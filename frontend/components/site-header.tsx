@@ -20,10 +20,17 @@ import {
   LuBadgeCheck as BadgeCheck,
   LuShoppingCart as ShoppingCart,
   LuPackage as Package,
+  LuMonitor as Monitor,
   // LuBadgeDollarSign as BadgeDollarSign,
   // LuBuilding2 as Building2,
   LuChartPie as ChartPie,
   LuUsers as Users,
+  LuStore as Store,
+  LuClock3 as Clock3,
+  LuFileClock as FileClock,
+  LuClipboardCheck as ClipboardCheck,
+  LuUndo2 as Undo2,
+  LuChartNoAxesColumn as ChartNoAxesColumn,
 } from "react-icons/lu";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -64,6 +71,7 @@ type NavGroup = {
     children?: Array<{
       href: string;
       labelKey: TranslationKey;
+      icon?: any;
     }>;
   }>;
 };
@@ -76,6 +84,20 @@ const navGroups: NavGroup[] = [
       { href: "/bank-cash-accounts", labelKey: "nav.item.bankCashAccounts", icon: WalletMinimal },
       { href: "/bank-reconciliations", labelKey: "nav.item.bankReconciliations", icon: BadgeCheck },
       { href: "/sales-receivables", labelKey: "nav.item.salesReceivables", icon: Users },
+      {
+        href: "/pos",
+        labelKey: "nav.item.pos",
+        icon: Store,
+        children: [
+          { href: "/pos?tab=sales", labelKey: "pos.workspace.sales", icon: Monitor },
+          { href: "/pos?tab=sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
+          { href: "/pos?tab=held", labelKey: "pos.workspace.held", icon: FileClock },
+          { href: "/pos?tab=review", labelKey: "pos.workspace.review", icon: ClipboardCheck },
+          { href: "/pos?tab=returns", labelKey: "pos.workspace.returns", icon: Undo2 },
+          { href: "/pos?tab=reports", labelKey: "pos.workspace.reports", icon: ChartNoAxesColumn },
+          { href: "/pos?tab=settings", labelKey: "pos.workspace.settings", icon: Settings2 },
+        ],
+      },
       {
         href: "/purchases",
         labelKey: "nav.item.purchases",
@@ -233,6 +255,25 @@ export function SiteHeader({
       void queryClient.prefetchQuery({
         queryKey: queryKeys.salesAging(token),
         queryFn: () => getAgingReport(undefined, token),
+        staleTime: 30_000,
+      });
+      return;
+    }
+
+    if (href.startsWith("/pos")) {
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.inventoryItems(token, { isActive: "true", limit: 120 }),
+        queryFn: () => getInventoryItems({ isActive: "true", limit: 120 }, token),
+        staleTime: 30_000,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.inventoryWarehouses(token, { isActive: "true" }),
+        queryFn: () => getInventoryWarehouses({ isActive: "true" }, token),
+        staleTime: 30_000,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.bankCashAccounts(token, { isActive: "true" }),
+        queryFn: () => getBankCashAccounts({ isActive: "true" }, token),
         staleTime: 30_000,
       });
       return;
@@ -419,18 +460,20 @@ export function SiteHeader({
                         {item.children.map((child) => {
                           const childTab = child.href.split("tab=")[1];
                           const isChildActive = searchParams.get("tab") === childTab;
+                          const ChildIcon = child.icon;
 
                           return (
                             <Link
                               key={child.href}
                               href={child.href}
                               className={cn(
-                                "block rounded-xl px-3 py-2 text-xs font-bold transition-all",
+                                "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all",
                                 isChildActive
                                   ? "bg-gray-900 text-white shadow-sm"
                                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
                               )}
                             >
+                              {ChildIcon ? <ChildIcon className="h-3.5 w-3.5 shrink-0" /> : null}
                               {t(child.labelKey)}
                             </Link>
                           );

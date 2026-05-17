@@ -173,6 +173,7 @@ simple-account/
 |   |-- features/
 |   |   |-- auth/
 |   |   |-- accounting/            # chart-of-accounts, journal-entries, general-ledger, fiscal, audit, master-data
+|   |   |-- pos/                   # POS workspace scaffold and sales-terminal UI shell
 |   |   |-- phase-2-bank-cash-management/
 |   |   |   `-- bank-cash-accounts/
 |   |   `-- phase-5-inventory-management/

@@ -81,6 +81,7 @@ Current feature areas:
 - `features/phase-2-bank-cash-management/bank-cash-accounts`
 - `features/phase-2-bank-cash-management/bank-cash-transactions`
 - `features/phase-3-sales-receivables`
+- `features/pos`
 - `features/phase-4-procure-to-pay`
 - `features/phase-5-inventory-management`
 - `features/phase-6-payroll-management`
@@ -91,6 +92,8 @@ Put code here when:
 - the UI belongs to one business feature
 - the component is not reusable across unrelated features
 - the logic depends on accounting or auth behavior
+
+`features/pos` owns the POS frontend workspace under `/pos`. Keep the route entry thin in `frontend/app/(erp)/pos/page.tsx` and place POS-specific terminal UI, tab switching, and future POS business screens inside the feature folder. When extending POS UI, reuse the palette in `frontend/features/pos/pos-theme.ts` and the design note in `docs/pos/POS_UI_Color_Reference.md`.
 
 For larger features, prefer an internal module layout so ownership is easy to scan:
 
