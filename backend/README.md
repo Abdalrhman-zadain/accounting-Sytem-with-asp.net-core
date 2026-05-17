@@ -57,3 +57,34 @@ From the repo root:
 ```bash
 docker compose up -d postgres
 ```
+
+## Troubleshooting Database Startup
+
+If backend startup fails with:
+
+```text
+PrismaClientInitializationError: Database `simple_account` does not exist
+```
+
+use this recovery flow from `backend/`:
+
+```bash
+npm run db:up
+npm run prisma:generate
+npm run prisma:migrate -- --name init_accounting_core
+npm run start:dev
+```
+
+If Docker starts but the database still does not exist, your local Postgres volume may have been created earlier with stale state. In that case, reset the local database volume and recreate it:
+
+```bash
+npm run db:down
+docker volume rm simple-account_postgres_data
+npm run db:up
+npm run prisma:migrate -- --name init_accounting_core
+```
+
+Warning:
+
+- removing `simple-account_postgres_data` deletes all local PostgreSQL data in that Docker volume
+- only use the volume-reset flow when you are okay recreating the local database

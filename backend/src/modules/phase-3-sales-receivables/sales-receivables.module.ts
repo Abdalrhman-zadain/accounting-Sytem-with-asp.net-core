@@ -6,14 +6,17 @@ import { BankCashTransactionsModule } from '../phase-2-bank-cash-management/bank
 import { ChartOfAccountsModule } from '../phase-1-accounting-foundation/accounting-core/chart-of-accounts/chart-of-accounts.module';
 import { JournalEntriesModule } from '../phase-1-accounting-foundation/accounting-core/journal-entries/journal-entries.module';
 import { PostingLogicModule } from '../phase-1-accounting-foundation/accounting-core/posting-logic/posting-logic.module';
+import { ReversalControlModule } from '../phase-1-accounting-foundation/accounting-core/reversal-control/reversal-control.module';
 import { InventoryPostingModule } from '../phase-5-inventory-management/inventory/shared/inventory-posting.module';
+import { PosController } from './pos/pos.controller';
+import { PosService } from './pos/pos.service';
 import { SalesReceivablesController } from './sales-receivables.controller';
 import { SalesReceivablesService } from './sales-receivables.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, InventoryPostingModule],
-  controllers: [SalesReceivablesController],
-  providers: [SalesReceivablesService],
-  exports: [SalesReceivablesService],
+  imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule],
+  controllers: [SalesReceivablesController, PosController],
+  providers: [SalesReceivablesService, PosService],
+  exports: [SalesReceivablesService, PosService],
 })
 export class SalesReceivablesModule {}

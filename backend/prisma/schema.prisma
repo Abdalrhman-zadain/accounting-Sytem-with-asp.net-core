@@ -78,6 +78,56 @@ enum SalesInvoiceStatus {
   CANCELLED
 }
 
+enum SalesInvoiceType {
+  STANDARD
+  POS
+}
+
+enum PosOperationalStatus {
+  DRAFT
+  HELD
+  COMPLETED
+  VOIDED
+  REFUNDED
+}
+
+enum PosAccountingStatus {
+  UNPOSTED
+  PENDING_REVIEW
+  POSTED
+  REJECTED
+  REVERSED
+}
+
+enum PosSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum PosPaymentMethod {
+  CASH
+  CARD
+  CLIQ
+  BANK_TRANSFER
+  WALLET
+}
+
+enum PosReturnStatus {
+  COMPLETED
+  APPROVED
+  REJECTED
+  REVERSED
+}
+
+enum PosRefundMethod {
+  CASH
+  CARD
+  CLIQ
+  BANK_TRANSFER
+  WALLET
+  STORE_CREDIT
+}
+
 enum CreditNoteStatus {
   DRAFT
   POSTED
@@ -188,6 +238,7 @@ enum InventoryStockMovementType {
   PURCHASE_RECEIPT
   GOODS_ISSUE
   SALES_ISSUE
+  SALES_RETURN
   TRANSFER_OUT
   TRANSFER_IN
   ADJUSTMENT_IN
@@ -346,6 +397,9 @@ model Account {
   salesOrderRevenueLines                    SalesOrderLine[]        @relation("SalesOrderRevenueAccount")
   salesInvoiceRevenueLines                  SalesInvoiceLine[]      @relation("SalesInvoiceRevenueAccount")
   creditNoteRevenueLines                    CreditNoteLine[]        @relation("CreditNoteRevenueAccount")
+  posReturnRevenueLines                     PosReturnLine[]         @relation("PosReturnRevenueAccount")
+  posReturnInventoryLines                   PosReturnLine[]         @relation("PosReturnInventoryAccount")
+  posReturnCogsLines                        PosReturnLine[]         @relation("PosReturnCogsAccount")
   inventoryDefaultItems                     InventoryItem[]         @relation("InventoryItemInventoryAccount")
   inventoryExpenseItems                     InventoryItem[]         @relation("InventoryItemExpenseAccount")
   inventoryCogsItems                        InventoryItem[]         @relation("InventoryItemCogsAccount")
@@ -398,6 +452,9 @@ model BankCashAccount {
   reconciliations      BankReconciliation[]
   supplierPayments     SupplierPayment[]
   payrollPayments      PayrollPayment[]
+  posSessions          PosSession[]
+  posPayments          PosPayment[]
+  posReturnPayments    PosReturnPayment[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -528,6 +585,7 @@ model Tax {
   salesOrderLines      SalesOrderLine[]
   salesInvoiceLines    SalesInvoiceLine[]
   creditNoteLines      CreditNoteLine[]
+  posReturnLines       PosReturnLine[]
   inventoryItems       InventoryItem[]       @relation("InventoryItemDefaultTax")
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -588,6 +646,7 @@ model JournalEntry {
   postingBatch              PostingBatch?              @relation(fields: [postingBatchId], references: [id])
   bankCashTransaction       BankCashTransaction?
   salesInvoice              SalesInvoice?              @relation("SalesInvoiceToJournalEntry")
+  posReturn                 PosReturn?                 @relation("PosReturnToJournalEntry")
   purchaseInvoice           PurchaseInvoice?           @relation("PurchaseInvoiceToJournalEntry")
   creditNote                CreditNote?                @relation("CreditNoteToJournalEntry")
   debitNote                 DebitNote?                 @relation("DebitNoteToJournalEntry")
@@ -639,6 +698,7 @@ model JournalEntry {
   quotations           SalesQuotation[]
   salesOrders          SalesOrder[]
   invoices             SalesInvoice[]
+  posReturns           PosReturn[]
   creditNotes          CreditNote[]
   bankCashTransactions BankCashTransaction[]
   journalEntries       JournalEntry[]        @relation("CustomerToJournalEntry")
@@ -764,6 +824,7 @@ model InventoryItem {
   salesQuotationLines    SalesQuotationLine[]
   salesOrderLines        SalesOrderLine[]
   salesInvoiceLines      SalesInvoiceLine[]
+  posReturnLines         PosReturnLine[]
   purchaseRequestLines   PurchaseRequestLine[]         @relation("PurchaseRequestLineInventoryItem")
   purchaseOrderLines     PurchaseOrderLine[]           @relation("PurchaseOrderLineInventoryItem")
   purchaseInvoiceLines   PurchaseInvoiceLine[]
@@ -889,6 +950,8 @@ model InventoryWarehouse {
   stockMovements       InventoryStockMovement[]
   purchaseInvoiceLines PurchaseInvoiceLine[]
   salesInvoiceLines    SalesInvoiceLine[]
+  posReturnLines       PosReturnLine[]
+  posSessions          PosSession[]
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
 
@@ -1989,6 +2052,7 @@ model SalesInvoice {
   id                 String              @id @default(cuid())
   reference          String              @unique
   status             SalesInvoiceStatus  @default(DRAFT)
+  invoiceType        SalesInvoiceType    @default(STANDARD)
   invoiceDate        DateTime
   dueDate            DateTime?
   customerId         String
@@ -2006,6 +2070,21 @@ model SalesInvoice {
   allocatedAmount    Decimal             @default(0) @db.Decimal(18, 2)
   outstandingAmount  Decimal             @default(0) @db.Decimal(18, 2)
   allocationStatus   AllocationStatus    @default(UNALLOCATED)
+  posOperationalStatus PosOperationalStatus?
+  posAccountingStatus  PosAccountingStatus?
+  posSessionId         String?
+  posSession           PosSession?          @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
+  posReceiptNumber     String?              @unique
+  posCompletedAt       DateTime?
+  posVoidedAt          DateTime?
+  posVoidReason        String?
+  posReviewedAt        DateTime?
+  posReviewedByUserId  String?
+  posReviewedByUser    User?                @relation("PosReviewedByUser", fields: [posReviewedByUserId], references: [id], onDelete: SetNull)
+  posReviewNotes       String?
+  posChangeAmount      Decimal?             @db.Decimal(18, 2)
+  posPayments          PosPayment[]
+  posReturns           PosReturn[]
   journalEntryId     String?             @unique
   journalEntry       JournalEntry?       @relation("SalesInvoiceToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
   lines              SalesInvoiceLine[]
@@ -2019,6 +2098,148 @@ model SalesInvoice {
   @@index([allocationStatus])
   @@index([sourceQuotationId])
   @@index([sourceSalesOrderId])
+  @@index([invoiceType, posOperationalStatus, invoiceDate])
+  @@index([invoiceType, posAccountingStatus, invoiceDate])
+  @@index([posSessionId])
+}
+
+model PosSession {
+  id             String           @id @default(cuid())
+  sessionNumber  String           @unique
+  terminalName   String
+  branchName     String?
+  warehouseId    String
+  warehouse      InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  cashierUserId  String?
+  cashierUser    User?            @relation("PosSessionCashier", fields: [cashierUserId], references: [id], onDelete: SetNull)
+  cashAccountId  String
+  cashAccount    BankCashAccount  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  openingCash    Decimal          @db.Decimal(18, 2)
+  expectedCash   Decimal          @default(0) @db.Decimal(18, 2)
+  actualCash     Decimal?         @db.Decimal(18, 2)
+  difference     Decimal?         @db.Decimal(18, 2)
+  status         PosSessionStatus @default(OPEN)
+  notes          String?
+  openedAt       DateTime         @default(now())
+  closedAt       DateTime?
+  salesInvoices  SalesInvoice[]
+  posReturns     PosReturn[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([cashierUserId, status, openedAt])
+  @@index([warehouseId, status])
+}
+
+model PosPayment {
+  id                String          @id @default(cuid())
+  salesInvoiceId    String
+  salesInvoice      SalesInvoice    @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  bankCashAccountId String
+  bankCashAccount   BankCashAccount @relation(fields: [bankCashAccountId], references: [id], onDelete: Restrict)
+  paymentMethod     PosPaymentMethod
+  amount            Decimal         @db.Decimal(18, 2)
+  tenderedAmount    Decimal?        @db.Decimal(18, 2)
+  reference         String?
+  createdAt         DateTime        @default(now())
+
+  @@index([salesInvoiceId])
+  @@index([bankCashAccountId])
+  @@index([paymentMethod])
+}
+
+model PosReturn {
+  id                   String              @id @default(cuid())
+  reference            String              @unique
+  status               PosReturnStatus     @default(COMPLETED)
+  returnDate           DateTime
+  salesInvoiceId       String
+  salesInvoice         SalesInvoice        @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  posSessionId         String?
+  posSession           PosSession?         @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
+  customerId           String
+  customer             Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currencyCode         String              @default("JOD")
+  reason               String?
+  subtotalAmount       Decimal             @default(0) @db.Decimal(18, 2)
+  discountAmount       Decimal             @default(0) @db.Decimal(18, 2)
+  taxAmount            Decimal             @default(0) @db.Decimal(18, 2)
+  totalAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  refundAmount         Decimal             @default(0) @db.Decimal(18, 2)
+  accountingStatus     PosAccountingStatus @default(PENDING_REVIEW)
+  journalEntryId       String?             @unique
+  journalEntry         JournalEntry?       @relation("PosReturnToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  reviewedAt           DateTime?
+  reviewedByUserId     String?
+  reviewedByUser       User?               @relation("PosReturnReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewNotes          String?
+  postedAt             DateTime?
+  reversedAt           DateTime?
+  createdByUserId      String?
+  createdByUser        User?               @relation("PosReturnCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lines                PosReturnLine[]
+  payments             PosReturnPayment[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([salesInvoiceId, returnDate])
+  @@index([posSessionId])
+  @@index([customerId])
+  @@index([accountingStatus, returnDate])
+}
+
+model PosReturnLine {
+  id                    String             @id @default(cuid())
+  posReturnId           String
+  posReturn             PosReturn          @relation(fields: [posReturnId], references: [id], onDelete: Cascade)
+  lineNumber            Int
+  salesInvoiceLineId    String?
+  salesInvoiceLine      SalesInvoiceLine?  @relation(fields: [salesInvoiceLineId], references: [id], onDelete: SetNull)
+  itemId                String?
+  item                  InventoryItem?     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId           String?
+  warehouse             InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  itemName              String?
+  description           String?
+  quantity              Decimal            @default(1) @db.Decimal(18, 4)
+  unitPrice             Decimal            @db.Decimal(18, 2)
+  discountAmount        Decimal            @default(0) @db.Decimal(18, 2)
+  taxId                 String?
+  tax                   Tax?               @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount             Decimal            @default(0) @db.Decimal(18, 2)
+  lineSubtotalAmount    Decimal            @db.Decimal(18, 2)
+  lineAmount            Decimal            @db.Decimal(18, 2)
+  revenueAccountId      String
+  revenueAccount        Account            @relation("PosReturnRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  inventoryAccountId    String?
+  inventoryAccount      Account?           @relation("PosReturnInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  cogsAccountId         String?
+  cogsAccount           Account?           @relation("PosReturnCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  unitCost              Decimal?           @db.Decimal(18, 4)
+  totalCost             Decimal?           @db.Decimal(18, 2)
+  createdAt             DateTime           @default(now())
+
+  @@unique([posReturnId, lineNumber])
+  @@index([salesInvoiceLineId])
+  @@index([itemId])
+  @@index([warehouseId])
+  @@index([taxId])
+}
+
+model PosReturnPayment {
+  id                String           @id @default(cuid())
+  posReturnId       String
+  posReturn         PosReturn        @relation(fields: [posReturnId], references: [id], onDelete: Cascade)
+  refundMethod      PosRefundMethod
+  bankCashAccountId String?
+  bankCashAccount   BankCashAccount? @relation(fields: [bankCashAccountId], references: [id], onDelete: Restrict)
+  amount            Decimal          @db.Decimal(18, 2)
+  reference         String?
+  createdAt         DateTime         @default(now())
+
+  @@index([posReturnId])
+  @@index([bankCashAccountId])
+  @@index([refundMethod])
 }
 
 model SalesInvoiceLine {
@@ -2043,6 +2264,7 @@ model SalesInvoiceLine {
   revenueAccountId   String
   revenueAccount     Account        @relation("SalesInvoiceRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
   createdAt          DateTime       @default(now())
+  posReturnLines     PosReturnLine[]
 
   @@unique([salesInvoiceId, lineNumber])
   @@index([itemId])
@@ -2295,6 +2517,10 @@ model User {
   createdJournals                     JournalEntry[]                 @relation("JournalCreator")
   createdLedgerLines                  LedgerTransaction[]            @relation("LedgerCreator")
   purchaseRequestStatusHistoryEntries PurchaseRequestStatusHistory[] @relation("UserPurchaseRequestStatusHistory")
+  posSessions                         PosSession[]                   @relation("PosSessionCashier")
+  reviewedPosSales                    SalesInvoice[]                 @relation("PosReviewedByUser")
+  createdPosReturns                   PosReturn[]                    @relation("PosReturnCreatedByUser")
+  reviewedPosReturns                  PosReturn[]                    @relation("PosReturnReviewedByUser")
   auditLogs                           AuditLog[]
 
   createdAt DateTime @default(now())

@@ -11,6 +11,7 @@ import {
   InventoryStockMovementType,
   Prisma,
   QuotationStatus,
+  SalesInvoiceType,
   SalesInvoiceStatus,
   SalesOrderStatus,
   SalesRepStatus,
@@ -48,6 +49,7 @@ type DocumentQuery = {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  invoiceType?: SalesInvoiceType;
 };
 
 type ReceiptQuery = {
@@ -77,6 +79,8 @@ type ResolvedLine = {
   lineSubtotalAmount: number;
   lineTotalAmount: number;
 };
+
+export type ResolvedSalesLine = ResolvedLine;
 
 @Injectable()
 export class SalesReceivablesService {
@@ -850,6 +854,7 @@ export class SalesReceivablesService {
     const search = query.search?.trim();
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
+        invoiceType: query.invoiceType ?? SalesInvoiceType.STANDARD,
         customerId: query.customerId,
         status: this.parseSalesInvoiceStatus(query.status),
         invoiceDate: this.dateRangeFilter(query.dateFrom, query.dateTo),
@@ -867,6 +872,62 @@ export class SalesReceivablesService {
     });
 
     return rows.map((row) => this.mapInvoice(row));
+  }
+
+  async resolveSalesInvoiceLines(lines: SalesLineDto[]) {
+    return this.resolveAndValidateLines(lines, {
+      requireRevenueAccount: true,
+    });
+  }
+
+  computeSalesDocumentTotals(lines: ResolvedSalesLine[]) {
+    return this.computeTotals(lines);
+  }
+
+  buildSalesInvoiceLineInput(
+    line: ResolvedSalesLine,
+    lineNumber: number,
+  ): Prisma.SalesInvoiceLineUncheckedCreateWithoutSalesInvoiceInput {
+    return this.buildSalesInvoiceLineCreateInput(line, lineNumber);
+  }
+
+  async buildSalesInvoiceCreditJournalLines(
+    tx: Prisma.TransactionClient,
+    invoice: {
+      id: string;
+      reference: string;
+      customerId: string;
+      customer: { receivableAccountId: string };
+      lines: Array<{
+        lineNumber: number;
+        description: string | null;
+        revenueAccountId: string;
+        taxId: string | null;
+        taxAmount: Prisma.Decimal | number;
+        lineSubtotalAmount: Prisma.Decimal | number;
+      }>;
+      totalAmount: Prisma.Decimal | number;
+    },
+    description: string,
+  ) {
+    const lines = await this.buildSalesInvoiceJournalLines(tx, invoice, description);
+    return lines.filter((line) => Number(line.creditAmount) > 0);
+  }
+
+  async createSalesInvoiceInventoryEffects(
+    tx: Prisma.TransactionClient,
+    invoice: Parameters<typeof this.applySalesInvoiceInventoryPosting>[1],
+  ) {
+    return this.applySalesInvoiceInventoryPosting(tx, invoice);
+  }
+
+  ensureBalancedJournalLines(
+    lines: Array<{
+      debitAmount: number;
+      creditAmount: number;
+    }>,
+  ) {
+    this.ensureBalancedJournal(lines);
   }
 
   async createInvoice(dto: CreateSalesInvoiceDto, user?: AuthUser) {
@@ -3503,6 +3564,7 @@ export class SalesReceivablesService {
       id: row.id,
       reference: row.reference,
       status: row.status,
+      invoiceType: row.invoiceType,
       invoiceDate: row.invoiceDate.toISOString(),
       dueDate: row.dueDate?.toISOString() ?? null,
       currencyCode: row.currencyCode,
@@ -3514,6 +3576,17 @@ export class SalesReceivablesService {
       allocatedAmount: row.allocatedAmount.toString(),
       outstandingAmount: row.outstandingAmount.toString(),
       allocationStatus: row.allocationStatus,
+      posOperationalStatus: row.posOperationalStatus ?? null,
+      posAccountingStatus: row.posAccountingStatus ?? null,
+      posSessionId: row.posSessionId ?? null,
+      posReceiptNumber: row.posReceiptNumber ?? null,
+      posCompletedAt: row.posCompletedAt?.toISOString() ?? null,
+      posVoidedAt: row.posVoidedAt?.toISOString() ?? null,
+      posVoidReason: row.posVoidReason ?? null,
+      posReviewedAt: row.posReviewedAt?.toISOString() ?? null,
+      posReviewedByUserId: row.posReviewedByUserId ?? null,
+      posReviewNotes: row.posReviewNotes ?? null,
+      posChangeAmount: row.posChangeAmount?.toString() ?? null,
       postedAt: row.postedAt?.toISOString() ?? null,
       journalEntryId: row.journalEntryId,
       journalReference: row.journalEntry?.reference ?? null,

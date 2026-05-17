@@ -262,8 +262,13 @@ export function SiteHeader({
 
     if (href.startsWith("/pos")) {
       void queryClient.prefetchQuery({
-        queryKey: queryKeys.inventoryItems(token, { isActive: "true", limit: 120 }),
-        queryFn: () => getInventoryItems({ isActive: "true", limit: 120 }, token),
+        queryKey: queryKeys.inventoryItems(token, {
+          isActive: "true",
+          page: 1,
+          limit: 100,
+        }),
+        queryFn: () =>
+          getInventoryItems({ isActive: "true", page: 1, limit: 100 }, token),
         staleTime: 30_000,
       });
       void queryClient.prefetchQuery({

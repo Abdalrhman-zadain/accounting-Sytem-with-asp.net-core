@@ -224,7 +224,7 @@ Current root:
 
 - `sales-receivables`
 
-`sales-receivables` owns customers, sales invoices, credit notes, receipt allocations, customer transaction history, and aging report endpoints while reusing Phase 1 journal/posting services for accounting impact.
+`sales-receivables` owns customers, sales invoices, credit notes, receipt allocations, customer transaction history, aging report endpoints, and the POS backend slice (`pos/`) that persists `invoiceType = POS` sales, sessions, payments, returns/refunds, receipt reprint/reversal/reporting actions, and accounting-review workflows while reusing Phase 1 journal/posting/reversal services for accounting impact.
 
 ### `backend/src/modules/phase-4-procure-to-pay`
 

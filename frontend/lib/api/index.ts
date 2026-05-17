@@ -132,6 +132,8 @@ import {
   PayrollPeriod,
   PayrollRule,
   PayrollSummary,
+  PosReportsOverview,
+  PosReturn,
   FixedAsset,
   FixedAssetAcquisition,
   FixedAssetCategory,
@@ -165,6 +167,10 @@ import {
   SegmentDefinition,
   SegmentValue,
   SalesOrder,
+  PosCompleteSaleResponse,
+  PosSale,
+  PosSession,
+  PosSessionReport,
   SalesQuotation,
   SalesInvoice,
   PurchaseRequest,
@@ -185,6 +191,8 @@ import {
   PaymentTerm,
   PurchaseRequestStatusNotePayload,
   PostSalesInvoicePayload,
+  HoldPosSalePayload,
+  CompletePosSalePayload,
   SupplierTransactionsResponse,
   SuppliersQuery,
   CreditNote,
@@ -2354,6 +2362,137 @@ export async function getAgingReport(asOfDate?: string, token?: string | null) {
   if (asOfDate) searchParams.set("asOfDate", asOfDate);
   const suffix = searchParams.toString() ? `?${searchParams}` : "";
   return apiRequest<AgingReport>(`/sales-receivables/reports/aging${suffix}`, {
+    token,
+  });
+}
+
+export async function getActivePosSession(token?: string | null) {
+  return apiRequest<PosSession | null>("/pos/sessions/active", { token });
+}
+
+export async function getPosSessions(token?: string | null) {
+  return apiRequest<PosSession[]>("/pos/sessions", { token });
+}
+
+export async function openPosSession(
+  payload: {
+    warehouseId: string;
+    cashAccountId: string;
+    terminalName?: string;
+    branchName?: string;
+    openingCash: number;
+    notes?: string;
+  },
+  token?: string | null,
+) {
+  return apiRequest<PosSession>("/pos/sessions/open", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function closePosSession(
+  id: string,
+  payload: { actualCash: number; notes?: string },
+  token?: string | null,
+) {
+  return apiRequest<{ session: PosSession; report: PosSessionReport }>(
+    `/pos/sessions/${id}/close`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    },
+  );
+}
+
+export async function getPosSessionReport(id: string, token?: string | null) {
+  return apiRequest<PosSessionReport>(`/pos/sessions/${id}/report`, { token });
+}
+
+export async function getHeldPosSales(
+  sessionId: string,
+  token?: string | null,
+) {
+  return apiRequest<PosSale[]>(`/pos/sales/held?sessionId=${encodeURIComponent(sessionId)}`, {
+    token,
+  });
+}
+
+export async function getPendingPosReview(token?: string | null) {
+  return apiRequest<PosSale[]>("/pos/sales/review", { token });
+}
+
+export async function holdPosSale(
+  payload: HoldPosSalePayload,
+  token?: string | null,
+) {
+  return apiRequest<PosSale>("/pos/sales/hold", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function completePosSale(
+  payload: CompletePosSalePayload,
+  token?: string | null,
+) {
+  return apiRequest<PosCompleteSaleResponse>("/pos/sales/complete", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function voidPosSale(
+  id: string,
+  payload: { reason?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosSale>(`/pos/sales/${id}/void`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function approvePosAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosSale>(`/pos/sales/${id}/accounting-approve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function rejectPosAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosSale>(`/pos/sales/${id}/accounting-reject`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function getPosReturns(token?: string | null) {
+  return apiRequest<PosReturn[]>("/pos/returns", { token });
+}
+
+export async function getPosReportsOverview(token?: string | null) {
+  return apiRequest<PosReportsOverview>("/pos/reports/overview", { token });
+}
+
+export async function reprintPosReceipt(id: string, token?: string | null) {
+  return apiRequest<PosCompleteSaleResponse>(`/pos/sales/${id}/reprint`, {
+    method: "POST",
     token,
   });
 }

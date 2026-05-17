@@ -178,3 +178,19 @@ What this means for future edits:
 - keep new reporting code inside `backend/src/modules/phase-8-reporting-control/reporting` and `frontend/features/phase-8-reporting-control`.
 - preserve Arabic/English translation coverage when adding report names, filters, actions, column labels, and comparison/snapshot terminology.
 - do not document the remaining Phase 8 roadmap items as implemented until the actual routes, data structures, and output behavior exist.
+
+## POS Sales Screen Status
+
+Current limitation:
+
+- the POS workspace now persists sessions, held sales, completed sales, payments, receipt numbers, returns/refunds, and review-state data through backend POS APIs backed by `SalesInvoice.invoiceType = POS`, `PosSession`, `PosPayment`, `PosReturn`, `PosReturnLine`, and `PosReturnPayment`.
+- POS completion creates immediate stock relief plus a draft journal entry for accountant approval; the review tab can approve, reject, reprint, and accounting-reverse that POS accounting step.
+- POS returns now create immediate stock-in for inventory items, record refund methods, prepare a separate draft journal for accountant approval, and appear in the new returns/reporting queries.
+- the `/pos` frontend now shows backend-fed returns and overview reporting cards, but it still does not expose a full cashier-side return-entry form or the complete report grid/filter experience from the requirements document.
+- offline mode, loyalty/promotions, branch master integration, and fine-grained non-role permission administration are still not implemented.
+
+What this means for future edits:
+
+- keep new POS UI code inside `frontend/features/pos`.
+- preserve the deliberate split between operational completion and accountant posting when extending POS.
+- if future POS work adds a full return-entry UI, branch master linkage, or finer approval/permission controls, update `docs/README.md`, `docs/system-design.md`, `docs/data-model.md`, and this section together.

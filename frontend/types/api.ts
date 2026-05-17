@@ -1855,9 +1855,41 @@ export type SalesInvoiceStatus =
   | "FULLY_PAID"
   | "OVERDUE"
   | "CANCELLED";
+export type SalesInvoiceType = "STANDARD" | "POS";
 export type CreditNoteStatus = "DRAFT" | "POSTED" | "APPLIED" | "CANCELLED";
 export type AllocationStatus = "UNALLOCATED" | "PARTIAL" | "FULLY_ALLOCATED";
 export type SalesRepStatus = "ACTIVE" | "INACTIVE";
+export type PosOperationalStatus =
+  | "DRAFT"
+  | "HELD"
+  | "COMPLETED"
+  | "VOIDED"
+  | "REFUNDED";
+export type PosAccountingStatus =
+  | "UNPOSTED"
+  | "PENDING_REVIEW"
+  | "POSTED"
+  | "REJECTED"
+  | "REVERSED";
+export type PosSessionStatus = "OPEN" | "CLOSED";
+export type PosPaymentMethod =
+  | "CASH"
+  | "CARD"
+  | "CLIQ"
+  | "BANK_TRANSFER"
+  | "WALLET";
+export type PosReturnStatus =
+  | "COMPLETED"
+  | "APPROVED"
+  | "REJECTED"
+  | "REVERSED";
+export type PosRefundMethod =
+  | "CASH"
+  | "CARD"
+  | "CLIQ"
+  | "BANK_TRANSFER"
+  | "WALLET"
+  | "STORE_CREDIT";
 
 export type SalesRepresentative = {
   id: string;
@@ -2661,6 +2693,7 @@ export type SalesInvoice = {
   id: string;
   reference: string;
   status: SalesInvoiceStatus;
+  invoiceType?: SalesInvoiceType;
   invoiceDate: string;
   dueDate?: string | null;
   currencyCode: string;
@@ -2672,6 +2705,17 @@ export type SalesInvoice = {
   allocatedAmount: string;
   outstandingAmount: string;
   allocationStatus: AllocationStatus;
+  posOperationalStatus?: PosOperationalStatus | null;
+  posAccountingStatus?: PosAccountingStatus | null;
+  posSessionId?: string | null;
+  posReceiptNumber?: string | null;
+  posCompletedAt?: string | null;
+  posVoidedAt?: string | null;
+  posVoidReason?: string | null;
+  posReviewedAt?: string | null;
+  posReviewedByUserId?: string | null;
+  posReviewNotes?: string | null;
+  posChangeAmount?: string | null;
   postedAt?: string | null;
   journalEntryId?: string | null;
   journalReference?: string | null;
@@ -3156,6 +3200,287 @@ export type JournalEntryLine = {
   description?: string | null;
   debitAmount: string;
   creditAmount: string;
+};
+
+export type PosPaymentEntryPayload = {
+  bankCashAccountId: string;
+  amount: number;
+  reference?: string;
+};
+
+export type HoldPosSalePayload = {
+  sessionId: string;
+  invoiceId?: string;
+  invoiceDate?: string;
+  currencyCode?: string;
+  description?: string;
+  lines: SalesLinePayload[];
+  payments?: PosPaymentEntryPayload[];
+};
+
+export type CompletePosSalePayload = {
+  sessionId: string;
+  invoiceId?: string;
+  invoiceDate?: string;
+  currencyCode?: string;
+  description?: string;
+  lines: SalesLinePayload[];
+  payments: PosPaymentEntryPayload[];
+};
+
+export type PosSession = {
+  id: string;
+  sessionNumber: string;
+  terminalName: string;
+  branchName?: string | null;
+  status: PosSessionStatus;
+  openingCash: string;
+  expectedCash: string;
+  actualCash?: string | null;
+  difference?: string | null;
+  notes?: string | null;
+  openedAt: string;
+  closedAt?: string | null;
+  warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  cashAccount: Pick<BankCashAccount, "id" | "name" | "type" | "currencyCode"> & {
+    account: Pick<Account, "id" | "code" | "name">;
+  };
+  cashierUser?: {
+    id: string;
+    email: string;
+    name?: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PosSale = {
+  id: string;
+  reference: string;
+  receiptNumber?: string | null;
+  invoiceDate: string;
+  status: SalesInvoiceStatus;
+  invoiceType: SalesInvoiceType;
+  currencyCode: string;
+  description?: string | null;
+  subtotalAmount: string;
+  discountAmount: string;
+  taxAmount: string;
+  totalAmount: string;
+  allocatedAmount: string;
+  outstandingAmount: string;
+  allocationStatus: AllocationStatus;
+  posOperationalStatus?: PosOperationalStatus | null;
+  posAccountingStatus?: PosAccountingStatus | null;
+  posCompletedAt?: string | null;
+  posVoidedAt?: string | null;
+  posVoidReason?: string | null;
+  posReviewedAt?: string | null;
+  posReviewedByUserId?: string | null;
+  posReviewNotes?: string | null;
+  posChangeAmount?: string | null;
+  postedAt?: string | null;
+  journalEntry?: {
+    id: string;
+    reference: string;
+    status: "DRAFT" | "POSTED";
+    postedAt?: string | null;
+  } | null;
+  session?: {
+    id: string;
+    sessionNumber: string;
+    terminalName: string;
+    branchName?: string | null;
+    warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  } | null;
+  lines: Array<{
+    id: string;
+    lineNumber: number;
+    itemId?: string | null;
+    itemName?: string | null;
+    description?: string | null;
+    quantity: string;
+    unitPrice: string;
+    discountAmount: string;
+    taxAmount: string;
+    lineSubtotalAmount: string;
+    lineAmount: string;
+    revenueAccountId: string;
+    taxId?: string | null;
+    item?: Pick<InventoryItem, "id" | "code" | "name" | "type" | "trackInventory"> | null;
+    warehouse?: Pick<InventoryWarehouse, "id" | "code" | "name"> | null;
+  }>;
+  payments: Array<{
+    id: string;
+    paymentMethod: PosPaymentMethod;
+    amount: string;
+    tenderedAmount?: string | null;
+    reference?: string | null;
+    bankCashAccount: Pick<BankCashAccount, "id" | "name" | "type" | "currencyCode"> & {
+      account: Pick<Account, "id" | "code" | "name">;
+    };
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PosReceipt = {
+  receiptNumber: string;
+  soldAt: string;
+  total: string;
+  tax: string;
+  discount: string;
+  subtotal: string;
+  paid: string;
+  tendered: string;
+  change: string;
+  paymentSummary: string;
+  warehouseName: string;
+  lines: Array<{
+    name: string;
+    quantity: string;
+    unitPrice: string;
+    discountAmount: string;
+    taxAmount: string;
+    lineTotal: string;
+  }>;
+};
+
+export type PosCompleteSaleResponse = {
+  sale: PosSale;
+  receipt: PosReceipt;
+};
+
+export type PosSessionReport = {
+  sessionId: string;
+  sessionNumber: string;
+  status: PosSessionStatus;
+  terminalName: string;
+  branchName?: string | null;
+  warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  cashAccount: Pick<BankCashAccount, "id" | "name" | "type"> & {
+    account: Pick<Account, "id" | "code" | "name">;
+  };
+  openingCash: string;
+  cashSales: string;
+  cashRefunds: string;
+  cardSales: string;
+  cliqSales: string;
+  bankTransferSales: string;
+  walletSales: string;
+  totalSales: string;
+  discounts: string;
+  tax: string;
+  expectedCash: string;
+  actualCash?: string | null;
+  difference?: string | null;
+  invoiceCount: number;
+  returnCount: number;
+  openedAt: string;
+  closedAt?: string | null;
+};
+
+export type PosReturn = {
+  id: string;
+  reference: string;
+  status: PosReturnStatus;
+  returnDate: string;
+  reason?: string | null;
+  currencyCode: string;
+  subtotalAmount: string;
+  discountAmount: string;
+  taxAmount: string;
+  totalAmount: string;
+  refundAmount: string;
+  accountingStatus: PosAccountingStatus;
+  postedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+  reversedAt?: string | null;
+  salesInvoice: {
+    id: string;
+    reference: string;
+    posReceiptNumber?: string | null;
+  };
+  session?: {
+    id: string;
+    sessionNumber: string;
+    branchName?: string | null;
+    warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  } | null;
+  journalEntry?: {
+    id: string;
+    reference: string;
+    status: "DRAFT" | "POSTED";
+    postedAt?: string | null;
+  } | null;
+  lines: Array<{
+    id: string;
+    lineNumber: number;
+    salesInvoiceLineId?: string | null;
+    itemId?: string | null;
+    itemName: string;
+    quantity: string;
+    unitPrice: string;
+    discountAmount: string;
+    taxAmount: string;
+    lineSubtotalAmount: string;
+    lineAmount: string;
+    unitCost?: string | null;
+    totalCost?: string | null;
+    item?: Pick<InventoryItem, "id" | "code" | "name" | "type" | "trackInventory"> | null;
+    warehouse?: Pick<InventoryWarehouse, "id" | "code" | "name"> | null;
+  }>;
+  payments: Array<{
+    id: string;
+    refundMethod: PosRefundMethod;
+    amount: string;
+    reference?: string | null;
+    bankCashAccount?: Pick<BankCashAccount, "id" | "name" | "type" | "currencyCode"> & {
+      account: Pick<Account, "id" | "code" | "name">;
+    } | null;
+  }>;
+  createdByUser?: {
+    id: string;
+    email: string;
+    name?: string | null;
+  } | null;
+  reviewedByUser?: {
+    id: string;
+    email: string;
+    name?: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PosReportsOverview = {
+  salesByPaymentMethod: Array<{
+    method: string;
+    salesAmount: string;
+    invoiceCount: number;
+  }>;
+  salesByCashier: Array<{
+    cashierId?: string | null;
+    cashierName: string;
+    salesAmount: string;
+    invoiceCount: number;
+  }>;
+  salesByBranch: Array<{
+    branchName: string;
+    salesAmount: string;
+    invoiceCount: number;
+  }>;
+  pendingReviewCount: number;
+  taxSummary: Array<{
+    taxId?: string | null;
+    taxCode: string;
+    taxName: string;
+    rate: string;
+    salesTax: string;
+    returnTax: string;
+    netTax: string;
+  }>;
 };
 
 export type JournalEntry = {

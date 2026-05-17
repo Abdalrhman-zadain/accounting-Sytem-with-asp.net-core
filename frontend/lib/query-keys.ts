@@ -181,6 +181,27 @@ export const queryKeys = {
   salesAging(token: string | null, asOfDate?: string) {
     return ["sales-aging", token, asOfDate ?? null] as const;
   },
+  posActiveSession(token: string | null) {
+    return ["pos-active-session", token] as const;
+  },
+  posSessions(token: string | null) {
+    return ["pos-sessions", token] as const;
+  },
+  posHeldSales(token: string | null, sessionId: string | null) {
+    return ["pos-held-sales", token, sessionId] as const;
+  },
+  posReview(token: string | null) {
+    return ["pos-review", token] as const;
+  },
+  posReturns(token: string | null) {
+    return ["pos-returns", token] as const;
+  },
+  posReportsOverview(token: string | null) {
+    return ["pos-reports-overview", token] as const;
+  },
+  posSessionReport(token: string | null, sessionId: string | null) {
+    return ["pos-session-report", token, sessionId] as const;
+  },
   journalEntries(token: string | null, params: JournalEntriesQuery = {}) {
     return ["journal-entries", token, normalizeObject(params as unknown as Record<string, unknown>)] as const;
   },
