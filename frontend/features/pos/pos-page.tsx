@@ -37,10 +37,12 @@ import { Card, Modal, PageShell } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
   approvePosAccounting,
+  approvePosSessionAccounting,
   approvePosReturnAccounting,
   closePosSession,
   completePosSale,
   createPosReturn,
+  getDraftPosSales,
   getCompletedPosSales,
   getBankCashAccounts,
   getActivePosSession,
@@ -66,6 +68,7 @@ import {
   reprintPosReceipt,
   reversePosAccounting,
   reversePosReturnAccounting,
+  savePosDraft,
   voidPosSale,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
@@ -149,6 +152,7 @@ type ReturnPaymentEntry = {
 
 type HeldSale = {
   id: string;
+  status: "DRAFT" | "HELD";
   title: string;
   createdAt: string;
   search: string;
@@ -175,6 +179,11 @@ type SessionState = {
 type CompletedReceipt = {
   receiptNumber: string;
   soldAt: string;
+  companyName: string;
+  branchName?: string | null;
+  taxNumber?: string | null;
+  cashierName: string;
+  terminalName?: string | null;
   warehouseName: string;
   paymentSummary: string;
   total: number;
@@ -385,6 +394,7 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
 
   return {
     id: sale.id,
+    status: sale.posOperationalStatus === "DRAFT" ? "DRAFT" : "HELD",
     title: sale.reference,
     createdAt: sale.updatedAt,
     search: "",
@@ -405,6 +415,11 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
 function mapReceiptResponse(receipt: {
   receiptNumber: string;
   soldAt: string;
+  companyName: string;
+  branchName?: string | null;
+  taxNumber?: string | null;
+  cashierName: string;
+  terminalName?: string | null;
   warehouseName: string;
   paymentSummary: string;
   total: string;
@@ -426,6 +441,11 @@ function mapReceiptResponse(receipt: {
   return {
     receiptNumber: receipt.receiptNumber,
     soldAt: receipt.soldAt,
+    companyName: receipt.companyName,
+    branchName: receipt.branchName,
+    taxNumber: receipt.taxNumber,
+    cashierName: receipt.cashierName,
+    terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,
     paymentSummary: receipt.paymentSummary,
     total: parseAmount(receipt.total),
@@ -477,10 +497,14 @@ function buildReceiptHtml(receipt: CompletedReceipt) {
         </style>
       </head>
       <body>
-        <h1>إيصال نقطة بيع</h1>
+        <h1>${receipt.companyName}</h1>
         <h2>${receipt.receiptNumber}</h2>
         <div class="meta">
+          <p>الفرع: ${receipt.branchName || "—"}</p>
+          <p>الرقم الضريبي: ${receipt.taxNumber || "—"}</p>
           <p>التاريخ: ${new Date(receipt.soldAt).toLocaleString()}</p>
+          <p>الكاشير: ${receipt.cashierName}</p>
+          <p>الجهاز: ${receipt.terminalName || "—"}</p>
           <p>المستودع: ${receipt.warehouseName}</p>
           <p>الدفع: ${receipt.paymentSummary}</p>
         </div>
@@ -555,6 +579,7 @@ export function PosPage() {
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+  const [draftSales, setDraftSales] = useState<HeldSale[]>([]);
   const [sessionState, setSessionState] = useState<SessionState>({
     isOpen: false,
     terminalName: "الجهاز رقم 01",
@@ -624,6 +649,12 @@ export function PosPage() {
   const heldSalesQuery = useQuery({
     queryKey: queryKeys.posHeldSales(token, activeSessionQuery.data?.id ?? null),
     queryFn: () => getHeldPosSales(activeSessionQuery.data!.id, token),
+    enabled: Boolean(token && activeSessionQuery.data?.id),
+  });
+
+  const draftSalesQuery = useQuery({
+    queryKey: queryKeys.posDraftSales(token, activeSessionQuery.data?.id ?? null),
+    queryFn: () => getDraftPosSales(activeSessionQuery.data!.id, token),
     enabled: Boolean(token && activeSessionQuery.data?.id),
   });
 
@@ -715,6 +746,9 @@ export function PosPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.posHeldSales(token, activeSessionQuery.data?.id ?? null),
       }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.posDraftSales(token, activeSessionQuery.data?.id ?? null),
+      }),
     ]);
   };
 
@@ -743,6 +777,20 @@ export function PosPage() {
       setLastSessionReport(report);
       await refreshPosData();
       pushMessage(t("pos.sales.alert.sessionMarkedClosed"));
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof savePosDraft>[0]) =>
+      savePosDraft(payload, token),
+    onSuccess: async () => {
+      setEditingInvoiceId(null);
+      resetSale();
+      await refreshPosData();
+      pushMessage("POS draft saved.");
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -788,6 +836,20 @@ export function PosPage() {
     onSuccess: async () => {
       await refreshPosData();
       pushMessage("POS sale approved and posted.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const approveSessionReviewMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      approvePosSessionAccounting(sessionId, {}, token),
+    onSuccess: async (response) => {
+      await refreshPosData();
+      pushMessage(
+        `Posted ${response.approvedCount} POS sale${response.approvedCount === 1 ? "" : "s"} for session ${response.sessionNumber}.`,
+      );
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -958,6 +1020,10 @@ export function PosPage() {
   useEffect(() => {
     setHeldSales((heldSalesQuery.data ?? []).map(mapPosSaleToHeldSale));
   }, [heldSalesQuery.data]);
+
+  useEffect(() => {
+    setDraftSales((draftSalesQuery.data ?? []).map(mapPosSaleToHeldSale));
+  }, [draftSalesQuery.data]);
 
   useEffect(() => {
     if (!selectedSessionReportId && posSessionsQuery.data?.length) {
@@ -1497,8 +1563,26 @@ export function PosPage() {
     });
   };
 
+  const saveDraftSale = () => {
+    if (!sessionState.isOpen) {
+      pushMessage(t("pos.sales.alert.sessionClosed"));
+      return;
+    }
+    if (cartLines.length === 0) {
+      pushMessage(t("pos.sales.alert.emptyCart"));
+      return;
+    }
+    saveDraftMutation.mutate({
+      sessionId: activeSession?.id ?? "",
+      invoiceId: editingInvoiceId ?? undefined,
+      description: search || undefined,
+      lines: buildSaleLinesPayload(),
+      payments: buildPaymentPayload(),
+    });
+  };
+
   const resumeHeldSale = (heldSaleId: string) => {
-    const target = heldSales.find((row) => row.id === heldSaleId);
+    const target = [...draftSales, ...heldSales].find((row) => row.id === heldSaleId);
     if (!target) return;
     setCartLines(target.cartLines);
     setPaymentEntries(target.paymentEntries);
@@ -1738,7 +1822,7 @@ export function PosPage() {
             <Card className="rounded-[28px] border-[#d8e2db] bg-white p-5 shadow-[0_18px_55px_-44px_rgba(43,79,54,0.25)]">
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px]">
                 <Field
-                  label="Barcode / Search - باركود / بحث"
+                  label={t("pos.sales.barcodeSearch")}
                   className="mb-0"
                 >
                   <div className="relative">
@@ -1752,14 +1836,14 @@ export function PosPage() {
                           handleBarcodeSubmit();
                         }
                       }}
-                      placeholder="Scan barcode or search by name / امسح الباركود أو ابحث بالاسم"
+                      placeholder={t("pos.sales.barcodePlaceholder")}
                       className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3 pl-11 pr-4 text-sm focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-4 rtl:pr-11"
                     />
                   </div>
                 </Field>
 
                 <Field
-                  label="Warehouse / المستودع"
+                  label={t("pos.sales.warehouseLabel")}
                   className="mb-0"
                 >
                   <select
@@ -1789,7 +1873,7 @@ export function PosPage() {
                         : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
                     )}
                   >
-                    {category === "all" ? "All / الكل" : category}
+                    {category === "all" ? t("pos.sales.allCategories") : category}
                   </button>
                 ))}
               </div>
@@ -1848,10 +1932,10 @@ export function PosPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-lg font-black text-[#233329] arabic-heading">
-                      Order Summary / ملخص الطلب
+                      {t("pos.sales.orderSummary")}
                     </div>
                     <div className="mt-1 text-sm text-[#6b7c70] arabic-auto">
-                      {cartLines.length} item(s) / عناصر
+                      {t("pos.sales.itemsCount", { count: cartLines.length })}
                     </div>
                   </div>
                   {editingInvoiceId ? (
@@ -1866,10 +1950,10 @@ export function PosPage() {
                 {cartLines.length === 0 ? (
                   <div className="rounded-[22px] border border-dashed border-[#d4ddd6] bg-[#f8fbf8] px-5 py-8 text-center">
                     <div className="text-sm font-bold text-[#233329]">
-                      Cart is empty / السلة فارغة
+                      {t("pos.sales.cartEmptyTitle")}
                     </div>
                     <p className="mt-2 text-sm leading-7 text-[#6c7a72]">
-                      Click a product card to add it directly to the current sale.
+                      {t("pos.sales.cartEmptyDescription")}
                     </p>
                   </div>
                 ) : (
@@ -1901,29 +1985,37 @@ export function PosPage() {
                 <div className="rounded-[24px] bg-[#f4f8f5] p-4">
                   <div className="grid gap-3">
                     <TotalRow
-                      label="Subtotal / الإجمالي قبل الضريبة"
+                      label={t("pos.sales.totalSubtotal")}
                       value={formatCurrency(
                         cartMetrics.subtotalBeforeDiscount,
                         currencyCode,
                       )}
                     />
                     <TotalRow
-                      label="Discount / الخصم"
+                      label={t("pos.sales.totalDiscount")}
                       value={formatCurrency(cartMetrics.discountTotal, currencyCode)}
                     />
                     <TotalRow
-                      label="Tax / الضريبة"
+                      label={t("pos.sales.totalTax")}
                       value={formatCurrency(cartMetrics.tax, currencyCode)}
                     />
                     <TotalRow
-                      label="Total / الإجمالي"
+                      label={t("pos.sales.totalGrand")}
                       value={formatCurrency(cartMetrics.total, currencyCode)}
                       emphasized
                     />
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={saveDraftSale}
+                    className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4e6455] transition hover:border-[#b7cbb9] hover:bg-white"
+                  >
+                    <LuSave className="h-4 w-4" />
+                    Save Draft / مسودة
+                  </button>
                   <button
                     type="button"
                     onClick={holdSale}
@@ -2104,7 +2196,7 @@ export function PosPage() {
               </div>
             ) : (
               <div className="space-y-4 rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
-                <Field label="Account / الحساب" className="mb-0">
+                <Field label={t("pos.sales.accountLabel")} className="mb-0">
                   <select
                     value={singlePaymentEntry?.bankCashAccountId ?? ""}
                     onChange={(event) =>
@@ -2123,7 +2215,7 @@ export function PosPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Tendered Amount / المبلغ المقبوض" className="mb-0">
+                <Field label={t("pos.sales.tenderedAmountLabel")} className="mb-0">
                   <Input
                     type="number"
                     min="0"
@@ -2139,7 +2231,7 @@ export function PosPage() {
                     className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                   />
                 </Field>
-                <Field label="Reference / المرجع" className="mb-0">
+                <Field label={t("pos.sales.paymentReference")} className="mb-0">
                   <Input
                     value={singlePaymentEntry?.reference ?? ""}
                     onChange={(event) =>
@@ -2149,7 +2241,7 @@ export function PosPage() {
                           })
                         : undefined
                     }
-                    placeholder="Card slip / CliQ ref / مرجع"
+                    placeholder={t("pos.sales.referencePlaceholder")}
                     className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                   />
                 </Field>
@@ -2159,16 +2251,16 @@ export function PosPage() {
             <div className="rounded-[22px] bg-[#f6f8f6] p-4">
               <div className="grid gap-3">
                 <TotalRow
-                  label="Tendered / المقبوض"
+                  label={t("pos.sales.tenderedLabel")}
                   value={formatCurrency(cartMetrics.tendered, currencyCode)}
                 />
                 <TotalRow
-                  label="Change / الباقي"
+                  label={t("pos.sales.changeLabel")}
                   value={formatCurrency(cartMetrics.change, currencyCode)}
                   emphasized={cartMetrics.change > 0}
                 />
                 <TotalRow
-                  label="Amount Due / المتبقي"
+                  label={t("pos.sales.amountDueLabel")}
                   value={formatCurrency(cartMetrics.amountDue, currencyCode)}
                   emphasized={cartMetrics.amountDue > 0}
                 />
@@ -2182,7 +2274,7 @@ export function PosPage() {
                 onChange={(event) => setAutoPrintReceipt(event.target.checked)}
                 className="h-4 w-4 rounded border-[#c8d7cc] text-[#5f8a67] focus:ring-[#5f8a67]/20"
               />
-              Print receipt after completion / طباعة الفاتورة بعد الإكمال
+              {t("pos.sales.printReceiptLabel")}
             </label>
 
             <button
@@ -2192,8 +2284,8 @@ export function PosPage() {
               className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:opacity-50"
             >
               {completeSaleMutation.isPending
-                ? "Completing..."
-                : "Complete Sale / إتمام البيع"}
+                ? t("pos.sales.completingAction")
+                : t("pos.sales.completeAction")}
             </button>
           </div>
         </Modal>
@@ -2212,7 +2304,10 @@ export function PosPage() {
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
             {activeSession
-              ? `Open session ${activeSession.sessionNumber} at ${activeSession.terminalName}`
+              ? t("pos.sessions.activeDescription", {
+                  sessionNumber: activeSession.sessionNumber,
+                  terminalName: activeSession.terminalName,
+                })
               : t("pos.sessions.noOpen")}
           </p>
           {report ? (
@@ -2233,9 +2328,9 @@ export function PosPage() {
                 hint={t("pos.sessions.difference")}
               />
               <SoftMetric
-                label="Invoices"
+                label={t("pos.sessions.invoices")}
                 value={formatCount(report.invoiceCount)}
-                hint={`${report.returnCount} returns`}
+                hint={t("pos.sessions.returnsHint", { count: report.returnCount })}
               />
             </div>
           ) : null}
@@ -2277,22 +2372,22 @@ export function PosPage() {
             {report ? (
               <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <DetailTile label="Branch" value={report.branchName || "—"} />
-                  <DetailTile label="Warehouse" value={report.warehouse.name} />
-                  <DetailTile label="Cash Account" value={report.cashAccount.name} />
-                  <DetailTile label="Opening Cash" value={report.openingCash} />
-                  <DetailTile label="Cash Sales" value={report.cashSales} />
-                  <DetailTile label="Cash Refunds" value={report.cashRefunds} />
-                  <DetailTile label="Card Sales" value={report.cardSales} />
-                  <DetailTile label="CliQ Sales" value={report.cliqSales} />
-                  <DetailTile label="Wallet Sales" value={report.walletSales} />
-                  <DetailTile label="Bank Transfer" value={report.bankTransferSales} />
-                  <DetailTile label="Discounts" value={report.discounts} />
-                  <DetailTile label="Tax" value={report.tax} />
-                  <DetailTile label="Total Sales" value={report.totalSales} />
-                  <DetailTile label="Opened" value={new Date(report.openedAt).toLocaleString()} />
+                  <DetailTile label={t("pos.sessions.branch")} value={report.branchName || "—"} />
+                  <DetailTile label={t("pos.sessions.warehouse")} value={report.warehouse.name} />
+                  <DetailTile label={t("pos.sessions.cashAccount")} value={report.cashAccount.name} />
+                  <DetailTile label={t("pos.sessions.openingCash")} value={report.openingCash} />
+                  <DetailTile label={t("pos.sessions.cashSales")} value={report.cashSales} />
+                  <DetailTile label={t("pos.sessions.cashRefunds")} value={report.cashRefunds} />
+                  <DetailTile label={t("pos.sessions.cardSales")} value={report.cardSales} />
+                  <DetailTile label={t("pos.sessions.cliqSales")} value={report.cliqSales} />
+                  <DetailTile label={t("pos.sessions.walletSales")} value={report.walletSales} />
+                  <DetailTile label={t("pos.sessions.bankTransferSales")} value={report.bankTransferSales} />
+                  <DetailTile label={t("pos.sessions.discounts")} value={report.discounts} />
+                  <DetailTile label={t("pos.sessions.tax")} value={report.tax} />
+                  <DetailTile label={t("pos.sessions.totalSales")} value={report.totalSales} />
+                  <DetailTile label={t("pos.sessions.openedAt")} value={new Date(report.openedAt).toLocaleString()} />
                   <DetailTile
-                    label="Closed"
+                    label={t("pos.sessions.closedAt")}
                     value={report.closedAt ? new Date(report.closedAt).toLocaleString() : "—"}
                   />
                 </div>
@@ -2316,13 +2411,79 @@ export function PosPage() {
             {t("pos.workspace.held")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Resume or void held POS sales without affecting inventory, cash, or accounting.
+            {t("pos.held.description")}
           </p>
         </Card>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          {heldSales.length > 0 ? (
-            heldSales.map((heldSale) => (
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5c7463]">
+              Draft Sales / مسودات
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {draftSales.length > 0 ? (
+                draftSales.map((heldSale) => (
+                  <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
+                        <div className="mt-1 text-sm text-[#66756d]">
+                          {new Date(heldSale.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
+                        {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
+                      {heldSale.cartLines.slice(0, 4).map((line) => (
+                        <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
+                          <span>{line.name}</span>
+                          <span>
+                            {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-5 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWorkspace("sales");
+                          startRoutingTransition(() => {
+                            router.replace("/pos?tab=sales");
+                          });
+                          resumeHeldSale(heldSale.id);
+                        }}
+                        className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                      >
+                        Resume Draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => voidSaleMutation.mutate(heldSale.id)}
+                        className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                      >
+                        {t("pos.sales.voidAction")}
+                      </button>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
+                  No POS drafts saved yet.
+                </Card>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5c7463]">
+              Held Sales / معلقة
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {heldSales.length > 0 ? (
+                heldSales.map((heldSale) => (
               <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -2332,7 +2493,7 @@ export function PosPage() {
                     </div>
                   </div>
                   <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
-                    {heldSale.cartLines.length} lines
+                    {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
                   </div>
                 </div>
                 <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
@@ -2368,18 +2529,35 @@ export function PosPage() {
                   </button>
                 </div>
               </Card>
-            ))
-          ) : (
-            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
-              No held POS sales are waiting to be resumed.
-            </Card>
-          )}
+                ))
+              ) : (
+                <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
+                  {t("pos.held.empty")}
+                </Card>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
   const renderReviewWorkspace = () => {
+    const sessionGroups = Array.from(
+      (reviewQuery.data ?? []).reduce((groups, sale) => {
+        const key = sale.session?.id ?? `unassigned-${sale.id}`;
+        const current = groups.get(key) ?? {
+          sessionId: sale.session?.id ?? null,
+          sessionNumber: sale.session?.sessionNumber ?? "Unassigned Session",
+          warehouseName: sale.session?.warehouse.name ?? "—",
+          sales: [] as PosSale[],
+        };
+        current.sales.push(sale);
+        groups.set(key, current);
+        return groups;
+      }, new Map<string, { sessionId: string | null; sessionNumber: string; warehouseName: string; sales: PosSale[] }>()),
+    ).map(([, value]) => value);
+
     return (
       <div className="space-y-6">
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
@@ -2387,103 +2565,133 @@ export function PosPage() {
             {t("pos.workspace.review")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Review completed POS sales, inventory relief, captured payments, and draft accounting before posting.
+            {t("pos.review.description")}
           </p>
         </Card>
-        <div className="space-y-4">
-          {(reviewQuery.data ?? []).map((sale) => (
-            <Card key={sale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="text-lg font-black text-[#233329]">{sale.reference}</div>
-                  <div className="mt-1 text-sm text-[#68776f]">
-                    {sale.posAccountingStatus} · {sale.totalAmount} {sale.currencyCode}
+        <div className="space-y-6">
+          {sessionGroups.map((group) => (
+            <div key={group.sessionId ?? group.sessionNumber} className="space-y-4">
+              <Card className="rounded-[24px] border-[#d7ddd8] bg-[#f7faf8] p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5b7362]">
+                      Session Review
+                    </div>
+                    <div className="mt-1 text-lg font-black text-[#233329]">
+                      {group.sessionNumber}
+                    </div>
+                    <div className="mt-1 text-sm text-[#68776f]">
+                      {group.sales.length} sale(s) pending review · {group.warehouseName}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-[#68776f]">
-                    Session: {sale.session?.sessionNumber ?? "—"} · Warehouse:{" "}
-                    {sale.session?.warehouse.name ?? "—"}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => reprintReceiptMutation.mutate(sale.id)}
-                    className="rounded-full border border-[#d6e0d8] px-4 py-2 text-xs font-bold text-[#46644b]"
-                  >
-                    {t("pos.sales.printLastReceipt")}
-                  </button>
-                  {sale.posAccountingStatus === "POSTED" ? (
+                  {group.sessionId ? (
                     <button
                       type="button"
-                      onClick={() => reverseReviewMutation.mutate(sale.id)}
-                      className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                      onClick={() => approveSessionReviewMutation.mutate(group.sessionId!)}
+                      className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
                     >
-                      Reverse
+                      Approve Session
                     </button>
-                  ) : (
-                    <>
+                  ) : null}
+                </div>
+              </Card>
+              {group.sales.map((sale) => (
+                <Card key={sale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="text-lg font-black text-[#233329]">{sale.reference}</div>
+                      <div className="mt-1 text-sm text-[#68776f]">
+                        {sale.posAccountingStatus} · {sale.totalAmount} {sale.currencyCode}
+                      </div>
+                      <div className="mt-1 text-sm text-[#68776f]">
+                        {t("pos.review.sessionWarehouse", {
+                          session: sale.session?.sessionNumber ?? "—",
+                          warehouse: sale.session?.warehouse.name ?? "—",
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => approveReviewMutation.mutate(sale.id)}
-                        className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                        onClick={() => reprintReceiptMutation.mutate(sale.id)}
+                        className="rounded-full border border-[#d6e0d8] px-4 py-2 text-xs font-bold text-[#46644b]"
                       >
-                        {t("pos.review.approve")}
+                        {t("pos.sales.printLastReceipt")}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => rejectReviewMutation.mutate(sale.id)}
-                        className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-                      >
-                        {t("pos.review.reject")}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <DetailTile label="Subtotal" value={sale.subtotalAmount} />
-                <DetailTile label="Discount" value={sale.discountAmount} />
-                <DetailTile label="Tax" value={sale.taxAmount} />
-                <DetailTile label="Change" value={sale.posChangeAmount ?? "0.00"} />
-              </div>
-              <div className="mt-5 grid gap-3 xl:grid-cols-2">
-                <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
-                  <div className="font-bold text-[#233329]">Lines</div>
-                  <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
-                    {sale.lines.map((line) => (
-                      <div key={line.id} className="flex items-center justify-between gap-3">
-                        <span>
-                          {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
-                        </span>
-                        <span>
-                          {line.quantity} x {line.unitPrice} = {line.lineAmount}
-                        </span>
-                      </div>
-                    ))}
+                      {sale.posAccountingStatus === "POSTED" ? (
+                        <button
+                          type="button"
+                          onClick={() => reverseReviewMutation.mutate(sale.id)}
+                          className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                        >
+                          {t("pos.review.reverse")}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => approveReviewMutation.mutate(sale.id)}
+                            className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                          >
+                            {t("pos.review.approve")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => rejectReviewMutation.mutate(sale.id)}
+                            className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                          >
+                            {t("pos.review.reject")}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
-                  <div className="font-bold text-[#233329]">Payments</div>
-                  <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
-                    {sale.payments.map((payment) => (
-                      <div key={payment.id} className="flex items-center justify-between gap-3">
-                        <span>
-                          {payment.paymentMethod} · {payment.bankCashAccount.name}
-                        </span>
-                        <span>
-                          {payment.amount}
-                          {payment.tenderedAmount ? ` / tendered ${payment.tenderedAmount}` : ""}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <DetailTile label={t("pos.review.subtotal")} value={sale.subtotalAmount} />
+                    <DetailTile label={t("pos.review.discount")} value={sale.discountAmount} />
+                    <DetailTile label={t("pos.review.tax")} value={sale.taxAmount} />
+                    <DetailTile label={t("pos.review.change")} value={sale.posChangeAmount ?? "0.00"} />
                   </div>
-                </div>
-              </div>
-            </Card>
+                  <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                    <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                      <div className="font-bold text-[#233329]">{t("pos.review.linesTitle")}</div>
+                      <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
+                        {sale.lines.map((line) => (
+                          <div key={line.id} className="flex items-center justify-between gap-3">
+                            <span>
+                              {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
+                            </span>
+                            <span>
+                              {line.quantity} x {line.unitPrice} = {line.lineAmount}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                      <div className="font-bold text-[#233329]">{t("pos.review.paymentsTitle")}</div>
+                      <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
+                        {sale.payments.map((payment) => (
+                          <div key={payment.id} className="flex items-center justify-between gap-3">
+                            <span>
+                              {payment.paymentMethod} · {payment.bankCashAccount.name}
+                            </span>
+                            <span>
+                              {payment.amount}
+                              {payment.tenderedAmount ? ` / tendered ${payment.tenderedAmount}` : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
           ))}
           {(reviewQuery.data ?? []).length === 0 ? (
             <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
-              No POS sales are waiting for accountant review right now.
+              {t("pos.review.empty")}
             </Card>
           ) : null}
         </div>
@@ -2501,21 +2709,21 @@ export function PosPage() {
             {t("pos.workspace.returns")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Capture cashier-side POS returns and then route them through accounting approval or reversal.
+            {t("pos.returns.description")}
           </p>
         </Card>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-            <div className="text-lg font-black text-[#233329]">Create POS return</div>
+            <div className="text-lg font-black text-[#233329]">{t("pos.returns.createTitle")}</div>
             <div className="mt-4 space-y-4">
-              <Field label="Original sale" className="mb-0">
+              <Field label={t("pos.returns.originalSaleLabel")} className="mb-0">
                 <select
                   value={selectedReturnSaleId}
                   onChange={(event) => setSelectedReturnSaleId(event.target.value)}
                   className="w-full rounded-[18px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
                 >
-                  <option value="">Select a completed POS sale</option>
+                  <option value="">{t("pos.returns.selectSalePlaceholder")}</option>
                   {completedSales.map((sale) => (
                     <option key={sale.id} value={sale.id}>
                       {sale.reference} · {sale.totalAmount} {sale.currencyCode}
@@ -2527,17 +2735,17 @@ export function PosPage() {
                 <>
                   <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
                     <div className="grid gap-2 md:grid-cols-2">
-                      <DetailTile label="Receipt" value={selectedReturnSale.receiptNumber ?? "—"} compact />
-                      <DetailTile label="Session" value={selectedReturnSale.session?.sessionNumber ?? "—"} compact />
-                      <DetailTile label="Warehouse" value={selectedReturnSale.session?.warehouse.name ?? "—"} compact />
-                      <DetailTile label="Invoice total" value={selectedReturnSale.totalAmount} compact />
+                      <DetailTile label={t("pos.returns.receiptLabel")} value={selectedReturnSale.receiptNumber ?? "—"} compact />
+                      <DetailTile label={t("pos.returns.sessionLabel")} value={selectedReturnSale.session?.sessionNumber ?? "—"} compact />
+                      <DetailTile label={t("pos.returns.warehouseLabel")} value={selectedReturnSale.session?.warehouse.name ?? "—"} compact />
+                      <DetailTile label={t("pos.returns.invoiceTotalLabel")} value={selectedReturnSale.totalAmount} compact />
                     </div>
                   </div>
-                  <Field label="Return reason" className="mb-0">
+                  <Field label={t("pos.returns.reasonLabel")} className="mb-0">
                     <Input
                       value={returnReason}
                       onChange={(event) => setReturnReason(event.target.value)}
-                      placeholder="Damaged item, customer cancellation, pricing correction..."
+                      placeholder={t("pos.returns.reasonPlaceholder")}
                       className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
                     />
                   </Field>
@@ -2554,11 +2762,14 @@ export function PosPage() {
                               {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
                             </div>
                             <div className="mt-1 text-sm text-[#68776f]">
-                              Sold {soldQuantity} at {line.unitPrice} each
+                              {t("pos.returns.soldAt", {
+                                quantity: soldQuantity,
+                                price: line.unitPrice,
+                              })}
                             </div>
                           </div>
-                          <DetailTile label="Line total" value={line.lineAmount} compact />
-                          <Field label="Return qty" className="mb-0">
+                          <DetailTile label={t("pos.returns.lineTotalLabel")} value={line.lineAmount} compact />
+                          <Field label={t("pos.returns.returnQtyLabel")} className="mb-0">
                             <Input
                               type="number"
                               min="0"
@@ -2581,14 +2792,14 @@ export function PosPage() {
                   <div className="space-y-3 rounded-[24px] border border-[#dbe2dd] bg-white p-4">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-bold text-[#233329]">
-                        Refund methods
+                        {t("pos.returns.refundMethodsTitle")}
                       </div>
                       <button
                         type="button"
                         onClick={addReturnPaymentEntry}
                         className="rounded-full border border-[#d6ded8] px-3 py-1.5 text-xs font-bold text-[#55645c]"
                       >
-                        Add refund
+                        {t("pos.returns.addRefundAction")}
                       </button>
                     </div>
                     {returnPaymentEntriesResolved.map((entry) => (
@@ -2605,12 +2816,12 @@ export function PosPage() {
                           }
                           className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
                         >
-                          <option value="CASH">Cash</option>
-                          <option value="CARD">Card</option>
-                          <option value="CLIQ">CliQ</option>
-                          <option value="BANK_TRANSFER">Bank Transfer</option>
-                          <option value="WALLET">Wallet</option>
-                          <option value="STORE_CREDIT">Store Credit</option>
+                          <option value="CASH">{t("pos.returns.method.CASH")}</option>
+                          <option value="CARD">{t("pos.returns.method.CARD")}</option>
+                          <option value="CLIQ">{t("pos.returns.method.CLIQ")}</option>
+                          <option value="BANK_TRANSFER">{t("pos.returns.method.BANK_TRANSFER")}</option>
+                          <option value="WALLET">{t("pos.returns.method.WALLET")}</option>
+                          <option value="STORE_CREDIT">{t("pos.returns.method.STORE_CREDIT")}</option>
                         </select>
                         <select
                           value={entry.bankCashAccountId}
@@ -2643,7 +2854,7 @@ export function PosPage() {
                           onChange={(event) =>
                             updateReturnPaymentEntry(entry.id, { reference: event.target.value })
                           }
-                          placeholder="Reference"
+                          placeholder={t("pos.returns.referencePlaceholder")}
                           className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
                         />
                         <button
@@ -2658,10 +2869,10 @@ export function PosPage() {
                     ))}
                   </div>
                   <div className="grid gap-3 rounded-[24px] border border-[#dbe2dd] bg-[#f8faf8] p-4 sm:grid-cols-3">
-                    <DetailTile label="Returned lines" value={String(returnPreview.selectedLineCount)} compact />
-                    <DetailTile label="Expected refund" value={formatCurrency(returnPreview.totalAmount)} compact />
+                    <DetailTile label={t("pos.returns.returnedLines")} value={String(returnPreview.selectedLineCount)} compact />
+                    <DetailTile label={t("pos.returns.expectedRefund")} value={formatCurrency(returnPreview.totalAmount)} compact />
                     <DetailTile
-                      label="Allocated refund"
+                      label={t("pos.returns.allocatedRefund")}
                       value={formatCurrency(
                         returnPaymentEntriesResolved.reduce(
                           (sum, entry) => sum + entry.amountValue,
@@ -2677,40 +2888,39 @@ export function PosPage() {
                     disabled={createReturnMutation.isPending}
                     className="w-full rounded-[20px] bg-[#46644b] px-4 py-3 text-sm font-black text-white"
                   >
-                    {createReturnMutation.isPending ? "..." : "Create POS return"}
+                    {createReturnMutation.isPending ? "..." : t("pos.returns.createTitle")}
                   </button>
-                </>
-              ) : (
-                <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
-                  Choose a completed POS sale to start a return.
-                </div>
-              )}
-            </div>
-          </Card>
+                  </>
+                  ) : (
+                  <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
+                  {t("pos.returns.selectSaleHelp")}
+                  </div>
+                  )}
+                  </div>
+                  </Card>
 
-          <div className="space-y-4">
-            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <SoftMetric
-                  label="Returns"
+                  <div className="space-y-4">
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                  <SoftMetric
+                  label={t("pos.returns.returnsMetric")}
                   value={formatCount(returns.length)}
-                  hint="Operational returns created from completed POS sales."
-                />
-                <SoftMetric
-                  label="Refunded"
+                  hint={t("pos.returns.returnsHint")}
+                  />
+                  <SoftMetric
+                  label={t("pos.returns.refundedMetric")}
                   value={formatCurrency(
                     returns.reduce((sum, row) => sum + parseAmount(row.refundAmount), 0),
                   )}
-                  hint="Total refund amount recorded across POS returns."
-                />
-                <SoftMetric
-                  label="Pending"
+                  hint={t("pos.returns.refundedHint")}
+                  />
+                  <SoftMetric
+                  label={t("pos.returns.pendingMetric")}
                   value={formatCount(
                     returns.filter((row) => row.accountingStatus === "PENDING_REVIEW").length,
                   )}
-                  hint="Returns waiting for accounting review."
-                />
-              </div>
+                  hint={t("pos.returns.pendingHint")}
+                  />              </div>
             </Card>
             {returns.map((posReturn) => (
               <Card key={posReturn.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
@@ -2791,29 +3001,29 @@ export function PosPage() {
             {t("pos.workspace.reports")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Payment mix, cashier performance, branch totals, pending review exposure, stock impact, and tax summary for POS activity.
+            {t("pos.reports.description")}
           </p>
           {overview ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-4">
               <SoftMetric
-                label="Pending Review"
+                label={t("pos.reports.pendingReviewLabel")}
                 value={formatCount(overview.pendingReviewCount)}
-                hint="Completed POS sales waiting for accounting."
+                hint={t("pos.reports.pendingReviewHint")}
               />
               <SoftMetric
-                label="Payment Mix"
+                label={t("pos.reports.paymentMixLabel")}
                 value={formatCount(salesByPaymentMethod.length)}
-                hint="Distinct payment methods used in POS sales."
+                hint={t("pos.reports.paymentMixHint")}
               />
               <SoftMetric
-                label="Cashiers"
+                label={t("pos.reports.cashiersLabel")}
                 value={formatCount(salesByCashier.length)}
-                hint="Cashiers with completed POS sales in the current report."
+                hint={t("pos.reports.cashiersHint")}
               />
               <SoftMetric
-                label="Branches"
+                label={t("pos.reports.branchesLabel")}
                 value={formatCount(salesByBranch.length)}
-                hint="Branches represented in POS reporting."
+                hint={t("pos.reports.branchesHint")}
               />
             </div>
           ) : null}
@@ -2821,39 +3031,56 @@ export function PosPage() {
 
         <div className="grid gap-6 xl:grid-cols-2">
           <ReportCard
-            title="Sales by payment method"
+            title={t("pos.reports.salesByPaymentTitle")}
             rows={salesByPaymentMethod.map((row) => ({
               label: row.method,
-              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+              value: t("pos.reports.paymentValue", {
+                amount: row.salesAmount,
+                count: row.invoiceCount,
+              }),
             }))}
           />
           <ReportCard
-            title="Sales by cashier"
+            title={t("pos.reports.salesByCashierTitle")}
             rows={salesByCashier.map((row) => ({
               label: row.cashierName,
-              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+              value: t("pos.reports.paymentValue", {
+                amount: row.salesAmount,
+                count: row.invoiceCount,
+              }),
             }))}
           />
           <ReportCard
-            title="Sales by branch"
+            title={t("pos.reports.salesByBranchTitle")}
             rows={salesByBranch.map((row) => ({
               label: row.branchName,
-              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+              value: t("pos.reports.paymentValue", {
+                amount: row.salesAmount,
+                count: row.invoiceCount,
+              }),
             }))}
           />
           <ReportCard
-            title="Tax summary"
+            title={t("pos.reports.taxSummaryTitle")}
             rows={taxSummary.map((row: PosTaxSummaryRow) => ({
               label: `${row.taxCode} (${row.rate}%)`,
-              value: `${row.netTax} net tax · ${row.returnTax} returns`,
+              value: t("pos.reports.taxValue", {
+                netTax: row.netTax,
+                returnTax: row.returnTax,
+              }),
             }))}
           />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">
           <DetailedTableCard
-            title="Sales by item"
-            headers={["Item", "Qty", "Sales", "Tax"]}
+            title={t("pos.reports.salesByItemTitle")}
+            headers={[
+              t("pos.reports.header.item"),
+              t("pos.reports.header.qty"),
+              t("pos.reports.header.sales"),
+              t("pos.reports.header.tax"),
+            ]}
             rows={salesByItem.map((row: PosSalesByItemRow) => [
               row.itemName,
               row.quantity,
@@ -2862,8 +3089,14 @@ export function PosPage() {
             ])}
           />
           <DetailedTableCard
-            title="Inventory impact"
-            headers={["Reference", "Item", "Warehouse", "Qty Out / In", "Running Qty"]}
+            title={t("pos.reports.inventoryImpactTitle")}
+            headers={[
+              t("pos.reports.header.reference"),
+              t("pos.reports.header.item"),
+              t("pos.reports.header.warehouse"),
+              t("pos.reports.header.qtyInOut"),
+              t("pos.reports.header.runningQty"),
+            ]}
             rows={inventoryImpact.map((row: PosInventoryImpactRow) => [
               row.transactionReference,
               row.item?.name ?? "—",
@@ -2887,7 +3120,7 @@ export function PosPage() {
             {t("pos.workspace.settings")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Runtime POS policies and role-based access derived from current system configuration.
+            {t("pos.settings.description")}
           </p>
         </Card>
 
@@ -2895,43 +3128,43 @@ export function PosPage() {
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <DetailTile
-                label="Invoice discount tax policy"
+                label={t("pos.settings.discountTaxPolicy")}
                 value={settings.runtime.invoiceDiscountTaxPolicy}
               />
               <DetailTile
-                label="Credit sale"
-                value={settings.runtime.allowCreditSale ? "Enabled" : "Disabled"}
+                label={t("pos.settings.creditSale")}
+                value={settings.runtime.allowCreditSale ? t("pos.settings.enabled") : t("pos.settings.disabled")}
               />
               <DetailTile
-                label="Auto post"
-                value={settings.runtime.autoPost ? "Enabled" : "Disabled"}
+                label={t("pos.settings.autoPost")}
+                value={settings.runtime.autoPost ? t("pos.settings.enabled") : t("pos.settings.disabled")}
               />
               <DetailTile
-                label="Allow close with drafts"
-                value={settings.runtime.allowCloseWithDrafts ? "Enabled" : "Disabled"}
+                label={t("pos.settings.allowCloseWithDrafts")}
+                value={settings.runtime.allowCloseWithDrafts ? t("pos.settings.enabled") : t("pos.settings.disabled")}
               />
               <DetailTile
-                label="Negative stock"
-                value={settings.runtime.negativeStockAllowed ? "Allowed" : "Blocked"}
+                label={t("pos.settings.negativeStock")}
+                value={settings.runtime.negativeStockAllowed ? t("pos.settings.allowed") : t("pos.settings.blocked")}
               />
               <DetailTile
-                label="Cashier discount limit"
+                label={t("pos.settings.cashierDiscountLimit")}
                 value={`${settings.runtime.cashierDiscountLimitPercent}%`}
               />
             </div>
 
             <DetailedTableCard
-              title="Role-based POS actions"
-              headers={["Action", "Allowed"]}
+              title={t("pos.settings.roleActionsTitle")}
+              headers={[t("pos.settings.header.action"), t("pos.settings.header.allowed")]}
               rows={Object.entries(settings.permissions).map(([action, allowed]) => [
                 action,
-                allowed ? "Yes" : "No",
+                allowed ? t("pos.settings.yes") : t("pos.settings.no"),
               ])}
             />
           </>
         ) : (
           <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
-            POS runtime settings could not be loaded.
+            {t("pos.settings.loadError")}
           </Card>
         )}
       </div>
@@ -3126,6 +3359,7 @@ function OpenShiftPanel({
   ) => void;
   isPending?: boolean;
 }) {
+  const { t } = useTranslation();
   const [openingCash, setOpeningCash] = useState(sessionState.openingCash);
   const [warehouseId, setWarehouseId] = useState(sessionState.warehouseId ?? "");
   const [cashAccountId, setCashAccountId] = useState(sessionState.cashAccountId ?? "");
@@ -3148,7 +3382,7 @@ function OpenShiftPanel({
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="Terminal Number / رقم الجهاز" className="mb-0">
+      <Field label={t("pos.sessions.terminalNumberLabel")} className="mb-0">
         <Input
           value={sessionState.terminalName}
           onChange={(event) =>
@@ -3157,7 +3391,7 @@ function OpenShiftPanel({
           className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
         />
       </Field>
-      <Field label="Branch / الفرع" className="mb-0">
+      <Field label={t("pos.sessions.branch")} className="mb-0">
         <Input
           value={sessionState.branchName}
           onChange={(event) =>
@@ -3166,14 +3400,14 @@ function OpenShiftPanel({
           className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
         />
       </Field>
-      <Field label="Cashier / الكاشير" className="mb-0">
+      <Field label={t("pos.sessions.cashierLabel")} className="mb-0">
         <Input
           value={cashierLabel}
           readOnly
           className="rounded-[18px] border-[#d6e1d9] bg-[#f2f6f3] py-3 text-[#53665a]"
         />
       </Field>
-      <Field label="Opening Cash / الرصيد الافتتاحي" className="mb-0">
+      <Field label={t("pos.sessions.openingCash")} className="mb-0">
         <Input
           type="number"
           min="0"
@@ -3183,7 +3417,7 @@ function OpenShiftPanel({
           className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
         />
       </Field>
-      <Field label="Warehouse / المستودع" className="mb-0">
+      <Field label={t("pos.sessions.warehouse")} className="mb-0">
         <select
           value={warehouseId}
           onChange={(event) => setWarehouseId(event.target.value)}
@@ -3196,7 +3430,7 @@ function OpenShiftPanel({
           ))}
         </select>
       </Field>
-      <Field label="Cash Register / الصندوق" className="mb-0">
+      <Field label={t("pos.sessions.cashRegisterLabel")} className="mb-0">
         <select
           value={cashAccountId}
           onChange={(event) => setCashAccountId(event.target.value)}
@@ -3217,7 +3451,7 @@ function OpenShiftPanel({
           disabled={isPending}
           className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_42px_-28px_rgba(95,138,103,0.9)] transition hover:bg-[#557b5c] disabled:opacity-50"
         >
-          {isPending ? "Opening..." : "Open Shift / فتح الوردية"}
+          {isPending ? t("pos.sessions.openingAction") : t("pos.sessions.openShiftAction")}
         </button>
       </div>
     </div>
@@ -3237,15 +3471,16 @@ function ActiveSessionBar({
   onCloseSession: () => void;
   isPending?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-[28px] border border-[#d8e2db] bg-white p-5 shadow-[0_20px_60px_-42px_rgba(43,79,54,0.3)]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <DetailTile label="Terminal / الجهاز" value={session.terminalName} compact />
-          <DetailTile label="Branch / الفرع" value={session.branchName ?? "—"} compact />
-          <DetailTile label="Cashier / الكاشير" value={cashierLabel} compact />
-          <DetailTile label="Session / الوردية" value={session.sessionNumber} compact />
-          <DetailTile label="Warehouse / المستودع" value={warehouseName} compact />
+          <DetailTile label={t("pos.sessions.terminalLabel")} value={session.terminalName} compact />
+          <DetailTile label={t("pos.sessions.branch")} value={session.branchName ?? "—"} compact />
+          <DetailTile label={t("pos.sessions.cashierLabel")} value={cashierLabel} compact />
+          <DetailTile label={t("pos.returns.sessionLabel")} value={session.sessionNumber} compact />
+          <DetailTile label={t("pos.sessions.warehouse")} value={warehouseName} compact />
         </div>
         <button
           type="button"
@@ -3253,7 +3488,7 @@ function ActiveSessionBar({
           disabled={isPending}
           className="inline-flex items-center justify-center rounded-[18px] border border-[#ead8d4] bg-[#fff8f7] px-5 py-3 text-sm font-bold text-[#8a5952] transition hover:bg-white disabled:opacity-50"
         >
-          {isPending ? "Closing..." : "Close Shift / إغلاق الوردية"}
+          {isPending ? t("pos.sessions.closingAction") : t("pos.sessions.closeShiftAction")}
         </button>
       </div>
     </div>

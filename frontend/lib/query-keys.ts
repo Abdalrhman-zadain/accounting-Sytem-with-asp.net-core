@@ -193,6 +193,9 @@ export const queryKeys = {
   posHeldSales(token: string | null, sessionId: string | null) {
     return ["pos-held-sales", token, sessionId] as const;
   },
+  posDraftSales(token: string | null, sessionId: string | null) {
+    return ["pos-draft-sales", token, sessionId] as const;
+  },
   posCompletedSales(token: string | null) {
     return ["pos-completed-sales", token] as const;
   },

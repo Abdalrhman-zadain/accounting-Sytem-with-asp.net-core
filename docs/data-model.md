@@ -125,7 +125,7 @@ Key fields:
 - sales representative `code`, `name`, `phone`, `email`, `defaultCommissionRate`, optional `employeeReceivableAccountId`, `status`, and linked customer count
 - quotation/order/invoice/credit-note `reference`, `status`, date fields, `currencyCode`, totals, and source-document references where applicable
 - invoice `dueDate`, `subtotalAmount`, `discountAmount`, `taxAmount`, `totalAmount`, and `journalEntryId`
-- POS-enabled invoice `invoiceType`, `posOperationalStatus`, `posAccountingStatus`, optional `posSessionId`, optional `posReceiptNumber`, optional `posCompletedAt`, optional `posReviewedAt`, optional `posReviewedByUserId`, optional `posReviewNotes`, and optional `posChangeAmount`
+- POS-enabled invoice `invoiceType`, `posOperationalStatus`, `posAccountingStatus`, optional `posSessionId`, optional `posReceiptNumber`, optional `posCompletedAt`, optional `posReviewedAt`, optional `posReviewedByUserId`, optional `posReviewNotes`, and optional `posChangeAmount`; the POS workflow now intentionally persists both `DRAFT` and `HELD` operational states before completion
 - invoice `allocatedAmount`, `outstandingAmount`, and `allocationStatus`
 - quotation line `itemId` (optional link to `InventoryItem`) plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineAmount`/`lineTotalAmount`, and `revenueAccountId`
 - sales-order line `itemId` (optional link to `InventoryItem`) plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineTotalAmount`, and `revenueAccountId`
@@ -158,7 +158,7 @@ Accounting meaning:
 - POS sales are stored as normal `SalesInvoice` rows with `invoiceType = POS`; draft/held/completed operational flow is tracked on the POS-specific status fields instead of the standard invoice status alone
 - completed POS sales keep `allocatedAmount = totalAmount` and `outstandingAmount = 0` because payment is captured operationally at the terminal rather than through later receipt allocation
 - POS completion creates `PosPayment` rows plus a draft journal entry that debits the mapped payment accounts, credits revenue/tax, and includes COGS/inventory-relief lines for stock items
-- POS inventory impact is immediate on sale completion, while ledger impact is deferred until accountant approval posts the prepared draft journal entry
+- POS inventory impact is immediate on sale completion, while ledger impact is deferred until accountant approval posts the prepared draft journal entry; review can now post one sale at a time or approve the prepared journal entries for all eligible sales in a session
 - POS returns are stored separately from invoices in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, stay linked back to the original POS sale, create immediate stock-in for inventory items, and prepare their own refund/sales-return draft journal for accountant approval
 - completed POS sales can move to `REFUNDED` operational status once linked return quantities fully offset the original sale lines, while accounting status can independently move through `PENDING_REVIEW`, `POSTED`, `REJECTED`, and `REVERSED`
 - invoice posting debits receivables and credits revenue plus sales tax/VAT liability when tax is present

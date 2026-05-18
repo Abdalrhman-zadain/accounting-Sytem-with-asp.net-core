@@ -10,6 +10,7 @@ import {
   OpenPosSessionDto,
   PosReverseAccountingDto,
   PosReviewDecisionDto,
+  SavePosDraftDto,
   VoidPosSaleDto,
 } from "./dto/pos.dto";
 import { PosService } from "./pos.service";
@@ -54,8 +55,13 @@ export class PosController {
   }
 
   @Get("sales/held")
-  listHeldSales(@Query("sessionId") sessionId: string) {
-    return this.service.listHeldSales(sessionId);
+  listHeldSales(@Req() req: Request & { user?: any }, @Query("sessionId") sessionId: string) {
+    return this.service.listHeldSales(sessionId, req.user);
+  }
+
+  @Get("sales/drafts")
+  listDraftSales(@Req() req: Request & { user?: any }, @Query("sessionId") sessionId: string) {
+    return this.service.listDraftSales(sessionId, req.user);
   }
 
   @Get("sales/completed")
@@ -113,6 +119,11 @@ export class PosController {
     return this.service.holdSale(dto, req.user);
   }
 
+  @Post("sales/draft")
+  saveDraft(@Req() req: Request & { user?: any }, @Body() dto: SavePosDraftDto) {
+    return this.service.saveDraft(dto, req.user);
+  }
+
   @Post("sales/complete")
   completeSale(@Req() req: Request & { user?: any }, @Body() dto: CompletePosSaleDto) {
     return this.service.completeSale(dto, req.user);
@@ -134,6 +145,15 @@ export class PosController {
     @Body() dto: PosReviewDecisionDto,
   ) {
     return this.service.approveAccounting(id, dto, req.user);
+  }
+
+  @Post("sessions/:id/accounting-approve")
+  approveSessionAccounting(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: PosReviewDecisionDto,
+  ) {
+    return this.service.approveSessionAccounting(id, dto, req.user);
   }
 
   @Post("sales/:id/accounting-reject")

@@ -3218,6 +3218,16 @@ export type HoldPosSalePayload = {
   payments?: PosPaymentEntryPayload[];
 };
 
+export type SavePosDraftPayload = {
+  sessionId: string;
+  invoiceId?: string;
+  invoiceDate?: string;
+  currencyCode?: string;
+  description?: string;
+  lines: SalesLinePayload[];
+  payments?: PosPaymentEntryPayload[];
+};
+
 export type CompletePosSalePayload = {
   sessionId: string;
   invoiceId?: string;
@@ -3328,6 +3338,11 @@ export type PosSale = {
     sessionNumber: string;
     terminalName: string;
     branchName?: string | null;
+    cashierUser?: {
+      id: string;
+      email: string;
+      name?: string | null;
+    } | null;
     warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
   } | null;
   lines: Array<{
@@ -3364,6 +3379,11 @@ export type PosSale = {
 export type PosReceipt = {
   receiptNumber: string;
   soldAt: string;
+  companyName: string;
+  branchName?: string | null;
+  taxNumber?: string | null;
+  cashierName: string;
+  terminalName?: string | null;
   total: string;
   tax: string;
   discount: string;
@@ -3386,6 +3406,13 @@ export type PosReceipt = {
 export type PosCompleteSaleResponse = {
   sale: PosSale;
   receipt: PosReceipt;
+};
+
+export type PosSessionAccountingApprovalResponse = {
+  sessionId: string;
+  sessionNumber: string;
+  approvedCount: number;
+  sales: PosSale[];
 };
 
 export type PosSessionReport = {

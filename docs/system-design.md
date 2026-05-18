@@ -14,7 +14,7 @@ The current business scope is:
 - sales and receivables workflows for customers, quotations, sales orders, invoices, customer receipts, credit notes, receipt allocation, balance tracking, and aging
 - sales-invoice posting can optionally hand off into a separate prefilled customer-receipt creation flow (`Post & Create Receipt`) while keeping the invoice document, receipt document, receipt allocation, and journal entries distinct
 - posted sales invoices now also issue stock for inventory-tracked lines from the selected warehouse, validate warehouse availability, and add COGS/inventory-relief lines to the invoice posting while service lines remain revenue-only
-- POS now reuses the sales-invoice domain through `SalesInvoice.invoiceType = POS`, stores cashier shifts in `PosSession`, stores tender/payment splits in `PosPayment`, stores return/refund records in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, completes the operational sale before GL posting, issues inventory immediately on completion, creates a draft journal for accountant review, posts or reverses that journal later from the POS review queue, and exposes cashier-side held-sale, return/refund, session-report, and detailed reporting workspaces from `/pos`
+- POS now reuses the sales-invoice domain through `SalesInvoice.invoiceType = POS`, stores cashier shifts in `PosSession`, stores tender/payment splits in `PosPayment`, stores return/refund records in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, supports cashier-side draft and held sale persistence before completion, completes the operational sale before GL posting, issues inventory immediately on completion, creates a draft journal for accountant review, posts that journal later per sale or in session-level batches from the POS review queue, and exposes cashier-side draft/held-sale, return/refund, session-report, and detailed reporting workspaces from `/pos`
 - tax master data for controlled tax codes, rates, active/inactive status, and optional posting-account mappings used by sales and purchase document lines
 - Phase 4 purchases includes supplier master management, internal purchase requests with approval/status history, dedicated purchase-request details pages with in-page approval/conversion actions, purchase orders with direct/request-linked creation plus draft-through-close operational statuses, purchase invoice drafts with source-order or source-request linkage and line-level account classification, supplier payments with invoice allocation plus Bank & Cash posting integration, and debit notes with optional purchase-invoice linkage, purchase-policy-driven discount account defaults, supplier/payable balance reduction, and posted journal entries that reduce payable plus purchase discount and input VAT when applicable
 - Phase 5 inventory currently implements `item-groups`, `item-categories`, `units-of-measure`, `item-master`, `warehouses`, `goods-receipts`, `goods-issues`, sales-invoice stock issues, `transfers`, `adjustments`, `stock-ledger`, and `policy` slices with enforced group/category/material hierarchy, managed base units of measure, warehouse-level balances, stock movement history, source-document drill-down, organization-level costing method selection via `inventory/policy` (`WEIGHTED_AVERAGE` or `FIFO`), prevent-negative-stock policy toggles, optional accounting posting integration through Phase 1 journal/posting services, reverse-status workflows for posted inventory documents, and operational item barcode/QR identifiers used for scanning and label workflows without creating accounting entries
@@ -113,14 +113,14 @@ POS lives on top of the Phase 3 sales/inventory/accounting seams rather than cre
 Browser
   -> /pos
   -> frontend/features/pos
-  -> GET /pos/sessions/active | /pos/sales/held | /pos/sales/review | /pos/returns | /pos/reports/overview
+  -> GET /pos/sessions/active | /pos/sales/drafts | /pos/sales/held | /pos/sales/review | /pos/returns | /pos/reports/overview
   -> POST /pos/sessions/open | /pos/sessions/:id/close
-  -> POST /pos/sales/hold | /pos/sales/complete | /pos/returns
+  -> POST /pos/sales/draft | /pos/sales/hold | /pos/sales/complete | /pos/returns
   -> PosController / PosService
   -> SalesInvoice(invoiceType=POS) + PosSession + PosPayment + PosReturn
   -> inventory movement on sale complete and return complete
   -> draft journal entry for sale/return review
-  -> POST /pos/sales/:id/accounting-approve and /accounting-reverse
+  -> POST /pos/sales/:id/accounting-approve, /pos/sessions/:id/accounting-approve, and /accounting-reverse
   -> POST /pos/returns/:id/accounting-approve and /accounting-reverse
 ```
 

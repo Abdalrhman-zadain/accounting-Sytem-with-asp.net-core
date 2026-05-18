@@ -105,6 +105,14 @@ export class HoldPosSaleDto extends PosSaleBaseDto {
   payments?: PosPaymentDto[];
 }
 
+export class SavePosDraftDto extends PosSaleBaseDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PosPaymentDto)
+  payments?: PosPaymentDto[];
+}
+
 export class CompletePosSaleDto extends PosSaleBaseDto {
   @IsArray()
   @ValidateNested({ each: true })

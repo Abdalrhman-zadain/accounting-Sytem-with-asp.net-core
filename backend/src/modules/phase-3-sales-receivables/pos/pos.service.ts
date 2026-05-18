@@ -38,6 +38,7 @@ import {
   PosReverseAccountingDto,
   PosReturnPaymentDto,
   PosReviewDecisionDto,
+  SavePosDraftDto,
   VoidPosSaleDto,
 } from "./dto/pos.dto";
 
@@ -240,13 +241,28 @@ export class PosService {
     return this.buildSessionReport(id);
   }
 
-  async listHeldSales(sessionId: string) {
-    await this.ensureSessionExists(sessionId);
+  async listHeldSales(sessionId: string, user?: AuthUser) {
+    await this.ensureSessionAccess(sessionId, user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
         posSessionId: sessionId,
         posOperationalStatus: PosOperationalStatus.HELD,
+      },
+      include: this.posSaleInclude(),
+      orderBy: { updatedAt: "desc" },
+    });
+
+    return rows.map((row) => this.mapPosSale(row));
+  }
+
+  async listDraftSales(sessionId: string, user?: AuthUser) {
+    await this.ensureSessionAccess(sessionId, user);
+    const rows = await this.prisma.salesInvoice.findMany({
+      where: {
+        invoiceType: SalesInvoiceType.POS,
+        posSessionId: sessionId,
+        posOperationalStatus: PosOperationalStatus.DRAFT,
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
@@ -293,6 +309,19 @@ export class PosService {
 
   async holdSale(dto: HoldPosSaleDto, user?: AuthUser) {
     this.ensurePosPermission("HOLD_SALE", user);
+    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.HELD);
+  }
+
+  async saveDraft(dto: SavePosDraftDto, user?: AuthUser) {
+    this.ensurePosPermission("SELL", user);
+    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.DRAFT);
+  }
+
+  private async saveDraftLikeSale(
+    dto: HoldPosSaleDto | SavePosDraftDto,
+    user: AuthUser | undefined,
+    status: PosOperationalStatus,
+  ) {
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
@@ -342,7 +371,7 @@ export class PosService {
               outstandingAmount: this.toAmount(0),
               allocationStatus: AllocationStatus.UNALLOCATED,
               status: SalesInvoiceStatus.DRAFT,
-              posOperationalStatus: PosOperationalStatus.HELD,
+              posOperationalStatus: status,
               posAccountingStatus: PosAccountingStatus.UNPOSTED,
               posCompletedAt: null,
               posReceiptNumber: null,
@@ -374,7 +403,7 @@ export class PosService {
               allocatedAmount: this.toAmount(0),
               outstandingAmount: this.toAmount(0),
               allocationStatus: AllocationStatus.UNALLOCATED,
-              posOperationalStatus: PosOperationalStatus.HELD,
+              posOperationalStatus: status,
               posAccountingStatus: PosAccountingStatus.UNPOSTED,
               posSessionId: session.id,
               lines: {
@@ -817,6 +846,83 @@ export class PosService {
     });
 
     return this.mapPosSale(updated);
+  }
+
+  async approveSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
+    this.ensurePosPermission("ACCOUNTING_POST", user);
+    const session = await this.prisma.posSession.findUnique({
+      where: { id },
+      select: { id: true, sessionNumber: true },
+    });
+    if (!session) {
+      throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const sales = await tx.salesInvoice.findMany({
+        where: {
+          invoiceType: SalesInvoiceType.POS,
+          posSessionId: id,
+          posOperationalStatus: PosOperationalStatus.COMPLETED,
+          posAccountingStatus: {
+            in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.REJECTED],
+          },
+          journalEntryId: { not: null },
+        },
+        select: {
+          id: true,
+          reference: true,
+          journalEntryId: true,
+        },
+        orderBy: [{ posCompletedAt: "asc" }, { createdAt: "asc" }],
+      });
+      if (!sales.length) {
+        throw new BadRequestException(
+          "No POS sales in this session are awaiting accounting approval.",
+        );
+      }
+
+      for (const sale of sales) {
+        await this.postingService.post(sale.journalEntryId!, tx as never);
+        await tx.salesInvoice.update({
+          where: { id: sale.id },
+          data: {
+            posAccountingStatus: PosAccountingStatus.POSTED,
+            posReviewedAt: new Date(),
+            posReviewedByUserId: user?.userId ?? null,
+            posReviewNotes: dto.notes?.trim() || null,
+            postedAt: new Date(),
+          },
+        });
+      }
+
+      return tx.salesInvoice.findMany({
+        where: {
+          id: { in: sales.map((sale) => sale.id) },
+        },
+        include: this.posSaleInclude(),
+        orderBy: [{ posCompletedAt: "asc" }, { createdAt: "asc" }],
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "PosSession",
+      entityId: session.id,
+      action: AuditAction.POST,
+      details: {
+        sessionNumber: session.sessionNumber,
+        approvedSalesCount: result.length,
+        notes: dto.notes?.trim() || null,
+      },
+    });
+
+    return {
+      sessionId: session.id,
+      sessionNumber: session.sessionNumber,
+      approvedCount: result.length,
+      sales: result.map((row) => this.mapPosSale(row)),
+    };
   }
 
   async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
@@ -2402,6 +2508,21 @@ export class PosService {
     return session;
   }
 
+  private async ensureSessionAccess(id: string, user?: AuthUser) {
+    const session = await this.prisma.posSession.findUnique({
+      where: { id },
+      select: { id: true, cashierUserId: true },
+    });
+    if (!session) {
+      throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+    const canSeeAll = user?.role === "ADMIN" || user?.role === "MANAGER";
+    if (!canSeeAll && session.cashierUserId && session.cashierUserId !== user?.userId) {
+      throw new BadRequestException("You do not have permission to access this POS session.");
+    }
+    return session;
+  }
+
   private mapPaymentMethod(raw: string) {
     const normalized = raw.trim().toUpperCase();
     if (normalized.includes("CARD")) return PosPaymentMethod.CARD;
@@ -2693,6 +2814,14 @@ export class PosService {
     return {
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
+      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "Simple Account",
+      branchName: row.posSession?.branchName ?? null,
+      taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
+      cashierName:
+        row.posSession?.cashierUser?.name ??
+        row.posSession?.cashierUser?.email ??
+        "Cashier",
+      terminalName: row.posSession?.terminalName ?? null,
       total: row.totalAmount.toString(),
       tax: row.taxAmount.toString(),
       discount: row.discountAmount.toString(),

@@ -173,6 +173,7 @@ import {
   PosCompleteSaleResponse,
   PosSale,
   PosSession,
+  PosSessionAccountingApprovalResponse,
   PosSessionReport,
   SalesQuotation,
   SalesInvoice,
@@ -197,6 +198,7 @@ import {
   CreatePosReturnPayload,
   HoldPosSalePayload,
   CompletePosSalePayload,
+  SavePosDraftPayload,
   PosTaxSummaryRow,
   SupplierTransactionsResponse,
   SuppliersQuery,
@@ -2429,6 +2431,15 @@ export async function getHeldPosSales(
   });
 }
 
+export async function getDraftPosSales(
+  sessionId: string,
+  token?: string | null,
+) {
+  return apiRequest<PosSale[]>(`/pos/sales/drafts?sessionId=${encodeURIComponent(sessionId)}`, {
+    token,
+  });
+}
+
 export async function getCompletedPosSales(token?: string | null) {
   return apiRequest<PosSale[]>("/pos/sales/completed", { token });
 }
@@ -2442,6 +2453,17 @@ export async function holdPosSale(
   token?: string | null,
 ) {
   return apiRequest<PosSale>("/pos/sales/hold", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function savePosDraft(
+  payload: SavePosDraftPayload,
+  token?: string | null,
+) {
+  return apiRequest<PosSale>("/pos/sales/draft", {
     method: "POST",
     body: JSON.stringify(payload),
     token,
@@ -2481,6 +2503,21 @@ export async function approvePosAccounting(
     body: JSON.stringify(payload),
     token,
   });
+}
+
+export async function approvePosSessionAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosSessionAccountingApprovalResponse>(
+    `/pos/sessions/${id}/accounting-approve`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    },
+  );
 }
 
 export async function rejectPosAccounting(

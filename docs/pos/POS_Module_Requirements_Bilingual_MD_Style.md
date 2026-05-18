@@ -16,6 +16,41 @@
 - إجمالي المتطلبات: 95
 > This document follows the bilingual Markdown-style structure: English requirement and Arabic translation in the same table row.
 
+## Implementation Tracking | تتبع التنفيذ
+
+Current engineering snapshot for this repository:
+
+- `IMPLEMENTED`: requirement is covered by the current codebase
+- `PARTIAL`: requirement exists, but not yet at the exact depth/control/model described here
+- `DEFERRED`: intentionally not implemented yet and planned for later work
+
+Outstanding requirements that are not fully implemented yet:
+
+| Req ID | Status | Gap Summary | ملخص الفجوة |
+| --- | --- | --- | --- |
+| REQ-POS-008 | PARTIAL | The system blocks more than one open session per cashier, but not with a dedicated same-register-or-same-branch rule model. | النظام يمنع أكثر من جلسة مفتوحة للكاشير، لكن ليس من خلال نموذج صريح لقاعدة نفس الصندوق أو نفس الفرع. |
+| REQ-POS-017 | PARTIAL | Most item data is loaded into the POS flow, but not every listed field is persisted/surfaced exactly as a POS line snapshot. | يتم تحميل معظم بيانات الصنف في مسار POS، لكن ليست كل الحقول المذكورة محفوظة أو ظاهرة بدقة كسnapshot لبند البيع. |
+| REQ-POS-019 | PARTIAL | Commercial line values are stored, but sale-side cost snapshot coverage is not fully explicit at the sales-line level. | يتم حفظ القيم التجارية للبند، لكن تغطية لقطة التكلفة على مستوى بند البيع ليست صريحة بالكامل. |
+| REQ-POS-022 | PARTIAL | Invoice-level discount policy is applied operationally, but the invoice discount is not modeled as a first-class persisted field in the exact form described here. | يتم تطبيق سياسة خصم الفاتورة تشغيليًا، لكن خصم الفاتورة ليس ممثلًا كحقل محفوظ مستقل بالشكل المذكور هنا. |
+| REQ-POS-024 | PARTIAL | Tax, discount, and amount values are stored, but explicit tax-rate/net/gross snapshot coverage is not fully modeled exactly as stated. | يتم حفظ الضريبة والخصومات والمبالغ، لكن حفظ نسبة الضريبة وصافي/إجمالي المبلغ بشكل صريح ليس ممثلًا بالكامل كما هو مذكور. |
+| REQ-POS-048 | PARTIAL | Accountant review exists, but the review experience does not yet expose every listed detail with the full richness described here. | توجد مراجعة محاسبية، لكن تجربة المراجعة لا تعرض بعد كل التفاصيل المذكورة بنفس مستوى العمق المطلوب هنا. |
+| REQ-POS-063 | PARTIAL | Receipt output is richer now, but company and tax identity are still configuration-driven rather than linked to a dedicated branch/company master model. | مخرجات الإيصال أصبحت أغنى، لكن هوية الشركة والرقم الضريبي ما زالا معتمدين على الإعدادات وليس على نموذج master مخصص للشركة/الفرع. |
+| REQ-POS-068 | PARTIAL | Major account validation exists, but not every mapping category listed here is enforced as explicitly as written. | يوجد تحقق رئيسي للحسابات، لكن ليست كل فئات الربط المذكورة هنا مفروضة بشكل صريح كما هو مكتوب. |
+| REQ-POS-070 | PARTIAL | Posting blocks missing required accounts, but the fallback/default-account behavior is not yet as complete and systematic as described here. | الترحيل يمنع غياب الحسابات المطلوبة، لكن سلوك الحسابات الافتراضية/البديلة ليس كاملًا ومنهجيًا بعد كما هو موصوف هنا. |
+| REQ-POS-075 | PARTIAL | POS permissions exist, but the system still relies mainly on role/env-based checks instead of a fully fine-grained permission administration model. | صلاحيات POS موجودة، لكن النظام لا يزال يعتمد أساسًا على الأدوار وإعدادات البيئة بدل نموذج إدارة صلاحيات دقيق بالكامل. |
+| REQ-POS-076 | PARTIAL | High discount control currently depends on privileged access, not a dedicated manager approval workflow record. | التحكم في الخصومات العالية يعتمد حاليًا على الصلاحية المرتفعة، وليس على مسار اعتماد مستقل من المدير. |
+| REQ-POS-078 | PARTIAL | Session closing rights are configurable by role/environment, but not yet through a richer dedicated permission administration model. | صلاحيات إغلاق الجلسة قابلة للتهيئة بحسب الدور/الإعدادات، لكن ليس بعد عبر نموذج إدارة صلاحيات مخصص وأكثر تفصيلًا. |
+| REQ-POS-079 | PARTIAL | Audit coverage is broad, but not every event is modeled as a distinct purpose-built audit event exactly as described here. | تغطية التدقيق واسعة، لكن ليست كل الأحداث ممثلة كأحداث تدقيق مستقلة ومخصصة تمامًا كما هو موصوف هنا. |
+| REQ-POS-080 | PARTIAL | Important metadata fields exist in many places, but they are not yet represented uniformly across all relevant POS records exactly as stated. | حقول البيانات المهمة موجودة في عدة مواضع، لكنها ليست ممثلة بشكل موحد بعد عبر جميع سجلات POS ذات العلاقة كما هو مذكور هنا. |
+
+Deferred for later work and intentionally outside the first POS version:
+
+| Req ID | Status | Gap Summary | ملخص الفجوة |
+| --- | --- | --- | --- |
+| REQ-POS-094 | DEFERRED | The current first POS version still excludes offline mode, restaurant tables, kitchen screens, loyalty points, coupons, gift cards, complex promotions, advanced returns, and multi-currency POS. | النسخة الحالية الأولى من POS ما زالت تستبعد وضع عدم الاتصال، طاولات المطاعم، شاشات المطبخ، نقاط الولاء، الكوبونات، بطاقات الهدايا، العروض المعقدة، المرتجعات المتقدمة، وتعدد العملات. |
+
+All other requirements are currently treated as implemented in the current codebase snapshot.
+
 ## 1. Core Design Decision | قرار التصميم الأساسي
 
 | Req ID | English Requirement | الترجمة العربية |
