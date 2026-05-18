@@ -16,20 +16,24 @@ import {
   LuBanknote,
   LuChartColumn,
   LuCreditCard,
+  LuMinus,
   LuPackage,
+  LuPlus,
   LuPrinter,
   LuReceipt,
   LuRefreshCcw,
   LuSave,
   LuSearch,
+  LuScanLine,
   LuSettings2,
   LuShoppingBasket,
   LuStore,
   LuTimerReset,
+  LuTrash2,
   LuWallet,
 } from "react-icons/lu";
 
-import { Card, PageShell } from "@/components/ui";
+import { Card, Modal, PageShell } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
   approvePosAccounting,
@@ -82,7 +86,6 @@ import type {
   PosSessionReport,
   PosTaxSummaryRow,
 } from "@/types/api";
-import { POS_THEME } from "./pos-theme";
 
 type PosWorkspace =
   | "sales"
@@ -216,6 +219,60 @@ function getItemCategory(item: InventoryItem) {
     item.category ||
     (item.trackInventory ? "Inventory" : "Services")
   );
+}
+
+function normalizePaymentAccountMethod(
+  account: Pick<BankCashAccount, "type" | "name" | "bankName" | "account">,
+): "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" {
+  const normalized = [
+    account.type,
+    account.name,
+    account.bankName,
+    account.account?.name,
+    account.account?.nameAr,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+
+  if (
+    normalized.includes("CARD") ||
+    normalized.includes("VISA") ||
+    normalized.includes("MASTER")
+  ) {
+    return "CARD";
+  }
+  if (normalized.includes("CLIQ")) {
+    return "CLIQ";
+  }
+  if (normalized.includes("WALLET")) {
+    return "WALLET";
+  }
+  if (normalized.includes("BANK")) {
+    return "BANK_TRANSFER";
+  }
+  return "CASH";
+}
+
+function getPaymentMethodLabel(
+  method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" | "MIXED",
+) {
+  switch (method) {
+    case "CASH":
+      return "Cash / نقد";
+    case "CARD":
+      return "Card / بطاقة";
+    case "CLIQ":
+      return "CliQ / كليك";
+    case "BANK_TRANSFER":
+      return "Bank / بنك";
+    case "WALLET":
+      return "Wallet / محفظة";
+    case "MIXED":
+      return "Mixed / مختلط";
+    default:
+      return method;
+  }
 }
 
 function parseAmount(value: string | number | null | undefined) {
@@ -482,7 +539,7 @@ function PlaceholderWorkspace({
 export function PosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<PosWorkspace>("sales");
@@ -516,6 +573,11 @@ export function PosPage() {
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnPayments, setReturnPayments] = useState<ReturnPaymentEntry[]>([]);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [selectedPayMethod, setSelectedPayMethod] = useState<
+    "CASH" | "CARD" | "CLIQ" | "MIXED"
+  >("CASH");
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
   const messageTimeoutRef = useRef<number | null>(null);
 
   const itemsQuery = useQuery({
@@ -708,10 +770,13 @@ export function PosPage() {
       setEditingInvoiceId(null);
       const receipt = mapReceiptResponse(response.receipt);
       setLastReceipt(receipt);
+      setIsPayModalOpen(false);
       resetSale();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.saleCompleted"));
-      printReceipt(receipt);
+      if (autoPrintReceipt) {
+        printReceipt(receipt);
+      }
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1034,6 +1099,27 @@ export function PosPage() {
     [paymentAccounts, paymentEntries],
   );
 
+  const getAccountsForMethod = (
+    method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
+  ) =>
+    paymentAccounts.filter(
+      (account) => normalizePaymentAccountMethod(account) === method,
+    );
+
+  const inferSelectedPayMethod = () => {
+    if (paymentEntriesResolved.length > 1) {
+      return "MIXED" as const;
+    }
+    const firstEntry = paymentEntriesResolved[0];
+    if (!firstEntry?.account) {
+      return "CASH" as const;
+    }
+    const inferred = normalizePaymentAccountMethod(firstEntry.account);
+    return inferred === "BANK_TRANSFER" || inferred === "WALLET"
+      ? "MIXED"
+      : (inferred as "CASH" | "CARD" | "CLIQ");
+  };
+
   const currencyCode =
     paymentEntriesResolved.find((entry) => entry.account)?.account?.currencyCode ||
     items[0]?.currencyCode ||
@@ -1192,6 +1278,43 @@ export function PosPage() {
         amount: Number(entry.amountValue.toFixed(2)),
         reference: entry.reference || undefined,
       }));
+
+  const setSinglePaymentMethod = (method: "CASH" | "CARD" | "CLIQ") => {
+    const matchingAccounts = getAccountsForMethod(method);
+    const fallbackAccount = matchingAccounts[0] ?? paymentAccounts[0];
+    if (!fallbackAccount) {
+      return;
+    }
+
+    setPaymentEntries((current) => {
+      const firstEntry = current[0];
+      const currentAmount = firstEntry?.amount?.trim();
+      return [
+        {
+          id: firstEntry?.id ?? createLocalId(),
+          bankCashAccountId:
+            matchingAccounts.find((account) => account.id === firstEntry?.bankCashAccountId)?.id ??
+            fallbackAccount.id,
+          amount: currentAmount || cartMetrics.total.toFixed(2),
+          reference: firstEntry?.reference ?? "",
+        },
+      ];
+    });
+  };
+
+  const updatePaymentEntryMethod = (
+    entryId: string,
+    method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
+  ) => {
+    const matchingAccounts = getAccountsForMethod(method);
+    const fallbackAccount = matchingAccounts[0] ?? paymentAccounts[0];
+    if (!fallbackAccount) {
+      return;
+    }
+    updatePaymentEntry(entryId, {
+      bankCashAccountId: fallbackAccount.id,
+    });
+  };
 
   const pushMessage = (message: string) => {
     setFlashMessage(message);
@@ -1453,6 +1576,26 @@ export function PosPage() {
     });
   };
 
+  const openPayModal = () => {
+    if (!activeSession?.id || !sessionState.isOpen) {
+      pushMessage(t("pos.sales.alert.sessionClosed"));
+      return;
+    }
+    if (cartLines.length === 0) {
+      pushMessage(t("pos.sales.alert.emptyCart"));
+      return;
+    }
+
+    const nextMethod = inferSelectedPayMethod();
+    setSelectedPayMethod(nextMethod);
+
+    if (nextMethod !== "MIXED") {
+      setSinglePaymentMethod(nextMethod);
+    }
+
+    setIsPayModalOpen(true);
+  };
+
   const createReturnFromSelection = () => {
     if (!selectedReturnSale) {
       pushMessage("Select a completed POS sale before creating a return.");
@@ -1505,87 +1648,41 @@ export function PosPage() {
   };
 
   const renderSalesWorkspace = () => {
-    return (
-      <div
-        className="space-y-6"
-        style={{ backgroundColor: POS_THEME.colors.pageSurface }}
-      >
-        <section
-          className="overflow-hidden rounded-[32px] border shadow-[0_32px_100px_-55px_rgba(35,51,41,0.45)]"
-          style={{
-            borderColor: POS_THEME.colors.outline,
-            background: POS_THEME.colors.heroGradient,
-            boxShadow: POS_THEME.shadows.hero,
-          }}
-        >
-          <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1.2fr_0.8fr] lg:px-8">
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className="rounded-full border bg-white/75 px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em]"
-                  style={{
-                    borderColor: POS_THEME.colors.primaryBorderStrong,
-                    color: POS_THEME.colors.primaryMuted,
-                  }}
-                >
-                  {t("pos.sales.kicker")}
-                </span>
-                <span
-                  className={cn(
-                    "rounded-full px-4 py-2 text-xs font-bold",
-                    sessionState.isOpen
-                      ? "bg-[#46644b] text-white"
-                      : "bg-[#ead7d5] text-[#7d3f38]",
-                  )}
-                >
-                  {sessionState.isOpen
-                    ? t("pos.sales.sessionOpen")
-                    : t("pos.sales.sessionClosed")}
-                </span>
-              </div>
-              <div className="space-y-3">
-                <h1
-                  className="max-w-3xl text-3xl font-black tracking-tight sm:text-4xl arabic-heading"
-                  style={{ color: POS_THEME.colors.primaryDark }}
-                >
-                  {t("pos.sales.title")}
+    const cashierLabel = user?.name?.trim() || user?.email || "Cashier";
+    const singlePaymentEntry = paymentEntriesResolved[0] ?? null;
+    const singleMethodAccounts =
+      selectedPayMethod === "MIXED"
+        ? []
+        : getAccountsForMethod(selectedPayMethod).length > 0
+          ? getAccountsForMethod(selectedPayMethod)
+          : paymentAccounts;
+
+    if (!sessionState.isOpen || !activeSession) {
+      return (
+        <div className="mx-auto max-w-4xl space-y-6">
+          {flashMessage ? (
+            <div className="rounded-[22px] border border-[#cfe1d3] bg-[#f3faf4] px-5 py-4 text-sm font-semibold text-[#35503b]">
+              {flashMessage}
+            </div>
+          ) : null}
+
+          <Card className="rounded-[32px] border-[#d8e2db] bg-white p-6 shadow-[0_24px_70px_-46px_rgba(43,79,54,0.35)] sm:p-8">
+            <div className="mx-auto max-w-3xl space-y-8">
+              <div className="space-y-3 text-center">
+                <div className="inline-flex items-center rounded-full border border-[#d6e5da] bg-[#f2f8f3] px-4 py-2 text-xs font-black tracking-[0.18em] text-[#4f7059]">
+                  POS OPEN SHIFT
+                </div>
+                <h1 className="text-3xl font-black tracking-tight text-[#1f3427] arabic-heading">
+                  فتح الوردية / Open Shift
                 </h1>
-                <p
-                  className="max-w-3xl text-base leading-8 arabic-auto"
-                  style={{ color: POS_THEME.colors.textMuted }}
-                >
-                  {t("pos.sales.description")}
+                <p className="text-sm leading-7 text-[#65766b] arabic-auto">
+                  Start the cashier terminal by choosing the terminal, branch, warehouse, and cash register. Selling stays hidden until the shift is opened.
                 </p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-4">
-                <SoftMetric
-                  label={t("pos.sales.metric.catalog")}
-                  value={formatCount(items.length)}
-                  hint={t("pos.sales.metric.catalogHint")}
-                />
-                <SoftMetric
-                  label={t("pos.sales.metric.warehouses")}
-                  value={formatCount(warehouses.length)}
-                  hint={
-                    selectedWarehouse?.name ??
-                    t("pos.sales.metric.warehouseNotSelected")
-                  }
-                />
-                <SoftMetric
-                  label={t("pos.sales.metric.paymentMethods")}
-                  value={formatCount(paymentAccounts.length)}
-                  hint={t("pos.sales.metric.paymentHint")}
-                />
-                <SoftMetric
-                  label={t("pos.sales.metric.heldSales")}
-                  value={formatCount(heldSales.length)}
-                  hint={t("pos.sales.metric.heldHint")}
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-              <SessionCard
+
+              <OpenShiftPanel
                 sessionState={sessionState}
+                cashierLabel={cashierLabel}
                 warehouses={warehouses}
                 paymentAccounts={paymentAccounts}
                 onSessionStateChange={(patch) =>
@@ -1600,41 +1697,52 @@ export function PosPage() {
                     branchName: sessionState.branchName || undefined,
                   });
                 }}
-                onCloseSession={() => {
-                  if (!activeSession) return;
-                  const raw = window.prompt(
-                    "Enter actual cash counted in the drawer",
-                    String(sessionState.expectedCash.toFixed(2)),
-                  );
-                  if (raw === null) return;
-                  closeSessionMutation.mutate({
-                    sessionId: activeSession.id,
-                    actualCash: parseAmount(raw),
-                  });
-                }}
-                t={t}
-              />
-              <ActionNotice
-                message={flashMessage}
-                lastReceipt={lastReceipt}
-                onPrintLastReceipt={() => {
-                  if (lastReceipt) {
-                    printReceipt(lastReceipt);
-                  }
-                }}
-                t={t}
+                isPending={openSessionMutation.isPending}
               />
             </div>
-          </div>
-        </section>
+          </Card>
+        </div>
+      );
+    }
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_440px]">
+    return (
+      <div className="space-y-6">
+        <ActiveSessionBar
+          session={activeSession}
+          cashierLabel={cashierLabel}
+          warehouseName={
+            selectedWarehouse?.name || activeSession.warehouse.name || "—"
+          }
+          onCloseSession={() => {
+            const raw = window.prompt(
+              "Enter actual cash counted in the drawer",
+              String(sessionState.expectedCash.toFixed(2)),
+            );
+            if (raw === null) return;
+            closeSessionMutation.mutate({
+              sessionId: activeSession.id,
+              actualCash: parseAmount(raw),
+            });
+          }}
+          isPending={closeSessionMutation.isPending}
+        />
+
+        {flashMessage ? (
+          <div className="rounded-[20px] border border-[#d3e2d6] bg-[#f4faf5] px-5 py-4 text-sm font-semibold text-[#36533d]">
+            {flashMessage}
+          </div>
+        ) : null}
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <section className="space-y-5">
-            <Card className="rounded-[28px] border-[#d7ddd8] bg-[#f9faf8] p-5 shadow-[0_18px_55px_-40px_rgba(40,64,48,0.45)]">
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_220px_220px]">
-                <Field label={t("pos.sales.searchLabel")} className="mb-0">
+            <Card className="rounded-[28px] border-[#d8e2db] bg-white p-5 shadow-[0_18px_55px_-44px_rgba(43,79,54,0.25)]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px]">
+                <Field
+                  label="Barcode / Search - باركود / بحث"
+                  className="mb-0"
+                >
                   <div className="relative">
-                    <LuSearch className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#76867c] rtl:left-auto rtl:right-4" />
+                    <LuScanLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#76917c] rtl:left-auto rtl:right-4" />
                     <Input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
@@ -1644,16 +1752,20 @@ export function PosPage() {
                           handleBarcodeSubmit();
                         }
                       }}
-                      placeholder={t("pos.sales.searchPlaceholder")}
-                      className="rounded-[20px] border-[#d4ddd7] bg-white py-3 pl-11 pr-4 text-sm focus:border-[#46644b] focus:ring-[#46644b]/10 rtl:pl-4 rtl:pr-11"
+                      placeholder="Scan barcode or search by name / امسح الباركود أو ابحث بالاسم"
+                      className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3 pl-11 pr-4 text-sm focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-4 rtl:pr-11"
                     />
                   </div>
                 </Field>
-                <Field label={t("pos.sales.warehouseLabel")} className="mb-0">
+
+                <Field
+                  label="Warehouse / المستودع"
+                  className="mb-0"
+                >
                   <select
                     value={selectedWarehouseId}
                     onChange={(event) => setSelectedWarehouseId(event.target.value)}
-                    className="w-full rounded-[20px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329] outline-none transition focus:border-[#46644b] focus:ring-4 focus:ring-[#46644b]/10"
+                    className="w-full rounded-[18px] border border-[#d6e1d9] bg-[#fbfdfb] px-4 py-3 text-sm font-semibold text-[#233329] outline-none transition focus:border-[#5f8a67] focus:ring-4 focus:ring-[#5f8a67]/10"
                   >
                     {warehouses.map((warehouse) => (
                       <option key={warehouse.id} value={warehouse.id}>
@@ -1662,111 +1774,39 @@ export function PosPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label={t("pos.sales.invoiceDiscountType")} className="mb-0">
-                  <select
-                    value={invoiceDiscountType}
-                    onChange={(event) =>
-                      setInvoiceDiscountType(event.target.value as DiscountType)
-                    }
-                    className="w-full rounded-[20px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329] outline-none transition focus:border-[#46644b] focus:ring-4 focus:ring-[#46644b]/10"
+              </div>
+
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                {categories.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setActiveCategory(category)}
+                    className={cn(
+                      "whitespace-nowrap rounded-full border px-4 py-2 text-sm font-bold transition",
+                      activeCategory === category
+                        ? "border-[#5f8a67] bg-[#5f8a67] text-white shadow-[0_14px_32px_-24px_rgba(95,138,103,0.9)]"
+                        : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
+                    )}
                   >
-                    <option value="FIXED">{t("pos.sales.discountFixed")}</option>
-                    <option value="PERCENT">
-                      {t("pos.sales.discountPercent")}
-                    </option>
-                  </select>
-                </Field>
-                <Field label={t("pos.sales.invoiceDiscountValue")} className="mb-0">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={String(invoiceDiscountValue)}
-                    onChange={(event) =>
-                      setInvoiceDiscountValue(parseAmount(event.target.value))
-                    }
-                    className="rounded-[20px] border-[#d4ddd7] bg-white py-3"
-                  />
-                </Field>
+                    {category === "all" ? "All / الكل" : category}
+                  </button>
+                ))}
               </div>
             </Card>
 
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setActiveCategory(category)}
-                  className={cn(
-                    "whitespace-nowrap rounded-full border px-4 py-2 text-sm font-bold transition",
-                    activeCategory === category
-                      ? "border-[#46644b] bg-[#46644b] text-white shadow-[0_14px_36px_-22px_rgba(70,100,75,0.85)]"
-                      : "border-[#d4ddd7] bg-white text-[#58675f] hover:border-[#b9c8bc] hover:bg-[#f6f8f6]",
-                  )}
-                >
-                  {category === "all" ? t("pos.sales.categoryAll") : category}
-                </button>
-              ))}
-            </div>
-
-            {heldSales.length > 0 ? (
-              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-[0_18px_55px_-40px_rgba(40,64,48,0.3)]">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-lg font-black text-[#233329] arabic-heading">
-                      {t("pos.sales.heldSectionTitle")}
-                    </div>
-                    <div className="mt-1 text-sm text-[#6c7a72] arabic-auto">
-                      {t("pos.sales.heldSectionDescription")}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {heldSales.map((heldSale) => (
-                    <div
-                      key={heldSale.id}
-                      className="rounded-[22px] border border-[#dbe2dd] bg-[#f9faf8] p-4"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-sm font-black text-[#233329] arabic-heading">
-                            {heldSale.title}
-                          </div>
-                          <div className="mt-1 text-xs text-[#708078]">
-                            {new Date(heldSale.createdAt).toLocaleString()}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => resumeHeldSale(heldSale.id)}
-                          className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-                        >
-                          {t("pos.sales.resumeHeld")}
-                        </button>
-                      </div>
-                      <div className="mt-3 text-sm text-[#5f6d66] arabic-auto">
-                        {t("pos.sales.heldSummary", {
-                          count: heldSale.cartLines.length,
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ) : null}
-
             {itemsQuery.isLoading ? (
-              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, index) => (
                   <div
                     key={index}
-                    className="h-56 animate-pulse rounded-[28px] border border-[#dbe2dd] bg-[#eef3ef]"
+                    className="h-44 animate-pulse rounded-[24px] border border-[#dbe5de] bg-[#eef5ef]"
                   />
                 ))}
               </div>
             ) : itemsQuery.isError ? (
-              <Card className="rounded-[28px] border-[#e4d1cf] bg-white/95 p-8 text-center shadow-[0_18px_55px_-40px_rgba(40,64,48,0.45)]">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f6ecea] text-[#8f5a55]">
+              <Card className="rounded-[28px] border-[#ead8d4] bg-white p-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f8eded] text-[#96665f]">
                   <LuPackage className="h-6 w-6" />
                 </div>
                 <div className="mt-4 text-lg font-bold text-[#233329] arabic-heading">
@@ -1777,8 +1817,8 @@ export function PosPage() {
                 </p>
               </Card>
             ) : filteredItems.length === 0 ? (
-              <Card className="rounded-[28px] border-[#d7ddd8] bg-white/95 p-8 text-center shadow-[0_18px_55px_-40px_rgba(40,64,48,0.45)]">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#eef3ef] text-[#46644b]">
+              <Card className="rounded-[28px] border-[#d8e2db] bg-white p-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#eef5ef] text-[#5f8a67]">
                   <LuShoppingBasket className="h-6 w-6" />
                 </div>
                 <div className="mt-4 text-lg font-bold text-[#233329] arabic-heading">
@@ -1789,112 +1829,232 @@ export function PosPage() {
                 </p>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredItems.map((item) => (
-                  <ProductCard
+                  <CompactProductCard
                     key={item.id}
                     item={item}
                     currencyCode={currencyCode}
                     onAdd={() => addItemToCart(item)}
-                    t={t}
                   />
                 ))}
               </div>
             )}
           </section>
 
-          <aside className="space-y-5">
-            <Card className="rounded-[30px] border-[#d7ddd8] bg-[#fcfcfb] p-0 shadow-[0_24px_80px_-48px_rgba(40,64,48,0.45)]">
-              <div className="border-b border-[#e1e7e2] px-5 py-5">
+          <aside className="xl:sticky xl:top-6 xl:self-start">
+            <Card className="rounded-[30px] border-[#d8e2db] bg-white p-0 shadow-[0_24px_80px_-48px_rgba(43,79,54,0.35)]">
+              <div className="border-b border-[#e5ece6] px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-lg font-black text-[#233329] arabic-heading">
-                      {t("pos.sales.cartTitle")}
+                      Order Summary / ملخص الطلب
                     </div>
-                    <div className="mt-1 text-sm text-[#6c7a72] arabic-auto">
-                      {t("pos.sales.cartSubtitle", { count: cartLines.length })}
+                    <div className="mt-1 text-sm text-[#6b7c70] arabic-auto">
+                      {cartLines.length} item(s) / عناصر
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={resetSale}
-                    className="rounded-full border border-[#d6ded8] bg-white px-3 py-2 text-xs font-bold text-[#5d6c64] transition hover:border-[#bcc9c0] hover:bg-[#f7f9f7]"
-                  >
-                    {t("pos.sales.clearCart")}
-                  </button>
+                  {editingInvoiceId ? (
+                    <span className="rounded-full bg-[#edf5ef] px-3 py-1.5 text-xs font-bold text-[#4f7059]">
+                      Held / معلقة
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="max-h-[380px] space-y-3 overflow-y-auto px-5 py-5">
+              <div className="max-h-[420px] space-y-3 overflow-y-auto px-5 py-5">
                 {cartLines.length === 0 ? (
-                  <div className="rounded-[24px] border border-dashed border-[#d0dad3] bg-[#f7faf8] px-5 py-8 text-center">
-                    <div className="text-sm font-bold text-[#233329] arabic-auto">
-                      {t("pos.sales.cartEmptyTitle")}
+                  <div className="rounded-[22px] border border-dashed border-[#d4ddd6] bg-[#f8fbf8] px-5 py-8 text-center">
+                    <div className="text-sm font-bold text-[#233329]">
+                      Cart is empty / السلة فارغة
                     </div>
-                    <p className="mt-2 text-sm leading-7 text-[#6c7a72] arabic-auto">
-                      {t("pos.sales.cartEmptyDescription")}
+                    <p className="mt-2 text-sm leading-7 text-[#6c7a72]">
+                      Click a product card to add it directly to the current sale.
                     </p>
                   </div>
                 ) : (
                   cartLines.map((line) => (
-                    <CartLineCard
+                    <CompactCartLine
                       key={line.itemId}
                       line={line}
-                      warehouses={warehouses}
                       currencyCode={currencyCode}
-                      onChange={(patch) =>
-                        updateLine(line.itemId, (current) => ({ ...current, ...patch }))
+                      onIncrease={() =>
+                        updateLine(line.itemId, (current) => ({
+                          ...current,
+                          quantity: current.quantity + 1,
+                        }))
+                      }
+                      onDecrease={() =>
+                        updateLine(line.itemId, (current) =>
+                          current.quantity <= 1
+                            ? current
+                            : { ...current, quantity: current.quantity - 1 },
+                        )
                       }
                       onRemove={() => updateLine(line.itemId, () => null)}
-                      t={t}
                     />
                   ))
                 )}
               </div>
 
-              <div className="space-y-4 border-t border-[#e1e7e2] px-5 py-5">
-                <div className="grid gap-3 rounded-[24px] bg-[#f4f7f4] p-4">
-                  <TotalRow
-                    label={t("pos.sales.totalSubtotal")}
-                    value={formatCurrency(
-                      cartMetrics.subtotalBeforeDiscount,
-                      currencyCode,
-                    )}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.totalDiscount")}
-                    value={formatCurrency(cartMetrics.discountTotal, currencyCode)}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.totalTax")}
-                    value={formatCurrency(cartMetrics.tax, currencyCode)}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.totalGrand")}
-                    value={formatCurrency(cartMetrics.total, currencyCode)}
-                    emphasized
-                  />
+              <div className="space-y-4 border-t border-[#e5ece6] px-5 py-5">
+                <div className="rounded-[24px] bg-[#f4f8f5] p-4">
+                  <div className="grid gap-3">
+                    <TotalRow
+                      label="Subtotal / الإجمالي قبل الضريبة"
+                      value={formatCurrency(
+                        cartMetrics.subtotalBeforeDiscount,
+                        currencyCode,
+                      )}
+                    />
+                    <TotalRow
+                      label="Discount / الخصم"
+                      value={formatCurrency(cartMetrics.discountTotal, currencyCode)}
+                    />
+                    <TotalRow
+                      label="Tax / الضريبة"
+                      value={formatCurrency(cartMetrics.tax, currencyCode)}
+                    />
+                    <TotalRow
+                      label="Total / الإجمالي"
+                      value={formatCurrency(cartMetrics.total, currencyCode)}
+                      emphasized
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-3 rounded-[24px] border border-[#dbe2dd] bg-white p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-bold text-[#233329] arabic-heading">
-                      {t("pos.sales.paymentSectionTitle")}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={addPaymentEntry}
-                      className="rounded-full border border-[#d6ded8] px-3 py-1.5 text-xs font-bold text-[#55645c]"
-                    >
-                      {t("pos.sales.addPayment")}
-                    </button>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={holdSale}
+                    className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-[#d7e2d8] bg-white px-4 py-3 text-sm font-bold text-[#4e6455] transition hover:border-[#b7cbb9] hover:bg-[#f8fbf8]"
+                  >
+                    <LuSave className="h-4 w-4" />
+                    Hold / تعليق
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetSale();
+                      pushMessage(t("pos.sales.alert.voidedDraft"));
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-[#ead8d4] bg-[#fffafa] px-4 py-3 text-sm font-bold text-[#8a5952] transition hover:bg-white"
+                  >
+                    <LuRefreshCcw className="h-4 w-4" />
+                    Cancel / إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openPayModal}
+                    disabled={cartLines.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <LuWallet className="h-4 w-4" />
+                    Pay / دفع
+                  </button>
+                </div>
+
+                {lastReceipt ? (
+                  <button
+                    type="button"
+                    onClick={() => printReceipt(lastReceipt)}
+                    className="w-full rounded-[18px] border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4e6455] transition hover:bg-white"
+                  >
+                    {t("pos.sales.printLastReceipt")}
+                  </button>
+                ) : null}
+              </div>
+            </Card>
+          </aside>
+        </div>
+
+        <Modal
+          isOpen={isPayModalOpen}
+          onClose={() => setIsPayModalOpen(false)}
+          title="Pay Sale / دفع الفاتورة"
+        >
+          <div className="space-y-5">
+            <div className="rounded-[22px] bg-[#f3f8f4] p-4 text-center">
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-[#66826e]">
+                Total Amount
+              </div>
+              <div className="mt-2 text-3xl font-black text-[#1f3427]">
+                {formatCurrency(cartMetrics.total, currencyCode)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {(["CASH", "CARD", "CLIQ", "MIXED"] as const).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPayMethod(method);
+                    if (method !== "MIXED") {
+                      setSinglePaymentMethod(method);
+                    }
+                  }}
+                  className={cn(
+                    "rounded-[18px] border px-4 py-3 text-sm font-bold transition",
+                    selectedPayMethod === method
+                      ? "border-[#5f8a67] bg-[#5f8a67] text-white"
+                      : "border-[#d7e2d8] bg-white text-[#4f6556] hover:bg-[#f7faf8]",
+                  )}
+                >
+                  {getPaymentMethodLabel(method)}
+                </button>
+              ))}
+            </div>
+
+            {selectedPayMethod === "MIXED" ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-bold text-[#233329]">
+                    Mixed payment / دفعات متعددة
                   </div>
-                  {paymentEntriesResolved.map((entry, index) => (
+                  <button
+                    type="button"
+                    onClick={addPaymentEntry}
+                    className="rounded-full border border-[#d7e2d8] px-3 py-1.5 text-xs font-bold text-[#4f6556]"
+                  >
+                    Add split / إضافة دفعة
+                  </button>
+                </div>
+                {paymentEntriesResolved.map((entry) => {
+                  const entryMethod = entry.account
+                    ? normalizePaymentAccountMethod(entry.account)
+                    : "CASH";
+                  const methodAccounts =
+                    getAccountsForMethod(entryMethod).length > 0
+                      ? getAccountsForMethod(entryMethod)
+                      : paymentAccounts;
+                  return (
                     <div
                       key={entry.id}
-                      className="rounded-[18px] border border-[#e1e7e2] bg-[#fbfcfb] p-3"
+                      className="space-y-3 rounded-[20px] border border-[#e2eae4] bg-[#fbfdfb] p-4"
                     >
-                      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr_0.9fr_auto]">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <select
+                          value={entryMethod}
+                          onChange={(event) =>
+                            updatePaymentEntryMethod(
+                              entry.id,
+                              event.target.value as
+                                | "CASH"
+                                | "CARD"
+                                | "CLIQ"
+                                | "BANK_TRANSFER"
+                                | "WALLET",
+                            )
+                          }
+                          className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                        >
+                          <option value="CASH">Cash / نقد</option>
+                          <option value="CARD">Card / بطاقة</option>
+                          <option value="CLIQ">CliQ / كليك</option>
+                          <option value="BANK_TRANSFER">Bank / بنك</option>
+                          <option value="WALLET">Wallet / محفظة</option>
+                        </select>
                         <select
                           value={entry.bankCashAccountId}
                           onChange={(event) =>
@@ -1902,9 +2062,9 @@ export function PosPage() {
                               bankCashAccountId: event.target.value,
                             })
                           }
-                          className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329] outline-none"
+                          className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
                         >
-                          {paymentAccounts.map((account) => (
+                          {methodAccounts.map((account) => (
                             <option key={account.id} value={account.id}>
                               {account.name}
                             </option>
@@ -1918,101 +2078,125 @@ export function PosPage() {
                           onChange={(event) =>
                             updatePaymentEntry(entry.id, { amount: event.target.value })
                           }
-                          placeholder={
-                            entry.account?.type.toUpperCase().includes("CASH")
-                              ? t("pos.sales.cashTenderedLabel")
-                              : t("pos.sales.paymentAmount")
-                          }
-                          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
+                          placeholder="Amount / المبلغ"
+                          className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                         />
                         <Input
                           value={entry.reference}
                           onChange={(event) =>
                             updatePaymentEntry(entry.id, { reference: event.target.value })
                           }
-                          placeholder={t("pos.sales.paymentReference")}
-                          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
+                          placeholder="Reference / المرجع"
+                          className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                         />
-                        <button
-                          type="button"
-                          onClick={() => removePaymentEntry(entry.id)}
-                          disabled={paymentEntriesResolved.length === 1}
-                          className="rounded-[16px] border border-[#ead7d5] px-3 py-3 text-xs font-bold text-[#8f5a55] disabled:opacity-40"
-                          title={t("pos.sales.removePayment")}
-                        >
-                          {index + 1}
-                        </button>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => removePaymentEntry(entry.id)}
+                        disabled={paymentEntriesResolved.length === 1}
+                        className="rounded-full border border-[#ead8d4] px-3 py-1.5 text-xs font-bold text-[#8a5952] disabled:opacity-40"
+                      >
+                        Remove / حذف
+                      </button>
                     </div>
-                  ))}
-                </div>
-
-                <div className="grid gap-3 rounded-[24px] border border-[#dbe2dd] bg-white p-4">
-                  <TotalRow
-                    label={t("pos.sales.cashTenderedLabel")}
-                    value={formatCurrency(cartMetrics.tendered, currencyCode)}
-                    emphasized={cartMetrics.tendered > 0}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.totalPaid")}
-                    value={formatCurrency(cartMetrics.paid, currencyCode)}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.totalChange")}
-                    value={formatCurrency(cartMetrics.change, currencyCode)}
-                    emphasized={cartMetrics.change > 0}
-                  />
-                  <TotalRow
-                    label={t("pos.sales.amountDue")}
-                    value={formatCurrency(cartMetrics.amountDue, currencyCode)}
-                    emphasized={cartMetrics.amountDue > 0}
-                  />
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <SoftActionButton
-                    icon={LuSave}
-                    label={t("pos.sales.holdAction")}
-                    onClick={holdSale}
-                  />
-                  <SoftActionButton
-                    icon={LuRefreshCcw}
-                    label={t("pos.sales.voidAction")}
-                    onClick={() => {
-                      if (editingInvoiceId) {
-                        voidSaleMutation.mutate(editingInvoiceId);
-                        return;
-                      }
-                      resetSale();
-                      pushMessage(t("pos.sales.alert.voidedDraft"));
-                    }}
-                  />
-                  <SoftActionButton
-                    icon={LuPrinter}
-                    label={t("pos.sales.printLastReceipt")}
-                    onClick={() => {
-                      if (lastReceipt) {
-                        printReceipt(lastReceipt);
-                        return;
-                      }
-                      pushMessage(t("pos.sales.alert.noReceiptYet"));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={completeSale}
-                    disabled={completeSaleMutation.isPending}
-                    className="inline-flex items-center justify-center rounded-[22px] bg-[#46644b] px-5 py-4 text-sm font-black text-white shadow-[0_20px_45px_-24px_rgba(70,100,75,0.95)] transition hover:-translate-y-0.5 hover:bg-[#3f5a44]"
-                  >
-                    {completeSaleMutation.isPending
-                      ? "..."
-                      : t("pos.sales.completeAction")}
-                  </button>
-                </div>
+                  );
+                })}
               </div>
-            </Card>
-          </aside>
-        </div>
+            ) : (
+              <div className="space-y-4 rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
+                <Field label="Account / الحساب" className="mb-0">
+                  <select
+                    value={singlePaymentEntry?.bankCashAccountId ?? ""}
+                    onChange={(event) =>
+                      singlePaymentEntry
+                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                            bankCashAccountId: event.target.value,
+                          })
+                        : undefined
+                    }
+                    className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                  >
+                    {singleMethodAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Tendered Amount / المبلغ المقبوض" className="mb-0">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={singlePaymentEntry?.amount ?? ""}
+                    onChange={(event) =>
+                      singlePaymentEntry
+                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                            amount: event.target.value,
+                          })
+                        : undefined
+                    }
+                    className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                  />
+                </Field>
+                <Field label="Reference / المرجع" className="mb-0">
+                  <Input
+                    value={singlePaymentEntry?.reference ?? ""}
+                    onChange={(event) =>
+                      singlePaymentEntry
+                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                            reference: event.target.value,
+                          })
+                        : undefined
+                    }
+                    placeholder="Card slip / CliQ ref / مرجع"
+                    className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                  />
+                </Field>
+              </div>
+            )}
+
+            <div className="rounded-[22px] bg-[#f6f8f6] p-4">
+              <div className="grid gap-3">
+                <TotalRow
+                  label="Tendered / المقبوض"
+                  value={formatCurrency(cartMetrics.tendered, currencyCode)}
+                />
+                <TotalRow
+                  label="Change / الباقي"
+                  value={formatCurrency(cartMetrics.change, currencyCode)}
+                  emphasized={cartMetrics.change > 0}
+                />
+                <TotalRow
+                  label="Amount Due / المتبقي"
+                  value={formatCurrency(cartMetrics.amountDue, currencyCode)}
+                  emphasized={cartMetrics.amountDue > 0}
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 rounded-[18px] border border-[#e2eae4] bg-white px-4 py-3 text-sm font-semibold text-[#42564a]">
+              <input
+                type="checkbox"
+                checked={autoPrintReceipt}
+                onChange={(event) => setAutoPrintReceipt(event.target.checked)}
+                className="h-4 w-4 rounded border-[#c8d7cc] text-[#5f8a67] focus:ring-[#5f8a67]/20"
+              />
+              Print receipt after completion / طباعة الفاتورة بعد الإكمال
+            </label>
+
+            <button
+              type="button"
+              onClick={completeSale}
+              disabled={completeSaleMutation.isPending}
+              className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:opacity-50"
+            >
+              {completeSaleMutation.isPending
+                ? "Completing..."
+                : "Complete Sale / إتمام البيع"}
+            </button>
+          </div>
+        </Modal>
       </div>
     );
   };
@@ -2921,16 +3105,17 @@ function DetailTile({
   );
 }
 
-function SessionCard({
+function OpenShiftPanel({
   sessionState,
+  cashierLabel,
   warehouses,
   paymentAccounts,
   onSessionStateChange,
   onOpenSession,
-  onCloseSession,
-  t,
+  isPending,
 }: {
   sessionState: SessionState;
+  cashierLabel: string;
   warehouses: InventoryWarehouse[];
   paymentAccounts: BankCashAccount[];
   onSessionStateChange: (patch: Partial<SessionState>) => void;
@@ -2939,8 +3124,7 @@ function SessionCard({
     warehouseId: string,
     cashAccountId: string,
   ) => void;
-  onCloseSession: () => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
+  isPending?: boolean;
 }) {
   const [openingCash, setOpeningCash] = useState(sessionState.openingCash);
   const [warehouseId, setWarehouseId] = useState(sessionState.warehouseId ?? "");
@@ -2956,370 +3140,265 @@ function SessionCard({
     if (!cashAccountId && paymentAccounts.length > 0) {
       const defaultCash =
         paymentAccounts.find((account) =>
-          account.type.toUpperCase().includes("CASH"),
+          normalizePaymentAccountMethod(account) === "CASH",
         ) ?? paymentAccounts[0];
       setCashAccountId(defaultCash.id);
     }
   }, [cashAccountId, paymentAccounts]);
 
   return (
-    <div className="rounded-[28px] border border-[#dbe2dd] bg-white/92 p-5 shadow-[0_18px_48px_-36px_rgba(35,51,41,0.55)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-black uppercase tracking-[0.2em] text-[#708078]">
-            {t("pos.sales.sessionCard")}
-          </div>
-          <div className="mt-2 text-xl font-black text-[#223228] arabic-heading">
-            {sessionState.terminalName}
-          </div>
-        </div>
-        <div className="rounded-full bg-[#eef3ef] p-3 text-[#46644b]">
-          <LuWallet className="h-5 w-5" />
-        </div>
-      </div>
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="Terminal Number / رقم الجهاز" className="mb-0">
+        <Input
+          value={sessionState.terminalName}
+          onChange={(event) =>
+            onSessionStateChange({ terminalName: event.target.value })
+          }
+          className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
+        />
+      </Field>
+      <Field label="Branch / الفرع" className="mb-0">
+        <Input
+          value={sessionState.branchName}
+          onChange={(event) =>
+            onSessionStateChange({ branchName: event.target.value })
+          }
+          className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
+        />
+      </Field>
+      <Field label="Cashier / الكاشير" className="mb-0">
+        <Input
+          value={cashierLabel}
+          readOnly
+          className="rounded-[18px] border-[#d6e1d9] bg-[#f2f6f3] py-3 text-[#53665a]"
+        />
+      </Field>
+      <Field label="Opening Cash / الرصيد الافتتاحي" className="mb-0">
+        <Input
+          type="number"
+          min="0"
+          step="0.01"
+          value={openingCash}
+          onChange={(event) => setOpeningCash(event.target.value)}
+          className="rounded-[18px] border-[#d6e1d9] bg-[#fbfdfb] py-3"
+        />
+      </Field>
+      <Field label="Warehouse / المستودع" className="mb-0">
+        <select
+          value={warehouseId}
+          onChange={(event) => setWarehouseId(event.target.value)}
+          className="w-full rounded-[18px] border border-[#d6e1d9] bg-[#fbfdfb] px-4 py-3 text-sm font-semibold text-[#233329]"
+        >
+          {warehouses.map((warehouse) => (
+            <option key={warehouse.id} value={warehouse.id}>
+              {warehouse.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Cash Register / الصندوق" className="mb-0">
+        <select
+          value={cashAccountId}
+          onChange={(event) => setCashAccountId(event.target.value)}
+          className="w-full rounded-[18px] border border-[#d6e1d9] bg-[#fbfdfb] px-4 py-3 text-sm font-semibold text-[#233329]"
+        >
+          {paymentAccounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </select>
+      </Field>
 
-      {sessionState.isOpen ? (
-        <>
-          <div className="mt-5 space-y-3 text-sm text-[#55645c]">
-            <DetailRow
-              label={t("pos.sales.sessionWarehouse")}
-              value={
-                warehouses.find((row) => row.id === sessionState.warehouseId)?.name ??
-                "—"
-              }
-            />
-            <DetailRow
-              label={t("pos.sales.sessionPayment")}
-              value={
-                paymentAccounts.find((row) => row.id === sessionState.cashAccountId)
-                  ?.name ?? "—"
-              }
-            />
-            <DetailRow
-              label={t("pos.sales.sessionStatus")}
-              value={t("pos.sales.sessionOpen")}
-            />
-            <DetailRow
-              label={t("pos.sales.openingCash")}
-              value={sessionState.openingCash || "0.00"}
-            />
-            <DetailRow
-              label={t("pos.sales.expectedCash")}
-              value={sessionState.expectedCash.toFixed(2)}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onCloseSession}
-            className="mt-5 w-full rounded-[18px] border border-[#ccd7cf] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#42564a] transition hover:border-[#b7c7bb] hover:bg-white"
-          >
-            {t("pos.sales.closeSessionAction")}
-          </button>
-        </>
-      ) : (
-        <div className="mt-5 space-y-3">
-          <Field label="Terminal" className="mb-0">
-            <Input
-              value={sessionState.terminalName}
-              onChange={(event) => onSessionStateChange({ terminalName: event.target.value })}
-              className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
-            />
-          </Field>
-          <Field label="Branch" className="mb-0">
-            <Input
-              value={sessionState.branchName}
-              onChange={(event) => onSessionStateChange({ branchName: event.target.value })}
-              className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
-            />
-          </Field>
-          <Field label={t("pos.sales.openingCash")} className="mb-0">
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={openingCash}
-              onChange={(event) => setOpeningCash(event.target.value)}
-              className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
-            />
-          </Field>
-          <Field label={t("pos.sales.sessionWarehouse")} className="mb-0">
-            <select
-              value={warehouseId}
-              onChange={(event) => setWarehouseId(event.target.value)}
-              className="w-full rounded-[18px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-            >
-              {warehouses.map((warehouse) => (
-                <option key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={t("pos.sales.sessionPayment")} className="mb-0">
-            <select
-              value={cashAccountId}
-              onChange={(event) => setCashAccountId(event.target.value)}
-              className="w-full rounded-[18px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-            >
-              {paymentAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <button
-            type="button"
-            onClick={() => onOpenSession(openingCash, warehouseId, cashAccountId)}
-            className="mt-2 w-full rounded-[18px] bg-[#46644b] px-4 py-3 text-sm font-bold text-white"
-          >
-            {t("pos.sales.openSessionAction")}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ActionNotice({
-  message,
-  lastReceipt,
-  onPrintLastReceipt,
-  t,
-}: {
-  message: string | null;
-  lastReceipt: CompletedReceipt | null;
-  onPrintLastReceipt: () => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
-}) {
-  return (
-    <div className="rounded-[28px] border border-[#dbe2dd] bg-[#243229] p-5 text-white shadow-[0_24px_56px_-36px_rgba(36,50,41,0.9)]">
-      <div className="text-xs font-black uppercase tracking-[0.2em] text-[#b8ccb9]">
-        {t("pos.sales.quickNote")}
-      </div>
-      <div className="mt-3 text-lg font-black arabic-heading">
-        {message ?? t("pos.sales.quickNoteDefault")}
-      </div>
-      <p className="mt-3 text-sm leading-7 text-[#dbe7dd] arabic-auto">
-        {lastReceipt
-          ? `${t("pos.sales.lastReceipt")}: ${lastReceipt.receiptNumber}`
-          : t("pos.sales.quickNoteHint")}
-      </p>
-      {lastReceipt ? (
+      <div className="md:col-span-2">
         <button
           type="button"
-          onClick={onPrintLastReceipt}
-          className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white"
+          onClick={() => onOpenSession(openingCash, warehouseId, cashAccountId)}
+          disabled={isPending}
+          className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_42px_-28px_rgba(95,138,103,0.9)] transition hover:bg-[#557b5c] disabled:opacity-50"
         >
-          <LuPrinter className="h-4 w-4" />
-          {t("pos.sales.printLastReceipt")}
+          {isPending ? "Opening..." : "Open Shift / فتح الوردية"}
         </button>
-      ) : null}
+      </div>
     </div>
   );
 }
 
-function ProductCard({
+function ActiveSessionBar({
+  session,
+  cashierLabel,
+  warehouseName,
+  onCloseSession,
+  isPending,
+}: {
+  session: PosSession;
+  cashierLabel: string;
+  warehouseName: string;
+  onCloseSession: () => void;
+  isPending?: boolean;
+}) {
+  return (
+    <div className="rounded-[28px] border border-[#d8e2db] bg-white p-5 shadow-[0_20px_60px_-42px_rgba(43,79,54,0.3)]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <DetailTile label="Terminal / الجهاز" value={session.terminalName} compact />
+          <DetailTile label="Branch / الفرع" value={session.branchName ?? "—"} compact />
+          <DetailTile label="Cashier / الكاشير" value={cashierLabel} compact />
+          <DetailTile label="Session / الوردية" value={session.sessionNumber} compact />
+          <DetailTile label="Warehouse / المستودع" value={warehouseName} compact />
+        </div>
+        <button
+          type="button"
+          onClick={onCloseSession}
+          disabled={isPending}
+          className="inline-flex items-center justify-center rounded-[18px] border border-[#ead8d4] bg-[#fff8f7] px-5 py-3 text-sm font-bold text-[#8a5952] transition hover:bg-white disabled:opacity-50"
+        >
+          {isPending ? "Closing..." : "Close Shift / إغلاق الوردية"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CompactProductCard({
   item,
   currencyCode,
   onAdd,
-  t,
 }: {
   item: InventoryItem;
   currencyCode: string;
   onAdd: () => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const price = parseAmount(item.defaultSalesPrice);
-  const category = getItemCategory(item);
   const availableQty = parseAmount(item.onHandQuantity);
 
   return (
     <button
       type="button"
       onClick={onAdd}
-      className="group overflow-hidden rounded-[28px] border border-[#dbe2dd] bg-white text-left shadow-[0_18px_55px_-42px_rgba(40,64,48,0.5)] transition hover:-translate-y-1 hover:shadow-[0_28px_70px_-38px_rgba(40,64,48,0.45)]"
+      className="group overflow-hidden rounded-[24px] border border-[#dbe5de] bg-white text-left shadow-[0_18px_42px_-36px_rgba(43,79,54,0.3)] transition hover:-translate-y-1 hover:border-[#bed1c2] hover:shadow-[0_24px_56px_-36px_rgba(43,79,54,0.34)]"
     >
-      <div className="relative h-40 overflow-hidden bg-[linear-gradient(135deg,_#f5f3f3_0%,_#dde4df_45%,_#c9ebcc_100%)]">
-        {item.itemImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.itemImageUrl}
-            alt={item.name}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <div className="rounded-full bg-white/85 p-4 text-[#46644b] shadow">
-              <LuPackage className="h-8 w-8" />
-            </div>
+      <div className="flex items-center gap-4 p-4">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-[linear-gradient(135deg,_#f4f8f4_0%,_#e2efe4_100%)]">
+          {item.itemImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.itemImageUrl}
+              alt={item.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <LuPackage className="h-7 w-7 text-[#5f8a67]" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#6f8675]">
+            AR / EN
           </div>
-        )}
-        <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#5b6a62]">
-          {category}
+          <div className="truncate text-sm font-black text-[#213327] arabic-heading">
+            {item.name}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[#6a7c70]">
+            <span>{item.code}</span>
+            <span>•</span>
+            <span>{item.unitOfMeasure}</span>
+          </div>
         </div>
       </div>
-      <div className="space-y-4 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-black text-[#223228] arabic-heading">
-              {item.name}
-            </div>
-            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#76867c]">
-              {item.code}
-            </div>
+      <div className="grid grid-cols-2 border-t border-[#edf2ee] bg-[#fbfdfb]">
+        <div className="px-4 py-3">
+          <div className="text-[11px] font-bold text-[#7a8d80]">
+            Price / السعر
           </div>
-          <div className="text-base font-black text-[#46644b]">
+          <div className="mt-1 text-sm font-black text-[#31543a]">
             {formatCurrency(price, currencyCode)}
           </div>
         </div>
-        <div className="flex items-center justify-between text-sm text-[#5f6d66]">
-          <span className="arabic-auto">{item.unitOfMeasure}</span>
-          <span
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-bold",
-              item.trackInventory
-                ? "bg-[#eef3ef] text-[#46644b]"
-                : "bg-[#f2efec] text-[#746860]",
-            )}
-          >
-            {item.trackInventory
-              ? `${t("pos.sales.onHand")} ${formatCount(availableQty)}`
-              : t("pos.sales.serviceItem")}
-          </span>
+        <div className="px-4 py-3">
+          <div className="text-[11px] font-bold text-[#7a8d80]">
+            Available / المتاح
+          </div>
+          <div className="mt-1 text-sm font-black text-[#213327]">
+            {item.trackInventory ? formatCount(availableQty) : "—"}
+          </div>
         </div>
       </div>
     </button>
   );
 }
 
-function CartLineCard({
+function CompactCartLine({
   line,
-  warehouses,
   currencyCode,
-  onChange,
+  onIncrease,
+  onDecrease,
   onRemove,
-  t,
 }: {
   line: CartLine;
-  warehouses: InventoryWarehouse[];
   currencyCode: string;
-  onChange: (patch: Partial<CartLine>) => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
   onRemove: () => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
-  const taxAmount = getLineTaxAmount(line);
+  const lineTotal = getLineTotal(line);
 
   return (
-    <div className="rounded-[24px] border border-[#dde4df] bg-[#fbfcfb] p-4">
+    <div className="rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-black text-[#223228] arabic-heading">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-black text-[#213327] arabic-heading">
             {line.name}
           </div>
-          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[#77867e]">
-            {line.code}
+          <div className="mt-1 text-xs text-[#728579]">
+            {line.code} • {formatCurrency(line.unitPrice, currencyCode)}
+          </div>
+          <div className="mt-2 text-xs text-[#728579]">
+            Available / المتاح:{" "}
+            {line.trackInventory ? formatCount(line.onHandQuantity) : "—"}
           </div>
         </div>
         <button
           type="button"
           onClick={onRemove}
-          className="text-xs font-bold text-[#8f5a55] transition hover:text-[#7d3f38]"
+          className="rounded-full bg-[#fff1ef] p-2 text-[#965f58] transition hover:bg-[#ffe7e4]"
+          title="Remove"
         >
-          {t("pos.sales.removeLine")}
+          <LuTrash2 className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Input
-          type="number"
-          min="1"
-          step="1"
-          value={String(line.quantity)}
-          onChange={(event) =>
-            onChange({ quantity: Math.max(1, parseAmount(event.target.value)) })
-          }
-          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
-        />
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={String(line.unitPrice)}
-          onChange={(event) =>
-            onChange({ unitPrice: parseAmount(event.target.value) })
-          }
-          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
-        />
-        <select
-          value={line.discountType}
-          onChange={(event) =>
-            onChange({ discountType: event.target.value as DiscountType })
-          }
-          className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-        >
-          <option value="FIXED">{t("pos.sales.discountFixed")}</option>
-          <option value="PERCENT">{t("pos.sales.discountPercent")}</option>
-        </select>
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={String(line.discountValue)}
-          onChange={(event) =>
-            onChange({ discountValue: parseAmount(event.target.value) })
-          }
-          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
-        />
-        {line.trackInventory ? (
-          <select
-            value={line.warehouseId ?? ""}
-            onChange={(event) => onChange({ warehouseId: event.target.value })}
-            className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329] sm:col-span-2"
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center rounded-full border border-[#d7e2d8] bg-white p-1">
+          <button
+            type="button"
+            onClick={onDecrease}
+            className="rounded-full p-2 text-[#4f6556] transition hover:bg-[#f4f8f5]"
+            title="Minus"
           >
-            <option value="">{t("pos.sales.selectWarehouseLine")}</option>
-            {warehouses.map((warehouse) => (
-              <option key={warehouse.id} value={warehouse.id}>
-                {warehouse.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
-      </div>
+            <LuMinus className="h-4 w-4" />
+          </button>
+          <span className="min-w-10 px-3 text-center text-sm font-black text-[#213327]">
+            {formatCount(line.quantity)}
+          </span>
+          <button
+            type="button"
+            onClick={onIncrease}
+            className="rounded-full p-2 text-[#4f6556] transition hover:bg-[#f4f8f5]"
+            title="Plus"
+          >
+            <LuPlus className="h-4 w-4" />
+          </button>
+        </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-[#617067]">
-        <MiniStat
-          label={t("pos.sales.onHand")}
-          value={line.trackInventory ? formatCount(line.onHandQuantity) : "—"}
-        />
-        <MiniStat
-          label={t("pos.sales.totalTax")}
-          value={formatCurrency(taxAmount, currencyCode)}
-        />
-        <MiniStat
-          label={t("pos.sales.lineTotal")}
-          value={formatCurrency(getLineTotal(line), currencyCode)}
-        />
+        <div className="text-right">
+          <div className="text-[11px] font-bold text-[#7a8d80]">
+            Line Total / الإجمالي
+          </div>
+          <div className="mt-1 text-sm font-black text-[#31543a]">
+            {formatCurrency(lineTotal, currencyCode)}
+          </div>
+        </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-[#617067]">
-        <MiniStat
-          label={t("pos.sales.unitCost")}
-          value={formatCurrency(line.unitCost, currencyCode)}
-        />
-        <MiniStat
-          label={t("pos.sales.totalCost")}
-          value={formatCurrency(getLineTotalCost(line), currencyCode)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[14px] bg-white px-3 py-2">
-      <div className="text-[11px] text-[#7b8b82]">{label}</div>
-      <div className="mt-1 font-bold text-[#223228]">{value}</div>
     </div>
   );
 }
@@ -3344,40 +3423,6 @@ function TotalRow({
         {label}
       </span>
       <span className={cn("text-sm font-black", emphasized && "text-lg")}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function SoftActionButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center justify-center gap-2 rounded-[22px] border border-[#d8dfda] bg-white px-4 py-4 text-sm font-bold text-[#55645c] transition hover:border-[#bfcabf] hover:bg-[#f7faf8]"
-    >
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#7b8b82]">
-        {label}
-      </span>
-      <span className="text-sm font-semibold text-[#223228] arabic-auto">
         {value}
       </span>
     </div>
