@@ -24,6 +24,11 @@ export class PosController {
     return this.service.getActiveSession(req.user);
   }
 
+  @Get("settings")
+  getSettings(@Req() req: Request & { user?: any }) {
+    return this.service.getSettings(req.user);
+  }
+
   @Get("sessions")
   listSessions(@Req() req: Request & { user?: any }) {
     return this.service.listSessions(req.user);
@@ -51,6 +56,11 @@ export class PosController {
   @Get("sales/held")
   listHeldSales(@Query("sessionId") sessionId: string) {
     return this.service.listHeldSales(sessionId);
+  }
+
+  @Get("sales/completed")
+  listCompletedSales(@Req() req: Request & { user?: any }) {
+    return this.service.listCompletedSales(req.user);
   }
 
   @Get("sales/review")

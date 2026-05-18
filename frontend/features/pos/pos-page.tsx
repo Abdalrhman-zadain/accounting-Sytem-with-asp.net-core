@@ -33,11 +33,22 @@ import { Card, PageShell } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
   approvePosAccounting,
+  approvePosReturnAccounting,
   closePosSession,
   completePosSale,
+  createPosReturn,
+  getCompletedPosSales,
   getBankCashAccounts,
   getActivePosSession,
   getHeldPosSales,
+  getPosInventoryImpactReport,
+  getPosSalesByBranchReport,
+  getPosSalesByCashierReport,
+  getPosSalesByItemReport,
+  getPosSalesByPaymentMethodReport,
+  getPosSessionReport,
+  getPosSettings,
+  getPosTaxSummaryReport,
   getInventoryItems,
   getInventoryWarehouses,
   getPendingPosReview,
@@ -47,7 +58,11 @@ import {
   holdPosSale,
   openPosSession,
   rejectPosAccounting,
+  rejectPosReturnAccounting,
   reprintPosReceipt,
+  reversePosAccounting,
+  reversePosReturnAccounting,
+  voidPosSale,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -57,11 +72,15 @@ import type {
   BankCashAccount,
   InventoryItem,
   InventoryWarehouse,
+  PosInventoryImpactRow,
   PosReportsOverview,
+  PosSalesByItemRow,
+  PosSettings,
   PosReturn,
   PosSale,
   PosSession,
   PosSessionReport,
+  PosTaxSummaryRow,
 } from "@/types/api";
 import { POS_THEME } from "./pos-theme";
 
@@ -111,6 +130,20 @@ type PaymentEntry = {
   reference: string;
 };
 
+type ReturnPaymentEntry = {
+  id: string;
+  refundMethod:
+    | "CASH"
+    | "CARD"
+    | "CLIQ"
+    | "BANK_TRANSFER"
+    | "WALLET"
+    | "STORE_CREDIT";
+  bankCashAccountId: string;
+  amount: string;
+  reference: string;
+};
+
 type HeldSale = {
   id: string;
   title: string;
@@ -127,6 +160,7 @@ type HeldSale = {
 type SessionState = {
   isOpen: boolean;
   terminalName: string;
+  branchName: string;
   openingCash: string;
   openedAt?: string | null;
   warehouseId?: string;
@@ -224,20 +258,34 @@ function getLineNetBeforeInvoiceDiscount(line: CartLine) {
   return Math.max(getLineBase(line) - getLineDiscountAmount(line), 0);
 }
 
-function getLineTaxAmount(line: CartLine, invoiceDiscountShare = 0) {
-  const taxableAfterInvoiceDiscount = Math.max(
-    getLineNetBeforeInvoiceDiscount(line) - invoiceDiscountShare,
-    0,
-  );
-  return taxableAfterInvoiceDiscount * (line.taxRate / 100);
+function getLineTaxAmount(
+  line: CartLine,
+  invoiceDiscountShare = 0,
+  taxPolicy: PosSettings["runtime"]["invoiceDiscountTaxPolicy"] = "BEFORE_TAX",
+) {
+  const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
+  const taxableBase =
+    taxPolicy === "BEFORE_TAX"
+      ? Math.max(netBeforeInvoiceDiscount - invoiceDiscountShare, 0)
+      : netBeforeInvoiceDiscount;
+  return taxableBase * (line.taxRate / 100);
 }
 
-function getLineTotal(line: CartLine, invoiceDiscountShare = 0) {
+function getLineTotal(
+  line: CartLine,
+  invoiceDiscountShare = 0,
+  taxPolicy: PosSettings["runtime"]["invoiceDiscountTaxPolicy"] = "BEFORE_TAX",
+) {
+  const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
+  if (taxPolicy === "AFTER_TAX") {
+    const taxAmount = getLineTaxAmount(line, 0, taxPolicy);
+    return Math.max(netBeforeInvoiceDiscount + taxAmount - invoiceDiscountShare, 0);
+  }
   const taxableAfterInvoiceDiscount = Math.max(
-    getLineNetBeforeInvoiceDiscount(line) - invoiceDiscountShare,
+    netBeforeInvoiceDiscount - invoiceDiscountShare,
     0,
   );
-  return taxableAfterInvoiceDiscount + getLineTaxAmount(line, invoiceDiscountShare);
+  return taxableAfterInvoiceDiscount + getLineTaxAmount(line, invoiceDiscountShare, taxPolicy);
 }
 
 function getLineTotalCost(line: CartLine) {
@@ -453,6 +501,7 @@ export function PosPage() {
   const [sessionState, setSessionState] = useState<SessionState>({
     isOpen: false,
     terminalName: "الجهاز رقم 01",
+    branchName: "",
     openingCash: "",
     expectedCash: 0,
     completedSales: 0,
@@ -461,6 +510,11 @@ export function PosPage() {
   const [lastSessionReport, setLastSessionReport] = useState<PosSessionReport | null>(
     null,
   );
+  const [selectedSessionReportId, setSelectedSessionReportId] = useState<string>("");
+  const [selectedReturnSaleId, setSelectedReturnSaleId] = useState<string>("");
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+  const [returnPayments, setReturnPayments] = useState<ReturnPaymentEntry[]>([]);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const messageTimeoutRef = useRef<number | null>(null);
 
@@ -493,6 +547,12 @@ export function PosPage() {
     enabled: Boolean(token),
   });
 
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.posSettings(token),
+    queryFn: () => getPosSettings(token),
+    enabled: Boolean(token && (workspace === "sales" || workspace === "settings")),
+  });
+
   const posSessionsQuery = useQuery({
     queryKey: queryKeys.posSessions(token),
     queryFn: () => getPosSessions(token),
@@ -508,28 +568,88 @@ export function PosPage() {
   const reviewQuery = useQuery({
     queryKey: queryKeys.posReview(token),
     queryFn: () => getPendingPosReview(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && workspace === "review"),
+  });
+
+  const completedSalesQuery = useQuery({
+    queryKey: queryKeys.posCompletedSales(token),
+    queryFn: () => getCompletedPosSales(token),
+    enabled: Boolean(token && workspace === "returns"),
   });
 
   const returnsQuery = useQuery({
     queryKey: queryKeys.posReturns(token),
     queryFn: () => getPosReturns(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && workspace === "returns"),
   });
 
   const reportsOverviewQuery = useQuery({
     queryKey: queryKeys.posReportsOverview(token),
     queryFn: () => getPosReportsOverview(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const selectedSessionId =
+    selectedSessionReportId || activeSessionQuery.data?.id || posSessionsQuery.data?.[0]?.id || null;
+
+  const sessionReportQuery = useQuery({
+    queryKey: queryKeys.posSessionReport(token, selectedSessionId),
+    queryFn: () => getPosSessionReport(selectedSessionId!, token),
+    enabled: Boolean(token && selectedSessionId && workspace === "sessions"),
+  });
+
+  const salesByPaymentMethodQuery = useQuery({
+    queryKey: queryKeys.posSalesByPaymentMethod(token),
+    queryFn: () => getPosSalesByPaymentMethodReport(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const salesByCashierQuery = useQuery({
+    queryKey: queryKeys.posSalesByCashier(token),
+    queryFn: () => getPosSalesByCashierReport(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const salesByBranchQuery = useQuery({
+    queryKey: queryKeys.posSalesByBranch(token),
+    queryFn: () => getPosSalesByBranchReport(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const salesByItemQuery = useQuery({
+    queryKey: queryKeys.posSalesByItem(token),
+    queryFn: () => getPosSalesByItemReport(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const inventoryImpactQuery = useQuery({
+    queryKey: queryKeys.posInventoryImpact(token),
+    queryFn: () => getPosInventoryImpactReport(token),
+    enabled: Boolean(token && workspace === "reports"),
+  });
+
+  const taxSummaryQuery = useQuery({
+    queryKey: queryKeys.posTaxSummary(token),
+    queryFn: () => getPosTaxSummaryReport(token),
+    enabled: Boolean(token && workspace === "reports"),
   });
 
   const refreshPosData = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.posActiveSession(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSettings(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posSessions(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posCompletedSales(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posReview(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posReturns(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posReportsOverview(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSessionReport(token, selectedSessionId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByPaymentMethod(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByCashier(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByBranch(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByItem(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posInventoryImpact(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posTaxSummary(token) }),
       queryClient.invalidateQueries({
         queryKey: queryKeys.posHeldSales(token, activeSessionQuery.data?.id ?? null),
       }),
@@ -602,6 +722,7 @@ export function PosPage() {
     mutationFn: (saleId: string) => approvePosAccounting(saleId, {}, token),
     onSuccess: async () => {
       await refreshPosData();
+      pushMessage("POS sale approved and posted.");
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -612,6 +733,91 @@ export function PosPage() {
     mutationFn: (saleId: string) => rejectPosAccounting(saleId, {}, token),
     onSuccess: async () => {
       await refreshPosData();
+      pushMessage("POS sale moved to rejected review status.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const reverseReviewMutation = useMutation({
+    mutationFn: (saleId: string) =>
+      reversePosAccounting(
+        saleId,
+        { description: "POS accounting reversal requested from review workspace." },
+        token,
+      ),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("POS accounting reversal has been created.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const voidSaleMutation = useMutation({
+    mutationFn: (saleId: string) => voidPosSale(saleId, {}, token),
+    onSuccess: async () => {
+      if (editingInvoiceId) {
+        resetSale();
+      }
+      await refreshPosData();
+      pushMessage("Held POS sale was voided.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const createReturnMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof createPosReturn>[0]) =>
+      createPosReturn(payload, token),
+    onSuccess: async () => {
+      setSelectedReturnSaleId("");
+      setReturnReason("");
+      setReturnQuantities({});
+      setReturnPayments([]);
+      await refreshPosData();
+      pushMessage("POS return created and sent for accounting review.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const approveReturnMutation = useMutation({
+    mutationFn: (returnId: string) => approvePosReturnAccounting(returnId, {}, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("POS return approved and posted.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const rejectReturnMutation = useMutation({
+    mutationFn: (returnId: string) => rejectPosReturnAccounting(returnId, {}, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("POS return marked as rejected.");
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const reverseReturnMutation = useMutation({
+    mutationFn: (returnId: string) =>
+      reversePosReturnAccounting(
+        returnId,
+        { description: "POS return accounting reversal requested from returns workspace." },
+        token,
+      ),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("POS return accounting reversal has been created.");
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -634,6 +840,9 @@ export function PosPage() {
   const warehouses = warehousesQuery.data ?? [];
   const paymentAccounts = paymentAccountsQuery.data ?? [];
   const activeSession = activeSessionQuery.data;
+  const posSettings = settingsQuery.data;
+  const taxPolicy = posSettings?.runtime.invoiceDiscountTaxPolicy ?? "BEFORE_TAX";
+  const completedSales = completedSalesQuery.data ?? [];
   const requestedWorkspace = searchParams.get("tab");
 
   useEffect(() => {
@@ -662,6 +871,7 @@ export function PosPage() {
         ? {
             isOpen: true,
             terminalName: activeSession.terminalName,
+            branchName: activeSession.branchName ?? "",
             openingCash: activeSession.openingCash,
             openedAt: activeSession.openedAt,
             warehouseId: activeSession.warehouse.id,
@@ -672,6 +882,7 @@ export function PosPage() {
         : {
             isOpen: false,
             terminalName: sessionState.terminalName || "الجهاز رقم 01",
+            branchName: sessionState.branchName || "",
             openingCash: "",
             expectedCash: 0,
             completedSales: 0,
@@ -682,6 +893,12 @@ export function PosPage() {
   useEffect(() => {
     setHeldSales((heldSalesQuery.data ?? []).map(mapPosSaleToHeldSale));
   }, [heldSalesQuery.data]);
+
+  useEffect(() => {
+    if (!selectedSessionReportId && posSessionsQuery.data?.length) {
+      setSelectedSessionReportId(activeSession?.id ?? posSessionsQuery.data[0].id);
+    }
+  }, [activeSession?.id, posSessionsQuery.data, selectedSessionReportId]);
 
   useEffect(() => {
     if (!selectedWarehouseId && warehouses.length > 0) {
@@ -709,6 +926,71 @@ export function PosPage() {
       ]);
     }
   }, [paymentAccounts, paymentEntries.length]);
+
+  useEffect(() => {
+    if (!selectedReturnSaleId && completedSales.length > 0) {
+      setSelectedReturnSaleId(completedSales[0].id);
+    }
+  }, [completedSales, selectedReturnSaleId]);
+
+  useEffect(() => {
+    setReturnQuantities({});
+    setReturnReason("");
+  }, [selectedReturnSaleId]);
+
+  useEffect(() => {
+    if (returnPayments.length === 0 && paymentAccounts.length > 0) {
+      const defaultCash =
+        paymentAccounts.find((account) =>
+          account.type.toUpperCase().includes("CASH"),
+        ) ?? paymentAccounts[0];
+      setReturnPayments([
+        {
+          id: createLocalId(),
+          refundMethod: "CASH",
+          bankCashAccountId: defaultCash.id,
+          amount: "",
+          reference: "",
+        },
+      ]);
+    }
+  }, [paymentAccounts, returnPayments.length]);
+
+  useEffect(() => {
+    if (!items.length) {
+      return;
+    }
+    setCartLines((current) =>
+      current.map((line) => {
+        const item = items.find((row) => row.id === line.itemId);
+        if (!item) {
+          return line;
+        }
+        const fallbackWarehouseId =
+          item.trackInventory
+            ? line.warehouseId || item.preferredWarehouseId || selectedWarehouseId || null
+            : null;
+
+        return {
+          ...line,
+          name: item.name,
+          code: item.code,
+          barcode: item.barcode,
+          unit: item.unitOfMeasure,
+          itemType: item.type,
+          taxRate: parseAmount(item.defaultTax?.rate),
+          trackInventory: item.trackInventory,
+          unitCost: parseAmount(item.defaultPurchasePrice),
+          averageCost: parseAmount(item.defaultPurchasePrice),
+          salesAccountId: item.salesAccount?.id ?? line.salesAccountId,
+          inventoryAccountId: item.inventoryAccount?.id ?? line.inventoryAccountId,
+          cogsAccountId: item.cogsAccount?.id ?? line.cogsAccountId,
+          warehouseId: fallbackWarehouseId,
+          onHandQuantity: parseAmount(item.onHandQuantity),
+        };
+      }),
+    );
+  }, [items, selectedWarehouseId]);
 
   const categories = useMemo(() => {
     const values = Array.from(
@@ -773,16 +1055,27 @@ export function PosPage() {
     const invoiceDiscount = getInvoiceDiscountAmount(
       invoiceDiscountType,
       invoiceDiscountValue,
-      taxableBase,
+      taxPolicy === "AFTER_TAX"
+        ? taxableBase +
+            cartLines.reduce(
+              (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
+              0,
+            )
+        : taxableBase,
     );
     const tax = cartLines.reduce((sum, line) => {
       const lineBase = getLineNetBeforeInvoiceDiscount(line);
+      if (taxPolicy === "AFTER_TAX") {
+        return sum + getLineTaxAmount(line, 0, taxPolicy);
+      }
       if (taxableBase <= 0) return sum;
       const invoiceShare = invoiceDiscount * (lineBase / taxableBase);
-      const lineTaxable = Math.max(lineBase - invoiceShare, 0);
-      return sum + lineTaxable * (line.taxRate / 100);
+      return sum + getLineTaxAmount(line, invoiceShare, taxPolicy);
     }, 0);
-    const total = Math.max(taxableBase - invoiceDiscount, 0) + tax;
+    const total =
+      taxPolicy === "AFTER_TAX"
+        ? Math.max(taxableBase + tax - invoiceDiscount, 0)
+        : Math.max(taxableBase - invoiceDiscount, 0) + tax;
     const tendered = paymentEntriesResolved.reduce(
       (sum, entry) => sum + entry.amountValue,
       0,
@@ -809,19 +1102,69 @@ export function PosPage() {
     invoiceDiscountType,
     invoiceDiscountValue,
     paymentEntriesResolved,
+    taxPolicy,
   ]);
+
+  const selectedReturnSale =
+    completedSales.find((sale) => sale.id === selectedReturnSaleId) ?? null;
+
+  const returnPaymentEntriesResolved = useMemo(
+    () =>
+      returnPayments.map((entry) => ({
+        ...entry,
+        account:
+          paymentAccounts.find((account) => account.id === entry.bankCashAccountId) ?? null,
+        amountValue: parseAmount(entry.amount),
+      })),
+    [paymentAccounts, returnPayments],
+  );
+
+  const returnPreview = useMemo(() => {
+    if (!selectedReturnSale) {
+      return {
+        totalAmount: 0,
+        selectedLineCount: 0,
+      };
+    }
+    return selectedReturnSale.lines.reduce(
+      (summary, line) => {
+        const quantity = parseAmount(returnQuantities[line.id]);
+        if (quantity <= 0) {
+          return summary;
+        }
+        const soldQuantity = parseAmount(line.quantity);
+        const ratio = soldQuantity > 0 ? Math.min(quantity, soldQuantity) / soldQuantity : 0;
+        summary.selectedLineCount += 1;
+        summary.totalAmount += parseAmount(line.lineAmount) * ratio;
+        return summary;
+      },
+      {
+        totalAmount: 0,
+        selectedLineCount: 0,
+      },
+    );
+  }, [returnQuantities, selectedReturnSale]);
 
   const buildSaleLinesPayload = () => {
     return cartLines.map((line) => {
       const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
       const invoiceShare =
-        cartMetrics.taxableBase > 0
+        cartMetrics.taxableBase > 0 && taxPolicy === "BEFORE_TAX"
           ? cartMetrics.invoiceDiscount *
             (netBeforeInvoiceDiscount / cartMetrics.taxableBase)
           : 0;
+      const afterTaxShare =
+        taxPolicy === "AFTER_TAX" && cartMetrics.total > 0
+          ? cartMetrics.invoiceDiscount *
+            ((netBeforeInvoiceDiscount + getLineTaxAmount(line, 0, "AFTER_TAX")) /
+              (cartMetrics.taxableBase + cartMetrics.tax))
+          : 0;
       const totalDiscountAmount = getLineDiscountAmount(line) + invoiceShare;
-      const taxAmount = getLineTaxAmount(line, invoiceShare);
-      const lineAmount = getLineTotal(line, invoiceShare);
+      const taxAmount = getLineTaxAmount(line, invoiceShare, taxPolicy);
+      const lineAmount =
+        taxPolicy === "AFTER_TAX"
+          ? getLineTotal(line, afterTaxShare, taxPolicy)
+          : getLineTotal(line, invoiceShare, taxPolicy);
 
       return {
         itemId: line.itemId,
@@ -830,7 +1173,9 @@ export function PosPage() {
         itemName: line.name,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
-        discountAmount: Number(totalDiscountAmount.toFixed(2)),
+        discountAmount: Number(
+          (getLineDiscountAmount(line) + (taxPolicy === "AFTER_TAX" ? afterTaxShare : invoiceShare)).toFixed(2),
+        ),
         taxAmount: Number(taxAmount.toFixed(2)),
         lineAmount: Number(lineAmount.toFixed(2)),
         description: line.name,
@@ -984,6 +1329,33 @@ export function PosPage() {
     setPaymentEntries((current) => current.filter((entry) => entry.id !== entryId));
   };
 
+  const updateReturnPaymentEntry = (
+    entryId: string,
+    patch: Partial<ReturnPaymentEntry>,
+  ) => {
+    setReturnPayments((current) =>
+      current.map((entry) => (entry.id === entryId ? { ...entry, ...patch } : entry)),
+    );
+  };
+
+  const addReturnPaymentEntry = () => {
+    const fallbackAccount = paymentAccounts[0];
+    setReturnPayments((current) => [
+      ...current,
+      {
+        id: createLocalId(),
+        refundMethod: "CASH",
+        bankCashAccountId: fallbackAccount?.id ?? "",
+        amount: "",
+        reference: "",
+      },
+    ]);
+  };
+
+  const removeReturnPaymentEntry = (entryId: string) => {
+    setReturnPayments((current) => current.filter((entry) => entry.id !== entryId));
+  };
+
   const holdSale = () => {
     if (!sessionState.isOpen) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
@@ -1059,24 +1431,6 @@ export function PosPage() {
       return;
     }
 
-    const accountViolation = cartLines.find((line) => {
-      if (!line.salesAccountId) {
-        return true;
-      }
-      if (line.trackInventory && (!line.inventoryAccountId || !line.cogsAccountId)) {
-        return true;
-      }
-      return false;
-    });
-    if (accountViolation) {
-      pushMessage(
-        t("pos.sales.alert.accountMappingRequired", {
-          item: accountViolation.name,
-        }),
-      );
-      return;
-    }
-
     if (
       paymentEntriesResolved.length === 0 ||
       paymentEntriesResolved.every((entry) => !entry.bankCashAccountId || entry.amountValue <= 0)
@@ -1085,7 +1439,7 @@ export function PosPage() {
       return;
     }
 
-    if (cartMetrics.paid < cartMetrics.total) {
+    if (cartMetrics.paid < cartMetrics.total && !posSettings?.runtime.allowCreditSale) {
       pushMessage(t("pos.sales.alert.insufficientPayment"));
       return;
     }
@@ -1096,6 +1450,57 @@ export function PosPage() {
       description: search || undefined,
       lines: buildSaleLinesPayload(),
       payments: buildPaymentPayload(),
+    });
+  };
+
+  const createReturnFromSelection = () => {
+    if (!selectedReturnSale) {
+      pushMessage("Select a completed POS sale before creating a return.");
+      return;
+    }
+
+    const lines = selectedReturnSale.lines
+      .map((line) => ({
+        salesInvoiceLineId: line.id,
+        quantity: Number(parseAmount(returnQuantities[line.id]).toFixed(4)),
+      }))
+      .filter((line) => line.quantity > 0);
+
+    if (!lines.length) {
+      pushMessage("Choose at least one returned quantity.");
+      return;
+    }
+
+    const payments = returnPaymentEntriesResolved
+      .filter((entry) => entry.amountValue > 0)
+      .map((entry) => ({
+        refundMethod: entry.refundMethod,
+        bankCashAccountId:
+          entry.refundMethod === "STORE_CREDIT" ? undefined : entry.bankCashAccountId || undefined,
+        amount: Number(entry.amountValue.toFixed(2)),
+        reference: entry.reference || undefined,
+      }));
+
+    if (!payments.length) {
+      pushMessage("Add at least one refund method before creating the return.");
+      return;
+    }
+
+    const refundTotal = Number(
+      payments.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2),
+    );
+    const expectedTotal = Number(returnPreview.totalAmount.toFixed(2));
+    if (refundTotal !== expectedTotal) {
+      pushMessage("Refund allocation must equal the selected return total.");
+      return;
+    }
+
+    createReturnMutation.mutate({
+      salesInvoiceId: selectedReturnSale.id,
+      sessionId: activeSession?.id ?? selectedReturnSale.session?.id ?? undefined,
+      reason: returnReason || undefined,
+      lines,
+      payments,
     });
   };
 
@@ -1183,12 +1588,16 @@ export function PosPage() {
                 sessionState={sessionState}
                 warehouses={warehouses}
                 paymentAccounts={paymentAccounts}
+                onSessionStateChange={(patch) =>
+                  setSessionState((current) => ({ ...current, ...patch }))
+                }
                 onOpenSession={(openingCash, warehouseId, cashAccountId) => {
                   openSessionMutation.mutate({
                     openingCash: parseAmount(openingCash),
                     warehouseId,
                     cashAccountId,
                     terminalName: sessionState.terminalName,
+                    branchName: sessionState.branchName || undefined,
                   });
                 }}
                 onCloseSession={() => {
@@ -1570,6 +1979,10 @@ export function PosPage() {
                     icon={LuRefreshCcw}
                     label={t("pos.sales.voidAction")}
                     onClick={() => {
+                      if (editingInvoiceId) {
+                        voidSaleMutation.mutate(editingInvoiceId);
+                        return;
+                      }
                       resetSale();
                       pushMessage(t("pos.sales.alert.voidedDraft"));
                     }}
@@ -1605,6 +2018,8 @@ export function PosPage() {
   };
 
   const renderSessionsWorkspace = () => {
+    const report = sessionReportQuery.data ?? lastSessionReport;
+
     return (
       <div className="space-y-6">
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
@@ -1616,22 +2031,27 @@ export function PosPage() {
               ? `Open session ${activeSession.sessionNumber} at ${activeSession.terminalName}`
               : t("pos.sessions.noOpen")}
           </p>
-          {lastSessionReport ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {report ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-4">
               <SoftMetric
                 label={t("pos.sessions.expected")}
-                value={lastSessionReport.expectedCash}
+                value={report.expectedCash}
                 hint={t("pos.sales.expectedCash")}
               />
               <SoftMetric
                 label={t("pos.sessions.actual")}
-                value={lastSessionReport.actualCash ?? "—"}
+                value={report.actualCash ?? "—"}
                 hint={t("pos.sessions.actual")}
               />
               <SoftMetric
                 label={t("pos.sessions.difference")}
-                value={lastSessionReport.difference ?? "—"}
+                value={report.difference ?? "—"}
                 hint={t("pos.sessions.difference")}
+              />
+              <SoftMetric
+                label="Invoices"
+                value={formatCount(report.invoiceCount)}
+                hint={`${report.returnCount} returns`}
               />
             </div>
           ) : null}
@@ -1640,53 +2060,167 @@ export function PosPage() {
           <div className="text-lg font-black text-[#233329] arabic-heading">
             {t("pos.sessions.recent")}
           </div>
-          <div className="mt-4 space-y-3">
-            {(posSessionsQuery.data ?? []).map((session) => (
-              <div
-                key={session.id}
-                className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-bold text-[#233329]">
-                      {session.sessionNumber}
+          <div className="mt-4 grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="space-y-3">
+              {(posSessionsQuery.data ?? []).map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => setSelectedSessionReportId(session.id)}
+                  className={cn(
+                    "w-full rounded-[20px] border p-4 text-left transition",
+                    selectedSessionId === session.id
+                      ? "border-[#46644b] bg-[#f3f7f3]"
+                      : "border-[#dbe2dd] bg-[#f8faf8]",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-[#233329]">
+                        {session.sessionNumber}
+                      </div>
+                      <div className="text-sm text-[#66756d]">
+                        {session.terminalName} · {session.warehouse.name}
+                      </div>
                     </div>
-                    <div className="text-sm text-[#66756d]">
-                      {session.terminalName} · {session.warehouse.name}
+                    <div className="text-sm font-bold text-[#46644b]">
+                      {session.status}
                     </div>
                   </div>
-                  <div className="text-sm font-bold text-[#46644b]">
-                    {session.status}
-                  </div>
+                </button>
+              ))}
+            </div>
+            {report ? (
+              <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <DetailTile label="Branch" value={report.branchName || "—"} />
+                  <DetailTile label="Warehouse" value={report.warehouse.name} />
+                  <DetailTile label="Cash Account" value={report.cashAccount.name} />
+                  <DetailTile label="Opening Cash" value={report.openingCash} />
+                  <DetailTile label="Cash Sales" value={report.cashSales} />
+                  <DetailTile label="Cash Refunds" value={report.cashRefunds} />
+                  <DetailTile label="Card Sales" value={report.cardSales} />
+                  <DetailTile label="CliQ Sales" value={report.cliqSales} />
+                  <DetailTile label="Wallet Sales" value={report.walletSales} />
+                  <DetailTile label="Bank Transfer" value={report.bankTransferSales} />
+                  <DetailTile label="Discounts" value={report.discounts} />
+                  <DetailTile label="Tax" value={report.tax} />
+                  <DetailTile label="Total Sales" value={report.totalSales} />
+                  <DetailTile label="Opened" value={new Date(report.openedAt).toLocaleString()} />
+                  <DetailTile
+                    label="Closed"
+                    value={report.closedAt ? new Date(report.closedAt).toLocaleString() : "—"}
+                  />
                 </div>
               </div>
-            ))}
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
+                Session report details will appear here once a POS session is selected.
+              </div>
+            )}
           </div>
         </Card>
       </div>
     );
   };
 
-  const renderReviewWorkspace = () => {
+  const renderHeldWorkspace = () => {
     return (
-      <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-        <div className="text-2xl font-black text-[#233329] arabic-heading">
-          {t("pos.workspace.review")}
-        </div>
-        <div className="mt-5 space-y-4">
-          {(reviewQuery.data ?? []).map((sale) => (
-            <div
-              key={sale.id}
-              className="rounded-[22px] border border-[#dbe2dd] bg-[#f9faf8] p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-black text-[#233329]">{sale.reference}</div>
-                  <div className="text-sm text-[#68776f]">
-                    {sale.posAccountingStatus} · {sale.totalAmount} {sale.currencyCode}
+      <div className="space-y-6">
+        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+          <div className="text-2xl font-black text-[#233329] arabic-heading">
+            {t("pos.workspace.held")}
+          </div>
+          <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+            Resume or void held POS sales without affecting inventory, cash, or accounting.
+          </p>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {heldSales.length > 0 ? (
+            heldSales.map((heldSale) => (
+              <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
+                    <div className="mt-1 text-sm text-[#66756d]">
+                      {new Date(heldSale.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
+                    {heldSale.cartLines.length} lines
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
+                  {heldSale.cartLines.slice(0, 4).map((line) => (
+                    <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
+                      <span>{line.name}</span>
+                      <span>
+                        {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspace("sales");
+                      startRoutingTransition(() => {
+                        router.replace("/pos?tab=sales");
+                      });
+                      resumeHeldSale(heldSale.id);
+                    }}
+                    className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                  >
+                    {t("pos.sales.resumeHeld")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => voidSaleMutation.mutate(heldSale.id)}
+                    className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                  >
+                    {t("pos.sales.voidAction")}
+                  </button>
+                </div>
+              </Card>
+            ))
+          ) : (
+            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
+              No held POS sales are waiting to be resumed.
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderReviewWorkspace = () => {
+    return (
+      <div className="space-y-6">
+        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+          <div className="text-2xl font-black text-[#233329] arabic-heading">
+            {t("pos.workspace.review")}
+          </div>
+          <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+            Review completed POS sales, inventory relief, captured payments, and draft accounting before posting.
+          </p>
+        </Card>
+        <div className="space-y-4">
+          {(reviewQuery.data ?? []).map((sale) => (
+            <Card key={sale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-black text-[#233329]">{sale.reference}</div>
+                  <div className="mt-1 text-sm text-[#68776f]">
+                    {sale.posAccountingStatus} · {sale.totalAmount} {sale.currencyCode}
+                  </div>
+                  <div className="mt-1 text-sm text-[#68776f]">
+                    Session: {sale.session?.sessionNumber ?? "—"} · Warehouse:{" "}
+                    {sale.session?.warehouse.name ?? "—"}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => reprintReceiptMutation.mutate(sale.id)}
@@ -1694,26 +2228,82 @@ export function PosPage() {
                   >
                     {t("pos.sales.printLastReceipt")}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => approveReviewMutation.mutate(sale.id)}
-                    className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-                  >
-                    {t("pos.review.approve")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => rejectReviewMutation.mutate(sale.id)}
-                    className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-                  >
-                    {t("pos.review.reject")}
-                  </button>
+                  {sale.posAccountingStatus === "POSTED" ? (
+                    <button
+                      type="button"
+                      onClick={() => reverseReviewMutation.mutate(sale.id)}
+                      className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                    >
+                      Reverse
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => approveReviewMutation.mutate(sale.id)}
+                        className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                      >
+                        {t("pos.review.approve")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => rejectReviewMutation.mutate(sale.id)}
+                        className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                      >
+                        {t("pos.review.reject")}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <DetailTile label="Subtotal" value={sale.subtotalAmount} />
+                <DetailTile label="Discount" value={sale.discountAmount} />
+                <DetailTile label="Tax" value={sale.taxAmount} />
+                <DetailTile label="Change" value={sale.posChangeAmount ?? "0.00"} />
+              </div>
+              <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                  <div className="font-bold text-[#233329]">Lines</div>
+                  <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
+                    {sale.lines.map((line) => (
+                      <div key={line.id} className="flex items-center justify-between gap-3">
+                        <span>
+                          {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
+                        </span>
+                        <span>
+                          {line.quantity} x {line.unitPrice} = {line.lineAmount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                  <div className="font-bold text-[#233329]">Payments</div>
+                  <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
+                    {sale.payments.map((payment) => (
+                      <div key={payment.id} className="flex items-center justify-between gap-3">
+                        <span>
+                          {payment.paymentMethod} · {payment.bankCashAccount.name}
+                        </span>
+                        <span>
+                          {payment.amount}
+                          {payment.tenderedAmount ? ` / tendered ${payment.tenderedAmount}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Card>
           ))}
+          {(reviewQuery.data ?? []).length === 0 ? (
+            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
+              No POS sales are waiting for accountant review right now.
+            </Card>
+          ) : null}
         </div>
-      </Card>
+      </div>
     );
   };
 
@@ -1727,48 +2317,254 @@ export function PosPage() {
             {t("pos.workspace.returns")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Completed POS returns, refund methods, and accounting review status.
+            Capture cashier-side POS returns and then route them through accounting approval or reversal.
           </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <SoftMetric
-              label="Returns"
-              value={formatCount(returns.length)}
-              hint="Operational returns created from completed POS sales."
-            />
-            <SoftMetric
-              label="Refunded"
-              value={formatCurrency(
-                returns.reduce((sum, row) => sum + parseAmount(row.refundAmount), 0),
-              )}
-              hint="Total refund amount recorded across POS returns."
-            />
-            <SoftMetric
-              label="Pending"
-              value={formatCount(
-                returns.filter((row) => row.accountingStatus === "PENDING_REVIEW").length,
-              )}
-              hint="Returns waiting for accounting review."
-            />
-          </div>
         </Card>
 
-        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+            <div className="text-lg font-black text-[#233329]">Create POS return</div>
+            <div className="mt-4 space-y-4">
+              <Field label="Original sale" className="mb-0">
+                <select
+                  value={selectedReturnSaleId}
+                  onChange={(event) => setSelectedReturnSaleId(event.target.value)}
+                  className="w-full rounded-[18px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                >
+                  <option value="">Select a completed POS sale</option>
+                  {completedSales.map((sale) => (
+                    <option key={sale.id} value={sale.id}>
+                      {sale.reference} · {sale.totalAmount} {sale.currencyCode}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {selectedReturnSale ? (
+                <>
+                  <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <DetailTile label="Receipt" value={selectedReturnSale.receiptNumber ?? "—"} compact />
+                      <DetailTile label="Session" value={selectedReturnSale.session?.sessionNumber ?? "—"} compact />
+                      <DetailTile label="Warehouse" value={selectedReturnSale.session?.warehouse.name ?? "—"} compact />
+                      <DetailTile label="Invoice total" value={selectedReturnSale.totalAmount} compact />
+                    </div>
+                  </div>
+                  <Field label="Return reason" className="mb-0">
+                    <Input
+                      value={returnReason}
+                      onChange={(event) => setReturnReason(event.target.value)}
+                      placeholder="Damaged item, customer cancellation, pricing correction..."
+                      className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
+                    />
+                  </Field>
+                  <div className="space-y-3">
+                    {selectedReturnSale.lines.map((line) => {
+                      const soldQuantity = parseAmount(line.quantity);
+                      return (
+                        <div
+                          key={line.id}
+                          className="grid gap-3 rounded-[20px] border border-[#dbe2dd] bg-[#fbfcfb] p-4 lg:grid-cols-[minmax(0,1fr)_140px_140px]"
+                        >
+                          <div>
+                            <div className="font-bold text-[#233329]">
+                              {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
+                            </div>
+                            <div className="mt-1 text-sm text-[#68776f]">
+                              Sold {soldQuantity} at {line.unitPrice} each
+                            </div>
+                          </div>
+                          <DetailTile label="Line total" value={line.lineAmount} compact />
+                          <Field label="Return qty" className="mb-0">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={String(soldQuantity)}
+                              step="0.0001"
+                              value={returnQuantities[line.id] ?? ""}
+                              onChange={(event) =>
+                                setReturnQuantities((current) => ({
+                                  ...current,
+                                  [line.id]: event.target.value,
+                                }))
+                              }
+                              className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
+                            />
+                          </Field>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="space-y-3 rounded-[24px] border border-[#dbe2dd] bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-bold text-[#233329]">
+                        Refund methods
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addReturnPaymentEntry}
+                        className="rounded-full border border-[#d6ded8] px-3 py-1.5 text-xs font-bold text-[#55645c]"
+                      >
+                        Add refund
+                      </button>
+                    </div>
+                    {returnPaymentEntriesResolved.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="grid gap-3 rounded-[18px] border border-[#e1e7e2] bg-[#fbfcfb] p-3 lg:grid-cols-[0.9fr_1fr_0.85fr_0.9fr_auto]"
+                      >
+                        <select
+                          value={entry.refundMethod}
+                          onChange={(event) =>
+                            updateReturnPaymentEntry(entry.id, {
+                              refundMethod: event.target.value as ReturnPaymentEntry["refundMethod"],
+                            })
+                          }
+                          className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="CARD">Card</option>
+                          <option value="CLIQ">CliQ</option>
+                          <option value="BANK_TRANSFER">Bank Transfer</option>
+                          <option value="WALLET">Wallet</option>
+                          <option value="STORE_CREDIT">Store Credit</option>
+                        </select>
+                        <select
+                          value={entry.bankCashAccountId}
+                          onChange={(event) =>
+                            updateReturnPaymentEntry(entry.id, {
+                              bankCashAccountId: event.target.value,
+                            })
+                          }
+                          disabled={entry.refundMethod === "STORE_CREDIT"}
+                          className="w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329] disabled:bg-[#f2f4f2]"
+                        >
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={entry.amount}
+                          onChange={(event) =>
+                            updateReturnPaymentEntry(entry.id, { amount: event.target.value })
+                          }
+                          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
+                        />
+                        <Input
+                          value={entry.reference}
+                          onChange={(event) =>
+                            updateReturnPaymentEntry(entry.id, { reference: event.target.value })
+                          }
+                          placeholder="Reference"
+                          className="rounded-[16px] border-[#d4ddd7] bg-white py-3"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeReturnPaymentEntry(entry.id)}
+                          disabled={returnPaymentEntriesResolved.length === 1}
+                          className="rounded-[16px] border border-[#ead7d5] px-3 py-3 text-xs font-bold text-[#8f5a55] disabled:opacity-40"
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 rounded-[24px] border border-[#dbe2dd] bg-[#f8faf8] p-4 sm:grid-cols-3">
+                    <DetailTile label="Returned lines" value={String(returnPreview.selectedLineCount)} compact />
+                    <DetailTile label="Expected refund" value={formatCurrency(returnPreview.totalAmount)} compact />
+                    <DetailTile
+                      label="Allocated refund"
+                      value={formatCurrency(
+                        returnPaymentEntriesResolved.reduce(
+                          (sum, entry) => sum + entry.amountValue,
+                          0,
+                        ),
+                      )}
+                      compact
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={createReturnFromSelection}
+                    disabled={createReturnMutation.isPending}
+                    className="w-full rounded-[20px] bg-[#46644b] px-4 py-3 text-sm font-black text-white"
+                  >
+                    {createReturnMutation.isPending ? "..." : "Create POS return"}
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
+                  Choose a completed POS sale to start a return.
+                </div>
+              )}
+            </div>
+          </Card>
+
           <div className="space-y-4">
+            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <SoftMetric
+                  label="Returns"
+                  value={formatCount(returns.length)}
+                  hint="Operational returns created from completed POS sales."
+                />
+                <SoftMetric
+                  label="Refunded"
+                  value={formatCurrency(
+                    returns.reduce((sum, row) => sum + parseAmount(row.refundAmount), 0),
+                  )}
+                  hint="Total refund amount recorded across POS returns."
+                />
+                <SoftMetric
+                  label="Pending"
+                  value={formatCount(
+                    returns.filter((row) => row.accountingStatus === "PENDING_REVIEW").length,
+                  )}
+                  hint="Returns waiting for accounting review."
+                />
+              </div>
+            </Card>
             {returns.map((posReturn) => (
-              <div
-                key={posReturn.id}
-                className="rounded-[22px] border border-[#dbe2dd] bg-[#f9faf8] p-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <Card key={posReturn.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="font-black text-[#233329]">{posReturn.reference}</div>
-                    <div className="text-sm text-[#68776f]">
+                    <div className="mt-1 text-sm text-[#68776f]">
                       {posReturn.salesInvoice.reference} · {posReturn.accountingStatus} ·{" "}
                       {formatCurrency(parseAmount(posReturn.totalAmount), posReturn.currencyCode)}
                     </div>
                   </div>
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#6a7a71]">
-                    {posReturn.status}
+                  <div className="flex flex-wrap gap-2">
+                    {posReturn.accountingStatus === "POSTED" ? (
+                      <button
+                        type="button"
+                        onClick={() => reverseReturnMutation.mutate(posReturn.id)}
+                        className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                      >
+                        Reverse
+                      </button>
+                    ) : posReturn.accountingStatus !== "REVERSED" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => approveReturnMutation.mutate(posReturn.id)}
+                          className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => rejectReturnMutation.mutate(posReturn.id)}
+                          className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#5e6d65]">
@@ -1781,21 +2577,28 @@ export function PosPage() {
                     </span>
                   ))}
                 </div>
-              </div>
+              </Card>
             ))}
             {returns.length === 0 ? (
-              <div className="rounded-[22px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
+              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
                 No POS returns have been recorded yet.
-              </div>
+              </Card>
             ) : null}
           </div>
-        </Card>
+        </div>
       </div>
     );
   };
 
   const renderReportsWorkspace = () => {
     const overview = reportsOverviewQuery.data;
+    const salesByPaymentMethod =
+      salesByPaymentMethodQuery.data ?? overview?.salesByPaymentMethod ?? [];
+    const salesByCashier = salesByCashierQuery.data ?? overview?.salesByCashier ?? [];
+    const salesByBranch = salesByBranchQuery.data ?? overview?.salesByBranch ?? [];
+    const salesByItem = salesByItemQuery.data ?? [];
+    const inventoryImpact = inventoryImpactQuery.data ?? [];
+    const taxSummary = taxSummaryQuery.data ?? overview?.taxSummary ?? [];
 
     return (
       <div className="space-y-6">
@@ -1804,7 +2607,7 @@ export function PosPage() {
             {t("pos.workspace.reports")}
           </div>
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            Payment mix, cashier performance, branch totals, and tax summary for POS activity.
+            Payment mix, cashier performance, branch totals, pending review exposure, stock impact, and tax summary for POS activity.
           </p>
           {overview ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-4">
@@ -1815,55 +2618,138 @@ export function PosPage() {
               />
               <SoftMetric
                 label="Payment Mix"
-                value={formatCount(overview.salesByPaymentMethod.length)}
+                value={formatCount(salesByPaymentMethod.length)}
                 hint="Distinct payment methods used in POS sales."
               />
               <SoftMetric
                 label="Cashiers"
-                value={formatCount(overview.salesByCashier.length)}
+                value={formatCount(salesByCashier.length)}
                 hint="Cashiers with completed POS sales in the current report."
               />
               <SoftMetric
                 label="Branches"
-                value={formatCount(overview.salesByBranch.length)}
+                value={formatCount(salesByBranch.length)}
                 hint="Branches represented in POS reporting."
               />
             </div>
           ) : null}
         </Card>
 
-        {overview ? (
-          <div className="grid gap-6 xl:grid-cols-2">
-            <ReportCard
-              title="Sales by payment method"
-              rows={overview.salesByPaymentMethod.map((row) => ({
-                label: row.method,
-                value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
-              }))}
-            />
-            <ReportCard
-              title="Sales by cashier"
-              rows={overview.salesByCashier.map((row) => ({
-                label: row.cashierName,
-                value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
-              }))}
-            />
-            <ReportCard
-              title="Sales by branch"
-              rows={overview.salesByBranch.map((row) => ({
-                label: row.branchName,
-                value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
-              }))}
-            />
-            <ReportCard
-              title="Tax summary"
-              rows={overview.taxSummary.map((row) => ({
-                label: `${row.taxCode} (${row.rate}%)`,
-                value: `${row.netTax} net tax`,
-              }))}
-            />
+        <div className="grid gap-6 xl:grid-cols-2">
+          <ReportCard
+            title="Sales by payment method"
+            rows={salesByPaymentMethod.map((row) => ({
+              label: row.method,
+              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+            }))}
+          />
+          <ReportCard
+            title="Sales by cashier"
+            rows={salesByCashier.map((row) => ({
+              label: row.cashierName,
+              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+            }))}
+          />
+          <ReportCard
+            title="Sales by branch"
+            rows={salesByBranch.map((row) => ({
+              label: row.branchName,
+              value: `${row.salesAmount} · ${row.invoiceCount} invoices`,
+            }))}
+          />
+          <ReportCard
+            title="Tax summary"
+            rows={taxSummary.map((row: PosTaxSummaryRow) => ({
+              label: `${row.taxCode} (${row.rate}%)`,
+              value: `${row.netTax} net tax · ${row.returnTax} returns`,
+            }))}
+          />
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <DetailedTableCard
+            title="Sales by item"
+            headers={["Item", "Qty", "Sales", "Tax"]}
+            rows={salesByItem.map((row: PosSalesByItemRow) => [
+              row.itemName,
+              row.quantity,
+              row.salesAmount,
+              row.taxAmount,
+            ])}
+          />
+          <DetailedTableCard
+            title="Inventory impact"
+            headers={["Reference", "Item", "Warehouse", "Qty Out / In", "Running Qty"]}
+            rows={inventoryImpact.map((row: PosInventoryImpactRow) => [
+              row.transactionReference,
+              row.item?.name ?? "—",
+              row.warehouse?.name ?? "—",
+              `${row.quantityOut} / ${row.quantityIn}`,
+              row.runningQuantity,
+            ])}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderSettingsWorkspace = () => {
+    const settings = posSettings;
+
+    return (
+      <div className="space-y-6">
+        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+          <div className="text-2xl font-black text-[#233329] arabic-heading">
+            {t("pos.workspace.settings")}
           </div>
-        ) : null}
+          <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+            Runtime POS policies and role-based access derived from current system configuration.
+          </p>
+        </Card>
+
+        {settings ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <DetailTile
+                label="Invoice discount tax policy"
+                value={settings.runtime.invoiceDiscountTaxPolicy}
+              />
+              <DetailTile
+                label="Credit sale"
+                value={settings.runtime.allowCreditSale ? "Enabled" : "Disabled"}
+              />
+              <DetailTile
+                label="Auto post"
+                value={settings.runtime.autoPost ? "Enabled" : "Disabled"}
+              />
+              <DetailTile
+                label="Allow close with drafts"
+                value={settings.runtime.allowCloseWithDrafts ? "Enabled" : "Disabled"}
+              />
+              <DetailTile
+                label="Negative stock"
+                value={settings.runtime.negativeStockAllowed ? "Allowed" : "Blocked"}
+              />
+              <DetailTile
+                label="Cashier discount limit"
+                value={`${settings.runtime.cashierDiscountLimitPercent}%`}
+              />
+            </div>
+
+            <DetailedTableCard
+              title="Role-based POS actions"
+              headers={["Action", "Allowed"]}
+              rows={Object.entries(settings.permissions).map(([action, allowed]) => [
+                action,
+                allowed ? "Yes" : "No",
+              ])}
+            />
+          </>
+        ) : (
+          <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
+            POS runtime settings could not be loaded.
+          </Card>
+        )}
       </div>
     );
   };
@@ -1877,6 +2763,10 @@ export function PosPage() {
       return renderSessionsWorkspace();
     }
 
+    if (workspace === "held") {
+      return renderHeldWorkspace();
+    }
+
     if (workspace === "review") {
       return renderReviewWorkspace();
     }
@@ -1887,6 +2777,10 @@ export function PosPage() {
 
     if (workspace === "reports") {
       return renderReportsWorkspace();
+    }
+
+    if (workspace === "settings") {
+      return renderSettingsWorkspace();
     }
 
     const descriptions: Record<Exclude<PosWorkspace, "sales">, string> = {
@@ -1962,10 +2856,76 @@ function ReportCard({
   );
 }
 
+function DetailedTableCard({
+  title,
+  headers,
+  rows,
+}: {
+  title: string;
+  headers: string[];
+  rows: string[][];
+}) {
+  return (
+    <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+      <div className="text-lg font-black text-[#233329]">{title}</div>
+      {rows.length > 0 ? (
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#e1e7e2] text-left text-[#6d7b73]">
+                {headers.map((header) => (
+                  <th key={header} className="px-3 py-2 font-bold">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={`${title}-${index}`} className="border-b border-[#f0f3f0]">
+                  {row.map((cell, cellIndex) => (
+                    <td key={`${title}-${index}-${cellIndex}`} className="px-3 py-3 text-[#233329]">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-4 text-sm text-[#64736b]">
+          No report rows available.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DetailTile({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn("rounded-[18px] border border-[#e1e7e2] bg-white", compact ? "px-3 py-3" : "px-4 py-4")}>
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-[#718178]">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-bold text-[#233329]">{value}</div>
+    </div>
+  );
+}
+
 function SessionCard({
   sessionState,
   warehouses,
   paymentAccounts,
+  onSessionStateChange,
   onOpenSession,
   onCloseSession,
   t,
@@ -1973,6 +2933,7 @@ function SessionCard({
   sessionState: SessionState;
   warehouses: InventoryWarehouse[];
   paymentAccounts: BankCashAccount[];
+  onSessionStateChange: (patch: Partial<SessionState>) => void;
   onOpenSession: (
     openingCash: string,
     warehouseId: string,
@@ -2057,6 +3018,20 @@ function SessionCard({
         </>
       ) : (
         <div className="mt-5 space-y-3">
+          <Field label="Terminal" className="mb-0">
+            <Input
+              value={sessionState.terminalName}
+              onChange={(event) => onSessionStateChange({ terminalName: event.target.value })}
+              className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
+            />
+          </Field>
+          <Field label="Branch" className="mb-0">
+            <Input
+              value={sessionState.branchName}
+              onChange={(event) => onSessionStateChange({ branchName: event.target.value })}
+              className="rounded-[18px] border-[#d4ddd7] bg-white py-3"
+            />
+          </Field>
           <Field label={t("pos.sales.openingCash")} className="mb-0">
             <Input
               type="number"

@@ -184,11 +184,17 @@ export const queryKeys = {
   posActiveSession(token: string | null) {
     return ["pos-active-session", token] as const;
   },
+  posSettings(token: string | null) {
+    return ["pos-settings", token] as const;
+  },
   posSessions(token: string | null) {
     return ["pos-sessions", token] as const;
   },
   posHeldSales(token: string | null, sessionId: string | null) {
     return ["pos-held-sales", token, sessionId] as const;
+  },
+  posCompletedSales(token: string | null) {
+    return ["pos-completed-sales", token] as const;
   },
   posReview(token: string | null) {
     return ["pos-review", token] as const;
@@ -201,6 +207,24 @@ export const queryKeys = {
   },
   posSessionReport(token: string | null, sessionId: string | null) {
     return ["pos-session-report", token, sessionId] as const;
+  },
+  posSalesByPaymentMethod(token: string | null) {
+    return ["pos-sales-by-payment-method", token] as const;
+  },
+  posSalesByCashier(token: string | null) {
+    return ["pos-sales-by-cashier", token] as const;
+  },
+  posSalesByBranch(token: string | null) {
+    return ["pos-sales-by-branch", token] as const;
+  },
+  posSalesByItem(token: string | null) {
+    return ["pos-sales-by-item", token] as const;
+  },
+  posInventoryImpact(token: string | null) {
+    return ["pos-inventory-impact", token] as const;
+  },
+  posTaxSummary(token: string | null) {
+    return ["pos-tax-summary", token] as const;
   },
   journalEntries(token: string | null, params: JournalEntriesQuery = {}) {
     return ["journal-entries", token, normalizeObject(params as unknown as Record<string, unknown>)] as const;

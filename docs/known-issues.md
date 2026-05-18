@@ -186,7 +186,7 @@ Current limitation:
 - the POS workspace now persists sessions, held sales, completed sales, payments, receipt numbers, returns/refunds, and review-state data through backend POS APIs backed by `SalesInvoice.invoiceType = POS`, `PosSession`, `PosPayment`, `PosReturn`, `PosReturnLine`, and `PosReturnPayment`.
 - POS completion creates immediate stock relief plus a draft journal entry for accountant approval; the review tab can approve, reject, reprint, and accounting-reverse that POS accounting step.
 - POS returns now create immediate stock-in for inventory items, record refund methods, prepare a separate draft journal for accountant approval, and appear in the new returns/reporting queries.
-- the `/pos` frontend now shows backend-fed returns and overview reporting cards, but it still does not expose a full cashier-side return-entry form or the complete report grid/filter experience from the requirements document.
+- the `/pos` frontend now supports cashier-side return entry, held-sale review, accountant review actions, and detailed report grids backed by POS APIs, but it still does not implement offline mode, loyalty/promotions, branch master integration, or fine-grained non-role permission administration.
 - offline mode, loyalty/promotions, branch master integration, and fine-grained non-role permission administration are still not implemented.
 
 What this means for future edits:

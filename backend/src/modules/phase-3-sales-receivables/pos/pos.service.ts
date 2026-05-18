@@ -71,6 +71,38 @@ export class PosService {
     return session ? this.mapSession(session) : null;
   }
 
+  async getSettings(user?: AuthUser) {
+    const actions = [
+      "OPEN_SESSION",
+      "CLOSE_SESSION",
+      "SELL",
+      "HOLD_SALE",
+      "VOID_SALE",
+      "RETURN_SALE",
+      "REFUND",
+      "REPRINT_RECEIPT",
+      "SESSION_REPORT",
+      "ACCOUNTING_POST",
+      "ACCOUNTING_REJECT",
+      "ACCOUNTING_REVERSE",
+      "NEGATIVE_STOCK_OVERRIDE",
+    ] as const;
+
+    return {
+      runtime: {
+        autoPost: this.parseBoolean(process.env.POS_AUTO_POST, false),
+        allowCloseWithDrafts: this.parseBoolean(process.env.POS_ALLOW_CLOSE_WITH_DRAFTS, false),
+        allowCreditSale: this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false),
+        invoiceDiscountTaxPolicy: this.parseTaxPolicy(process.env.POS_INVOICE_DISCOUNT_TAX_POLICY),
+        negativeStockAllowed: this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false),
+        cashierDiscountLimitPercent: Number(process.env.POS_MAX_CASHIER_DISCOUNT_PERCENT ?? "15"),
+      },
+      permissions: Object.fromEntries(
+        actions.map((action) => [action, this.hasPosPermission(action, user)]),
+      ),
+    };
+  }
+
   async listSessions(user?: AuthUser) {
     const rows = await this.prisma.posSession.findMany({
       where: user?.userId ? { cashierUserId: user.userId } : undefined,
@@ -218,6 +250,25 @@ export class PosService {
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
+    });
+
+    return rows.map((row) => this.mapPosSale(row));
+  }
+
+  async listCompletedSales(user?: AuthUser) {
+    this.ensurePosPermission("RETURN_SALE", user);
+    const canSeeAll = user?.role === "ADMIN" || user?.role === "MANAGER";
+    const rows = await this.prisma.salesInvoice.findMany({
+      where: {
+        invoiceType: SalesInvoiceType.POS,
+        posOperationalStatus: {
+          in: [PosOperationalStatus.COMPLETED, PosOperationalStatus.REFUNDED],
+        },
+        ...(canSeeAll ? {} : { posSession: { cashierUserId: user?.userId ?? undefined } }),
+      },
+      include: this.posSaleInclude(),
+      orderBy: [{ posCompletedAt: "desc" }, { updatedAt: "desc" }],
+      take: 100,
     });
 
     return rows.map((row) => this.mapPosSale(row));
@@ -410,7 +461,13 @@ export class PosService {
       throw new BadRequestException("Every POS payment must use an active bank/cash account.");
     }
     const accountMap = new Map(bankCashAccounts.map((account) => [account.id, account]));
-    const normalizedPayments = this.normalizePayments(dto.payments, accountMap, totals.totalAmount);
+    const allowCreditSale = this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false);
+    const normalizedPayments = this.normalizePayments(
+      dto.payments,
+      accountMap,
+      totals.totalAmount,
+      allowCreditSale,
+    );
     const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -452,10 +509,16 @@ export class PosService {
               discountAmount: this.toAmount(totals.discountAmount),
               taxAmount: this.toAmount(totals.taxAmount),
               totalAmount: this.toAmount(totals.totalAmount),
-              allocatedAmount: this.toAmount(totals.totalAmount),
-              outstandingAmount: this.toAmount(0),
-              allocationStatus: AllocationStatus.FULLY_ALLOCATED,
-              status: SalesInvoiceStatus.FULLY_PAID,
+              allocatedAmount: this.toAmount(normalizedPayments.totalApplied),
+              outstandingAmount: this.toAmount(normalizedPayments.outstandingAmount),
+              allocationStatus:
+                normalizedPayments.outstandingAmount > 0
+                  ? AllocationStatus.PARTIAL
+                  : AllocationStatus.FULLY_ALLOCATED,
+              status:
+                normalizedPayments.outstandingAmount > 0
+                  ? SalesInvoiceStatus.PARTIALLY_PAID
+                  : SalesInvoiceStatus.FULLY_PAID,
               posOperationalStatus: PosOperationalStatus.COMPLETED,
               posAccountingStatus: autoPost
                 ? PosAccountingStatus.POSTED
@@ -475,7 +538,10 @@ export class PosService {
             data: {
               reference: reference!,
               invoiceType: SalesInvoiceType.POS,
-              status: SalesInvoiceStatus.FULLY_PAID,
+              status:
+                normalizedPayments.outstandingAmount > 0
+                  ? SalesInvoiceStatus.PARTIALLY_PAID
+                  : SalesInvoiceStatus.FULLY_PAID,
               invoiceDate,
               customerId: walkInCustomer.id,
               currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
@@ -484,9 +550,12 @@ export class PosService {
               discountAmount: this.toAmount(totals.discountAmount),
               taxAmount: this.toAmount(totals.taxAmount),
               totalAmount: this.toAmount(totals.totalAmount),
-              allocatedAmount: this.toAmount(totals.totalAmount),
-              outstandingAmount: this.toAmount(0),
-              allocationStatus: AllocationStatus.FULLY_ALLOCATED,
+              allocatedAmount: this.toAmount(normalizedPayments.totalApplied),
+              outstandingAmount: this.toAmount(normalizedPayments.outstandingAmount),
+              allocationStatus:
+                normalizedPayments.outstandingAmount > 0
+                  ? AllocationStatus.PARTIAL
+                  : AllocationStatus.FULLY_ALLOCATED,
               posOperationalStatus: PosOperationalStatus.COMPLETED,
               posAccountingStatus: autoPost
                 ? PosAccountingStatus.POSTED
@@ -581,8 +650,20 @@ export class PosService {
         description,
       );
       const paymentDebits = this.aggregatePaymentDebits(normalizedPayments.payments, description);
+      const receivableDebits =
+        normalizedPayments.outstandingAmount > 0
+          ? [
+              {
+                accountId: invoiceWithDetails.customer.receivableAccountId,
+                description: `${description} credit balance`,
+                debitAmount: normalizedPayments.outstandingAmount,
+                creditAmount: 0,
+              },
+            ]
+          : [];
       const journalLines = [
         ...paymentDebits,
+        ...receivableDebits,
         ...salesCredits,
         ...inventoryPosting.accountingLines,
       ];
@@ -1529,6 +1610,32 @@ export class PosService {
     }
   }
 
+  private hasPosPermission(
+    action:
+      | "OPEN_SESSION"
+      | "CLOSE_SESSION"
+      | "SELL"
+      | "HOLD_SALE"
+      | "VOID_SALE"
+      | "RETURN_SALE"
+      | "REFUND"
+      | "REPRINT_RECEIPT"
+      | "SESSION_REPORT"
+      | "ACCOUNTING_POST"
+      | "ACCOUNTING_REJECT"
+      | "ACCOUNTING_REVERSE"
+      | "NEGATIVE_STOCK_OVERRIDE",
+    user?: AuthUser,
+    override?: { envKey?: string; fallbackRoles?: string[] },
+  ) {
+    try {
+      this.ensurePosPermission(action, user, override);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private parseRoleList(value: string | undefined, fallback: string[]) {
     if (!value?.trim()) {
       return fallback;
@@ -2039,6 +2146,7 @@ export class PosService {
       }
     >,
     invoiceTotal: number,
+    allowCreditSale = false,
   ) {
     if (!payments.length) {
       throw new BadRequestException("At least one payment method is required.");
@@ -2066,11 +2174,11 @@ export class PosService {
     const totalTendered = Number(
       normalized.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2),
     );
-    if (totalTendered < invoiceTotal) {
+    if (totalTendered < invoiceTotal && !allowCreditSale) {
       throw new BadRequestException("Total paid amount is less than the POS invoice total.");
     }
 
-    let remainingChange = Number((totalTendered - invoiceTotal).toFixed(2));
+    let remainingChange = Number((Math.max(totalTendered - invoiceTotal, 0)).toFixed(2));
     if (remainingChange > 0 && !normalized.some((payment) => payment.paymentMethod === PosPaymentMethod.CASH)) {
       throw new BadRequestException("POS change can only be returned against cash payments.");
     }
@@ -2095,8 +2203,19 @@ export class PosService {
     const totalApplied = Number(
       applied.reduce((sum, payment) => sum + payment.appliedAmount, 0).toFixed(2),
     );
-    if (totalApplied !== Number(invoiceTotal.toFixed(2))) {
+    if (
+      !allowCreditSale &&
+      totalApplied !== Number(invoiceTotal.toFixed(2))
+    ) {
       throw new BadRequestException("POS payment allocation does not equal the invoice total.");
+    }
+    if (allowCreditSale && totalApplied > Number(invoiceTotal.toFixed(2))) {
+      throw new BadRequestException("POS payment allocation cannot exceed the invoice total.");
+    }
+
+    const outstandingAmount = Number((invoiceTotal - totalApplied).toFixed(2));
+    if (outstandingAmount < 0) {
+      throw new BadRequestException("POS outstanding amount cannot be negative.");
     }
 
     const cashAppliedAmount = Number(
@@ -2111,6 +2230,8 @@ export class PosService {
       totalTendered,
       changeAmount: Number((totalTendered - totalApplied).toFixed(2)),
       cashAppliedAmount,
+      totalApplied,
+      outstandingAmount,
     };
   }
 
@@ -2364,6 +2485,10 @@ export class PosService {
     }
     const normalized = value.trim().toLowerCase();
     return ["1", "true", "yes", "on"].includes(normalized);
+  }
+
+  private parseTaxPolicy(value: string | undefined) {
+    return value?.trim().toUpperCase() === "AFTER_TAX" ? "AFTER_TAX" : "BEFORE_TAX";
   }
 
   private posSessionInclude() {

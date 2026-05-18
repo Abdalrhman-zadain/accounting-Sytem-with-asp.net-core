@@ -3228,6 +3228,43 @@ export type CompletePosSalePayload = {
   payments: PosPaymentEntryPayload[];
 };
 
+export type PosReturnPaymentPayload = {
+  refundMethod:
+    | "CASH"
+    | "CARD"
+    | "CLIQ"
+    | "BANK_TRANSFER"
+    | "WALLET"
+    | "STORE_CREDIT";
+  bankCashAccountId?: string;
+  amount: number;
+  reference?: string;
+};
+
+export type CreatePosReturnPayload = {
+  salesInvoiceId: string;
+  sessionId?: string;
+  returnDate?: string;
+  reason?: string;
+  lines: Array<{
+    salesInvoiceLineId: string;
+    quantity: number;
+  }>;
+  payments: PosReturnPaymentPayload[];
+};
+
+export type PosSettings = {
+  runtime: {
+    autoPost: boolean;
+    allowCloseWithDrafts: boolean;
+    allowCreditSale: boolean;
+    invoiceDiscountTaxPolicy: "BEFORE_TAX" | "AFTER_TAX";
+    negativeStockAllowed: boolean;
+    cashierDiscountLimitPercent: number;
+  };
+  permissions: Record<string, boolean>;
+};
+
 export type PosSession = {
   id: string;
   sessionNumber: string;
@@ -3481,6 +3518,41 @@ export type PosReportsOverview = {
     returnTax: string;
     netTax: string;
   }>;
+};
+
+export type PosSalesByItemRow = {
+  itemId?: string | null;
+  itemName: string;
+  quantity: string;
+  salesAmount: string;
+  taxAmount: string;
+};
+
+export type PosInventoryImpactRow = {
+  id: string;
+  movementType: string;
+  transactionType: string;
+  transactionReference: string;
+  transactionDate: string;
+  item?: Pick<InventoryItem, "id" | "code" | "name"> | null;
+  warehouse?: Pick<InventoryWarehouse, "id" | "code" | "name"> | null;
+  quantityIn: string;
+  quantityOut: string;
+  unitCost: string;
+  valueIn: string;
+  valueOut: string;
+  runningQuantity: string;
+  runningValuation: string;
+};
+
+export type PosTaxSummaryRow = {
+  taxId?: string | null;
+  taxCode: string;
+  taxName: string;
+  rate: string;
+  salesTax: string;
+  returnTax: string;
+  netTax: string;
 };
 
 export type JournalEntry = {

@@ -132,7 +132,10 @@ import {
   PayrollPeriod,
   PayrollRule,
   PayrollSummary,
+  PosInventoryImpactRow,
   PosReportsOverview,
+  PosSalesByItemRow,
+  PosSettings,
   PosReturn,
   FixedAsset,
   FixedAssetAcquisition,
@@ -191,8 +194,10 @@ import {
   PaymentTerm,
   PurchaseRequestStatusNotePayload,
   PostSalesInvoicePayload,
+  CreatePosReturnPayload,
   HoldPosSalePayload,
   CompletePosSalePayload,
+  PosTaxSummaryRow,
   SupplierTransactionsResponse,
   SuppliersQuery,
   CreditNote,
@@ -2370,6 +2375,10 @@ export async function getActivePosSession(token?: string | null) {
   return apiRequest<PosSession | null>("/pos/sessions/active", { token });
 }
 
+export async function getPosSettings(token?: string | null) {
+  return apiRequest<PosSettings>("/pos/settings", { token });
+}
+
 export async function getPosSessions(token?: string | null) {
   return apiRequest<PosSession[]>("/pos/sessions", { token });
 }
@@ -2418,6 +2427,10 @@ export async function getHeldPosSales(
   return apiRequest<PosSale[]>(`/pos/sales/held?sessionId=${encodeURIComponent(sessionId)}`, {
     token,
   });
+}
+
+export async function getCompletedPosSales(token?: string | null) {
+  return apiRequest<PosSale[]>("/pos/sales/completed", { token });
 }
 
 export async function getPendingPosReview(token?: string | null) {
@@ -2482,12 +2495,104 @@ export async function rejectPosAccounting(
   });
 }
 
+export async function reversePosAccounting(
+  id: string,
+  payload: { reversalDate?: string; description?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosSale>(`/pos/sales/${id}/accounting-reverse`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
 export async function getPosReturns(token?: string | null) {
   return apiRequest<PosReturn[]>("/pos/returns", { token });
 }
 
+export async function createPosReturn(
+  payload: CreatePosReturnPayload,
+  token?: string | null,
+) {
+  return apiRequest<PosReturn>("/pos/returns", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function approvePosReturnAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosReturn>(`/pos/returns/${id}/accounting-approve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function rejectPosReturnAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosReturn>(`/pos/returns/${id}/accounting-reject`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function reversePosReturnAccounting(
+  id: string,
+  payload: { reversalDate?: string; description?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<PosReturn>(`/pos/returns/${id}/accounting-reverse`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
 export async function getPosReportsOverview(token?: string | null) {
   return apiRequest<PosReportsOverview>("/pos/reports/overview", { token });
+}
+
+export async function getPosSalesByPaymentMethodReport(token?: string | null) {
+  return apiRequest<PosReportsOverview["salesByPaymentMethod"]>(
+    "/pos/reports/sales-by-payment-method",
+    { token },
+  );
+}
+
+export async function getPosSalesByCashierReport(token?: string | null) {
+  return apiRequest<PosReportsOverview["salesByCashier"]>(
+    "/pos/reports/sales-by-cashier",
+    { token },
+  );
+}
+
+export async function getPosSalesByBranchReport(token?: string | null) {
+  return apiRequest<PosReportsOverview["salesByBranch"]>(
+    "/pos/reports/sales-by-branch",
+    { token },
+  );
+}
+
+export async function getPosSalesByItemReport(token?: string | null) {
+  return apiRequest<PosSalesByItemRow[]>("/pos/reports/sales-by-item", { token });
+}
+
+export async function getPosInventoryImpactReport(token?: string | null) {
+  return apiRequest<PosInventoryImpactRow[]>("/pos/reports/inventory-impact", { token });
+}
+
+export async function getPosTaxSummaryReport(token?: string | null) {
+  return apiRequest<PosTaxSummaryRow[]>("/pos/reports/tax-summary", { token });
 }
 
 export async function reprintPosReceipt(id: string, token?: string | null) {
