@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,6 +30,7 @@ import {
   LuShoppingBasket,
   LuStore,
   LuTimerReset,
+  LuTriangleAlert,
   LuTrash2,
   LuWallet,
 } from "react-icons/lu";
@@ -202,6 +204,11 @@ type CompletedReceipt = {
     taxAmount: number;
     lineTotal: number;
   }>;
+};
+
+type FlashNotice = {
+  message: string;
+  tone: "success" | "error";
 };
 
 const workspaceTabs: WorkspaceTab[] = [
@@ -611,13 +618,14 @@ export function PosPage() {
   const [returnReason, setReturnReason] = useState("");
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnPayments, setReturnPayments] = useState<ReturnPaymentEntry[]>([]);
-  const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const [flashNotice, setFlashNotice] = useState<FlashNotice | null>(null);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedPayMethod, setSelectedPayMethod] = useState<
     "CASH" | "CARD" | "CLIQ" | "MIXED"
   >("CASH");
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
   const messageTimeoutRef = useRef<number | null>(null);
+  const resumedSaleRef = useRef<string | null>(null);
 
   const itemsQuery = useQuery({
     queryKey: queryKeys.inventoryItems(token, {
@@ -780,7 +788,7 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.sessionOpened"));
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -793,7 +801,7 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.sessionMarkedClosed"));
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -807,7 +815,7 @@ export function PosPage() {
       pushMessage("POS draft saved.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -821,7 +829,7 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.savedToHold"));
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -841,7 +849,7 @@ export function PosPage() {
       }
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -852,7 +860,7 @@ export function PosPage() {
       pushMessage("POS sale approved and posted.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -866,7 +874,7 @@ export function PosPage() {
       );
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -877,7 +885,7 @@ export function PosPage() {
       pushMessage("POS sale moved to rejected review status.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -893,7 +901,7 @@ export function PosPage() {
       pushMessage("POS accounting reversal has been created.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -907,7 +915,7 @@ export function PosPage() {
       pushMessage("Held POS sale was voided.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -923,7 +931,7 @@ export function PosPage() {
       pushMessage("POS return created and sent for accounting review.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -934,7 +942,7 @@ export function PosPage() {
       pushMessage("POS return approved and posted.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -945,7 +953,7 @@ export function PosPage() {
       pushMessage("POS return marked as rejected.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -961,7 +969,7 @@ export function PosPage() {
       pushMessage("POS return accounting reversal has been created.");
     },
     onError: (error) => {
-      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
     },
   });
 
@@ -1004,6 +1012,7 @@ export function PosPage() {
     return visible.length ? visible : workspaceTabs.filter((tab) => tab.id === "sales");
   }, [user]);
   const requestedWorkspace = pathnameWorkspaceMap[pathname] ?? searchParams.get("tab");
+  const resumeSaleId = searchParams.get("resume");
   const fallbackWorkspace = availableWorkspaceTabs[0]?.id ?? "sales";
 
   useEffect(() => {
@@ -1022,6 +1031,30 @@ export function PosPage() {
     if (workspace === requestedWorkspace) return;
     setWorkspace(requestedWorkspace as PosWorkspace);
   }, [availableWorkspaceTabs, fallbackWorkspace, requestedWorkspace, router, workspace]);
+
+  useEffect(() => {
+    if (workspace !== "sales" || !resumeSaleId) {
+      if (!resumeSaleId) {
+        resumedSaleRef.current = null;
+      }
+      return;
+    }
+
+    if (resumedSaleRef.current === resumeSaleId) {
+      return;
+    }
+
+    const target = [...draftSales, ...heldSales].find((row) => row.id === resumeSaleId);
+    if (!target) {
+      return;
+    }
+
+    resumedSaleRef.current = resumeSaleId;
+    resumeHeldSale(resumeSaleId);
+    startRoutingTransition(() => {
+      router.replace("/pos/register", { scroll: false });
+    });
+  }, [draftSales, heldSales, resumeSaleId, router, workspace]);
 
   useEffect(() => {
     return () => {
@@ -1421,14 +1454,21 @@ export function PosPage() {
     });
   };
 
-  const pushMessage = (message: string) => {
-    setFlashMessage(message);
+  const pushMessage = (message: string, tone: FlashNotice["tone"] = "success") => {
+    setFlashNotice({ message, tone });
     if (messageTimeoutRef.current) {
       window.clearTimeout(messageTimeoutRef.current);
     }
+    if (tone === "error") {
+      return;
+    }
     messageTimeoutRef.current = window.setTimeout(() => {
-      setFlashMessage(null);
+      setFlashNotice(null);
     }, 3600);
+  };
+
+  const pushError = (message: string) => {
+    pushMessage(message, "error");
   };
 
   const resetSale = () => {
@@ -1783,12 +1823,6 @@ export function PosPage() {
     if (!sessionState.isOpen || !activeSession) {
       return (
         <div className="mx-auto max-w-4xl space-y-6">
-          {flashMessage ? (
-            <div className="rounded-[22px] border border-[#cfe1d3] bg-[#f3faf4] px-5 py-4 text-sm font-semibold text-[#35503b]">
-              {flashMessage}
-            </div>
-          ) : null}
-
           <Card className="rounded-[32px] border-[#d8e2db] bg-white p-6 shadow-[0_24px_70px_-46px_rgba(43,79,54,0.35)] sm:p-8">
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="space-y-3 text-center">
@@ -1849,12 +1883,6 @@ export function PosPage() {
           }}
           isPending={closeSessionMutation.isPending}
         />
-
-        {flashMessage ? (
-          <div className="rounded-[20px] border border-[#d3e2d6] bg-[#f4faf5] px-5 py-4 text-sm font-semibold text-[#36533d]">
-            {flashMessage}
-          </div>
-        ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <section className="space-y-5">
@@ -2488,11 +2516,9 @@ export function PosPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          setWorkspace("sales");
                           startRoutingTransition(() => {
-                            router.replace("/pos?tab=sales");
+                            router.replace(`/pos/register?resume=${heldSale.id}`);
                           });
-                          resumeHeldSale(heldSale.id);
                         }}
                         className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
                       >
@@ -2549,11 +2575,9 @@ export function PosPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setWorkspace("sales");
                       startRoutingTransition(() => {
-                        router.replace("/pos?tab=sales");
+                        router.replace(`/pos/register?resume=${heldSale.id}`);
                       });
-                      resumeHeldSale(heldSale.id);
                     }}
                     className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
                   >
@@ -3256,7 +3280,18 @@ export function PosPage() {
     );
   };
 
-  return <PageShell>{renderWorkspace()}</PageShell>;
+  return (
+    <PageShell>
+      {flashNotice ? (
+        <FlashNoticeBanner
+          message={flashNotice.message}
+          tone={flashNotice.tone}
+          onClose={() => setFlashNotice(null)}
+        />
+      ) : null}
+      {renderWorkspace()}
+    </PageShell>
+  );
 }
 
 function SoftMetric({
@@ -3278,6 +3313,85 @@ function SoftMetric({
         {hint}
       </div>
     </div>
+  );
+}
+
+function FlashNoticeBanner({
+  message,
+  tone,
+  onClose,
+}: {
+  message: string;
+  tone: "success" | "error";
+  onClose: () => void;
+}) {
+  const isError = tone === "error";
+  const accentClasses = isError
+    ? {
+        panel: "bg-[#e53810] text-white shadow-[0_26px_70px_-24px_rgba(15,23,42,0.6)]",
+        badge: "bg-white/14",
+        eyebrow: "text-white/80",
+        button: "border-white/30 text-white hover:bg-white/12",
+      }
+    : {
+        panel:
+          "bg-[#0f8f67] text-white shadow-[0_26px_70px_-24px_rgba(6,95,70,0.55)]",
+        badge: "bg-white/14",
+        eyebrow: "text-white/80",
+        button: "border-white/30 text-white hover:bg-white/12",
+      };
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
+      <div
+        className={cn(
+          "pointer-events-auto relative w-full max-w-3xl overflow-hidden rounded-[18px]",
+          accentClasses.panel,
+        )}
+        role="alert"
+        aria-live="assertive"
+      >
+        <div className="flex items-center gap-5 px-6 py-7 sm:px-8 sm:py-8">
+          <div
+            className={cn(
+              "flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px]",
+              accentClasses.badge,
+            )}
+          >
+            <LuTriangleAlert className="h-8 w-8" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "text-sm font-black uppercase tracking-[0.22em]",
+                accentClasses.eyebrow,
+              )}
+            >
+              {isError ? "Error" : "Success"}
+            </div>
+            <div className="mt-2 text-xl font-medium leading-10 arabic-auto sm:text-[2rem]">
+              {message}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              "shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition-colors",
+              accentClasses.button,
+            )}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
