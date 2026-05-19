@@ -410,12 +410,20 @@ Main models:
 
 - `AuditLog`
 - `User`
+- `PosAccessRole`
+- `PosPermission`
+- `PosAccessRolePermission`
+- `UserPosAccessRole`
 
 Key fields & behavior:
 
-- `User.role` (ADMIN, MANAGER, USER) determines the user's privilege layer.
+- `User.username` is the unique login identifier used by the auth flow.
+- `User.role` (ADMIN, MANAGER, USER) remains the legacy system privilege layer used by existing accounting services.
 - `User.companyId` isolates data to a specific tenant.
 - `User.parentUserId` supports hierarchical management of users within a company.
+- POS-specific route/action visibility is modeled separately from the legacy system role through `PosAccessRole` (`CASHIER`, `ACCOUNTANT`) and the many-to-many joins into `PosPermission`.
+- `UserPosAccessRole` allows one or more POS access roles per user, and `PosAccessRolePermission` defines the backend-enforced permission list linked to each POS role.
+- JWT/login responses now carry a computed access snapshot derived from those role-to-permission links so the frontend and backend use the same allowed-route and permission picture.
 - `AuditLog.companyId` enables fast filtering of audit history per tenant.
 
 Accounting meaning:

@@ -10,10 +10,11 @@
     "test:watch": "jest --watch",
     "db:up": "docker compose -f ../docker-compose.yml up -d postgres",
     "db:down": "docker compose -f ../docker-compose.yml down",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "prisma generate --generator client",
     "prisma:format": "prisma format",
     "prisma:migrate": "prisma migrate dev --skip-generate",
     "prisma:studio": "prisma studio",
+    "seed:cashier": "ts-node prisma/setup-pos-cashier.ts",
     "prisma:migrate:account-codes:6-to-7": "ts-node prisma/migrate-6-to-7-digit-account-codes.ts",
     "seed": "ts-node prisma/seed.ts"
   },

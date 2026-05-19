@@ -588,6 +588,7 @@ Where to edit:
 What else to check:
 
 - auth guard usage
+- if the endpoint is under POS or affects cashier/accountant visibility, align it with the auth access snapshot (`allowedRoutes`, POS role permissions, and cashier-only backend restrictions) rather than relying on frontend hiding alone
 - ownership of the endpoint
 - whether it belongs to an existing controller or should stay internal
 - properly scoping database queries to the user's `companyId` for multi-tenancy isolation

@@ -28,12 +28,13 @@ Additional phase requirements baselines:
 - [Phase 7 Fixed Assets Requirements](./phase-7-fixed-assets-requirements.md)
 - [Phase 8 Reporting Requirements](./phase-8-reporting-requirements.md)
 - [Phase 9 Tax & Compliance Requirements](./phase-9-tax-compliance-requirements.md)
+- [POS Roles & Permissions Requirements](./pos/Phase_POS_Roles_and_Permissions_Requirements.md)
 
 ## Scope
 
 These docs describe the currently implemented accounting modules.
 
-- `platform/auth` is implemented.
+- `platform/auth` is implemented, including username/password login, inactive-user blocking, JWT session hydration, and POS access snapshots with `cashier` / `accountant` role-to-permission resolution.
 - `phase-1-accounting-foundation/accounting-core` is implemented.
 - Phase 1 Master Data now includes tax code setup for sales/purchase document entry, with tax rates, tax types, account mapping, active/inactive control, and protected deletion when tax records are used historically.
 - `phase-2-bank-cash-management/bank-cash-accounts` is implemented.
@@ -45,8 +46,39 @@ These docs describe the currently implemented accounting modules.
 - `phase-6-payroll-management/payroll` is implemented for employee masters, payroll groups, payroll components, employee/group component assignments, payroll rules with fixed/percentage/quantity/formula calculation, payroll periods, payslip generation/editing/adjustment, payroll posting and reversal through Phase 1 journal entries, salary payment allocation/settlement/reversal through Phase 2 bank/cash payments, and summary inquiry.
 - `phase-7-fixed-assets-management/fixed-assets` is implemented for fixed-asset category setup, asset register maintenance/editing, acquisition draft/post/reverse, depreciation run draft/post/reverse with schedule/history visibility, disposal draft/post/reverse, transfer draft/post/reverse, audit-history capture, summary inquiry, and bilingual ERP workspace coverage.
 - `phase-8-reporting-control/reporting` is implemented for a bilingual reporting workspace covering summary inquiry, trial balance, balance sheet, profit and loss, cash movement, general ledger, audit inquiry, saved report definitions, point-in-time snapshots, export/print output generation, and reporting activity logging using posted accounting data.
-- a POS module now exists at `/pos` with backend-backed session open/close, draft/hold/resume/void sale capture, barcode/code add, item search, cart editing, discounts, payment capture, complete sale, enriched receipt preview/print, controlled receipt reprint, inventory issue on completion, draft journal creation for accountant review, per-sale and session-level pending-review approval actions, accounting rejection/reversal, cashier-side POS return/refund capture, detailed tax/payment/cashier/branch/item/inventory reporting, and session reporting using `SalesInvoice.invoiceType = POS`, `PosSession`, `PosPayment`, `PosReturn`, `PosReturnLine`, and `PosReturnPayment`
+- a POS module now exists at `/pos` with backend-backed session open/close, draft/hold/resume/void sale capture, barcode/code add, item search, cart editing, discounts, payment capture, complete sale, enriched receipt preview/print, controlled receipt reprint, inventory issue on completion, draft journal creation for accountant review, per-sale and session-level pending-review approval actions, accounting rejection/reversal, cashier-side POS return/refund capture, detailed tax/payment/cashier/branch/item/inventory reporting, session reporting using `SalesInvoice.invoiceType = POS`, `PosSession`, `PosPayment`, `PosReturn`, `PosReturnLine`, and `PosReturnPayment`, plus route/menu/API gating between cashier-only operational screens and accountant review/reporting screens.
 - other later ERP phases are **not implemented yet** and should not be described as existing behavior
+
+## POS Roles & Permissions Status
+
+Current implementation status against [POS Roles & Permissions Requirements](./pos/Phase_POS_Roles_and_Permissions_Requirements.md):
+
+Implemented:
+
+- unique username/password login is supported, and passwords are stored as bcrypt hashes
+- inactive users are blocked from login
+- users now carry POS access roles and permission snapshots for `CASHIER` and `ACCOUNTANT`
+- login/session payloads now include POS permissions, allowed routes, and a role-based default route
+- cashier-only users are redirected to `/pos/register`
+- accountant-access users are redirected to `/dashboard`
+- frontend route protection now blocks screens outside the signed-in user's allowed route list
+- sidebar/navigation visibility now changes by allowed route access instead of showing the same ERP menu to everyone
+- cashier-only backend sessions are blocked from non-POS APIs by the JWT auth guard
+- POS backend actions now enforce permission-based access inside the POS service for session open/close, sales completion, held sales, review, reports, and accounting approval/rejection flows
+- POS route aliases now exist for cashier and accountant flows, including `/pos/register`, `/pos/session`, `/pos/sessions`, `/pos/held-sales`, `/pos/accounting-review`, `/pos/completed-sales`, `/pos/reports`, and `/pos/settings`
+- seed/setup support now includes a dedicated cashier login: `cashier / cashier123`
+
+Not fully implemented yet:
+
+- full system-wide backend permission enforcement for every non-POS accounting controller is not yet driven by the new POS permission list; existing accounting modules still primarily rely on legacy auth/module behavior
+- POS report export is not yet explicitly enforced by `POS_EXPORT_POS_REPORTS`
+- the accountant review UI does not yet expose a dedicated POS-to-journal-entry drill-down workflow even though accountants can reach `/journal-entries`
+- the shared `/pos` workspace still serves both cashier and accountant flows from one feature shell; visibility differs by access, but the UI is not yet split into fully distinct role-specific shells
+
+Practical meaning:
+
+- the POS roles/permissions baseline is substantially implemented
+- the requirements document should currently be treated as partially complete rather than 100% closed
 
 ## How To Use These Docs
 

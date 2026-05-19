@@ -6,7 +6,7 @@ The project is a **modular monolith** with a Next.js frontend, a NestJS backend,
 
 The current business scope is:
 
-- multi-tenant platform authentication (companies, users, roles)
+- multi-tenant platform authentication (companies, users, usernames, roles, and POS permission snapshots)
 - Phase 1 Accounting Foundation
 - bank and cash account registry linked to posting accounts for operational balances and history
 - bank/cash receipt, payment, and transfer drafts that post through generated journal entries
@@ -140,10 +140,13 @@ Authentication is centralized in `platform/auth` on the backend and the auth pro
 
 Backend auth responsibilities:
 
-- register users into specific companies
-- login users
-- issue JWT access tokens containing the multi-tenant company context and roles (ADMIN, MANAGER, USER)
+- register users with unique usernames plus email/password credentials
+- login users by username (with email fallback for compatibility)
+- block inactive users before issuing sessions
+- resolve POS access roles (`CASHIER`, `ACCOUNTANT`) into permission codes and allowed frontend route sets
+- issue JWT access tokens containing the multi-tenant company context, legacy system role (`ADMIN`, `MANAGER`, `USER`), and the computed POS access snapshot
 - guard protected controllers with `JwtAuthGuard`
+- restrict cashier-only sessions to POS APIs while keeping POS action-level checks enforced inside the POS service
 - provide company-based isolation for database access and business logic
 
 Frontend auth responsibilities:
@@ -151,6 +154,8 @@ Frontend auth responsibilities:
 - persist the session in local storage
 - hydrate the session on client load
 - gate ERP routes with `RequireAuth`
+- redirect authenticated users to their computed default route (`/pos/register` for cashier-only access, `/dashboard` for accountant/system access)
+- block sidebar items and direct route entry when a screen is outside the signed-in user's allowed route list
 - redirect unauthenticated users to `/login`
 
 ## Public Frontend Routes

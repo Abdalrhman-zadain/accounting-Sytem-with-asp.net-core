@@ -19,11 +19,12 @@ import { Card, SectionHeading } from "@/components/ui";
 import { Field, Input } from "@/components/forms";
 
 const loginSchema = z.object({
-  email: z.string().email("Enter a valid email."),
+  username: z.string().min(1, "Username is required."),
   password: z.string().min(1, "Password is required."),
 });
 
 const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters."),
   email: z.string().email("Enter a valid email."),
   password: z.string().min(6, "Password must be at least 6 characters."),
   name: z.string().max(120, "Name is too long.").optional().or(z.literal("")),
@@ -41,7 +42,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   const form = useForm<LoginValues | RegisterValues>({
     resolver: zodResolver(isLogin ? loginSchema : registerSchema),
-    defaultValues: isLogin ? { email: "", password: "" } : { email: "", password: "", name: "" },
+    defaultValues: isLogin ? { username: "", password: "" } : { username: "", email: "", password: "", name: "" },
   });
 
   const mutation = useMutation({
@@ -59,13 +60,18 @@ export function AuthForm({ mode }: { mode: Mode }) {
       if (isLogin) {
         const loginResult = result as Awaited<ReturnType<typeof login>>;
         auth.setSession(loginResult.access_token, loginResult.user);
-        router.push("/");
+        router.push(loginResult.user.defaultRoute || "/");
         return;
       }
 
       router.push("/login?registered=1");
     },
   });
+
+  const emailError =
+    "email" in form.formState.errors
+      ? (form.formState.errors.email?.message as string | undefined)
+      : undefined;
 
   return (
     <div className="mx-auto max-w-lg mt-12 animate-in fade-in zoom-in-95 duration-500">
@@ -105,13 +111,24 @@ export function AuthForm({ mode }: { mode: Mode }) {
           ) : null}
 
           <Field
-            label="Email Address"
-            error={form.formState.errors.email?.message as string | undefined}
+            label="Username"
+            error={form.formState.errors.username?.message as string | undefined}
           >
             <div className="relative">
-              <Input type="email" placeholder="user@example.com" {...form.register("email")} />
+              <Input placeholder="cashier.01" {...form.register("username")} />
             </div>
           </Field>
+
+          {!isLogin ? (
+            <Field
+              label="Email Address"
+              error={emailError}
+            >
+              <div className="relative">
+                <Input type="email" placeholder="user@example.com" {...form.register("email" as never)} />
+              </div>
+            </Field>
+          ) : null}
 
           <Field
             label="Secure Password"

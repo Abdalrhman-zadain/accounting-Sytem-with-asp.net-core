@@ -9,7 +9,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LuArrowRightLeft,
@@ -73,6 +73,7 @@ import {
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
+import { hasPermission } from "@/lib/auth-access";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import type {
@@ -212,6 +213,18 @@ const workspaceTabs: WorkspaceTab[] = [
   { id: "reports", labelKey: "pos.workspace.reports", icon: LuChartColumn },
   { id: "settings", labelKey: "pos.workspace.settings", icon: LuSettings2 },
 ];
+
+const pathnameWorkspaceMap: Record<string, PosWorkspace> = {
+  "/pos/register": "sales",
+  "/pos/session": "sessions",
+  "/pos/sessions": "sessions",
+  "/pos/held-sales": "held",
+  "/pos/accounting-review": "review",
+  "/pos/completed-sales": "review",
+  "/pos/returns": "returns",
+  "/pos/reports": "reports",
+  "/pos/settings": "settings",
+};
 
 const HELD_SALES_KEY = "pos-held-sales";
 const SESSION_KEY = "pos-session-state";
@@ -562,6 +575,7 @@ function PlaceholderWorkspace({
 
 export function PosPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { token, user } = useAuth();
   const { t } = useTranslation();
@@ -970,19 +984,44 @@ export function PosPage() {
   const posSettings = settingsQuery.data;
   const taxPolicy = posSettings?.runtime.invoiceDiscountTaxPolicy ?? "BEFORE_TAX";
   const completedSales = completedSalesQuery.data ?? [];
-  const requestedWorkspace = searchParams.get("tab");
+  const availableWorkspaceTabs = useMemo(() => {
+    const visible = workspaceTabs.filter((tab) => {
+      if (tab.id === "sales") return hasPermission(user, "POS_VIEW_POS_SCREEN");
+      if (tab.id === "sessions") {
+        return (
+          hasPermission(user, "POS_VIEW_OWN_SESSION_REPORT") ||
+          hasPermission(user, "POS_VIEW_SESSION_REPORT")
+        );
+      }
+      if (tab.id === "held") return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
+      if (tab.id === "review") return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
+      if (tab.id === "returns") return false;
+      if (tab.id === "reports") return hasPermission(user, "POS_VIEW_POS_REPORTS");
+      if (tab.id === "settings") return hasPermission(user, "POS_VIEW_POS_REPORTS");
+      return false;
+    });
+
+    return visible.length ? visible : workspaceTabs.filter((tab) => tab.id === "sales");
+  }, [user]);
+  const requestedWorkspace = pathnameWorkspaceMap[pathname] ?? searchParams.get("tab");
+  const fallbackWorkspace = availableWorkspaceTabs[0]?.id ?? "sales";
 
   useEffect(() => {
     if (!requestedWorkspace) {
       startRoutingTransition(() => {
-        router.replace("/pos?tab=sales");
+        router.replace(`/pos?tab=${fallbackWorkspace}`);
       });
       return;
     }
-    if (!workspaceTabs.some((tab) => tab.id === requestedWorkspace)) return;
+    if (!availableWorkspaceTabs.some((tab) => tab.id === requestedWorkspace)) {
+      startRoutingTransition(() => {
+        router.replace(`/pos?tab=${fallbackWorkspace}`);
+      });
+      return;
+    }
     if (workspace === requestedWorkspace) return;
     setWorkspace(requestedWorkspace as PosWorkspace);
-  }, [requestedWorkspace, router, workspace]);
+  }, [availableWorkspaceTabs, fallbackWorkspace, requestedWorkspace, router, workspace]);
 
   useEffect(() => {
     return () => {

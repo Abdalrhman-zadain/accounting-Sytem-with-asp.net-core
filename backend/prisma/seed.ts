@@ -1,9 +1,27 @@
-import { PrismaClient } from '../src/generated/prisma';
+import { PosAccessRoleCode, PosPermissionCode, PrismaClient } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+
+const cashierPermissionCodes: PosPermissionCode[] = [
+  'POS_OPEN_SESSION',
+  'POS_CLOSE_OWN_SESSION',
+  'POS_VIEW_POS_SCREEN',
+  'POS_SCAN_BARCODE',
+  'POS_SEARCH_ITEM',
+  'POS_ADD_ITEM_TO_CART',
+  'POS_UPDATE_ITEM_QUANTITY',
+  'POS_REMOVE_ITEM_FROM_CART',
+  'POS_HOLD_SALE',
+  'POS_RESUME_OWN_HELD_SALE',
+  'POS_VOID_DRAFT_SALE',
+  'POS_COMPLETE_SALE',
+  'POS_SELECT_PAYMENT_METHOD',
+  'POS_PRINT_RECEIPT',
+  'POS_VIEW_OWN_SESSION_REPORT',
+];
 
 async function main() {
   console.log('Cleaning existing database data...');
@@ -25,6 +43,7 @@ async function main() {
   const hashedPassword = await bcrypt.hash('admin123', 10);
   const admin = await prisma.user.create({
     data: {
+      username: 'admin',
       email: 'admin@genius.com',
       password: hashedPassword,
       name: 'Genius Admin',
@@ -32,7 +51,67 @@ async function main() {
     },
   });
 
-  console.log('Admin user created: admin@genius.com / admin123');
+  console.log('Admin user created: admin / admin123');
+
+  const cashierRole = await prisma.posAccessRole.upsert({
+    where: { code: PosAccessRoleCode.CASHIER },
+    update: {
+      name: 'Cashier',
+      description: 'Operational POS sales access limited to cashier workflows.',
+      isActive: true,
+    },
+    create: {
+      code: PosAccessRoleCode.CASHIER,
+      name: 'Cashier',
+      description: 'Operational POS sales access limited to cashier workflows.',
+      isActive: true,
+    },
+  });
+
+  for (const code of cashierPermissionCodes) {
+    const permission = await prisma.posPermission.upsert({
+      where: { code },
+      update: {
+        name: code,
+        description: code,
+      },
+      create: {
+        code,
+        name: code,
+        description: code,
+      },
+    });
+
+    await prisma.posAccessRolePermission.upsert({
+      where: {
+        roleId_permissionId: {
+          roleId: cashierRole.id,
+          permissionId: permission.id,
+        },
+      },
+      update: {},
+      create: {
+        roleId: cashierRole.id,
+        permissionId: permission.id,
+      },
+    });
+  }
+
+  const cashierPassword = await bcrypt.hash('cashier123', 10);
+  const cashier = await prisma.user.create({
+    data: {
+      username: 'cashier',
+      email: 'cashier@genius.com',
+      password: cashierPassword,
+      name: 'POS Cashier',
+      role: 'USER',
+      posAccessRoles: {
+        create: [{ roleId: cashierRole.id }],
+      },
+    },
+  });
+
+  console.log(`Cashier user created: ${cashier.username} / cashier123`);
 
   const segmentDefinitions = [
     { index: 1, name: 'Company', description: 'Enterprise Legal Entity' },

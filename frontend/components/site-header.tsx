@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { SiQuickbooks } from "react-icons/si";
 import {
@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { useTranslation, TranslationKey } from "@/lib/i18n";
 import { useSettings } from "@/providers/settings-provider";
 import { queryKeys } from "@/lib/query-keys";
+import { canAccessRoute } from "@/lib/auth-access";
 import {
   getAgingReport,
   getAccountOptions,
@@ -89,13 +90,13 @@ const navGroups: NavGroup[] = [
         labelKey: "nav.item.pos",
         icon: Store,
         children: [
-          { href: "/pos?tab=sales", labelKey: "pos.workspace.sales", icon: Monitor },
-          { href: "/pos?tab=sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
-          { href: "/pos?tab=held", labelKey: "pos.workspace.held", icon: FileClock },
-          { href: "/pos?tab=review", labelKey: "pos.workspace.review", icon: ClipboardCheck },
-          { href: "/pos?tab=returns", labelKey: "pos.workspace.returns", icon: Undo2 },
-          { href: "/pos?tab=reports", labelKey: "pos.workspace.reports", icon: ChartNoAxesColumn },
-          { href: "/pos?tab=settings", labelKey: "pos.workspace.settings", icon: Settings2 },
+          { href: "/pos/register", labelKey: "pos.workspace.sales", icon: Monitor },
+          { href: "/pos/sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
+          { href: "/pos/held-sales", labelKey: "pos.workspace.held", icon: FileClock },
+          { href: "/pos/accounting-review", labelKey: "pos.workspace.review", icon: ClipboardCheck },
+          { href: "/pos/returns", labelKey: "pos.workspace.returns", icon: Undo2 },
+          { href: "/pos/reports", labelKey: "pos.workspace.reports", icon: ChartNoAxesColumn },
+          { href: "/pos/settings", labelKey: "pos.workspace.settings", icon: Settings2 },
         ],
       },
       {
@@ -144,7 +145,6 @@ export function SiteHeader({
   onToggleCollapsed?: () => void;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, isHydrated, logout, user, token } = useAuth();
@@ -376,6 +376,33 @@ export function SiteHeader({
     }
   };
 
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => {
+          const visibleChildren = item.children?.filter((child) => canAccessRoute(user, child.href)) ?? [];
+          const isVisible = canAccessRoute(user, item.href) || visibleChildren.length > 0;
+
+          if (!isVisible) {
+            return null;
+          }
+
+          const effectiveHref =
+            item.href === "/pos" && visibleChildren.length > 0
+              ? visibleChildren[0].href
+              : item.href;
+
+          return {
+            ...item,
+            href: effectiveHref,
+            children: visibleChildren,
+          };
+        })
+        .filter(Boolean) as NavGroup["items"],
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
     <aside
       className={cn(
@@ -433,7 +460,7 @@ export function SiteHeader({
       </div>
 
       <nav className="flex-1 overflow-y-auto space-y-10 px-4 py-8">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.labelKey}>
             <span className={cn("mb-4 block px-3 text-[10px] font-black uppercase tracking-[0.25em] text-gray-400", isCollapsed && "sr-only")}>
               {t(group.labelKey)}
@@ -441,7 +468,10 @@ export function SiteHeader({
             <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                const isActive =
+                  pathname === item.href ||
+                  pathname.startsWith(item.href + "/") ||
+                  (item.labelKey === "nav.item.pos" && pathname.startsWith("/pos"));
                 return (
                   <div key={item.href}>
                     <Link
@@ -460,11 +490,10 @@ export function SiteHeader({
                       {isActive && !isCollapsed && <ChevronRight className="h-4 w-4 text-gray-400 ltr:rotate-0 rtl:rotate-180" />}
                     </Link>
 
-                    {item.children && isActive && !isCollapsed && (
+                    {item.children && item.children.length > 0 && isActive && !isCollapsed && (
                       <div className="mt-2 space-y-1 pe-3 ps-9">
                         {item.children.map((child) => {
-                          const childTab = child.href.split("tab=")[1];
-                          const isChildActive = searchParams.get("tab") === childTab;
+                          const isChildActive = pathname === child.href || pathname.startsWith(child.href + "/");
                           const ChildIcon = child.icon;
 
                           return (
@@ -500,7 +529,7 @@ export function SiteHeader({
               <User size={16} />
             </div>
             <div className={cn("min-w-0 flex-1", isCollapsed && "sr-only")}>
-              <div className="truncate text-xs font-bold text-gray-900">{user?.name || "User"}</div>
+              <div className="truncate text-xs font-bold text-gray-900">{user?.name || user?.username || "User"}</div>
               <div className="truncate text-[10px] text-gray-500">{user?.email}</div>
             </div>
             <button

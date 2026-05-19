@@ -128,6 +128,45 @@ enum PosRefundMethod {
   STORE_CREDIT
 }
 
+enum PosAccessRoleCode {
+  CASHIER
+  ACCOUNTANT
+}
+
+enum PosPermissionCode {
+  POS_OPEN_SESSION
+  POS_CLOSE_OWN_SESSION
+  POS_VIEW_POS_SCREEN
+  POS_SCAN_BARCODE
+  POS_SEARCH_ITEM
+  POS_ADD_ITEM_TO_CART
+  POS_UPDATE_ITEM_QUANTITY
+  POS_REMOVE_ITEM_FROM_CART
+  POS_HOLD_SALE
+  POS_RESUME_OWN_HELD_SALE
+  POS_VOID_DRAFT_SALE
+  POS_COMPLETE_SALE
+  POS_SELECT_PAYMENT_METHOD
+  POS_PRINT_RECEIPT
+  POS_VIEW_OWN_SESSION_REPORT
+  POS_VIEW_COMPLETED_SALES
+  POS_VIEW_PENDING_ACCOUNTING
+  POS_VIEW_POS_INVOICE_DETAILS
+  POS_VIEW_POS_PAYMENTS
+  POS_VIEW_POS_INVENTORY_MOVEMENTS
+  POS_VIEW_SESSIONS
+  POS_VIEW_SESSION_REPORT
+  POS_APPROVE_ACCOUNTING
+  POS_REJECT_ACCOUNTING
+  POS_POST_BY_INVOICE
+  POS_POST_BY_SESSION
+  POS_VIEW_POS_REPORTS
+  POS_EXPORT_POS_REPORTS
+  VIEW_JOURNAL_ENTRIES
+  VIEW_GENERAL_LEDGER
+  VIEW_INVENTORY_MOVEMENTS
+}
+
 enum CreditNoteStatus {
   DRAFT
   POSTED
@@ -459,6 +498,52 @@ model BankCashAccount {
   updatedAt            DateTime              @updatedAt
 
   @@index([type, isActive])
+}
+
+model PosAccessRole {
+  id          String                    @id @default(cuid())
+  code        PosAccessRoleCode         @unique
+  name        String
+  description String?
+  isActive    Boolean                   @default(true)
+  permissions PosAccessRolePermission[]
+  users       UserPosAccessRole[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model PosPermission {
+  id          String                    @id @default(cuid())
+  code        PosPermissionCode         @unique
+  name        String
+  description String?
+  roles       PosAccessRolePermission[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model PosAccessRolePermission {
+  id           String        @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         PosAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   PosPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserPosAccessRole {
+  id        String        @id @default(cuid())
+  userId    String
+  roleId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      PosAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([userId, roleId])
+  @@index([roleId])
 }
 
 model BankCashTransaction {
@@ -2497,6 +2582,7 @@ model AuditLog {
 
 model User {
   id       String   @id @default(cuid())
+  username String   @unique
   email    String   @unique
   password String
   name     String?
@@ -2521,11 +2607,13 @@ model User {
   reviewedPosSales                    SalesInvoice[]                 @relation("PosReviewedByUser")
   createdPosReturns                   PosReturn[]                    @relation("PosReturnCreatedByUser")
   reviewedPosReturns                  PosReturn[]                    @relation("PosReturnReviewedByUser")
+  posAccessRoles                      UserPosAccessRole[]
   auditLogs                           AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([email])
+  @@index([username])
   @@index([companyId])
 }

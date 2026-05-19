@@ -19,6 +19,7 @@ import {
 } from "../../../generated/prisma";
 
 import { PrismaService } from "../../../common/prisma/prisma.service";
+import type { AuthorizedUser, PosPermissionCode } from "../../platform/auth/auth.types";
 import { AuditService } from "../../phase-1-accounting-foundation/accounting-core/audit/audit.service";
 import { JournalEntriesService } from "../../phase-1-accounting-foundation/accounting-core/journal-entries/journal-entries.service";
 import { PostingService } from "../../phase-1-accounting-foundation/accounting-core/posting-logic/posting.service";
@@ -42,8 +43,6 @@ import {
   VoidPosSaleDto,
 } from "./dto/pos.dto";
 
-type AuthUser = { userId?: string; email?: string; role?: string; companyId?: string };
-
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
 const POS_WALK_IN_CUSTOMER_NAME = "POS Walk-in Customer";
 
@@ -59,7 +58,7 @@ export class PosService {
     private readonly salesReceivablesService: SalesReceivablesService,
   ) {}
 
-  async getActiveSession(user?: AuthUser) {
+  async getActiveSession(user?: AuthorizedUser) {
     const session = await this.prisma.posSession.findFirst({
       where: {
         status: PosSessionStatus.OPEN,
@@ -72,23 +71,7 @@ export class PosService {
     return session ? this.mapSession(session) : null;
   }
 
-  async getSettings(user?: AuthUser) {
-    const actions = [
-      "OPEN_SESSION",
-      "CLOSE_SESSION",
-      "SELL",
-      "HOLD_SALE",
-      "VOID_SALE",
-      "RETURN_SALE",
-      "REFUND",
-      "REPRINT_RECEIPT",
-      "SESSION_REPORT",
-      "ACCOUNTING_POST",
-      "ACCOUNTING_REJECT",
-      "ACCOUNTING_REVERSE",
-      "NEGATIVE_STOCK_OVERRIDE",
-    ] as const;
-
+  async getSettings(user?: AuthorizedUser) {
     return {
       runtime: {
         autoPost: this.parseBoolean(process.env.POS_AUTO_POST, false),
@@ -99,14 +82,17 @@ export class PosService {
         cashierDiscountLimitPercent: Number(process.env.POS_MAX_CASHIER_DISCOUNT_PERCENT ?? "15"),
       },
       permissions: Object.fromEntries(
-        actions.map((action) => [action, this.hasPosPermission(action, user)]),
+        this.listKnownPermissionCodes().map((permissionCode) => [
+          permissionCode,
+          this.hasPosPermissionCode(permissionCode, user),
+        ]),
       ),
     };
   }
 
-  async listSessions(user?: AuthUser) {
+  async listSessions(user?: AuthorizedUser) {
     const rows = await this.prisma.posSession.findMany({
-      where: user?.userId ? { cashierUserId: user.userId } : undefined,
+      where: this.canReviewAllSessions(user) ? undefined : user?.userId ? { cashierUserId: user.userId } : undefined,
       include: this.posSessionInclude(),
       orderBy: [{ status: "asc" }, { openedAt: "desc" }],
       take: 20,
@@ -115,7 +101,7 @@ export class PosService {
     return rows.map((row) => this.mapSession(row));
   }
 
-  async openSession(dto: OpenPosSessionDto, user?: AuthUser) {
+  async openSession(dto: OpenPosSessionDto, user?: AuthorizedUser) {
     this.ensurePosPermission("OPEN_SESSION", user);
     await this.ensureWarehouse(dto.warehouseId);
     await this.ensureBankCashAccount(dto.cashAccountId);
@@ -165,11 +151,8 @@ export class PosService {
     return this.mapSession(created);
   }
 
-  async closeSession(id: string, dto: ClosePosSessionDto, user?: AuthUser) {
-    this.ensurePosPermission("CLOSE_SESSION", user, {
-      envKey: "POS_SESSION_CLOSE_ALLOWED_ROLES",
-      fallbackRoles: ["USER", "MANAGER", "ADMIN"],
-    });
+  async closeSession(id: string, dto: ClosePosSessionDto, user?: AuthorizedUser) {
+    this.ensurePosPermission("CLOSE_SESSION", user);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       include: {
@@ -235,13 +218,17 @@ export class PosService {
     };
   }
 
-  async getSessionReport(id: string, user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getSessionReport(id: string, user?: AuthorizedUser) {
+    if (this.canReviewAllSessions(user)) {
+      this.ensurePosPermissionCode("POS_VIEW_SESSION_REPORT", user);
+    } else {
+      this.ensurePosPermissionCode("POS_VIEW_OWN_SESSION_REPORT", user);
+    }
     await this.ensureSessionExists(id);
     return this.buildSessionReport(id);
   }
 
-  async listHeldSales(sessionId: string, user?: AuthUser) {
+  async listHeldSales(sessionId: string, user?: AuthorizedUser) {
     await this.ensureSessionAccess(sessionId, user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
@@ -256,7 +243,7 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async listDraftSales(sessionId: string, user?: AuthUser) {
+  async listDraftSales(sessionId: string, user?: AuthorizedUser) {
     await this.ensureSessionAccess(sessionId, user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
@@ -271,9 +258,9 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async listCompletedSales(user?: AuthUser) {
-    this.ensurePosPermission("RETURN_SALE", user);
-    const canSeeAll = user?.role === "ADMIN" || user?.role === "MANAGER";
+  async listCompletedSales(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
+    const canSeeAll = this.canReviewAllSessions(user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
@@ -290,8 +277,8 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async listPendingReview(user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_POST", user);
+  async listPendingReview(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_PENDING_ACCOUNTING", user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
@@ -307,19 +294,19 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async holdSale(dto: HoldPosSaleDto, user?: AuthUser) {
+  async holdSale(dto: HoldPosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("HOLD_SALE", user);
     return this.saveDraftLikeSale(dto, user, PosOperationalStatus.HELD);
   }
 
-  async saveDraft(dto: SavePosDraftDto, user?: AuthUser) {
+  async saveDraft(dto: SavePosDraftDto, user?: AuthorizedUser) {
     this.ensurePosPermission("SELL", user);
     return this.saveDraftLikeSale(dto, user, PosOperationalStatus.DRAFT);
   }
 
   private async saveDraftLikeSale(
     dto: HoldPosSaleDto | SavePosDraftDto,
-    user: AuthUser | undefined,
+    user: AuthorizedUser | undefined,
     status: PosOperationalStatus,
   ) {
     const session = await this.ensureOpenSession(dto.sessionId);
@@ -451,7 +438,7 @@ export class PosService {
     return this.mapPosSale(result);
   }
 
-  async completeSale(dto: CompletePosSaleDto, user?: AuthUser) {
+  async completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("SELL", user);
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
@@ -755,7 +742,7 @@ export class PosService {
     };
   }
 
-  async voidSale(id: string, dto: VoidPosSaleDto, user?: AuthUser) {
+  async voidSale(id: string, dto: VoidPosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("VOID_SALE", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
@@ -797,8 +784,8 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async approveAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_POST", user);
+  async approveAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       include: {
@@ -848,8 +835,8 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async approveSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_POST", user);
+  async approveSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_POST_BY_SESSION", user);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       select: { id: true, sessionNumber: true },
@@ -925,8 +912,8 @@ export class PosService {
     };
   }
 
-  async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_REJECT", user);
+  async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       include: this.posSaleInclude(),
@@ -967,8 +954,8 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async reverseAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_REVERSE", user);
+  async reverseAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       select: {
@@ -1021,7 +1008,7 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async reprintReceipt(id: string, user?: AuthUser) {
+  async reprintReceipt(id: string, user?: AuthorizedUser) {
     this.ensurePosPermission("REPRINT_RECEIPT", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
@@ -1051,8 +1038,8 @@ export class PosService {
     };
   }
 
-  async listReturns(user?: AuthUser) {
-    this.ensurePosPermission("RETURN_SALE", user);
+  async listReturns(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
     const rows = await this.prisma.posReturn.findMany({
       include: this.posReturnInclude(),
       orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
@@ -1060,7 +1047,7 @@ export class PosService {
     return rows.map((row) => this.mapPosReturn(row));
   }
 
-  async createReturn(dto: CreatePosReturnDto, user?: AuthUser) {
+  async createReturn(dto: CreatePosReturnDto, user?: AuthorizedUser) {
     this.ensurePosPermission("RETURN_SALE", user);
     this.ensurePosPermission("REFUND", user);
     const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
@@ -1236,8 +1223,8 @@ export class PosService {
     return this.mapPosReturn(result);
   }
 
-  async approveReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_POST", user);
+  async approveReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       include: {
@@ -1282,8 +1269,8 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async rejectReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_REJECT", user);
+  async rejectReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       include: this.posReturnInclude(),
@@ -1321,8 +1308,8 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async reverseReturnAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthUser) {
-    this.ensurePosPermission("ACCOUNTING_REVERSE", user);
+  async reverseReturnAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       select: {
@@ -1371,8 +1358,8 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async getReportsOverview(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getReportsOverview(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const [salesByPaymentMethod, salesByCashier, salesByBranch, pendingReview, taxSummary] =
       await Promise.all([
         this.getSalesByPaymentMethodReport(user),
@@ -1391,8 +1378,8 @@ export class PosService {
     };
   }
 
-  async getSalesByPaymentMethodReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getSalesByPaymentMethodReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const sales = await this.loadCompletedPosSalesForReports(user);
     const totals = new Map<string, { method: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
@@ -1410,8 +1397,8 @@ export class PosService {
     }));
   }
 
-  async getSalesByCashierReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getSalesByCashierReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const sales = await this.loadCompletedPosSalesForReports(user);
     const totals = new Map<string, { cashierId: string | null; cashierName: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
@@ -1432,8 +1419,8 @@ export class PosService {
     }));
   }
 
-  async getSalesByBranchReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getSalesByBranchReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const sales = await this.loadCompletedPosSalesForReports(user);
     const totals = new Map<string, { branchName: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
@@ -1449,8 +1436,8 @@ export class PosService {
     }));
   }
 
-  async getSalesByItemReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getSalesByItemReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const sales = await this.loadCompletedPosSalesForReports(user);
     const totals = new Map<string, { itemId: string | null; itemName: string; quantity: number; salesAmount: number; taxAmount: number }>();
     for (const sale of sales) {
@@ -1477,8 +1464,8 @@ export class PosService {
     }));
   }
 
-  async getInventoryImpactReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getInventoryImpactReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_INVENTORY_MOVEMENTS", user);
     const rows = await this.prisma.inventoryStockMovement.findMany({
       where: {
         movementType: {
@@ -1510,8 +1497,8 @@ export class PosService {
     }));
   }
 
-  async getTaxSummaryReport(user?: AuthUser) {
-    this.ensurePosPermission("SESSION_REPORT", user);
+  async getTaxSummaryReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const [salesLines, returnLines] = await Promise.all([
       this.prisma.salesInvoiceLine.findMany({
         where: {
@@ -1684,75 +1671,91 @@ export class PosService {
       | "ACCOUNTING_REJECT"
       | "ACCOUNTING_REVERSE"
       | "NEGATIVE_STOCK_OVERRIDE",
-    user?: AuthUser,
-    override?: { envKey?: string; fallbackRoles?: string[] },
+    user?: AuthorizedUser,
   ) {
-    const defaults: Record<string, string[]> = {
-      OPEN_SESSION: ["USER", "MANAGER", "ADMIN"],
-      CLOSE_SESSION: ["USER", "MANAGER", "ADMIN"],
-      SELL: ["USER", "MANAGER", "ADMIN"],
-      HOLD_SALE: ["USER", "MANAGER", "ADMIN"],
-      VOID_SALE: ["USER", "MANAGER", "ADMIN"],
-      RETURN_SALE: ["MANAGER", "ADMIN"],
-      REFUND: ["MANAGER", "ADMIN"],
-      REPRINT_RECEIPT: ["MANAGER", "ADMIN"],
-      SESSION_REPORT: ["USER", "MANAGER", "ADMIN"],
-      ACCOUNTING_POST: ["USER", "MANAGER", "ADMIN"],
-      ACCOUNTING_REJECT: ["USER", "MANAGER", "ADMIN"],
-      ACCOUNTING_REVERSE: ["USER", "MANAGER", "ADMIN"],
-      NEGATIVE_STOCK_OVERRIDE: ["MANAGER", "ADMIN"],
-    };
-
-    const envKey =
-      override?.envKey ??
-      `POS_${action}_ROLES`;
-    const allowedRoles = this.parseRoleList(
-      process.env[envKey],
-      override?.fallbackRoles ?? defaults[action],
-    );
-    const userRole = (user?.role ?? "").trim().toUpperCase();
-    if (!userRole || !allowedRoles.includes(userRole)) {
+    const requiredPermission = this.resolveActionPermission(action);
+    if (!requiredPermission) {
+      return;
+    }
+    if (!this.hasPosPermissionCode(requiredPermission, user)) {
       throw new BadRequestException(`You do not have permission to ${action.toLowerCase().replaceAll("_", " ")}.`);
     }
   }
 
-  private hasPosPermission(
-    action:
-      | "OPEN_SESSION"
-      | "CLOSE_SESSION"
-      | "SELL"
-      | "HOLD_SALE"
-      | "VOID_SALE"
-      | "RETURN_SALE"
-      | "REFUND"
-      | "REPRINT_RECEIPT"
-      | "SESSION_REPORT"
-      | "ACCOUNTING_POST"
-      | "ACCOUNTING_REJECT"
-      | "ACCOUNTING_REVERSE"
-      | "NEGATIVE_STOCK_OVERRIDE",
-    user?: AuthUser,
-    override?: { envKey?: string; fallbackRoles?: string[] },
-  ) {
-    try {
-      this.ensurePosPermission(action, user, override);
-      return true;
-    } catch {
-      return false;
+  private ensurePosPermissionCode(permissionCode: PosPermissionCode, user?: AuthorizedUser) {
+    if (!this.hasPosPermissionCode(permissionCode, user)) {
+      throw new BadRequestException(`You do not have permission for ${permissionCode}.`);
     }
   }
 
-  private parseRoleList(value: string | undefined, fallback: string[]) {
-    if (!value?.trim()) {
-      return fallback;
-    }
-    return value
-      .split(",")
-      .map((role) => role.trim().toUpperCase())
-      .filter(Boolean);
+  private hasPosPermissionCode(permissionCode: PosPermissionCode, user?: AuthorizedUser) {
+    return Boolean(user?.permissions?.includes(permissionCode));
   }
 
-  private ensureDiscountPermission(lines: ResolvedSalesLine[], user?: AuthUser) {
+  private listKnownPermissionCodes(): PosPermissionCode[] {
+    return [
+      "POS_OPEN_SESSION",
+      "POS_CLOSE_OWN_SESSION",
+      "POS_VIEW_POS_SCREEN",
+      "POS_SCAN_BARCODE",
+      "POS_SEARCH_ITEM",
+      "POS_ADD_ITEM_TO_CART",
+      "POS_UPDATE_ITEM_QUANTITY",
+      "POS_REMOVE_ITEM_FROM_CART",
+      "POS_HOLD_SALE",
+      "POS_RESUME_OWN_HELD_SALE",
+      "POS_VOID_DRAFT_SALE",
+      "POS_COMPLETE_SALE",
+      "POS_SELECT_PAYMENT_METHOD",
+      "POS_PRINT_RECEIPT",
+      "POS_VIEW_OWN_SESSION_REPORT",
+      "POS_VIEW_COMPLETED_SALES",
+      "POS_VIEW_PENDING_ACCOUNTING",
+      "POS_VIEW_POS_INVOICE_DETAILS",
+      "POS_VIEW_POS_PAYMENTS",
+      "POS_VIEW_POS_INVENTORY_MOVEMENTS",
+      "POS_VIEW_SESSIONS",
+      "POS_VIEW_SESSION_REPORT",
+      "POS_APPROVE_ACCOUNTING",
+      "POS_REJECT_ACCOUNTING",
+      "POS_POST_BY_INVOICE",
+      "POS_POST_BY_SESSION",
+      "POS_VIEW_POS_REPORTS",
+      "POS_EXPORT_POS_REPORTS",
+      "VIEW_JOURNAL_ENTRIES",
+      "VIEW_GENERAL_LEDGER",
+      "VIEW_INVENTORY_MOVEMENTS",
+    ];
+  }
+
+  private resolveActionPermission(action: string): PosPermissionCode | null {
+    const actionToPermission: Record<string, PosPermissionCode | null> = {
+      OPEN_SESSION: "POS_OPEN_SESSION",
+      CLOSE_SESSION: "POS_CLOSE_OWN_SESSION",
+      SELL: "POS_COMPLETE_SALE",
+      HOLD_SALE: "POS_HOLD_SALE",
+      VOID_SALE: "POS_VOID_DRAFT_SALE",
+      RETURN_SALE: "POS_VIEW_COMPLETED_SALES",
+      REFUND: "POS_VIEW_COMPLETED_SALES",
+      REPRINT_RECEIPT: "POS_PRINT_RECEIPT",
+      SESSION_REPORT: "POS_VIEW_OWN_SESSION_REPORT",
+      ACCOUNTING_POST: "POS_APPROVE_ACCOUNTING",
+      ACCOUNTING_REJECT: "POS_REJECT_ACCOUNTING",
+      ACCOUNTING_REVERSE: "POS_APPROVE_ACCOUNTING",
+      NEGATIVE_STOCK_OVERRIDE: "POS_COMPLETE_SALE",
+    };
+    return actionToPermission[action] ?? null;
+  }
+
+  private canReviewAllSessions(user?: AuthorizedUser) {
+    return Boolean(
+      user?.posRoles?.includes("ACCOUNTANT") ||
+        user?.role === "ADMIN" ||
+        user?.role === "MANAGER",
+    );
+  }
+
+  private ensureDiscountPermission(lines: ResolvedSalesLine[], user?: AuthorizedUser) {
     const gross = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
     const discounts = lines.reduce((sum, line) => sum + line.discountAmount, 0);
     if (gross <= 0 || discounts <= 0) {
@@ -1762,14 +1765,11 @@ export class PosService {
     const discountPercent = Number(((discounts / gross) * 100).toFixed(2));
     const cashierLimit = Number(process.env.POS_MAX_CASHIER_DISCOUNT_PERCENT ?? "15");
     if (discountPercent > cashierLimit) {
-      this.ensurePosPermission("REFUND", user, {
-        envKey: "POS_HIGH_DISCOUNT_APPROVER_ROLES",
-        fallbackRoles: ["MANAGER", "ADMIN"],
-      });
+      this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     }
   }
 
-  private async ensurePriceChangePermission(lines: Array<{ itemId?: string | null; unitPrice?: number }>, user?: AuthUser) {
+  private async ensurePriceChangePermission(lines: Array<{ itemId?: string | null; unitPrice?: number }>, user?: AuthorizedUser) {
     const itemIds = Array.from(new Set(lines.map((line) => line.itemId?.trim()).filter(Boolean))) as string[];
     if (!itemIds.length) {
       return;
@@ -1790,10 +1790,7 @@ export class PosService {
       return Number(item.defaultSalesPrice) !== Number((line.unitPrice ?? 0).toFixed(2));
     });
     if (hasPriceChange) {
-      this.ensurePosPermission("SELL", user, {
-        envKey: "POS_PRICE_CHANGE_ALLOWED_ROLES",
-        fallbackRoles: ["MANAGER", "ADMIN"],
-      });
+      this.ensurePosPermissionCode("POS_COMPLETE_SALE", user);
       await this.auditService.log({
         userId: user?.userId,
         entity: "SalesInvoice",
@@ -2205,8 +2202,8 @@ export class PosService {
     });
   }
 
-  private async loadCompletedPosSalesForReports(user?: AuthUser) {
-    const canSeeAll = user?.role === "ADMIN" || user?.role === "MANAGER";
+  private async loadCompletedPosSalesForReports(user?: AuthorizedUser) {
+    const canSeeAll = this.canReviewAllSessions(user);
     return this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
@@ -2508,7 +2505,7 @@ export class PosService {
     return session;
   }
 
-  private async ensureSessionAccess(id: string, user?: AuthUser) {
+  private async ensureSessionAccess(id: string, user?: AuthorizedUser) {
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       select: { id: true, cashierUserId: true },
@@ -2516,7 +2513,7 @@ export class PosService {
     if (!session) {
       throw new BadRequestException(`POS session ${id} was not found.`);
     }
-    const canSeeAll = user?.role === "ADMIN" || user?.role === "MANAGER";
+    const canSeeAll = this.canReviewAllSessions(user);
     if (!canSeeAll && session.cashierUserId && session.cashierUserId !== user?.userId) {
       throw new BadRequestException("You do not have permission to access this POS session.");
     }
