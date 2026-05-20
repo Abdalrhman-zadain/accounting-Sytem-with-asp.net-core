@@ -278,6 +278,7 @@ export function SalesReceivablesPage() {
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [invoiceEditorClientError, setInvoiceEditorClientError] = useState<string | null>(null);
   const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState>(EMPTY_INVOICE_EDITOR);
+  const isInlineInvoiceWorkspace = activeTab === "invoices" && isInvoiceEditorOpen;
 
   const [creditNoteSearch, setCreditNoteSearch] = useState("");
   const [creditNoteStatusFilter, setCreditNoteStatusFilter] = useState<"DRAFT" | "POSTED" | "">("");
@@ -1560,12 +1561,22 @@ export function SalesReceivablesPage() {
   };
 
   return (
-    <PageShell>
-      <div className="space-y-8">
-        <SectionHeading
-          title={t("salesReceivables.title")}
-          description={t("salesReceivables.description")}
-        />
+    <PageShell className={cn(isInlineInvoiceWorkspace ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
+      <div className={cn(isInlineInvoiceWorkspace ? "space-y-4" : "space-y-8")}>
+        {isInlineInvoiceWorkspace ? (
+          <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
+            <span className="text-gray-700">المبيعات</span>
+            <span className="mx-2 text-gray-300">/</span>
+            <span className="text-gray-700">الفواتير</span>
+            <span className="mx-2 text-gray-300">/</span>
+            <span className="text-teal-700">فاتورة جديدة</span>
+          </div>
+        ) : (
+          <SectionHeading
+            title={t("salesReceivables.title")}
+            description={t("salesReceivables.description")}
+          />
+        )}
 
         {errorMessage ? <Card className="border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</Card> : null}
 

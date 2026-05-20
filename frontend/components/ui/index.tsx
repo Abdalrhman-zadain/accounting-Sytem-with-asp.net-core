@@ -4,9 +4,20 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "./skeleton";
 export { Skeleton };
 
-export function PageShell({ children }: { children: ReactNode }) {
+export function PageShell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 animate-in fade-in slide-in-from-bottom-8 duration-300 motion-reduce:animate-none">
+    <div
+      className={cn(
+        "mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 animate-in fade-in slide-in-from-bottom-8 duration-300 motion-reduce:animate-none",
+        className,
+      )}
+    >
       {children}
     </div>
   );
