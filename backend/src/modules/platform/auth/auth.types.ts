@@ -31,7 +31,10 @@ export type PosPermissionCode =
   | "POS_EXPORT_POS_REPORTS"
   | "VIEW_JOURNAL_ENTRIES"
   | "VIEW_GENERAL_LEDGER"
-  | "VIEW_INVENTORY_MOVEMENTS";
+  | "VIEW_INVENTORY_MOVEMENTS"
+  | "POS_CREDIT_SALE"
+  | "POS_SELL_NEGATIVE_STOCK"
+  | "POS_CHANGE_UNIT_PRICE";
 
 export type AuthorizedUser = {
   userId: string;

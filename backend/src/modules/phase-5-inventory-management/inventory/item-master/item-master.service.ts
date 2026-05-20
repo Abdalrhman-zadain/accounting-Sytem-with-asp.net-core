@@ -21,6 +21,7 @@ type InventoryItemListQuery = {
   itemCategoryId?: string;
   page?: string;
   limit?: string;
+  warehouseId?: string;
 };
 
 type InventoryItemWithAccounts = Prisma.InventoryItemGetPayload<{
@@ -121,6 +122,20 @@ export class ItemMasterService {
     },
   } as const;
 
+  /** Optional warehouse filter: when set, each item includes matching `warehouseBalances` for on-hand per warehouse. */
+  private getItemListInclude(warehouseId?: string | null) {
+    if (!warehouseId?.trim()) {
+      return this.itemInclude;
+    }
+    return {
+      ...this.itemInclude,
+      warehouseBalances: {
+        where: { warehouseId: warehouseId.trim() },
+        select: { warehouseId: true, onHandQuantity: true },
+      },
+    };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly itemGroupsService: ItemGroupsService,
@@ -185,7 +200,7 @@ export class ItemMasterService {
       this.prisma.inventoryItem.count({ where }),
       this.prisma.inventoryItem.findMany({
         where,
-        include: this.itemInclude,
+        include: this.getItemListInclude(query.warehouseId),
         orderBy: [{ isActive: "desc" }, { name: "asc" }],
         skip,
         take: limit,
@@ -195,7 +210,9 @@ export class ItemMasterService {
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return {
-      data: rows.map((row: InventoryItemWithAccounts) => this.mapItem(row)),
+      data: rows.map((row) =>
+        this.mapItem(row as InventoryItemWithAccounts & { warehouseBalances?: { onHandQuantity: Prisma.Decimal }[] }, query.warehouseId?.trim()),
+      ),
       page,
       limit,
       total,
@@ -846,7 +863,17 @@ export class ItemMasterService {
     }));
   }
 
-  private mapItem(row: InventoryItemWithAccounts) {
+  private mapItem(
+    row: InventoryItemWithAccounts & { warehouseBalances?: { onHandQuantity: Prisma.Decimal }[] },
+    warehouseId?: string | null,
+  ) {
+    const warehouseOnHand =
+      warehouseId?.trim() && row.warehouseBalances?.length
+        ? row.warehouseBalances[0]?.onHandQuantity ?? new Prisma.Decimal(0)
+        : null;
+
+    const onHandDisplay = warehouseOnHand ?? row.onHandQuantity;
+
     return {
       id: row.id,
       code: row.code,
@@ -878,7 +905,7 @@ export class ItemMasterService {
       preferredWarehouseId: row.preferredWarehouseId,
       preferredWarehouseCode: row.preferredWarehouseCode,
       preferredWarehouse: row.preferredWarehouse,
-      onHandQuantity: row.onHandQuantity.toString(),
+      onHandQuantity: onHandDisplay.toString(),
       valuationAmount: row.valuationAmount.toString(),
       isActive: row.isActive,
       status: row.isActive ? "ACTIVE" : "INACTIVE",

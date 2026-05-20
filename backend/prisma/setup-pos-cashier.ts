@@ -19,6 +19,7 @@ const cashierPermissionCodes: PosPermissionCode[] = [
   "POS_SELECT_PAYMENT_METHOD",
   "POS_PRINT_RECEIPT",
   "POS_VIEW_OWN_SESSION_REPORT",
+  "POS_CHANGE_UNIT_PRICE",
 ];
 
 async function main() {

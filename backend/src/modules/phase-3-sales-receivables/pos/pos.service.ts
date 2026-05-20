@@ -40,6 +40,7 @@ import {
   PosReturnPaymentDto,
   PosReviewDecisionDto,
   SavePosDraftDto,
+  SetPosFavoriteItemsDto,
   VoidPosSaleDto,
 } from "./dto/pos.dto";
 
@@ -76,9 +77,13 @@ export class PosService {
       runtime: {
         autoPost: this.parseBoolean(process.env.POS_AUTO_POST, false),
         allowCloseWithDrafts: this.parseBoolean(process.env.POS_ALLOW_CLOSE_WITH_DRAFTS, false),
-        allowCreditSale: this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false),
+        allowCreditSale:
+          this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
+          this.hasPosPermissionCode("POS_CREDIT_SALE", user),
         invoiceDiscountTaxPolicy: this.parseTaxPolicy(process.env.POS_INVOICE_DISCOUNT_TAX_POLICY),
-        negativeStockAllowed: this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false),
+        negativeStockAllowed:
+          this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
+          this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user),
         cashierDiscountLimitPercent: Number(process.env.POS_MAX_CASHIER_DISCOUNT_PERCENT ?? "15"),
       },
       permissions: Object.fromEntries(
@@ -88,6 +93,48 @@ export class PosService {
         ]),
       ),
     };
+  }
+
+  async listFavoriteItemIds(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    if (!user?.userId) {
+      return { itemIds: [] as string[] };
+    }
+    const rows = await this.prisma.posUserFavoriteItem.findMany({
+      where: { userId: user.userId },
+      select: { itemId: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return { itemIds: rows.map((row) => row.itemId) };
+  }
+
+  async setFavoriteItemIds(dto: SetPosFavoriteItemsDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    if (!user?.userId) {
+      throw new BadRequestException("User context is required to sync favorites.");
+    }
+    const incoming = dto.itemIds.map((id) => id.trim()).filter(Boolean);
+    const uniqueIncoming = Array.from(new Set(incoming));
+    let validIds = uniqueIncoming;
+    if (uniqueIncoming.length) {
+      const found = await this.prisma.inventoryItem.findMany({
+        where: { id: { in: uniqueIncoming }, isActive: true },
+        select: { id: true },
+      });
+      const allowed = new Set(found.map((row) => row.id));
+      validIds = uniqueIncoming.filter((id) => allowed.has(id));
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.posUserFavoriteItem.deleteMany({ where: { userId: user.userId! } });
+      if (validIds.length) {
+        await tx.posUserFavoriteItem.createMany({
+          data: validIds.map((itemId) => ({ userId: user.userId!, itemId })),
+        });
+      }
+    });
+
+    return this.listFavoriteItemIds(user);
   }
 
   async listSessions(user?: AuthorizedUser) {
@@ -311,6 +358,17 @@ export class PosService {
   ) {
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
+    let customerId = walkInCustomer.id;
+    if (dto.customerId?.trim()) {
+      const cust = await this.prisma.customer.findUnique({
+        where: { id: dto.customerId.trim(), isActive: true },
+        select: { id: true },
+      });
+      if (!cust) {
+        throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
+      }
+      customerId = cust.id;
+    }
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
     const holdPaymentAccountMap = dto.payments?.length
@@ -343,64 +401,64 @@ export class PosService {
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
       const invoice = existing
-        ? await tx.salesInvoice.update({
-            where: { id: existing.id },
-            data: {
-              invoiceDate,
-              customerId: walkInCustomer.id,
-              currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
-              description: dto.description?.trim() || null,
-              subtotalAmount: this.toAmount(totals.subtotalAmount),
-              discountAmount: this.toAmount(totals.discountAmount),
-              taxAmount: this.toAmount(totals.taxAmount),
-              totalAmount: this.toAmount(totals.totalAmount),
-              allocatedAmount: this.toAmount(0),
-              outstandingAmount: this.toAmount(0),
-              allocationStatus: AllocationStatus.UNALLOCATED,
-              status: SalesInvoiceStatus.DRAFT,
-              posOperationalStatus: status,
-              posAccountingStatus: PosAccountingStatus.UNPOSTED,
-              posCompletedAt: null,
-              posReceiptNumber: null,
-              posChangeAmount: null,
-              posReviewNotes: null,
-              posReviewedAt: null,
-              posReviewedByUserId: null,
-              lines: {
-                create: resolvedLines.map((line, index) =>
-                  this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
-                ),
+          ? await tx.salesInvoice.update({
+              where: { id: existing.id },
+              data: {
+                invoiceDate,
+                customerId: customerId,
+                currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
+                description: dto.description?.trim() || null,
+                subtotalAmount: this.toAmount(totals.subtotalAmount),
+                discountAmount: this.toAmount(totals.discountAmount),
+                taxAmount: this.toAmount(totals.taxAmount),
+                totalAmount: this.toAmount(totals.totalAmount),
+                allocatedAmount: this.toAmount(0),
+                outstandingAmount: this.toAmount(0),
+                allocationStatus: AllocationStatus.UNALLOCATED,
+                status: SalesInvoiceStatus.DRAFT,
+                posOperationalStatus: status,
+                posAccountingStatus: PosAccountingStatus.UNPOSTED,
+                posCompletedAt: null,
+                posReceiptNumber: null,
+                posChangeAmount: null,
+                posReviewNotes: null,
+                posReviewedAt: null,
+                posReviewedByUserId: null,
+                lines: {
+                  create: resolvedLines.map((line, index) =>
+                    this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+                  ),
+                },
               },
-            },
-            include: this.posSaleInclude(),
-          })
-        : await tx.salesInvoice.create({
-            data: {
-              reference: reference!,
-              invoiceType: SalesInvoiceType.POS,
-              status: SalesInvoiceStatus.DRAFT,
-              invoiceDate,
-              customerId: walkInCustomer.id,
-              currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
-              description: dto.description?.trim() || null,
-              subtotalAmount: this.toAmount(totals.subtotalAmount),
-              discountAmount: this.toAmount(totals.discountAmount),
-              taxAmount: this.toAmount(totals.taxAmount),
-              totalAmount: this.toAmount(totals.totalAmount),
-              allocatedAmount: this.toAmount(0),
-              outstandingAmount: this.toAmount(0),
-              allocationStatus: AllocationStatus.UNALLOCATED,
-              posOperationalStatus: status,
-              posAccountingStatus: PosAccountingStatus.UNPOSTED,
-              posSessionId: session.id,
-              lines: {
-                create: resolvedLines.map((line, index) =>
-                  this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
-                ),
+              include: this.posSaleInclude(),
+            })
+          : await tx.salesInvoice.create({
+              data: {
+                reference: reference!,
+                invoiceType: SalesInvoiceType.POS,
+                status: SalesInvoiceStatus.DRAFT,
+                invoiceDate,
+                customerId: customerId,
+                currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
+                description: dto.description?.trim() || null,
+                subtotalAmount: this.toAmount(totals.subtotalAmount),
+                discountAmount: this.toAmount(totals.discountAmount),
+                taxAmount: this.toAmount(totals.taxAmount),
+                totalAmount: this.toAmount(totals.totalAmount),
+                allocatedAmount: this.toAmount(0),
+                outstandingAmount: this.toAmount(0),
+                allocationStatus: AllocationStatus.UNALLOCATED,
+                posOperationalStatus: status,
+                posAccountingStatus: PosAccountingStatus.UNPOSTED,
+                posSessionId: session.id,
+                lines: {
+                  create: resolvedLines.map((line, index) =>
+                    this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+                  ),
+                },
               },
-            },
-            include: this.posSaleInclude(),
-          });
+              include: this.posSaleInclude(),
+            });
 
       if (dto.payments?.length) {
         await tx.posPayment.createMany({
@@ -442,6 +500,17 @@ export class PosService {
     this.ensurePosPermission("SELL", user);
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
+    let customerId = walkInCustomer.id;
+    if (dto.customerId?.trim()) {
+      const cust = await this.prisma.customer.findUnique({
+        where: { id: dto.customerId.trim(), isActive: true },
+        select: { id: true },
+      });
+      if (!cust) {
+        throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
+      }
+      customerId = cust.id;
+    }
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     await this.ensurePriceChangePermission(dto.lines, user);
     this.ensureDiscountPermission(resolvedLines, user);
@@ -477,13 +546,23 @@ export class PosService {
       throw new BadRequestException("Every POS payment must use an active bank/cash account.");
     }
     const accountMap = new Map(bankCashAccounts.map((account) => [account.id, account]));
-    const allowCreditSale = this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false);
+    const allowCreditSale =
+      this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
+      this.hasPosPermissionCode("POS_CREDIT_SALE", user);
+    const allowNegativeStockIssue =
+      this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
+      this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user);
     const normalizedPayments = this.normalizePayments(
       dto.payments,
       accountMap,
       totals.totalAmount,
       allowCreditSale,
     );
+    if (normalizedPayments.outstandingAmount > 0 && customerId === walkInCustomer.id) {
+      throw new BadRequestException(
+        "Partial payment / credit sales require a customer other than POS walk-in.",
+      );
+    }
     const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -518,7 +597,7 @@ export class PosService {
             where: { id: existing.id },
             data: {
               invoiceDate,
-              customerId: walkInCustomer.id,
+              customerId: customerId,
               currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
               description: dto.description?.trim() || null,
               subtotalAmount: this.toAmount(totals.subtotalAmount),
@@ -559,7 +638,7 @@ export class PosService {
                   ? SalesInvoiceStatus.PARTIALLY_PAID
                   : SalesInvoiceStatus.FULLY_PAID,
               invoiceDate,
-              customerId: walkInCustomer.id,
+              customerId: customerId,
               currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
               description: dto.description?.trim() || null,
               subtotalAmount: this.toAmount(totals.subtotalAmount),
@@ -627,21 +706,25 @@ export class PosService {
         },
       });
 
-      const inventoryPosting = await this.salesReceivablesService.createSalesInvoiceInventoryEffects(tx, {
-        id: invoiceWithDetails.id,
-        reference: invoiceWithDetails.reference,
-        invoiceDate: invoiceWithDetails.invoiceDate,
-        description: invoiceWithDetails.description,
-        lines: invoiceWithDetails.lines.map((line) => ({
-          id: line.id,
-          lineNumber: line.lineNumber,
-          itemId: line.itemId,
-          warehouseId: line.warehouseId,
-          quantity: line.quantity,
-          description: line.description,
-          item: line.item,
-        })),
-      });
+      const inventoryPosting = await this.salesReceivablesService.createSalesInvoiceInventoryEffects(
+        tx,
+        {
+          id: invoiceWithDetails.id,
+          reference: invoiceWithDetails.reference,
+          invoiceDate: invoiceWithDetails.invoiceDate,
+          description: invoiceWithDetails.description,
+          lines: invoiceWithDetails.lines.map((line) => ({
+            id: line.id,
+            lineNumber: line.lineNumber,
+            itemId: line.itemId,
+            warehouseId: line.warehouseId,
+            quantity: line.quantity,
+            description: line.description,
+            item: line.item,
+          })),
+        },
+        { allowNegativeStockIssue },
+      );
 
       const description = invoiceWithDetails.description
         ? `${invoiceWithDetails.reference} - ${invoiceWithDetails.description}`
@@ -1725,6 +1808,9 @@ export class PosService {
       "VIEW_JOURNAL_ENTRIES",
       "VIEW_GENERAL_LEDGER",
       "VIEW_INVENTORY_MOVEMENTS",
+      "POS_CREDIT_SALE",
+      "POS_SELL_NEGATIVE_STOCK",
+      "POS_CHANGE_UNIT_PRICE",
     ];
   }
 
@@ -1742,7 +1828,7 @@ export class PosService {
       ACCOUNTING_POST: "POS_APPROVE_ACCOUNTING",
       ACCOUNTING_REJECT: "POS_REJECT_ACCOUNTING",
       ACCOUNTING_REVERSE: "POS_APPROVE_ACCOUNTING",
-      NEGATIVE_STOCK_OVERRIDE: "POS_COMPLETE_SALE",
+      NEGATIVE_STOCK_OVERRIDE: "POS_SELL_NEGATIVE_STOCK",
     };
     return actionToPermission[action] ?? null;
   }
@@ -1790,7 +1876,7 @@ export class PosService {
       return Number(item.defaultSalesPrice) !== Number((line.unitPrice ?? 0).toFixed(2));
     });
     if (hasPriceChange) {
-      this.ensurePosPermissionCode("POS_COMPLETE_SALE", user);
+      this.ensurePosPermissionCode("POS_CHANGE_UNIT_PRICE", user);
       await this.auditService.log({
         userId: user?.userId,
         entity: "SalesInvoice",
@@ -2627,6 +2713,12 @@ export class PosService {
 
   private posSaleInclude() {
     return {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       posSession: {
         select: {
           id: true,
@@ -2769,6 +2861,7 @@ export class PosService {
           }
         : null,
       session: row.posSession ?? null,
+      customer: row.customer ?? null,
       lines: row.lines.map((line: any) => ({
         id: line.id,
         lineNumber: line.lineNumber,

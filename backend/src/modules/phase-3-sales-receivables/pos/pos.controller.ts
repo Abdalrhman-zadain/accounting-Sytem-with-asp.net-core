@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 
 import { JwtAuthGuard } from "../../platform/auth/guards/jwt-auth.guard";
@@ -11,6 +11,7 @@ import {
   PosReverseAccountingDto,
   PosReviewDecisionDto,
   SavePosDraftDto,
+  SetPosFavoriteItemsDto,
   VoidPosSaleDto,
 } from "./dto/pos.dto";
 import { PosService } from "./pos.service";
@@ -28,6 +29,16 @@ export class PosController {
   @Get("settings")
   getSettings(@Req() req: Request & { user?: any }) {
     return this.service.getSettings(req.user);
+  }
+
+  @Get("favorites/items")
+  listFavoriteItems(@Req() req: Request & { user?: any }) {
+    return this.service.listFavoriteItemIds(req.user);
+  }
+
+  @Put("favorites/items")
+  setFavoriteItems(@Req() req: Request & { user?: any }, @Body() dto: SetPosFavoriteItemsDto) {
+    return this.service.setFavoriteItemIds(dto, req.user);
   }
 
   @Get("sessions")

@@ -917,8 +917,9 @@ export class SalesReceivablesService {
   async createSalesInvoiceInventoryEffects(
     tx: Prisma.TransactionClient,
     invoice: Parameters<typeof this.applySalesInvoiceInventoryPosting>[1],
+    options?: { allowNegativeStockIssue?: boolean },
   ) {
-    return this.applySalesInvoiceInventoryPosting(tx, invoice);
+    return this.applySalesInvoiceInventoryPosting(tx, invoice, options);
   }
 
   ensureBalancedJournalLines(
@@ -3131,6 +3132,7 @@ export class SalesReceivablesService {
         } | null;
       }>;
     },
+    options?: { allowNegativeStockIssue?: boolean },
   ) {
     const accountingLines: Array<{
       accountId: string;
@@ -3139,7 +3141,8 @@ export class SalesReceivablesService {
       creditAmount: number;
     }> = [];
     const costingMethod = await this.inventoryPostingService.getCostingMethod();
-    const preventNegativeStock = this.inventoryPostingService.preventNegativeStock();
+    const policyBlocksNegative = this.inventoryPostingService.preventNegativeStock();
+    const enforceNonNegative = policyBlocksNegative && !options?.allowNegativeStockIssue;
 
     for (const line of invoice.lines) {
       if (!line.itemId || !this.lineTracksInventory(line.item)) {
@@ -3179,7 +3182,7 @@ export class SalesReceivablesService {
       const currentValuation =
         currentBalance?.valuationAmount ?? new Prisma.Decimal(0);
 
-      if (preventNegativeStock && currentQuantity.lt(line.quantity)) {
+      if (enforceNonNegative && currentQuantity.lt(line.quantity)) {
         throw new BadRequestException(
           `Item ${line.item.code} does not have enough available stock in the selected warehouse for line ${line.lineNumber}.`,
         );

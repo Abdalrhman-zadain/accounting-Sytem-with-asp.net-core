@@ -187,10 +187,15 @@ Current limitation:
 - POS completion creates immediate stock relief plus a draft journal entry for accountant approval; the review tab can approve per sale, approve all eligible sales in a session, reject, reprint, and accounting-reverse that POS accounting step.
 - POS returns now create immediate stock-in for inventory items, record refund methods, prepare a separate draft journal for accountant approval, and appear in the new returns/reporting queries.
 - the `/pos` frontend now supports cashier-side return entry, held-sale review, accountant review actions, and detailed report grids backed by POS APIs, but it still does not implement offline mode, loyalty/promotions, branch master integration, or fine-grained non-role permission administration.
-- offline mode, loyalty/promotions, branch master integration, and fine-grained non-role permission administration are still not implemented.
+- POS sales now support optional customer selection from the cart sidebar: the cashier can search existing active customers, select one via a live search dropdown, or quick-create a new customer (name + tax treatment) without leaving the POS screen. If no customer is selected the system defaults to `ensureWalkInCustomer()` for backward compatibility. The selected customer ID is persisted on `SalesInvoice.customerId` and is restored when a draft or held sale is resumed.
+- the register screen uses warehouse-scoped inventory list (`GET /inventory/items?warehouseId=`) for on-hand in the grid and gates over-selling using `runtime.negativeStockAllowed` plus POS permissions; partial/credit completion requires a selected real customer when tendered is below total and policy allows it.
+- cashier catalog favorites persist through `GET`/`PUT /pos/favorites/items` (requires the Prisma migration that adds `PosUserFavoriteItem` and related enum values when the database is upgraded).
+- register layout is partially split into `pos-product-card.tsx`, `pos-session-bar.tsx`, and `pos-register-layout.tsx` while state and mutations remain in `pos-page.tsx`.
+- the **Offers** category chip still uses a lightweight text/metadata heuristic (not a dedicated promotion price table); treat it as UX-only until item master exposes promotional fields.
 
 What this means for future edits:
 
 - keep new POS UI code inside `frontend/features/pos`.
 - preserve the deliberate split between operational completion and accountant posting when extending POS.
+- when extending the customer selector (e.g. credit-sale enforcement, balance display), read the current customer from `selectedCustomer` state in `PosPage` and pass it as a prop or context; do not duplicate the `customersQuery` fetch.
 - if future POS work adds a full return-entry UI, branch master linkage, or finer approval/permission controls, update `docs/README.md`, `docs/system-design.md`, `docs/data-model.md`, and this section together.

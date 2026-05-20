@@ -187,6 +187,9 @@ export const queryKeys = {
   posSettings(token: string | null) {
     return ["pos-settings", token] as const;
   },
+  posFavoriteItems(token: string | null) {
+    return ["pos-favorite-items", token] as const;
+  },
   posSessions(token: string | null) {
     return ["pos-sessions", token] as const;
   },

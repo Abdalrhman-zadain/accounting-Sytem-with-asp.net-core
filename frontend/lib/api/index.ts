@@ -749,6 +749,9 @@ export async function getInventoryItems(
     searchParams.set("page", String(params.page));
   if (params.limit && params.limit > 0)
     searchParams.set("limit", String(params.limit));
+  if (params.warehouseId?.trim()) {
+    searchParams.set("warehouseId", params.warehouseId.trim());
+  }
   const suffix = searchParams.toString() ? `?${searchParams}` : "";
   return apiRequest<InventoryItemsResponse>(`/inventory/items${suffix}`, {
     token,
@@ -2379,6 +2382,21 @@ export async function getActivePosSession(token?: string | null) {
 
 export async function getPosSettings(token?: string | null) {
   return apiRequest<PosSettings>("/pos/settings", { token });
+}
+
+export async function getPosFavoriteItemIds(token?: string | null) {
+  return apiRequest<{ itemIds: string[] }>("/pos/favorites/items", { token });
+}
+
+export async function setPosFavoriteItemIds(
+  itemIds: string[],
+  token?: string | null,
+) {
+  return apiRequest<{ itemIds: string[] }>("/pos/favorites/items", {
+    method: "PUT",
+    body: JSON.stringify({ itemIds }),
+    token,
+  });
 }
 
 export async function getPosSessions(token?: string | null) {

@@ -78,6 +78,10 @@ class PosSaleBaseDto {
   invoiceId?: string;
 
   @IsOptional()
+  @IsString()
+  customerId?: string;
+
+  @IsOptional()
   @IsDateString()
   invoiceDate?: string;
 
@@ -118,6 +122,12 @@ export class CompletePosSaleDto extends PosSaleBaseDto {
   @ValidateNested({ each: true })
   @Type(() => PosPaymentDto)
   payments!: PosPaymentDto[];
+}
+
+export class SetPosFavoriteItemsDto {
+  @IsArray()
+  @IsString({ each: true })
+  itemIds!: string[];
 }
 
 export class VoidPosSaleDto {

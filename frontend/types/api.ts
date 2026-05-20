@@ -41,7 +41,10 @@ export type PosPermissionCode =
   | "POS_EXPORT_POS_REPORTS"
   | "VIEW_JOURNAL_ENTRIES"
   | "VIEW_GENERAL_LEDGER"
-  | "VIEW_INVENTORY_MOVEMENTS";
+  | "VIEW_INVENTORY_MOVEMENTS"
+  | "POS_CREDIT_SALE"
+  | "POS_SELL_NEGATIVE_STOCK"
+  | "POS_CHANGE_UNIT_PRICE";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -471,6 +474,7 @@ export type InventoryItemsQuery = {
   itemCategoryId?: string;
   page?: number;
   limit?: number;
+  warehouseId?: string;
 };
 
 export type InventoryMasterDataQuery = {
@@ -3256,6 +3260,7 @@ export type PosPaymentEntryPayload = {
 export type HoldPosSalePayload = {
   sessionId: string;
   invoiceId?: string;
+  customerId?: string;
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
@@ -3266,6 +3271,7 @@ export type HoldPosSalePayload = {
 export type SavePosDraftPayload = {
   sessionId: string;
   invoiceId?: string;
+  customerId?: string;
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
@@ -3276,6 +3282,7 @@ export type SavePosDraftPayload = {
 export type CompletePosSalePayload = {
   sessionId: string;
   invoiceId?: string;
+  customerId?: string;
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
@@ -3389,6 +3396,10 @@ export type PosSale = {
       name?: string | null;
     } | null;
     warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  } | null;
+  customer?: {
+    id: string;
+    name: string;
   } | null;
   lines: Array<{
     id: string;

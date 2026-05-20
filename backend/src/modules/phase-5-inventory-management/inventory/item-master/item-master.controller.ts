@@ -28,8 +28,18 @@ export class ItemMasterController {
     @Query("itemCategoryId") itemCategoryId?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
+    @Query("warehouseId") warehouseId?: string,
   ) {
-    return this.service.list({ isActive, search, type, itemGroupId, itemCategoryId, page, limit });
+    return this.service.list({
+      isActive,
+      search,
+      type,
+      itemGroupId,
+      itemCategoryId,
+      page,
+      limit,
+      warehouseId,
+    });
   }
 
   @Post("generate-barcode")

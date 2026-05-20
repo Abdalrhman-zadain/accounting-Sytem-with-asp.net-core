@@ -627,3 +627,55 @@ Review these questions:
 - did the change preserve posting and reversal auditability
 - does the change describe a current Phase 1 capability instead of a future ERP phase
 - do the docs still match the code after the edit
+
+## Add Or Extend POS Customer Selection
+
+Where to edit:
+
+- backend DTO: `backend/src/modules/phase-3-sales-receivables/pos/dto/pos.dto.ts` — add fields to `PosSaleBaseDto`
+- backend service: `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts` — `saveDraftLikeSale` and `completeSale` resolve `customerId`; `posSaleInclude` and `mapPosSale` expose the customer relation
+- frontend types: `frontend/types/api.ts` — `HoldPosSalePayload`, `SavePosDraftPayload`, `CompletePosSalePayload`, and `PosSale` all carry `customerId?`/`customer?`
+- frontend feature: `frontend/features/pos/pos-page.tsx` — state, queries, mutations, selector strip JSX, and quick-create modal
+
+What else to check:
+
+- when no `customerId` is supplied, the backend falls back to `ensureWalkInCustomer()` — this backward-compatible default must remain in place
+- if a `customerId` is supplied, the backend validates the customer is active; a `BadRequestException` is thrown if the record is missing or inactive
+- `resetSale` must clear `selectedCustomerId` to `null` so new sales start as Walk-In
+- `resumeHeldSale` must restore `selectedCustomerId` from the loaded `HeldSale.customerId`
+- all three POS payloads (`holdSale`, `saveDraftSale`, `completeSale`) must forward `customerId: selectedCustomerId || undefined`
+- `mapPosSaleToHeldSale` must copy `sale.customer?.id ?? null` into the local `HeldSale` model so drafts and held sales can be resumed with the original customer
+- `Customer` and `TaxTreatment` must both be present in the `import type` block at the top of `pos-page.tsx`
+- the quick-create customer modal must use `TaxTreatment.englishName` / `TaxTreatment.arabicName` — the `name` field does not exist on this type
+
+Must remain compatible:
+
+- Walk-In default behavior when no customer is selected
+- existing `PosOperationalStatus` and `PosAccountingStatus` lifecycle invariants
+- `SalesInvoice.customerId` Prisma field — no schema migration required
+
+Checks to run:
+
+- backend build (`npm run build` in `backend/`)
+- frontend typecheck (`npx tsc --noEmit` in `frontend/`)
+
+## POS register layout, catalog, favorites, and payments
+
+Where to edit:
+
+- register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
+- extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
+- category chips and offer/favorite matching: `frontend/features/pos/pos-catalog-chips.ts`
+- warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
+- cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
+- POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+
+What else to check:
+
+- `GET /pos/settings` drives `runtime.allowCreditSale`, `runtime.negativeStockAllowed`, `runtime.allowCloseWithDrafts`, and `runtime.cashierDiscountLimitPercent` — align the register with these flags and with POS permission codes (`POS_CREDIT_SALE`, `POS_SELL_NEGATIVE_STOCK`, `POS_CHANGE_UNIT_PRICE`, `POS_HOLD_SALE`, `POS_CLOSE_OWN_SESSION`, etc.)
+- bank transfer in the pay modal must resolve to `BANK_TRANSFER` bank/cash accounts via `normalizePaymentAccountMethod`
+- the **Offers** catalog chip remains name/category heuristic until a real promotion field or table is added to item master
+
+Checks to run:
+
+- frontend typecheck (`npx tsc --noEmit` in `frontend/`)

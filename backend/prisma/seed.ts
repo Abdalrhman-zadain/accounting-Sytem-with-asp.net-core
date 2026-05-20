@@ -1,5 +1,6 @@
 import { PosAccessRoleCode, PosPermissionCode, PrismaClient } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
+import { seedPosRegisterDemo } from './seed-pos-register';
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,7 @@ const cashierPermissionCodes: PosPermissionCode[] = [
   'POS_SELECT_PAYMENT_METHOD',
   'POS_PRINT_RECEIPT',
   'POS_VIEW_OWN_SESSION_REPORT',
+  'POS_CHANGE_UNIT_PRICE',
 ];
 
 async function main() {
@@ -1722,6 +1724,11 @@ async function main() {
   await createReconciledMatch(customerReceiptStatementLine.id, bankReceiptLedger.id);
   await createReconciledMatch(transferStatementLine.id, transferBankLedger.id);
   await createReconciledMatch(rentStatementLine.id, rentPaymentBankLedger.id);
+
+  await seedPosRegisterDemo(prisma, {
+    adminUserId: admin.id,
+    cashierUserId: cashier.id,
+  });
 
   console.log('Seed complete.');
 }

@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev --skip-generate",
     "prisma:studio": "prisma studio",
     "seed:cashier": "ts-node prisma/setup-pos-cashier.ts",
+    "seed:pos-demo": "ts-node prisma/seed-pos-demo.ts",
     "prisma:migrate:account-codes:6-to-7": "ts-node prisma/migrate-6-to-7-digit-account-codes.ts",
     "seed": "ts-node prisma/seed.ts"
   },

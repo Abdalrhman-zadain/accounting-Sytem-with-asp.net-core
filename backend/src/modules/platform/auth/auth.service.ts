@@ -57,6 +57,9 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
   VIEW_JOURNAL_ENTRIES: { name: 'View journal entries', description: 'Access journal entries generated from POS posting.' },
   VIEW_GENERAL_LEDGER: { name: 'View general ledger', description: 'Access the general ledger workspace.' },
   VIEW_INVENTORY_MOVEMENTS: { name: 'View inventory movements', description: 'Access inventory movement inquiry routes.' },
+  POS_CREDIT_SALE: { name: 'POS credit sale', description: 'Allow POS sales with unpaid balance when permitted by policy.' },
+  POS_SELL_NEGATIVE_STOCK: { name: 'POS negative stock', description: 'Allow POS inventory issues despite negative stock safeguards.' },
+  POS_CHANGE_UNIT_PRICE: { name: 'Change POS line price', description: 'Override item default sale price at the POS cart.' },
 };
 
 @Injectable()
