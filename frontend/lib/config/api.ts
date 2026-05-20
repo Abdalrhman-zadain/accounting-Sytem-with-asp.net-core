@@ -1,5 +1,10 @@
 export function getApiBaseUrl() {
-  const raw =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3003/api";
-  return raw.replace(/\/+$/, "");
+  if (typeof window !== "undefined") {
+    // If we are on the production domain, use relative path to go through the proxy
+    if (window.location.hostname === "sabina.trusttechlimited.com") {
+      return "/api";
+    }
+    return `http://${window.location.hostname}:3007/api`;
+  }
+  return "http://localhost:3007/api";
 }

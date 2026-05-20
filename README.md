@@ -218,6 +218,46 @@ npm run test:watch
 
 ### Frontend Checks
 
+## Deployment & Maintenance
+
+### Production Setup (PM2)
+
+The project is deployed using **PM2** and **Nginx**.
+
+- **Backend:** Runs on port `3007` (to avoid conflicts with other local projects).
+- **Frontend:** Runs on port `3000`.
+- **Domain:** `https://sabina.trusttechlimited.com`
+
+#### Managing with PM2
+
+Use the following commands from the root directory:
+
+```bash
+# Start/Restart everything
+pm2 restart ecosystem.config.js
+
+# View live logs
+pm2 logs account-backend
+pm2 logs account-frontend
+
+# Save current process list for reboot persistence
+pm2 save
+```
+
+#### Production Configuration Changes
+
+- **Relative API Paths:** The frontend is configured in `frontend/lib/config/api.ts` to use relative `/api` paths when accessed via the production domain. This ensures **HTTPS** compatibility and prevents "Mixed Content" blocks.
+- **Backend CORS:** The backend CORS is configured to reflect the request origin to allow secure cross-origin communication between the frontend and backend under the reverse proxy.
+
+### Nginx Configuration
+
+The Nginx configuration (typically in `/etc/nginx/sites-available/trusttech-apps`) routes domain traffic as follows:
+
+- `https://sabina.trusttechlimited.com/` -> Frontend (Port 3000)
+- `https://sabina.trusttechlimited.com/api/` -> Backend (Port 3007)
+
+---
+
 ## Checks Passed
 
 ```text
