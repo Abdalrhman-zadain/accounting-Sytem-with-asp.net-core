@@ -33,6 +33,7 @@ type RevenueAccountOption = { id: string; code: string; name: string };
 
 type SalesDocumentEditorModalProps = {
   isOpen: boolean;
+  presentation?: "modal" | "inline";
   title: string;
   introTitle: string;
   introDescription?: string;
@@ -75,6 +76,7 @@ type SalesDocumentEditorModalProps = {
 
 export function SalesDocumentEditorModal({
   isOpen,
+  presentation = "modal",
   title,
   introTitle,
   introDescription,
@@ -119,8 +121,10 @@ export function SalesDocumentEditorModal({
   const { data: taxes = [] } = useQuery({ queryKey: ["taxes", "active", token], queryFn: () => getActiveTaxes(token) });
   const isArabic = language === "ar";
   const totals = useMemo(() => calculateQuotationTotals(lines), [lines]);
+  const isInline = presentation === "inline";
   void allowTaxOverride;
   void description;
+  void title;
   void onReferenceChange;
   void onDescriptionChange;
 
@@ -160,12 +164,13 @@ export function SalesDocumentEditorModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 p-3 sm:p-6">
-      <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} />
+    <div className={cn(isInline ? "relative" : "fixed inset-0 z-50 p-3 sm:p-6")}>
+      {!isInline ? <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} /> : null}
       <div
         dir={isArabic ? "rtl" : "ltr"}
         className={cn(
-          "relative mx-auto flex h-full max-h-full max-w-[1720px] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
+          "relative mx-auto flex flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
+          isInline ? "min-h-[calc(100vh-220px)] w-full" : "h-full max-h-full max-w-[1720px]",
           isArabic && "arabic-ui",
         )}
       >

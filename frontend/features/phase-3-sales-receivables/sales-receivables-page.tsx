@@ -2096,193 +2096,256 @@ export function SalesReceivablesPage() {
 
       {activeTab === "invoices" ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <SummaryCard label={t("salesReceivables.summary.invoices")} value={invoices.length} hint={t("salesReceivables.hint.currentFilteredList")} />
-            <SummaryCard label={t("salesReceivables.summary.drafts")} value={invoices.filter((row) => row.status === "DRAFT").length} hint={t("salesReceivables.hint.stillEditable")} />
-            <SummaryCard
-              label={t("salesReceivables.summary.outstanding")}
-              value={formatCurrency(invoices.reduce((sum, row) => sum + Number(row.outstandingAmount), 0))}
-              hint={t("salesReceivables.hint.receivableStillOpen")}
-            />
-          </div>
-
-          <Card className="p-5">
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.5fr_0.7fr_auto]">
-              <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} placeholder={t("salesReceivables.filters.searchInvoices")} />
-              <Select value={invoiceStatusFilter} onChange={(event) => setInvoiceStatusFilter(event.target.value as SalesInvoiceStatus | "")}>
-                <option value="">{t("salesReceivables.filters.allStatuses")}</option>
-                <option value="DRAFT">{t("salesReceivables.status.draft")}</option>
-                <option value="POSTED">{t("salesReceivables.status.posted")}</option>
-                <option value="PARTIALLY_PAID">{t("salesReceivables.status.partiallyPaid")}</option>
-                <option value="FULLY_PAID">{t("salesReceivables.status.fullyPaid")}</option>
-                <option value="OVERDUE">{t("salesReceivables.status.overdue")}</option>
-                <option value="CANCELLED">{t("salesReceivables.status.cancelled")}</option>
-              </Select>
-              <Select value={invoiceCustomerFilter} onChange={(event) => setInvoiceCustomerFilter(event.target.value)}>
-                <option value="">{t("salesReceivables.filters.allCustomers")}</option>
-                {activeCustomers.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.code} · {row.name}
-                  </option>
-                ))}
-              </Select>
-              <Button className="gap-2" onClick={() => {
+          {isInvoiceEditorOpen ? (
+            <SalesDocumentEditorModal
+              presentation="inline"
+              isOpen={isInvoiceEditorOpen}
+              onClose={() => {
                 setInvoiceEditorClientError(null);
-                setInvoiceEditor(EMPTY_INVOICE_EDITOR());
-                setIsInvoiceEditorOpen(true);
-                }}
-              >
-                <CirclePlus className="h-4 w-4 shrink-0" />
-                {t("salesReceivables.action.newInvoice")}
-              </Button>
-            </div>
-            <ExportActions
-              className="mt-4 flex flex-wrap items-center gap-2"
-              onAction={handleInvoicesExport}
-              permissions={exportPermissions}
-              disabled={invoicesQuery.isLoading}
+                setIsInvoiceEditorOpen(false);
+              }}
+              title={
+                invoiceEditor.id
+                  ? t("salesReceivables.dialog.editInvoiceDraft")
+                  : invoiceEditor.sourceQuotationId || invoiceEditor.sourceSalesOrderId
+                    ? t("salesReceivables.action.toInvoice")
+                    : t("salesReceivables.dialog.newSalesInvoice")
+              }
+              introTitle={
+                invoiceEditor.sourceQuotationId || invoiceEditor.sourceSalesOrderId
+                  ? t("salesReceivables.action.toInvoice")
+                  : t("salesReceivables.dialog.newSalesInvoice")
+              }
+              reference={invoiceEditor.reference}
+              dateLabel={t("salesReceivables.field.invoiceDate")}
+              dateValue={invoiceEditor.invoiceDate}
+              secondaryDateLabel={t("salesReceivables.field.dueDate")}
+              secondaryDateValue={invoiceEditor.dueDate}
+              currencyCode={invoiceEditor.currencyCode}
+              customerId={invoiceEditor.customerId}
+              description={invoiceEditor.description}
+              lines={invoiceEditor.lines}
+              customers={activeCustomers}
+              inventoryItems={inventoryItems}
+              warehouses={inventoryWarehouses}
+              isInventoryItemsLoading={inventoryItemsQuery.isLoading}
+              revenueAccounts={revenueAccountsQuery.data ?? []}
+              isSubmitting={isInvoiceSaving || createInvoiceMutation.isPending || updateInvoiceMutation.isPending}
+              validationError={invoiceEditorClientError}
+              defaultLineTax={selectedInvoiceDefaultTax}
+              allowTaxOverride={canOverrideInvoiceTax}
+              onReferenceChange={(value) => setInvoiceEditor((current) => ({ ...current, reference: value }))}
+              onDateChange={(value) => setInvoiceEditor((current) => ({ ...current, invoiceDate: value }))}
+              onSecondaryDateChange={(value) => setInvoiceEditor((current) => ({ ...current, dueDate: value }))}
+              onCurrencyChange={(value) => setInvoiceEditor((current) => ({ ...current, currencyCode: value.toUpperCase() }))}
+              onCustomerChange={handleInvoiceCustomerChange}
+              onDescriptionChange={(value) => setInvoiceEditor((current) => ({ ...current, description: value }))}
+              onLinesChange={(lines) => setInvoiceEditor((current) => ({ ...current, lines }))}
+              onDraftSubmit={() => {
+                void saveInvoiceFromEditor();
+              }}
+              draftSubmitLabel={t("salesReceivables.action.saveDraft")}
+              onPostSubmit={() => {
+                void saveAndPostInvoiceFromEditor();
+              }}
+              postSubmitLabel={t("salesReceivables.action.postInvoice")}
+              onPostAndCreateReceiptSubmit={() => {
+                void saveAndCreateReceiptFromInvoiceEditor();
+              }}
+              postAndCreateReceiptLabel={t("salesReceivables.action.postAndCreateReceipt")}
+              postAndCreateReceiptTooltip={t("salesReceivables.tooltip.postAndCreateReceipt")}
+              isPostSubmitting={postInvoiceMutation.isPending}
+              isPostAndCreateReceiptSubmitting={postInvoiceMutation.isPending}
             />
-          </Card>
-
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <Card className="overflow-hidden p-0">
-              <div className="border-b border-gray-200 px-6 py-4">
-                <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.salesInvoices")}</div>
-                <div className="text-xs text-gray-500">{t("salesReceivables.section.salesInvoicesDescription")}</div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <SummaryCard label={t("salesReceivables.summary.invoices")} value={invoices.length} hint={t("salesReceivables.hint.currentFilteredList")} />
+                <SummaryCard label={t("salesReceivables.summary.drafts")} value={invoices.filter((row) => row.status === "DRAFT").length} hint={t("salesReceivables.hint.stillEditable")} />
+                <SummaryCard
+                  label={t("salesReceivables.summary.outstanding")}
+                  value={formatCurrency(invoices.reduce((sum, row) => sum + Number(row.outstandingAmount), 0))}
+                  hint={t("salesReceivables.hint.receivableStillOpen")}
+                />
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <TableHead>{t("salesReceivables.field.reference")}</TableHead>
-                      <TableHead>{t("salesReceivables.field.customer")}</TableHead>
-                      <TableHead>{t("salesReceivables.field.date")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.metric.outstanding")}</TableHead>
-                      <TableHead className="text-center">{t("salesReceivables.metric.status")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoices.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">
-                          {t("salesReceivables.empty.invoices")}
-                        </td>
-                      </tr>
-                    ) : (
-                      invoices.map((row) => (
-                        <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedInvoice?.id === row.id && "bg-gray-50")}>
-                          <td className="px-6 py-4">
-                            <button type="button" className="text-left" onClick={() => setSelectedInvoiceId(row.id)}>
-                              <div className="font-bold text-gray-900">{row.reference}</div>
-                              <div className="text-xs text-gray-500">{row.journalReference ?? t("salesReceivables.empty.noJournal")}</div>
-                            </button>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-semibold text-gray-900">{row.customer.name}</div>
-                            <div className="text-xs text-gray-500">{row.customer.code}</div>
-                          </td>
-                          <td className="px-6 py-4 text-gray-700">{formatDate(row.invoiceDate)}</td>
-                          <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">{formatCurrency(row.totalAmount)}</td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="font-mono font-bold text-gray-900">{formatCurrency(row.outstandingAmount)}</div>
-                            <div className="text-xs text-gray-500">{row.allocationStatus.replaceAll("_", " ")}</div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <StatusPill label={row.status} tone={row.status === "POSTED" ? "positive" : "warning"} />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex justify-end gap-2">
-                              {row.status === "DRAFT" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                                    onClick={() => {
-                                      setInvoiceEditor({
-                                        id: row.id,
-                                        reference: row.reference,
-                                        invoiceDate: row.invoiceDate.slice(0, 10),
-                                        dueDate: row.dueDate?.slice(0, 10) ?? "",
-                                        currencyCode: row.currencyCode,
-                                        customerId: row.customer.id,
-                                        description: row.description ?? "",
-                                        lines: row.lines.map(mapLineToEditor),
-                                        sourceQuotationId: row.sourceQuotation?.id ?? "",
-                                        sourceSalesOrderId: row.sourceSalesOrder?.id ?? "",
-                                      });
-                                      setInvoiceEditorClientError(null);
-                                      setIsInvoiceEditorOpen(true);
-                                    }}
-                                  >
-                                    {t("salesReceivables.action.edit")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100"
-                                    onClick={() => {
-                                      if (window.confirm(t("salesReceivables.confirm.postInvoiceAndCreateReceipt", { reference: row.reference }))) {
-                                        postInvoiceMutation
-                                          .mutateAsync({
-                                            id: row.id,
-                                            sourceAction: "POST_AND_CREATE_RECEIPT",
-                                          })
-                                          .then((postedInvoice) => {
-                                            openReceiptEditorForInvoice(postedInvoice, "POST_AND_CREATE_RECEIPT");
-                                          })
-                                          .catch(() => undefined);
-                                      }
-                                    }}
-                                  >
-                                    {t("salesReceivables.action.postAndCreateReceipt")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                                    onClick={() => {
-                                      if (window.confirm(t("salesReceivables.confirm.postInvoice", { reference: row.reference }))) {
-                                        postInvoiceMutation.mutate({
-                                          id: row.id,
-                                          sourceAction: "STANDARD_POST",
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    {t("salesReceivables.action.post")}
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                                  onClick={() => setSelectedInvoiceId(row.id)}
-                                >
-                                  {t("salesReceivables.action.view")}
-                                </button>
-                              )}
-                            </div>
-                          </td>
+
+              <Card className="p-5">
+                <div className="grid gap-4 lg:grid-cols-[1.1fr_0.5fr_0.7fr_auto]">
+                  <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} placeholder={t("salesReceivables.filters.searchInvoices")} />
+                  <Select value={invoiceStatusFilter} onChange={(event) => setInvoiceStatusFilter(event.target.value as SalesInvoiceStatus | "")}>
+                    <option value="">{t("salesReceivables.filters.allStatuses")}</option>
+                    <option value="DRAFT">{t("salesReceivables.status.draft")}</option>
+                    <option value="POSTED">{t("salesReceivables.status.posted")}</option>
+                    <option value="PARTIALLY_PAID">{t("salesReceivables.status.partiallyPaid")}</option>
+                    <option value="FULLY_PAID">{t("salesReceivables.status.fullyPaid")}</option>
+                    <option value="OVERDUE">{t("salesReceivables.status.overdue")}</option>
+                    <option value="CANCELLED">{t("salesReceivables.status.cancelled")}</option>
+                  </Select>
+                  <Select value={invoiceCustomerFilter} onChange={(event) => setInvoiceCustomerFilter(event.target.value)}>
+                    <option value="">{t("salesReceivables.filters.allCustomers")}</option>
+                    {activeCustomers.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.code} · {row.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button className="gap-2" onClick={() => {
+                    setInvoiceEditorClientError(null);
+                    setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+                    setIsInvoiceEditorOpen(true);
+                    }}
+                  >
+                    <CirclePlus className="h-4 w-4 shrink-0" />
+                    {t("salesReceivables.action.newInvoice")}
+                  </Button>
+                </div>
+                <ExportActions
+                  className="mt-4 flex flex-wrap items-center gap-2"
+                  onAction={handleInvoicesExport}
+                  permissions={exportPermissions}
+                  disabled={invoicesQuery.isLoading}
+                />
+              </Card>
+
+              <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                <Card className="overflow-hidden p-0">
+                  <div className="border-b border-gray-200 px-6 py-4">
+                    <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.salesInvoices")}</div>
+                    <div className="text-xs text-gray-500">{t("salesReceivables.section.salesInvoicesDescription")}</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <TableHead>{t("salesReceivables.field.reference")}</TableHead>
+                          <TableHead>{t("salesReceivables.field.customer")}</TableHead>
+                          <TableHead>{t("salesReceivables.field.date")}</TableHead>
+                          <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
+                          <TableHead className="text-right">{t("salesReceivables.metric.outstanding")}</TableHead>
+                          <TableHead className="text-center">{t("salesReceivables.metric.status")}</TableHead>
+                          <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                      </thead>
+                      <tbody>
+                        {invoices.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">
+                              {t("salesReceivables.empty.invoices")}
+                            </td>
+                          </tr>
+                        ) : (
+                          invoices.map((row) => (
+                            <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedInvoice?.id === row.id && "bg-gray-50")}>
+                              <td className="px-6 py-4">
+                                <button type="button" className="text-left" onClick={() => setSelectedInvoiceId(row.id)}>
+                                  <div className="font-bold text-gray-900">{row.reference}</div>
+                                  <div className="text-xs text-gray-500">{row.journalReference ?? t("salesReceivables.empty.noJournal")}</div>
+                                </button>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-semibold text-gray-900">{row.customer.name}</div>
+                                <div className="text-xs text-gray-500">{row.customer.code}</div>
+                              </td>
+                              <td className="px-6 py-4 text-gray-700">{formatDate(row.invoiceDate)}</td>
+                              <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">{formatCurrency(row.totalAmount)}</td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="font-mono font-bold text-gray-900">{formatCurrency(row.outstandingAmount)}</div>
+                                <div className="text-xs text-gray-500">{row.allocationStatus.replaceAll("_", " ")}</div>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <StatusPill label={row.status} tone={row.status === "POSTED" ? "positive" : "warning"} />
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex justify-end gap-2">
+                                  {row.status === "DRAFT" ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                                        onClick={() => {
+                                          setInvoiceEditor({
+                                            id: row.id,
+                                            reference: row.reference,
+                                            invoiceDate: row.invoiceDate.slice(0, 10),
+                                            dueDate: row.dueDate?.slice(0, 10) ?? "",
+                                            currencyCode: row.currencyCode,
+                                            customerId: row.customer.id,
+                                            description: row.description ?? "",
+                                            lines: row.lines.map(mapLineToEditor),
+                                            sourceQuotationId: row.sourceQuotation?.id ?? "",
+                                            sourceSalesOrderId: row.sourceSalesOrder?.id ?? "",
+                                          });
+                                          setInvoiceEditorClientError(null);
+                                          setIsInvoiceEditorOpen(true);
+                                        }}
+                                      >
+                                        {t("salesReceivables.action.edit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100"
+                                        onClick={() => {
+                                          if (window.confirm(t("salesReceivables.confirm.postInvoiceAndCreateReceipt", { reference: row.reference }))) {
+                                            postInvoiceMutation
+                                              .mutateAsync({
+                                                id: row.id,
+                                                sourceAction: "POST_AND_CREATE_RECEIPT",
+                                              })
+                                              .then((postedInvoice) => {
+                                                openReceiptEditorForInvoice(postedInvoice, "POST_AND_CREATE_RECEIPT");
+                                              })
+                                              .catch(() => undefined);
+                                          }
+                                        }}
+                                      >
+                                        {t("salesReceivables.action.postAndCreateReceipt")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                                        onClick={() => {
+                                          if (window.confirm(t("salesReceivables.confirm.postInvoice", { reference: row.reference }))) {
+                                            postInvoiceMutation.mutate({
+                                              id: row.id,
+                                              sourceAction: "STANDARD_POST",
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        {t("salesReceivables.action.post")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                                      onClick={() => setSelectedInvoiceId(row.id)}
+                                    >
+                                      {t("salesReceivables.action.view")}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
 
-            <Card className="space-y-5">
-              <div>
-                <div className="text-lg font-bold text-gray-900">{selectedInvoice?.reference ?? t("salesReceivables.section.invoiceDetails")}</div>
-                <div className="text-sm text-gray-500">{selectedInvoice ? `${selectedInvoice.customer.code} · ${selectedInvoice.customer.name}` : t("salesReceivables.section.invoiceDetailsEmpty")}</div>
-              </div>
-              {selectedInvoice ? (
-                <>
-                  {selectedInvoice.journalReference ? (
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                <Card className="space-y-5">
+                  <div>
+                    <div className="text-lg font-bold text-gray-900">{selectedInvoice?.reference ?? t("salesReceivables.section.invoiceDetails")}</div>
+                    <div className="text-sm text-gray-500">{selectedInvoice ? `${selectedInvoice.customer.code} · ${selectedInvoice.customer.name}` : t("salesReceivables.section.invoiceDetailsEmpty")}</div>
+                  </div>
+                  {selectedInvoice ? (
+                    <>
+                      {selectedInvoice.journalReference ? (
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
                         onClick={() => openJournalEntry(selectedInvoice.journalReference)}
                       >
                         {t("salesReceivables.action.viewJournal")}
@@ -2324,6 +2387,8 @@ export function SalesReceivablesPage() {
               )}
             </Card>
           </div>
+        </>
+      )}
         </div>
       ) : null}
 
@@ -3013,66 +3078,6 @@ export function SalesReceivablesPage() {
         onChange={setOrderEditor}
         onCustomerChange={handleOrderCustomerChange}
         onSubmit={() => (orderEditor.id ? updateOrderMutation.mutate() : createOrderMutation.mutate())}
-      />
-
-      <SalesDocumentEditorModal
-        isOpen={isInvoiceEditorOpen}
-        onClose={() => {
-          setInvoiceEditorClientError(null);
-          setIsInvoiceEditorOpen(false);
-        }}
-        title={
-          invoiceEditor.id
-            ? t("salesReceivables.dialog.editInvoiceDraft")
-            : invoiceEditor.sourceQuotationId || invoiceEditor.sourceSalesOrderId
-              ? t("salesReceivables.action.toInvoice")
-              : t("salesReceivables.dialog.newSalesInvoice")
-        }
-        introTitle={
-          invoiceEditor.sourceQuotationId || invoiceEditor.sourceSalesOrderId
-            ? t("salesReceivables.action.toInvoice")
-            : t("salesReceivables.dialog.newSalesInvoice")
-        }
-        reference={invoiceEditor.reference}
-        dateLabel={t("salesReceivables.field.invoiceDate")}
-        dateValue={invoiceEditor.invoiceDate}
-        secondaryDateLabel={t("salesReceivables.field.dueDate")}
-        secondaryDateValue={invoiceEditor.dueDate}
-        currencyCode={invoiceEditor.currencyCode}
-        customerId={invoiceEditor.customerId}
-        description={invoiceEditor.description}
-        lines={invoiceEditor.lines}
-        customers={activeCustomers}
-        inventoryItems={inventoryItems}
-        warehouses={inventoryWarehouses}
-        isInventoryItemsLoading={inventoryItemsQuery.isLoading}
-        revenueAccounts={revenueAccountsQuery.data ?? []}
-        isSubmitting={isInvoiceSaving || createInvoiceMutation.isPending || updateInvoiceMutation.isPending}
-        validationError={invoiceEditorClientError}
-        defaultLineTax={selectedInvoiceDefaultTax}
-        allowTaxOverride={canOverrideInvoiceTax}
-        onReferenceChange={(value) => setInvoiceEditor((current) => ({ ...current, reference: value }))}
-        onDateChange={(value) => setInvoiceEditor((current) => ({ ...current, invoiceDate: value }))}
-        onSecondaryDateChange={(value) => setInvoiceEditor((current) => ({ ...current, dueDate: value }))}
-        onCurrencyChange={(value) => setInvoiceEditor((current) => ({ ...current, currencyCode: value.toUpperCase() }))}
-        onCustomerChange={handleInvoiceCustomerChange}
-        onDescriptionChange={(value) => setInvoiceEditor((current) => ({ ...current, description: value }))}
-        onLinesChange={(lines) => setInvoiceEditor((current) => ({ ...current, lines }))}
-        onDraftSubmit={() => {
-          void saveInvoiceFromEditor();
-        }}
-        draftSubmitLabel={t("salesReceivables.action.saveDraft")}
-        onPostSubmit={() => {
-          void saveAndPostInvoiceFromEditor();
-        }}
-        postSubmitLabel={t("salesReceivables.action.postInvoice")}
-        onPostAndCreateReceiptSubmit={() => {
-          void saveAndCreateReceiptFromInvoiceEditor();
-        }}
-        postAndCreateReceiptLabel={t("salesReceivables.action.postAndCreateReceipt")}
-        postAndCreateReceiptTooltip={t("salesReceivables.tooltip.postAndCreateReceipt")}
-        isPostSubmitting={postInvoiceMutation.isPending}
-        isPostAndCreateReceiptSubmitting={postInvoiceMutation.isPending}
       />
 
       <CreditNoteEditorModal
