@@ -169,8 +169,10 @@ export function SalesDocumentEditorModal({
       <div
         dir={isArabic ? "rtl" : "ltr"}
         className={cn(
-          "relative mx-auto flex flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
-          isInline ? "min-h-[calc(100vh-220px)] w-full" : "h-full max-h-full max-w-[1720px]",
+          "relative mx-auto flex flex-col overflow-hidden",
+          isInline
+            ? "min-h-[calc(100vh-220px)] w-full bg-transparent"
+            : "h-full max-h-full max-w-[1720px] rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
           isArabic && "arabic-ui",
         )}
       >
@@ -183,128 +185,134 @@ export function SalesDocumentEditorModal({
           <X className="h-6 w-6" />
         </button>
 
-        <div className="flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-5">
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+            isInline ? "px-0 pb-2 pt-1 sm:px-0 sm:pb-3 sm:pt-1" : "px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-5",
+          )}
+        >
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             {validationError ? (
               <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-[0_10px_24px_rgba(239,68,68,0.08)]">
                 {validationError}
               </div>
             ) : null}
 
-            <section className="shrink-0 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className={cn("text-lg text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
-                    {introTitle}
+            <section className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:px-6 sm:py-6">
+              <div className="shrink-0 border-b border-slate-200/90 pb-4">
+                <div className={cn("mb-4 flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <FileText className="h-5 w-5" />
                   </div>
-                  {introDescription ? <div className="text-sm text-slate-500">{introDescription}</div> : null}
-                </div>
-              </div>
-
-              <div className={cn("grid gap-4 xl:grid-cols-[1.45fr_1fr_1fr_0.8fr]")}>
-                <Field label={t("salesReceivables.field.customer")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
-                  <div className="relative">
-                    <Select
-                      value={customerId}
-                      onChange={(event) => onCustomerChange(event.target.value)}
-                      className={cn("border-slate-200 bg-slate-50/70", isArabic ? "arabic-ui pe-12 text-right" : "ps-12")}
-                    >
-                      <option value="">{t("salesReceivables.empty.selectActiveCustomer")}</option>
-                      {customers.map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {row.code} · {row.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
-                  </div>
-                  <div className="mt-2">
-                    <div className={cn(
-                      "inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ring-1 ring-inset",
-                      customerId
-                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                        : "bg-slate-50 text-slate-500 ring-slate-200"
-                    )}>
-                      <span className={cn(isArabic && "arabic-ui")}>
-                        {t("salesReceivables.field.customerTaxTreatment")}: {" "}
-                        {customerId ? (
-                          customers.find(c => c.id === customerId)?.taxTreatment ? (
-                            isArabic
-                              ? customers.find(c => c.id === customerId)?.taxTreatment?.arabicName
-                              : customers.find(c => c.id === customerId)?.taxTreatment?.englishName
-                          ) : t("salesReceivables.empty.notSet")
-                        ) : t("salesReceivables.empty.selectCustomerToViewTaxTreatment")}
-                      </span>
+                  <div>
+                    <div className={cn("text-lg text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
+                      {introTitle}
                     </div>
+                    {introDescription ? <div className="text-sm text-slate-500">{introDescription}</div> : null}
                   </div>
-                </Field>
+                </div>
 
-                <Field label={dateLabel} required labelClassName={isArabic ? "arabic-ui" : undefined}>
-                  <div className="relative">
-                    <Input
-                      type="date"
-                      value={dateValue}
-                      onChange={(event) => onDateChange(event.target.value)}
-                      className={cn("border-slate-200 bg-slate-50/70", isArabic ? "arabic-ui pe-12 text-right" : "ps-12")}
-                    />
-                    <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
-                  </div>
-                </Field>
+                <div className={cn("grid gap-4 xl:grid-cols-[1.45fr_1fr_1fr_0.8fr]")}>
+                  <Field label={t("salesReceivables.field.customer")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
+                    <div className="relative">
+                      <Select
+                        value={customerId}
+                        onChange={(event) => onCustomerChange(event.target.value)}
+                        className={cn("border-slate-200 bg-slate-50/70", isArabic ? "arabic-ui pe-12 text-right" : "ps-12")}
+                      >
+                        <option value="">{t("salesReceivables.empty.selectActiveCustomer")}</option>
+                        {customers.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.code} · {row.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
+                    </div>
+                    <div className="mt-2">
+                      <div className={cn(
+                        "inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ring-1 ring-inset",
+                        customerId
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : "bg-slate-50 text-slate-500 ring-slate-200"
+                      )}>
+                        <span className={cn(isArabic && "arabic-ui")}>
+                          {t("salesReceivables.field.customerTaxTreatment")}: {" "}
+                          {customerId ? (
+                            customers.find(c => c.id === customerId)?.taxTreatment ? (
+                              isArabic
+                                ? customers.find(c => c.id === customerId)?.taxTreatment?.arabicName
+                                : customers.find(c => c.id === customerId)?.taxTreatment?.englishName
+                            ) : t("salesReceivables.empty.notSet")
+                          ) : t("salesReceivables.empty.selectCustomerToViewTaxTreatment")}
+                        </span>
+                      </div>
+                    </div>
+                  </Field>
 
-                {secondaryDateLabel && onSecondaryDateChange ? (
-                  <Field label={secondaryDateLabel} labelClassName={isArabic ? "arabic-ui" : undefined}>
+                  <Field label={dateLabel} required labelClassName={isArabic ? "arabic-ui" : undefined}>
                     <div className="relative">
                       <Input
                         type="date"
-                        value={secondaryDateValue ?? ""}
-                        onChange={(event) => onSecondaryDateChange(event.target.value)}
+                        value={dateValue}
+                        onChange={(event) => onDateChange(event.target.value)}
                         className={cn("border-slate-200 bg-slate-50/70", isArabic ? "arabic-ui pe-12 text-right" : "ps-12")}
                       />
                       <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
                     </div>
                   </Field>
-                ) : null}
 
-                <Field label={t("salesReceivables.field.currency")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
-                  <Input
-                    value={currencyCode}
-                    onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())}
-                    maxLength={3}
-                    className={cn("border-slate-200 bg-slate-50/70 uppercase", isArabic && "arabic-ui text-right")}
-                  />
-                </Field>
-              </div>
-            </section>
+                  {secondaryDateLabel && onSecondaryDateChange ? (
+                    <Field label={secondaryDateLabel} labelClassName={isArabic ? "arabic-ui" : undefined}>
+                      <div className="relative">
+                        <Input
+                          type="date"
+                          value={secondaryDateValue ?? ""}
+                          onChange={(event) => onSecondaryDateChange(event.target.value)}
+                          className={cn("border-slate-200 bg-slate-50/70", isArabic ? "arabic-ui pe-12 text-right" : "ps-12")}
+                        />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
+                      </div>
+                    </Field>
+                  ) : null}
 
-            <section className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <Package2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className={cn("text-lg text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
-                      {t("salesReceivables.section.documentLines")}
-                    </div>
-                    <div className="text-sm text-slate-500">{t("salesReceivables.section.documentLinesDescription")}</div>
-                  </div>
+                  <Field label={t("salesReceivables.field.currency")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
+                    <Input
+                      value={currencyCode}
+                      onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())}
+                      maxLength={3}
+                      className={cn("border-slate-200 bg-slate-50/70 uppercase", isArabic && "arabic-ui text-right")}
+                    />
+                  </Field>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={addLine}
-                  className="rounded-2xl border-emerald-200 px-4 text-emerald-700 hover:bg-emerald-50"
-                >
-                  <CirclePlus className="h-4 w-4" />
-                  {t("salesReceivables.action.addLine")}
-                </Button>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50/50">
-                <div className="h-full overflow-auto">
+              <div className="flex min-h-0 flex-1 flex-col pt-4">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                      <Package2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className={cn("text-lg text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
+                        {t("salesReceivables.section.documentLines")}
+                      </div>
+                      <div className="text-sm text-slate-500">{t("salesReceivables.section.documentLinesDescription")}</div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={addLine}
+                    className="rounded-2xl border-emerald-200 px-4 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <CirclePlus className="h-4 w-4" />
+                    {t("salesReceivables.action.addLine")}
+                  </Button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50/40">
+                  <div className="h-full overflow-auto">
                   <table className="min-w-[1500px] table-fixed border-separate border-spacing-0">
                     <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_rgba(226,232,240,1)]">
                       <tr>
@@ -546,71 +554,86 @@ export function SalesDocumentEditorModal({
                       })}
                     </tbody>
                   </table>
+                  </div>
+                </div>
+
+                <div className={cn("mt-4 flex shrink-0", isArabic ? "justify-start" : "justify-end")}>
+                  <div className="w-full max-w-[400px] rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-none">
+                    <div className={cn("mb-3 text-sm font-extrabold text-slate-900", isArabic ? "text-right arabic-ui" : "text-left")}>
+                      {t("salesReceivables.metric.invoiceTotal")}
+                    </div>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-4 text-sm text-slate-600">
+                        <span className={cn(isArabic && "arabic-ui")}>{t("salesReceivables.metric.subtotal")}</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {currencyCode || "JOD"} {totals.subtotalAmount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 text-sm text-slate-600">
+                        <span className={cn(isArabic && "arabic-ui")}>{t("salesReceivables.metric.tax")}</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="border-t border-slate-200 pt-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className={cn("text-base font-black text-slate-900", isArabic && "arabic-ui")}>
+                            {t("salesReceivables.metric.total")}
+                          </span>
+                          <span className="font-mono text-2xl font-black text-emerald-700">
+                            {currencyCode || "JOD"} {totals.totalAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 shrink-0 border-t border-slate-200 pt-4">
+                  <div
+                    className={cn(
+                      "flex flex-wrap items-center gap-3",
+                      isArabic ? "justify-start sm:flex-row-reverse" : "justify-end",
+                    )}
+                  >
+                    <Button variant="secondary" onClick={onClose} className="rounded-2xl px-6">
+                      {t("salesReceivables.action.cancel")}
+                    </Button>
+                    {onPostAndCreateReceiptSubmit && postAndCreateReceiptLabel ? (
+                      <Button
+                        variant="secondary"
+                        onClick={onPostAndCreateReceiptSubmit}
+                        disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
+                        title={postAndCreateReceiptTooltip}
+                        className="rounded-2xl border-sky-200 px-6 text-sky-700 hover:bg-sky-50"
+                      >
+                        <ReceiptText className="h-4 w-4" />
+                        {postAndCreateReceiptLabel}
+                      </Button>
+                    ) : null}
+                    {onPostSubmit && postSubmitLabel ? (
+                      <Button
+                        variant="secondary"
+                        onClick={onPostSubmit}
+                        disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
+                        className="rounded-2xl border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50"
+                      >
+                        <FileText className="h-4 w-4" />
+                        {postSubmitLabel}
+                      </Button>
+                    ) : null}
+                    <Button
+                      onClick={onDraftSubmit}
+                      disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
+                      className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700"
+                    >
+                      <Save className="h-4 w-4" />
+                      {draftSubmitLabel}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </section>
-
-            <section className="shrink-0 rounded-[1.75rem] border border-slate-200 bg-white/95 p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] backdrop-blur">
-              <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr_1fr]">
-                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/80 p-5 shadow-[0_10px_24px_rgba(16,185,129,0.08)]">
-                  <div className="text-sm font-bold text-emerald-700">{t("salesReceivables.metric.total")}</div>
-                  <div className="mt-2 text-3xl font-black text-emerald-700">
-                    {currencyCode || "JOD"} {totals.totalAmount.toFixed(2)}
-                  </div>
-                </div>
-                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-bold text-slate-500">{t("salesReceivables.metric.subtotal")}</div>
-                  <div className="mt-2 text-2xl font-black text-slate-900">
-                    {currencyCode || "JOD"} {totals.subtotalAmount.toFixed(2)}
-                  </div>
-                </div>
-                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-bold text-slate-500">{t("salesReceivables.metric.tax")}</div>
-                  <div className="mt-2 text-2xl font-black text-slate-900">
-                    {currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8">
-          <div className={cn("flex flex-col gap-3 sm:flex-row", isArabic ? "sm:flex-row-reverse" : "")}>
-            <Button
-              onClick={onDraftSubmit}
-              disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
-              className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700"
-            >
-              <Save className="h-4 w-4" />
-              {draftSubmitLabel}
-            </Button>
-            {onPostSubmit && postSubmitLabel ? (
-              <Button
-                variant="secondary"
-                onClick={onPostSubmit}
-                disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
-                className="rounded-2xl border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50"
-              >
-                <FileText className="h-4 w-4" />
-                {postSubmitLabel}
-              </Button>
-            ) : null}
-            {onPostAndCreateReceiptSubmit && postAndCreateReceiptLabel ? (
-              <Button
-                variant="secondary"
-                onClick={onPostAndCreateReceiptSubmit}
-                disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
-                title={postAndCreateReceiptTooltip}
-                className="rounded-2xl border-sky-200 px-6 text-sky-700 hover:bg-sky-50"
-              >
-                <ReceiptText className="h-4 w-4" />
-                {postAndCreateReceiptLabel}
-              </Button>
-            ) : null}
-            <Button variant="secondary" onClick={onClose} className="rounded-2xl px-6">
-              {t("salesReceivables.action.cancel")}
-            </Button>
           </div>
         </div>
       </div>

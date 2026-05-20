@@ -71,7 +71,7 @@ import type {
   Tax,
   TaxTreatment,
 } from "@/types/api";
-import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { exportOrPrint, formatExportDate, formatExportMoney, type ExportMode } from "@/lib/export-print";
@@ -89,6 +89,17 @@ import { SalesDocumentEditorModal } from "./components/sales-document-editor-mod
 import { SalesOrderEditorModal } from "./components/sales-order-editor-modal";
 
 type SalesTab = "customers" | "sales-reps" | "quotations" | "orders" | "invoices" | "receipts" | "credit-notes" | "aging";
+
+const SALES_TAB_BREADCRUMB_LABELS: Record<SalesTab, string> = {
+  customers: "العملاء",
+  "sales-reps": "مندوبي المبيعات",
+  quotations: "عروض الأسعار",
+  orders: "أوامر البيع",
+  invoices: "الفواتير",
+  receipts: "المقبوضات",
+  "credit-notes": "الإشعارات الدائنة",
+  aging: "أعمار الذمم",
+};
 
 type CustomerEditorState = {
   id?: string;
@@ -1560,23 +1571,24 @@ export function SalesReceivablesPage() {
     setCreditNoteEditor(EMPTY_CREDIT_NOTE_EDITOR());
   };
 
+  const activeTabBreadcrumbLabel = SALES_TAB_BREADCRUMB_LABELS[activeTab];
+
   return (
     <PageShell className={cn(isInlineInvoiceWorkspace ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
       <div className={cn(isInlineInvoiceWorkspace ? "space-y-4" : "space-y-8")}>
-        {isInlineInvoiceWorkspace ? (
-          <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
-            <span className="text-gray-700">المبيعات</span>
-            <span className="mx-2 text-gray-300">/</span>
-            <span className="text-gray-700">الفواتير</span>
-            <span className="mx-2 text-gray-300">/</span>
-            <span className="text-teal-700">فاتورة جديدة</span>
-          </div>
-        ) : (
-          <SectionHeading
-            title={t("salesReceivables.title")}
-            description={t("salesReceivables.description")}
-          />
-        )}
+        <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
+          <span className="text-gray-700">المبيعات</span>
+          <span className="mx-2 text-gray-300">/</span>
+          <span className={cn(activeTab === "invoices" && !isInlineInvoiceWorkspace ? "text-teal-700" : "text-gray-700")}>
+            {activeTabBreadcrumbLabel}
+          </span>
+          {isInlineInvoiceWorkspace ? (
+            <>
+              <span className="mx-2 text-gray-300">/</span>
+              <span className="text-teal-700">فاتورة جديدة</span>
+            </>
+          ) : null}
+        </div>
 
         {errorMessage ? <Card className="border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</Card> : null}
 
