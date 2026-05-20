@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { SiQuickbooks } from "react-icons/si";
 import {
@@ -84,7 +84,21 @@ const navGroups: NavGroup[] = [
       { href: "/accounts", labelKey: "nav.item.chartOfAccounts", icon: BookOpen },
       { href: "/bank-cash-accounts", labelKey: "nav.item.bankCashAccounts", icon: WalletMinimal },
       { href: "/bank-reconciliations", labelKey: "nav.item.bankReconciliations", icon: BadgeCheck },
-      { href: "/sales-receivables", labelKey: "nav.item.salesReceivables", icon: Users },
+      {
+        href: "/sales-receivables",
+        labelKey: "nav.item.salesReceivables",
+        icon: Users,
+        children: [
+          { href: "/sales-receivables?tab=customers", labelKey: "salesReceivables.tab.customers" },
+          { href: "/sales-receivables?tab=sales-reps", labelKey: "salesReceivables.tab.salesReps" },
+          { href: "/sales-receivables?tab=quotations", labelKey: "salesReceivables.tab.quotations" },
+          { href: "/sales-receivables?tab=orders", labelKey: "salesReceivables.tab.orders" },
+          { href: "/sales-receivables?tab=invoices", labelKey: "salesReceivables.tab.invoices" },
+          { href: "/sales-receivables?tab=receipts", labelKey: "salesReceivables.tab.receipts" },
+          { href: "/sales-receivables?tab=credit-notes", labelKey: "salesReceivables.tab.creditNotes" },
+          { href: "/sales-receivables?tab=aging", labelKey: "salesReceivables.tab.aging" },
+        ],
+      },
       {
         href: "/pos",
         labelKey: "nav.item.pos",
@@ -115,7 +129,20 @@ const navGroups: NavGroup[] = [
       { href: "/inventory", labelKey: "nav.item.inventory", icon: Package },
       // { href: "/payroll", labelKey: "nav.item.payroll", icon: BadgeDollarSign },
       // { href: "/fixed-assets", labelKey: "nav.item.fixedAssets", icon: Building2 },
-      { href: "/reporting", labelKey: "nav.item.reporting", icon: ChartPie },
+      {
+        href: "/reporting",
+        labelKey: "nav.item.reporting",
+        icon: ChartPie,
+        children: [
+          { href: "/reporting?tab=summary", labelKey: "reporting.tab.summary" },
+          { href: "/reporting?tab=trialBalance", labelKey: "reporting.tab.trialBalance" },
+          { href: "/reporting?tab=balanceSheet", labelKey: "reporting.tab.balanceSheet" },
+          { href: "/reporting?tab=profitLoss", labelKey: "reporting.tab.profitLoss" },
+          { href: "/reporting?tab=cashMovement", labelKey: "reporting.tab.cashMovement" },
+          { href: "/reporting?tab=generalLedger", labelKey: "reporting.tab.generalLedger" },
+          { href: "/reporting?tab=audit", labelKey: "reporting.tab.audit" },
+        ],
+      },
       { href: "/journal-entries", labelKey: "nav.item.journalEntries", icon: FileText },
       { href: "/general-ledger", labelKey: "nav.item.generalLedger", icon: BarChart2 },
     ],
@@ -145,6 +172,7 @@ export function SiteHeader({
   onToggleCollapsed?: () => void;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, isHydrated, logout, user, token } = useAuth();
@@ -152,6 +180,7 @@ export function SiteHeader({
   const { language, setLanguage } = useSettings();
 
   const isLoginPage = pathname === "/login" || pathname === "/register";
+  const currentLocation = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
 
   if (isLoginPage) {
     return (
@@ -403,6 +432,23 @@ export function SiteHeader({
     }))
     .filter((group) => group.items.length > 0);
 
+  const matchesHref = (targetHref: string) => {
+    const target = new URL(targetHref, "http://localhost");
+    const current = new URL(currentLocation || "/", "http://localhost");
+
+    if (target.pathname !== current.pathname) {
+      return false;
+    }
+
+    for (const [key, value] of target.searchParams.entries()) {
+      if (current.searchParams.get(key) !== value) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   return (
     <aside
       className={cn(
@@ -469,8 +515,9 @@ export function SiteHeader({
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(item.href + "/") ||
+                  matchesHref(item.href) ||
+                  pathname === item.href.split("?")[0] ||
+                  pathname.startsWith(item.href.split("?")[0] + "/") ||
                   (item.labelKey === "nav.item.pos" && pathname.startsWith("/pos"));
                 return (
                   <div key={item.href}>
@@ -493,7 +540,10 @@ export function SiteHeader({
                     {item.children && item.children.length > 0 && isActive && !isCollapsed && (
                       <div className="mt-2 space-y-1 pe-3 ps-9">
                         {item.children.map((child) => {
-                          const isChildActive = pathname === child.href || pathname.startsWith(child.href + "/");
+                          const childPath = child.href.split("?")[0];
+                          const isChildActive = child.href.includes("?")
+                            ? matchesHref(child.href)
+                            : pathname === childPath || pathname.startsWith(childPath + "/");
                           const ChildIcon = child.icon;
 
                           return (

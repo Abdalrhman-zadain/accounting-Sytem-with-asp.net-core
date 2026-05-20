@@ -105,6 +105,12 @@ This document captures the Phase 8 Reporting & Control requirements baseline in 
 | REQ-RPT-036 | The system shall keep general ledger inquiry aligned with the same posted-ledger source used by trial balance, balance sheet, and profit and loss reports. | يجب أن يحافظ النظام على توافق استعلام دفتر الأستاذ العام مع نفس مصدر دفتر الأستاذ المرحل المستخدم في ميزان المراجعة والميزانية العمومية وقائمة الأرباح والخسائر. |
 | REQ-RPT-037 | The system shall allow the user to reach general ledger details from other report drill-through actions where supported. | يجب أن يسمح النظام للمستخدم بالوصول إلى تفاصيل دفتر الأستاذ العام من إجراءات الانتقال التفصيلي في التقارير الأخرى عند الدعم. |
 
+Current implementation detail:
+
+- The general ledger detail table renders in the order `Date`, `Voucher Name`, `Description / Statement`, `Debit`, `Credit`, `Running Balance`, and `Reference`.
+- Printable/exported general ledger output appends a closing summary section showing `Movement Balance`, `Total Debit`, `Total Credit`, `Total`, and `Final Balance`.
+- The reporting workspace subsections are reachable from sidebar children under `Reporting` using the same query-driven workspace pattern used by `Purchases`.
+
 ## 7. Audit Reports | تقارير التدقيق
 
 | Req ID | English Requirement | الترجمة العربية |

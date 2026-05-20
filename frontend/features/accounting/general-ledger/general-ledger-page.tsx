@@ -108,16 +108,17 @@ export function GeneralLedgerPage() {
                             <thead className="border-b border-gray-200 bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.date")}</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.reference")}</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.description")}</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.voucherName")}</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.descriptionStatement")}</th>
                                     <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.debit")}</th>
                                     <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.credit")}</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.balance")}</th>
+                                    <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.runningBalance")}</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.reference")}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {ledgerQuery.isLoading ? (
-                                    <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-600">{t("ledger.loading")}</td></tr>
+                                    <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-600">{t("ledger.loading")}</td></tr>
                                 ) : (
                                     <>
                                         {/* Opening Balance Row */}
@@ -130,10 +131,11 @@ export function GeneralLedgerPage() {
                                             <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-teal-400 font-black">
                                                 {formatCurrency(openingBalance)}
                                             </td>
+                                            <td className="px-6 py-3 text-xs text-gray-500">—</td>
                                         </tr>
 
                                         {entries.length === 0 ? (
-                                            <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-600 italic">{t("ledger.empty.noMovements")}</td></tr>
+                                            <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-600 italic">{t("ledger.empty.noMovements")}</td></tr>
                                         ) : entries.map((entry, idx) => {
                                             const dr = parseFloat(entry.debitAmount);
                                             const cr = parseFloat(entry.creditAmount);
@@ -142,9 +144,9 @@ export function GeneralLedgerPage() {
                                                 <tr key={entry.id} className={cn("hover:bg-gray-50 transition-colors", idx % 2 === 0 ? "" : "bg-gray-50")}>
                                                     <td className="px-6 py-3 text-xs text-gray-400 tabular-nums">{formatDate(entry.entryDate)}</td>
                                                     <td className="px-6 py-3">
-                                                        <span className="font-mono text-xs font-bold text-teal-400">{entry.reference || "—"}</span>
+                                                        <span className="font-mono text-xs font-bold text-teal-400">{entry.journalReference || entry.reference || "—"}</span>
                                                     </td>
-                                                    <td className="px-6 py-3 text-xs text-gray-500 max-w-[200px] truncate">{entry.description || "—"}</td>
+                                                    <td className="px-6 py-3 text-xs text-gray-500 max-w-[260px] truncate">{entry.description || "—"}</td>
                                                     <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-teal-400 font-bold">
                                                         {dr > 0 ? formatCurrency(dr) : "—"}
                                                     </td>
@@ -153,6 +155,9 @@ export function GeneralLedgerPage() {
                                                     </td>
                                                     <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-zinc-200 font-black">
                                                         {formatCurrency(runBal)}
+                                                    </td>
+                                                    <td className="px-6 py-3">
+                                                        <span className="font-mono text-xs font-bold text-teal-400">{entry.reference || "—"}</span>
                                                     </td>
                                                 </tr>
                                             );
@@ -166,6 +171,7 @@ export function GeneralLedgerPage() {
                                     <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-teal-400">{formatCurrency(totalDebit)}</td>
                                     <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-orange-400">{formatCurrency(totalCredit)}</td>
                                     <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-gray-900">{formatCurrency(selectedAccount?.currentBalance ?? "0")}</td>
+                                    <td className="px-6 py-4" />
                                 </tr>
                             </tfoot>
                         </table>

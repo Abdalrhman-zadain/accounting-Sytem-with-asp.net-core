@@ -1,17 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LuBookText as BookText,
   LuCirclePlus as CirclePlus,
-  LuFileMinus as FileMinus,
-  LuFilePlus2 as FilePlus,
-  LuFileText as FileText,
-  LuReceiptText as ReceiptText,
-  LuScrollText as ScrollText,
-  LuUsers as Users,
 } from "react-icons/lu";
 
 import {
@@ -243,6 +237,9 @@ export function SalesReceivablesPage() {
   const { token, user } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [, startTabTransition] = useTransition();
 
   const [activeTab, setActiveTab] = useState<SalesTab>("customers");
 
@@ -296,6 +293,32 @@ export function SalesReceivablesPage() {
   const [receiptEditorLockedToInvoice, setReceiptEditorLockedToInvoice] = useState(false);
 
   const [agingDate, setAgingDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const selectTab = useCallback(
+    (nextTab: SalesTab) => {
+      setActiveTab(nextTab);
+
+      const nextSearchParams = new URLSearchParams(searchParams.toString());
+      nextSearchParams.set("tab", nextTab);
+      const nextQuery = nextSearchParams.toString();
+
+      startTabTransition(() => {
+        router.replace(nextQuery ? `/sales-receivables?${nextQuery}` : "/sales-receivables");
+      });
+    },
+    [router, searchParams, startTabTransition],
+  );
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (!requestedTab) return;
+
+    const allowedTabs: SalesTab[] = ["customers", "sales-reps", "quotations", "orders", "invoices", "receipts", "credit-notes", "aging"];
+    if (!allowedTabs.includes(requestedTab as SalesTab)) return;
+    if (requestedTab === activeTab) return;
+
+    setActiveTab(requestedTab as SalesTab);
+  }, [activeTab, searchParams]);
 
   const customersQuery = useQuery({
     queryKey: queryKeys.salesCustomers(token, { search: customerSearch, isActive: customerStatusFilter, salesRepId: customerSalesRepFilter }),
@@ -691,7 +714,7 @@ export function SalesReceivablesPage() {
     });
     setInvoiceEditorClientError(null);
     setIsInvoiceEditorOpen(true);
-    setActiveTab("invoices");
+    selectTab("invoices");
   };
 
   const openInvoiceEditorFromOrder = (orderId: string) => {
@@ -714,7 +737,7 @@ export function SalesReceivablesPage() {
     });
     setInvoiceEditorClientError(null);
     setIsInvoiceEditorOpen(true);
-    setActiveTab("invoices");
+    selectTab("invoices");
   };
 
   const handleInvoiceCustomerChange = (value: string) => {
@@ -847,7 +870,7 @@ export function SalesReceivablesPage() {
     });
     setReceiptEditorLockedToInvoice(true);
     setIsReceiptEditorOpen(true);
-    setActiveTab("receipts");
+    selectTab("receipts");
     setSelectedInvoiceId(invoice.id);
   };
 
@@ -988,7 +1011,7 @@ export function SalesReceivablesPage() {
     onSuccess: async (created) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedOrderId(created.id);
-      setActiveTab("orders");
+      selectTab("orders");
     },
   });
 
@@ -1076,7 +1099,7 @@ export function SalesReceivablesPage() {
     onSuccess: async (created) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedInvoiceId(created.id);
-      setActiveTab("invoices");
+      selectTab("invoices");
     },
   });
 
@@ -1536,17 +1559,6 @@ export function SalesReceivablesPage() {
     setCreditNoteEditor(EMPTY_CREDIT_NOTE_EDITOR());
   };
 
-  const tabs: Array<{ id: SalesTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { id: "customers", label: t("salesReceivables.tab.customers"), icon: Users },
-    { id: "sales-reps", label: "مندوبي المبيعات", icon: Users },
-    { id: "quotations", label: t("salesReceivables.tab.quotations"), icon: FilePlus },
-    { id: "orders", label: t("salesReceivables.tab.orders"), icon: ScrollText },
-    { id: "invoices", label: t("salesReceivables.tab.invoices"), icon: FileText },
-    { id: "receipts", label: t("salesReceivables.tab.receipts"), icon: ReceiptText },
-    { id: "credit-notes", label: t("salesReceivables.tab.creditNotes"), icon: FileMinus },
-    { id: "aging", label: t("salesReceivables.tab.aging"), icon: BookText },
-  ];
-
   return (
     <PageShell>
       <div className="space-y-8">
@@ -1554,27 +1566,6 @@ export function SalesReceivablesPage() {
           title={t("salesReceivables.title")}
           description={t("salesReceivables.description")}
         />
-
-        <div className="flex flex-wrap gap-3">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold transition-colors",
-                  active ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
 
         {errorMessage ? <Card className="border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</Card> : null}
 

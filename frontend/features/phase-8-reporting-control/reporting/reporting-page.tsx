@@ -767,18 +767,19 @@ export function ReportingPage() {
 
       {reportingWarnings.length ? <WarningsCard warnings={reportingWarnings} activeTab={activeTab} t={t} /> : null}
 
-      <Card className="mt-6 flex flex-wrap gap-3 p-3">
-        {visibleTabs.map((tab) => (
-          <Button key={tab.id} variant={activeTab === tab.id ? "primary" : "secondary"} onClick={() => setActiveTab(tab.id)}>
-            {t(tab.labelKey)}
-          </Button>
-        ))}
-      </Card>
-
       <div className="mt-6 space-y-6">
         {activeTab === "summary" ? <SummarySection data={summaryQuery.data} error={summaryQuery.error} loading={summaryQuery.isLoading} t={t} /> : null}
         {activeTab === "trialBalance" ? (
-          <TrialBalanceSection data={trialBalanceQuery.data} error={trialBalanceQuery.error} loading={trialBalanceQuery.isLoading} t={t} onSelectAccount={setAccountId} />
+          <TrialBalanceSection
+            data={trialBalanceQuery.data}
+            error={trialBalanceQuery.error}
+            loading={trialBalanceQuery.isLoading}
+            t={t}
+            onSelectAccount={(id) => {
+              setAccountId(id);
+              setActiveTab("generalLedger");
+            }}
+          />
         ) : null}
         {activeTab === "balanceSheet" ? <BalanceSheetSection data={balanceSheetQuery.data} error={balanceSheetQuery.error} loading={balanceSheetQuery.isLoading} t={t} /> : null}
         {activeTab === "profitLoss" ? <ProfitLossSection data={profitLossQuery.data} error={profitLossQuery.error} loading={profitLossQuery.isLoading} t={t} /> : null}
@@ -1087,29 +1088,21 @@ function GeneralLedgerSection({
         <Table
           headers={[
             t("reporting.column.date"),
-            t("reporting.column.reference"),
-            t("reporting.column.journal"),
-            t("reporting.column.description"),
+            t("reporting.column.voucherName"),
+            t("reporting.column.descriptionStatement"),
             t("reporting.column.debit"),
             t("reporting.column.credit"),
             t("reporting.column.runningBalance"),
-            t("reporting.column.source"),
+            t("reporting.column.reference"),
           ]}
           rows={data.transactions.map((row) => [
             formatDate(row.entryDate),
-            row.reference,
             row.journalReference,
             row.description || row.journalDescription || t("reporting.value.none"),
             formatCurrency(row.debitAmount),
             formatCurrency(row.creditAmount),
             formatCurrency(row.runningBalance),
-            row.sourceDocument ? (
-              <Link key={`${row.id}-source`} href={row.sourceDocument.path} className="text-sm font-semibold text-primary hover:underline">
-                {row.sourceDocument.label}: {row.sourceDocument.reference}
-              </Link>
-            ) : (
-              t("reporting.value.none")
-            ),
+            row.reference || t("reporting.value.none"),
           ])}
           emptyLabel={t("reporting.value.noRows")}
         />

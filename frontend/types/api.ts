@@ -3671,6 +3671,7 @@ export type JournalEntriesQuery = {
 export type LedgerEntry = {
   id: string;
   reference: string;
+  journalReference: string;
   journalEntryId: string;
   journalEntryLineId: string;
   postingBatchId: string;

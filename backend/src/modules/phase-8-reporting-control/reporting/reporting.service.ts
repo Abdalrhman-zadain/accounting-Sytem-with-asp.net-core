@@ -31,6 +31,7 @@ type AmountMap = Map<string, { debit: number; credit: number }>;
 type AuthUser = { userId: string; email?: string; role?: string };
 type RawRow = Record<string, unknown>;
 type ExportSection = { headers: string[]; rows: Array<Array<string | number | null | undefined>> };
+type ExportSummaryRow = { label: string; amount: string };
 type WorkbookCell = { value: string | number; kind?: "title" | "meta" | "header" | "currency" | "text" };
 type WorkbookSheet = { name: string; rows: WorkbookCell[][] };
 
@@ -1504,8 +1505,16 @@ export class ReportingService {
     if (reportType === "generalLedger") {
       return [
         {
-          headers: ["Date", "Reference", "Journal", "Description", "Debit", "Credit", "RunningBalance"],
-          rows: reportData.transactions.map((row: any) => [row.entryDate, row.reference, row.journalReference, row.description ?? row.journalDescription ?? "", row.debitAmount, row.creditAmount, row.runningBalance]),
+          headers: ["Date", "Voucher Name", "Description / Statement", "Debit", "Credit", "Running Balance", "Reference"],
+          rows: reportData.transactions.map((row: any) => [
+            row.entryDate,
+            row.journalReference,
+            row.description ?? row.journalDescription ?? "",
+            row.debitAmount,
+            row.creditAmount,
+            row.runningBalance,
+            row.reference,
+          ]),
         },
       ];
     }
@@ -1533,6 +1542,7 @@ export class ReportingService {
 
   private renderHtmlExport(title: string, reportType: string, reportData: any, generatedAt: string) {
     const sections = this.flattenExportRows(reportType, reportData);
+    const summaryRows = this.buildExportSummaryRows(reportType, reportData);
     const tables = sections
       .map(
         (section) => `
@@ -1547,6 +1557,20 @@ export class ReportingService {
         `,
       )
       .join("");
+    const summaryTable =
+      summaryRows.length > 0
+        ? `
+          <section class="summary-section">
+            <h2>Summary</h2>
+            <table>
+              <thead><tr><th>Label</th><th>Amount</th></tr></thead>
+              <tbody>
+                ${summaryRows.map((row) => `<tr><td>${this.escapeHtml(row.label)}</td><td>${this.escapeHtml(row.amount)}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </section>
+        `
+        : "";
 
     return `
       <!doctype html>
@@ -1557,16 +1581,19 @@ export class ReportingService {
           <style>
             body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
             h1 { margin-bottom: 8px; }
+            h2 { margin: 24px 0 8px; font-size: 18px; }
             p { color: #4b5563; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; }
             th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px; }
             th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; }
+            .summary-section { page-break-inside: avoid; }
           </style>
         </head>
         <body>
           <h1>${this.escapeHtml(title)}</h1>
           <p>Report type: ${this.escapeHtml(reportType)}<br/>Generated at: ${this.escapeHtml(generatedAt)}</p>
           ${tables}
+          ${summaryTable}
         </body>
       </html>
     `;
@@ -1574,6 +1601,7 @@ export class ReportingService {
 
   private renderPdfExport(title: string, reportType: string, reportData: any, generatedAt: string) {
     const sections = this.flattenExportRows(reportType, reportData);
+    const summaryRows = this.buildExportSummaryRows(reportType, reportData);
     const lines = this.wrapPdfLines(title, 80, true);
     lines.push(...this.wrapPdfLines(`Report type: ${reportType}`, 95));
     lines.push(...this.wrapPdfLines(`Generated at: ${generatedAt}`, 95), "");
@@ -1582,6 +1610,14 @@ export class ReportingService {
       lines.push(...this.wrapPdfLines(section.headers.join(" | "), 95));
       for (const row of section.rows) {
         lines.push(...this.wrapPdfLines(row.map((cell) => String(cell ?? "")).join(" | "), 95));
+      }
+      lines.push("");
+    }
+
+    if (summaryRows.length > 0) {
+      lines.push(...this.wrapPdfLines("Summary", 95));
+      for (const row of summaryRows) {
+        lines.push(...this.wrapPdfLines(`${row.label} | ${row.amount}`, 95));
       }
       lines.push("");
     }
@@ -1623,7 +1659,7 @@ ET`;
 
   private renderXlsxExport(title: string, reportType: string, reportData: any, generatedAt: string) {
     const sections = this.flattenExportRows(reportType, reportData);
-    const sheets = this.buildWorkbookSheets(title, reportType, generatedAt, sections);
+    const sheets = this.buildWorkbookSheets(title, reportType, reportData, generatedAt, sections);
     const files = [
       { name: "[Content_Types].xml", content: this.buildContentTypesXml(sheets.length) },
       { name: "_rels/.rels", content: this.buildRootRelsXml() },
@@ -1639,7 +1675,8 @@ ET`;
     return this.buildZipArchive(files).toString("base64");
   }
 
-  private buildWorkbookSheets(title: string, reportType: string, generatedAt: string, sections: ExportSection[]): WorkbookSheet[] {
+  private buildWorkbookSheets(title: string, reportType: string, reportData: any, generatedAt: string, sections: ExportSection[]): WorkbookSheet[] {
+    const summaryRows = this.buildExportSummaryRows(reportType, reportData);
     const overviewRows: WorkbookCell[][] = [
       [{ value: title, kind: "title" } as WorkbookCell],
       [{ value: `Report type: ${reportType}`, kind: "meta" } as WorkbookCell],
@@ -1658,6 +1695,15 @@ ET`;
       overviewRows.push([]);
     });
 
+    if (summaryRows.length > 0) {
+      overviewRows.push([{ value: "Summary", kind: "header" } as WorkbookCell], []);
+      overviewRows.push([{ value: "Label", kind: "header" }, { value: "Amount", kind: "header" }]);
+      summaryRows.forEach((row) => {
+        overviewRows.push([{ value: row.label, kind: "text" }, { value: row.amount, kind: "currency" }]);
+      });
+      overviewRows.push([]);
+    }
+
     return [
       { name: "Overview", rows: overviewRows },
       ...sections.map((section, index): WorkbookSheet => ({
@@ -1671,6 +1717,27 @@ ET`;
           ...section.rows.map((row) => row.map((cell) => this.toWorkbookCell(cell))),
         ],
       })),
+    ];
+  }
+
+  private buildExportSummaryRows(reportType: string, reportData: any): ExportSummaryRow[] {
+    if (reportType !== "generalLedger") {
+      return [];
+    }
+
+    const openingBalance = Number(reportData.openingBalance ?? 0);
+    const totalDebit = Number(reportData.totalDebit ?? 0);
+    const totalCredit = Number(reportData.totalCredit ?? 0);
+    const movementBalance = totalDebit - totalCredit;
+    const total = openingBalance + movementBalance;
+    const finalBalance = Number(reportData.closingBalance ?? 0);
+
+    return [
+      { label: "Movement Balance", amount: this.toAmount(movementBalance) },
+      { label: "Total Debit", amount: this.toAmount(totalDebit) },
+      { label: "Total Credit", amount: this.toAmount(totalCredit) },
+      { label: "Total", amount: this.toAmount(total) },
+      { label: "Final Balance", amount: this.toAmount(finalBalance) },
     ];
   }
 

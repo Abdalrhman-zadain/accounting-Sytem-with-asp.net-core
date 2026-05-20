@@ -239,6 +239,7 @@ Service responsibility:
 
 - query posted ledger rows
 - compute running/opening balance views from stored transactions
+- expose row-level voucher/journal references alongside ledger references for read/reporting surfaces
 
 Important business rules:
 

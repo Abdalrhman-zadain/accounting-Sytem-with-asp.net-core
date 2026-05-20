@@ -40,6 +40,11 @@ export class GeneralLedgerService {
       },
       include: {
         account: true,
+        journalEntry: {
+          select: {
+            reference: true,
+          },
+        },
       },
       orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
     });
@@ -52,6 +57,7 @@ export class GeneralLedgerService {
       return {
         id: line.id,
         reference: line.reference,
+        journalReference: line.journalEntry.reference,
         journalEntryId: line.journalEntryId,
         journalEntryLineId: line.journalEntryLineId,
         postingBatchId: line.postingBatchId,
