@@ -314,10 +314,24 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}) {
     headers.set("Authorization", `Bearer ${options.token}`);
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        `Unable to reach the API at ${getApiBaseUrl()}. Check that the backend is running and the API base URL is correct.`,
+        0,
+        error.message,
+      );
+    }
+
+    throw error;
+  }
 
   return parseResponse<T>(response);
 }
