@@ -172,7 +172,7 @@ export function SalesDocumentEditorModal({
           "relative mx-auto flex flex-col overflow-hidden",
           isInline
             ? "min-h-[calc(100vh-220px)] w-full bg-transparent"
-            : "h-full max-h-full max-w-[1720px] rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
+            : "h-full max-h-full max-w-[1720px] rounded-[2rem] border border-slate-200 bg-[#f8fafc] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
           isArabic && "arabic-ui",
         )}
       >
@@ -187,7 +187,7 @@ export function SalesDocumentEditorModal({
 
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+            "flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.05),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f7_100%)]",
             isInline ? "px-0 pb-2 pt-1 sm:px-0 sm:pb-3 sm:pt-1" : "px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-5",
           )}
         >
@@ -198,8 +198,8 @@ export function SalesDocumentEditorModal({
               </div>
             ) : null}
 
-            <section className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:px-6 sm:py-6">
-              <div className="shrink-0 border-b border-slate-200/90 pb-4">
+            <section className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border border-slate-300 bg-white px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:px-6 sm:py-6">
+              <div className="shrink-0 border-b border-slate-300 pb-4">
                 <div className={cn("mb-4 flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                     <FileText className="h-5 w-5" />
@@ -311,10 +311,10 @@ export function SalesDocumentEditorModal({
                   </Button>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50/40">
+                <div className="min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-slate-300 bg-slate-50/40">
                   <div className="h-full overflow-auto">
                   <table className="min-w-[1500px] table-fixed border-separate border-spacing-0">
-                    <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_rgba(226,232,240,1)]">
+                    <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_rgba(148,163,184,0.9)]">
                       <tr>
                         {[
                           "#",
@@ -332,7 +332,7 @@ export function SalesDocumentEditorModal({
                           <th
                             key={`line-table-header-${labelIndex}`}
                             className={cn(
-                              "border-b border-slate-200 px-3 py-3 text-sm font-extrabold text-slate-900",
+                              "border-b border-slate-300 px-3 py-3 text-sm font-extrabold text-slate-900",
                               isArabic ? "arabic-ui text-right" : "text-left",
                               labelIndex === 0 && "w-16",
                               labelIndex === 1 && "w-[260px]",
@@ -369,12 +369,12 @@ export function SalesDocumentEditorModal({
 
                         return (
                           <tr key={line.key} className="align-top">
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <div className="flex h-12 items-center justify-center rounded-2xl bg-slate-100 text-sm font-extrabold text-slate-900">
                                 {index + 1}
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Select
                                 value={line.itemId}
                                 onChange={(event) => {
@@ -409,7 +409,7 @@ export function SalesDocumentEditorModal({
                                 ))}
                               </Select>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Select
                                 value={line.warehouseId}
                                 disabled={!selectedItem || selectedItem.type === "SERVICE"}
@@ -435,7 +435,7 @@ export function SalesDocumentEditorModal({
                                   ))}
                               </Select>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Input
                                 value={line.itemName}
                                 onChange={(event) =>
@@ -445,7 +445,7 @@ export function SalesDocumentEditorModal({
                                 className={cn("h-12 border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
                               />
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Select
                                 value={line.revenueAccountId}
                                 onChange={(event) =>
@@ -464,7 +464,7 @@ export function SalesDocumentEditorModal({
                                 ))}
                               </Select>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Input
                                 type="number"
                                 min="0"
@@ -476,7 +476,7 @@ export function SalesDocumentEditorModal({
                                 className={cn("h-12 border-slate-200 bg-white text-center", isArabic && "arabic-ui")}
                               />
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Input
                                 type="number"
                                 min="0"
@@ -488,7 +488,7 @@ export function SalesDocumentEditorModal({
                                 className={cn("h-12 border-slate-200 bg-white text-center", isArabic && "arabic-ui")}
                               />
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Input
                                 type="number"
                                 min="0"
@@ -500,7 +500,7 @@ export function SalesDocumentEditorModal({
                                 className={cn("h-12 border-slate-200 bg-white text-center", isArabic && "arabic-ui")}
                               />
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <Select
                                 value={line.taxId}
                                 onChange={(event) => {
@@ -522,7 +522,7 @@ export function SalesDocumentEditorModal({
                                 ))}
                               </Select>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <div className="relative">
                                 <Input
                                   type="number"
@@ -538,7 +538,7 @@ export function SalesDocumentEditorModal({
                                 </span>
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-3">
+                            <td className="border-b border-slate-200 px-3 py-3">
                               <button
                                 type="button"
                                 onClick={() => removeLine(line.key)}
@@ -558,7 +558,7 @@ export function SalesDocumentEditorModal({
                 </div>
 
                 <div className={cn("mt-4 flex shrink-0", isArabic ? "justify-start" : "justify-end")}>
-                  <div className="w-full max-w-[400px] rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-none">
+                  <div className="w-full max-w-[400px] rounded-[1.25rem] border border-slate-300 bg-white p-4 shadow-none">
                     <div className={cn("mb-3 text-sm font-extrabold text-slate-900", isArabic ? "text-right arabic-ui" : "text-left")}>
                       {t("salesReceivables.metric.invoiceTotal")}
                     </div>
@@ -575,7 +575,7 @@ export function SalesDocumentEditorModal({
                           {currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
                         </span>
                       </div>
-                      <div className="border-t border-slate-200 pt-3">
+                      <div className="border-t border-slate-300 pt-3">
                         <div className="flex items-center justify-between gap-4">
                           <span className={cn("text-base font-black text-slate-900", isArabic && "arabic-ui")}>
                             {t("salesReceivables.metric.total")}
@@ -589,7 +589,7 @@ export function SalesDocumentEditorModal({
                   </div>
                 </div>
 
-                <div className="mt-4 shrink-0 border-t border-slate-200 pt-4">
+                <div className="mt-4 shrink-0 border-t border-slate-300 pt-4">
                   <div
                     className={cn(
                       "flex flex-wrap items-center gap-3",
