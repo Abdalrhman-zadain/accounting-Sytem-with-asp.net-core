@@ -4000,16 +4000,18 @@ export function PosPage() {
   };
 
   return (
-    <PageShell>
+    <div className="flex h-screen w-full flex-col bg-[#f6f7f8] animate-in fade-in duration-300">
       {flashNotice ? (
-        <FlashNoticeBanner
-          message={flashNotice.message}
-          tone={flashNotice.tone}
-          onClose={() => setFlashNotice(null)}
-        />
+        <div className="px-4 pt-4">
+          <FlashNoticeBanner
+            message={flashNotice.message}
+            tone={flashNotice.tone}
+            onClose={() => setFlashNotice(null)}
+          />
+        </div>
       ) : null}
       {renderWorkspace()}
-    </PageShell>
+    </div>
   );
 }
 
@@ -4364,170 +4366,74 @@ function CompactCartLine({
   const hasDiscount = line.discountValue > 0;
 
   return (
-    <div className="border-b border-[#f0f3f1] py-3 last:border-0 transition-colors">
-      {/* Top row: name + Line Total */}
-      <div className="flex items-start justify-between gap-2">
+    <div className="border-b border-[#f0f3f1] py-3 px-1 last:border-0 hover:bg-[#fbfdfc] transition-colors">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-xs font-bold text-[#213327] arabic-heading">
+          <div className="truncate text-[13px] font-bold text-[#1f2937] arabic-heading">
             {line.name}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-[#728579]">
+          <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] text-[#6b7280]">
+            <span className="font-bold text-[#374151]">{formatCount(line.quantity)}</span> 
+            <span>Units x </span>
             {canEditUnitPrice && onUnitPriceChange ? (
               isEditingPrice ? (
-                <label className="inline-flex items-center gap-1">
-                  <span className="whitespace-nowrap font-semibold text-[#5f6d66]">Unit:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    autoFocus
-                    onBlur={() => setIsEditingPrice(false)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingPrice(false)}
-                    value={line.unitPrice === 0 ? "" : line.unitPrice}
-                    onChange={(e) =>
-                      onUnitPriceChange(Math.max(0, Number(e.target.value) || 0))
-                    }
-                    className="w-16 border-b border-[#5f8a67] bg-transparent px-1 py-0.5 text-[10px] font-bold text-[#213327] focus:outline-none"
-                  />
-                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  autoFocus
+                  onBlur={() => setIsEditingPrice(false)}
+                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingPrice(false)}
+                  value={line.unitPrice === 0 ? "" : line.unitPrice}
+                  onChange={(e) =>
+                    onUnitPriceChange(Math.max(0, Number(e.target.value) || 0))
+                  }
+                  className="w-16 border-b border-[#5f8a67] bg-transparent px-0 py-0 text-[11px] font-bold text-[#213327] focus:outline-none"
+                />
               ) : (
                 <span 
                   onClick={() => setIsEditingPrice(true)} 
-                  className="cursor-pointer hover:text-[#5f8a67] transition-colors"
+                  className="cursor-pointer font-medium hover:text-[#5f8a67] transition-colors"
                   title="Click to edit price"
                 >
                   {formatCurrency(line.unitPrice, currencyCode)}
                 </span>
               )
             ) : (
-              <span>{formatCurrency(line.unitPrice, currencyCode)}</span>
+              <span className="font-medium">{formatCurrency(line.unitPrice, currencyCode)}</span>
             )}
+            <span> / Units</span>
 
+            {hasDiscount && (
+               <span className="ml-1 rounded bg-green-50 px-1 py-0.5 text-[9px] font-bold text-green-700">
+                 Disc: {line.discountType === "PERCENT" ? `${line.discountValue}%` : formatCurrency(line.discountValue, currencyCode)}
+               </span>
+            )}
+            
             {/* Only show stock if low */}
             {line.trackInventory && line.onHandQuantity <= 5 && (
-              <span className={cn("px-1.5 py-0.5 rounded-full text-[9px] font-bold", line.onHandQuantity <= 0 ? "bg-rose-50 text-rose-600" : "bg-orange-50 text-orange-600")}>
+              <span className={cn("ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold", line.onHandQuantity <= 0 ? "bg-rose-50 text-rose-600" : "bg-orange-50 text-orange-600")}>
                 {line.onHandQuantity <= 0 ? getLocalizedText("Out of stock / نفد", language) : `${formatCount(line.onHandQuantity)} left`}
               </span>
             )}
           </div>
         </div>
         
-        {/* Line Total aligned to top right */}
-        <div className="shrink-0 text-end">
-          <div className="text-xs font-black text-[#213327]">
+        {/* Line Total and Remove aligned to right */}
+        <div className="flex flex-col items-end shrink-0">
+          <div className="text-[14px] font-black text-[#111827]">
             {formatCurrency(lineTotal, currencyCode)}
           </div>
-          {hasDiscount && (
-            <div className="text-[9px] text-[#8aad92] line-through">
-              {formatCurrency(line.unitPrice * line.quantity, currencyCode)}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom row: qty controls + discount toggle + remove */}
-      <div className="mt-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Quantity stepper */}
-          <div className="inline-flex items-center rounded-full bg-[#f4f7f5] p-0.5 border border-[#e8efe9]">
-            <button
-              type="button"
-              onClick={onDecrease}
-              className="rounded-full p-1 text-[#64736b] transition hover:bg-white hover:text-[#213327] hover:shadow-sm"
-            >
-              <LuMinus className="h-3 w-3" />
-            </button>
-            <span className="min-w-[28px] px-1 text-center text-[11px] font-black text-[#213327]">
-              {formatCount(line.quantity)}
-            </span>
-            <button
-              type="button"
-              onClick={onIncrease}
-              className="rounded-full p-1 text-[#64736b] transition hover:bg-white hover:text-[#213327] hover:shadow-sm"
-            >
-              <LuPlus className="h-3 w-3" />
-            </button>
-          </div>
-
-          {canEditLineDiscount && (
-            <button
-              type="button"
-              onClick={() => setShowDiscount((v) => !v)}
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-full px-2 text-[10px] font-bold transition",
-                hasDiscount || showDiscount
-                  ? "bg-[#edf5ef] text-[#3f6e47]"
-                  : "bg-transparent text-[#8aad92] hover:bg-[#f4f7f5] hover:text-[#4f6556]"
-              )}
-            >
-              {hasDiscount ? (
-                <>
-                  <LuTag className="h-3 w-3" />
-                  <span>
-                    {line.discountType === "PERCENT"
-                      ? `${line.discountValue}%`
-                      : formatCurrency(line.discountValue, currencyCode)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <LuTag className="h-3.5 w-3.5" />
-                  <span>Discount</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* Remove button moved to bottom right */}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded-full p-1.5 text-[#aebbb3] transition hover:bg-[#ffe7e4] hover:text-[#e06555]"
-          title="Remove"
-        >
-          <LuTrash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Expandable discount editor */}
-      {showDiscount && canEditLineDiscount && (
-        <div className="mt-2.5 flex items-center gap-1.5 rounded-[7px] border border-[#d6e1d9] bg-[#f7fbf8] px-2 py-1.5">
           <button
             type="button"
-            onClick={() => onDiscountChange(
-              line.discountType === "FIXED" ? "PERCENT" : "FIXED",
-              line.discountValue,
-            )}
-            className="shrink-0 rounded-[5px] border border-[#c8d9ca] bg-white px-2 py-1 text-[10px] font-black text-[#4f6556] transition hover:bg-[#edf5ef]"
+            onClick={onRemove}
+            className="mt-1.5 rounded p-1 text-[#d1d5db] transition hover:bg-[#fee2e2] hover:text-[#ef4444]"
+            title="Remove item"
           >
-            {line.discountType === "FIXED" ? "JOD" : "%"}
+            <LuTrash2 className="h-4 w-4" />
           </button>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={line.discountValue === 0 ? "" : line.discountValue}
-            onChange={(e) =>
-              onDiscountChange(line.discountType, Math.max(0, Number(e.target.value) || 0))
-            }
-            placeholder="0"
-            className="min-w-0 flex-1 bg-transparent text-xs font-bold text-[#213327] placeholder-[#adc0b0] focus:outline-none"
-          />
-          {hasDiscount && (
-            <button
-              type="button"
-              onClick={() => {
-                onDiscountChange("FIXED", 0);
-                setShowDiscount(false);
-              }}
-              className="shrink-0 text-[#adc0b0] hover:text-[#965f58] text-xs font-bold transition"
-            >
-              ✕
-            </button>
-          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

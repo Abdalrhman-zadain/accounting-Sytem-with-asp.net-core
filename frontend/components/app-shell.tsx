@@ -19,6 +19,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const isAuthPage = pathname === "/login" || pathname === "/register";
+  const isPosPage = pathname?.startsWith("/pos");
 
   return (
     <>
@@ -37,7 +38,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               : "ltr:pl-60 rtl:pr-60",
         )}
       >
-        <div className="mx-auto max-w-[1800px] px-3 pb-6 pt-0 md:px-4 md:pb-8 md:pt-0">{children}</div>
+        <div
+          className={cn(
+            "mx-auto w-full",
+            isPosPage ? "p-0 max-w-none" : "max-w-[1800px] px-3 pb-6 pt-0 md:px-4 md:pb-8 md:pt-0"
+          )}
+        >
+          {children}
+        </div>
       </main>
     </>
   );
