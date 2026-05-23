@@ -19,6 +19,7 @@ type PosProductSeed = {
   groupCode: string;
   categoryCode: string;
   favorite?: boolean;
+  itemImageUrl?: string;
 };
 
 const POS_PRODUCTS: PosProductSeed[] = [
@@ -34,6 +35,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
     favorite: true,
+    itemImageUrl: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-DRK-002',
@@ -47,6 +49,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
     favorite: true,
+    itemImageUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-DRK-003',
@@ -60,6 +63,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
     favorite: true,
+    itemImageUrl: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-FOD-001',
@@ -72,6 +76,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     stockBranch: 8,
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1606755962773-d324e0a13086?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-FOD-002',
@@ -84,6 +89,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     stockBranch: 15,
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1566478989037-eee170a4176d?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-FOD-003',
@@ -96,6 +102,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     stockBranch: 10,
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1548907040-4baa42d10919?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-SRV-001',
@@ -109,6 +116,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     trackInventory: false,
     groupCode: 'SERVICES',
     categoryCode: 'SERVICE_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1526367790999-0150786686a2?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-SRV-002',
@@ -122,6 +130,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     trackInventory: false,
     groupCode: 'SERVICES',
     categoryCode: 'SERVICE_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=400&h=400&fit=crop',
   },
   {
     code: 'OFFER-SUMMER',
@@ -134,6 +143,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     stockBranch: 5,
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&h=400&fit=crop',
   },
   {
     code: 'POS-DRK-004',
@@ -147,6 +157,20 @@ const POS_PRODUCTS: PosProductSeed[] = [
     reorderLevel: 5,
     groupCode: 'FINISHED',
     categoryCode: 'FINISHED_GENERAL',
+    itemImageUrl: 'https://images.unsplash.com/photo-1622543925917-763c34d1a86e?w=400&h=400&fit=crop',
+  },
+  {
+    code: 'TEST-SCAN-01',
+    name: 'Camera Test Product / منتج تجريبي',
+    barcode: '76149276',
+    category: 'Other / أخرى',
+    salesPrice: 9.99,
+    purchasePrice: 4.5,
+    stockMain: 100,
+    groupCode: 'FINISHED',
+    categoryCode: 'FINISHED_GENERAL',
+    favorite: true,
+    itemImageUrl: '/test-product-croissant.png',
   },
 ];
 
@@ -266,6 +290,7 @@ export async function seedPosRegisterDemo(
         inventoryAccountId: trackInventory ? inventoryAccount.id : null,
         cogsAccountId: trackInventory ? cogsAccount.id : null,
         salesAccountId: salesAccount.id,
+        itemImageUrl: product.itemImageUrl ?? null,
         defaultSalesPrice: new Prisma.Decimal(product.salesPrice),
         defaultPurchasePrice: new Prisma.Decimal(purchasePrice),
         currencyCode: 'JOD',
@@ -294,6 +319,7 @@ export async function seedPosRegisterDemo(
         inventoryAccountId: trackInventory ? inventoryAccount.id : null,
         cogsAccountId: trackInventory ? cogsAccount.id : null,
         salesAccountId: salesAccount.id,
+        itemImageUrl: product.itemImageUrl ?? null,
         defaultSalesPrice: new Prisma.Decimal(product.salesPrice),
         defaultPurchasePrice: new Prisma.Decimal(purchasePrice),
         currencyCode: 'JOD',

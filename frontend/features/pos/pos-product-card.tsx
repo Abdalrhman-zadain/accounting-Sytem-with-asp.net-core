@@ -1,7 +1,17 @@
 "use client";
 
-import { LuPackage, LuStar } from "react-icons/lu";
+import {
+  LuPackage,
+  LuStar,
+  LuCpu,
+  LuCar,
+  LuCake,
+  LuCupSoda,
+  LuLayers,
+  LuTag,
+} from "react-icons/lu";
 
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { InventoryItem } from "@/types/api";
 
@@ -23,6 +33,70 @@ function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+// Helper to determine product category visual style
+function getCategoryVisuals(item: InventoryItem, language: string) {
+  const cat = (
+    item.itemCategory?.name ||
+    item.itemGroup?.name ||
+    item.category ||
+    (item.trackInventory ? "Inventory" : "Services")
+  ).toLowerCase();
+
+  const name = item.name.toLowerCase();
+
+  if (cat.includes("drink") || cat.includes("beverage") || cat.includes("مشروب") || name.includes("cola") || name.includes("juice")) {
+    return {
+      bg: "bg-[#e0f2fe]/90 text-[#0369a1] border-[#bae6fd]",
+      icon: LuCupSoda,
+      label: language === "ar" ? "مشروب" : "Drink",
+    };
+  }
+  if (cat.includes("food") || cat.includes("meal") || cat.includes("طعام") || cat.includes("cake") || cat.includes("كيك") || name.includes("cake") || name.includes("sweet")) {
+    return {
+      bg: "bg-[#fef3c7]/90 text-[#b45309] border-[#fde68a]",
+      icon: LuCake,
+      label: language === "ar" ? "طعام" : "Food",
+    };
+  }
+  if (cat.includes("computer") || cat.includes("tech") || cat.includes("laptop") || cat.includes("شاشة") || cat.includes("electronics") || cat.includes("كمبيوتر") || name.includes("computer") || name.includes("ram") || name.includes("pc")) {
+    return {
+      bg: "bg-[#e0e7ff]/90 text-[#4338ca] border-[#c7d2fe]",
+      icon: LuCpu,
+      label: language === "ar" ? "إلكترونيات" : "Tech",
+    };
+  }
+  if (cat.includes("car") || cat.includes("auto") || cat.includes("vehicle") || cat.includes("سيارة") || name.includes("car") || name.includes("toyota") || name.includes("tire")) {
+    return {
+      bg: "bg-[#fee2e2]/90 text-[#b91c1c] border-[#fecaca]",
+      icon: LuCar,
+      label: language === "ar" ? "سيارات" : "Automotive",
+    };
+  }
+  if (!item.trackInventory || cat.includes("service") || cat.includes("خدمة")) {
+    return {
+      bg: "bg-[#dcfce7]/90 text-[#15803d] border-[#bbf7d0]",
+      icon: LuLayers,
+      label: language === "ar" ? "خدمة" : "Service",
+    };
+  }
+  
+  const defaultLabel = item.itemCategory?.name || item.category || "Item / صنف";
+  return {
+    bg: "bg-[#f1f5f9]/90 text-[#475569] border-[#e2e8f0]",
+    icon: LuPackage,
+    label: getLocalizedText(defaultLabel, language),
+  };
+}
+
+function getLocalizedText(text: string, language: string) {
+  if (!text) return text;
+  const parts = text.split(" / ");
+  if (parts.length > 1) {
+    return language === "ar" ? parts[1].trim() : parts[0].trim();
+  }
+  return text;
+}
+
 export function PosProductCard({
   item,
   currencyCode,
@@ -38,6 +112,7 @@ export function PosProductCard({
   onToggleFavorite?: () => void;
   allowNegativeStock?: boolean;
 }) {
+  const { language } = useTranslation();
   const price = parseAmount(item.defaultSalesPrice);
   const qty = parseAmount(item.onHandQuantity);
   const reorderLevel = parseAmount(item.reorderLevel);
@@ -45,61 +120,57 @@ export function PosProductCard({
     item.trackInventory && qty > 0 && reorderLevel > 0 && qty <= reorderLevel;
   const blockedNoStock = item.trackInventory && qty <= 0 && !allowNegativeStock;
 
+  const visuals = getCategoryVisuals(item, language);
+  const CategoryIcon = visuals.icon;
+
   return (
-    <div className="flex min-h-[244px] flex-col overflow-hidden rounded-[7px] border border-[#e8ecea] bg-white shadow-[0_1px_2px_rgba(31,49,39,0.04)] transition hover:border-[#d9e1dd] hover:shadow-[0_6px_18px_-14px_rgba(31,49,39,0.5)]">
-      <div className="relative flex h-[122px] w-full items-center justify-center overflow-hidden bg-[#f2f4f3]">
+    <div
+      onClick={blockedNoStock ? undefined : onAdd}
+      className={cn(
+        "group flex flex-col overflow-hidden rounded-[16px] bg-white p-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none",
+        blockedNoStock
+          ? "opacity-60 cursor-not-allowed"
+          : "cursor-pointer hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)] active:scale-[0.98]"
+      )}
+    >
+      {/* Product Image Area */}
+      <div className="relative mb-3 aspect-[4/3] w-full overflow-hidden rounded-[12px] bg-[#f8faf9]">
         {item.itemImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.itemImageUrl} alt={item.name} className="h-full w-full object-cover" />
+          <img
+            src={item.itemImageUrl}
+            alt={item.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 mix-blend-multiply"
+          />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <LuPackage className="h-7 w-7 text-[#cbd4cf]" />
+          <div className="flex h-full w-full items-center justify-center">
+            <LuPackage className="h-8 w-8 text-slate-200 transition-transform duration-300 group-hover:scale-105" />
           </div>
         )}
-        {onToggleFavorite ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-            className={cn(
-              "absolute right-1.5 top-1.5 rounded-full border bg-white/90 p-1.5 shadow-sm transition hover:bg-white",
-              isFavorite ? "border-amber-400 text-amber-500" : "border-[#dfe8e1] text-[#9fb0a4]",
-            )}
-            title="Favorite / مفضلة"
-          >
-            <LuStar className={cn("h-3.5 w-3.5", isFavorite && "fill-current")} />
-          </button>
-        ) : null}
       </div>
-      <div className="flex flex-1 flex-col px-2.5 py-2">
-        <p className="truncate text-[12px] font-bold leading-5 text-[#223328] arabic-heading">{item.name}</p>
-        <p className="mt-0.5 truncate text-[10px] font-medium text-[#8a9690]">
-          {item.code}
-          {item.barcode ? ` · ${item.barcode}` : ""}
-        </p>
-        <p className="mt-2 text-[12px] font-bold text-[#223328]">{formatCurrency(price, currencyCode)}</p>
-        <p
+
+      {/* Product Name */}
+      <p className="truncate text-[14px] font-semibold text-slate-800 transition-colors duration-200 group-hover:text-slate-900 arabic-heading px-1">
+        {getLocalizedText(item.name, language)}
+      </p>
+
+      {/* Footer: Category Pill and Price */}
+      <div className="mt-2 flex items-center justify-between px-1">
+        {/* Pastel Category Badge */}
+        <span
           className={cn(
-            "text-[10px] font-semibold",
-            blockedNoStock ? "text-[#b85c52]" : lowStock ? "text-[#b08040]" : "text-[#5a8a62]",
+            "rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide",
+            // Fallback classes if visuals.bg doesn't contain bg colors
+            visuals.bg.replace("border", "border-none").replace("text-", "text-opacity-80 text-")
           )}
         >
-          {item.trackInventory
-            ? lowStock
-              ? `Low stock / مخزون منخفض: ${formatCount(qty)}`
-              : `Stock / المخزون: ${formatCount(qty)}`
-            : "Service / خدمة"}
-        </p>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={blockedNoStock}
-          className="mt-auto min-h-[28px] w-full rounded-[4px] bg-[#5f8a67] py-1.5 text-[10px] font-black text-white transition hover:bg-[#527958] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          + Add / إضافة
-        </button>
+          {visuals.label}
+        </span>
+
+        {/* Price */}
+        <span className="text-[14px] font-bold text-slate-900">
+          {formatCurrency(price, currencyCode)}
+        </span>
       </div>
     </div>
   );

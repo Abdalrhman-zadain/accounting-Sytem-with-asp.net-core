@@ -2,7 +2,9 @@
 
 import { LuBell, LuStore } from "react-icons/lu";
 
-import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n";
+
+import { cn, getLocalizedText } from "@/lib/utils";
 import type { InventoryWarehouse, PosSession, PosSessionReport } from "@/types/api";
 
 function parseAmount(value: string | number | null | undefined) {
@@ -42,6 +44,7 @@ export function PosSessionBar({
   currencyCode?: string;
   canCloseSession?: boolean;
 }) {
+  const { language } = useTranslation();
   const cc = currencyCode || session.cashAccount.currencyCode || "JOD";
   const initials =
     cashierLabel
@@ -79,7 +82,7 @@ export function PosSessionBar({
           <div className="flex items-center gap-1.5">
             <p className="text-[12px] font-semibold text-[#2f3f35]">{session.sessionNumber}</p>
             <span className="rounded-full bg-[#e7f4eb] px-2 py-0.5 text-[9px] font-bold text-[#4f8a5f]">
-              Open / مفتوح
+              {getLocalizedText("Open / مفتوح", language)}
             </span>
           </div>
         </div>
@@ -104,14 +107,14 @@ export function PosSessionBar({
             disabled={isPending || canCloseSession === false}
             title={
               canCloseSession === false
-                ? "You cannot close this shift / لا يمكن إغلاق الوردية"
+                ? getLocalizedText("You cannot close this shift / لا يمكن إغلاق الوردية", language)
                 : undefined
             }
             className={cn(
               "rounded-lg border border-[#efd7d4] bg-[#fff7f6] px-3 py-1.5 text-xs font-semibold text-[#a15f57] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {isPending ? "Closing…" : "Close Shift / إغلاق الوردية"}
+            {isPending ? "Closing…" : getLocalizedText("Close Shift / إغلاق الوردية", language)}
           </button>
           <button type="button" className="rounded-lg p-1.5 text-[#9aa8a0] transition hover:bg-[#f5f7f6]">
             <LuBell className="h-4 w-4" />
@@ -121,25 +124,25 @@ export function PosSessionBar({
       {shiftReport ? (
         <div className="flex flex-wrap gap-2 border-t border-[#edf1ee] px-4 py-2 text-[10px] text-[#5d6962] sm:px-5">
           <span className="rounded-full bg-[#f6f8f7] px-2.5 py-0.5 font-bold">
-            Opening / الافتتاح:{" "}
+            {getLocalizedText("Opening / الافتتاح:", language)}{" "}
             <span className="text-[#1f3427]">{formatCurrency(parseAmount(shiftReport.openingCash), cc)}</span>
           </span>
           <span className="rounded-full bg-[#f6f8f7] px-2.5 py-0.5 font-bold">
-            Cash sales / نقد:{" "}
+            {getLocalizedText("Cash sales / نقد:", language)}{" "}
             <span className="text-[#1f3427]">{formatCurrency(parseAmount(shiftReport.cashSales), cc)}</span>
           </span>
           <span className="rounded-full bg-[#f6f8f7] px-2.5 py-0.5 font-bold">
-            Card / بطاقة:{" "}
+            {getLocalizedText("Card / بطاقة:", language)}{" "}
             <span className="text-[#1f3427]">{formatCurrency(parseAmount(shiftReport.cardSales), cc)}</span>
           </span>
           <span className="rounded-full bg-[#f6f8f7] px-2.5 py-0.5 font-bold">
-            Bank / تحويل:{" "}
+            {getLocalizedText("Bank / تحويل:", language)}{" "}
             <span className="text-[#1f3427]">
               {formatCurrency(parseAmount(shiftReport.bankTransferSales), cc)}
             </span>
           </span>
           <span className="rounded-full border border-[#d6e6da] bg-white px-2.5 py-0.5 font-black text-[#4f7c58]">
-            Expected cash / المتوقع:{" "}
+            {getLocalizedText("Expected cash / المتوقع:", language)}{" "}
             {formatCurrency(parseAmount(shiftReport.expectedCash), cc)}
           </span>
         </div>

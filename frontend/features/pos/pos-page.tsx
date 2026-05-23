@@ -37,6 +37,9 @@ import {
   LuUserPlus,
   LuChevronDown,
   LuLock,
+  LuCamera,
+  LuArchive,
+  LuTag,
 } from "react-icons/lu";
 
 import { Card, Modal, PageShell } from "@/components/ui";
@@ -85,7 +88,7 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { hasPermission } from "@/lib/auth-access";
-import { cn } from "@/lib/utils";
+import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
   POS_CATALOG_CHIPS,
@@ -97,6 +100,7 @@ import {
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import { PosRegisterMainGrid } from "@/features/pos/pos-register-layout";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
+import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
   BankCashAccount,
   Customer,
@@ -163,12 +167,12 @@ type PaymentEntry = {
 type ReturnPaymentEntry = {
   id: string;
   refundMethod:
-    | "CASH"
-    | "CARD"
-    | "CLIQ"
-    | "BANK_TRANSFER"
-    | "WALLET"
-    | "STORE_CREDIT";
+  | "CASH"
+  | "CARD"
+  | "CLIQ"
+  | "BANK_TRANSFER"
+  | "WALLET"
+  | "STORE_CREDIT";
   bankCashAccountId: string;
   amount: string;
   reference: string;
@@ -599,7 +603,7 @@ export function PosPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { token, user } = useAuth();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<PosWorkspace>("sales");
   const [, startRoutingTransition] = useTransition();
@@ -610,6 +614,7 @@ export function PosPage() {
   const [invoiceDiscountType, setInvoiceDiscountType] =
     useState<DiscountType>("FIXED");
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState(0);
+  const [isInvoiceDiscountOpen, setIsInvoiceDiscountOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
@@ -651,6 +656,7 @@ export function PosPage() {
   const [payFlowStep, setPayFlowStep] = useState<"tender" | "success">("tender");
   const [isHeldOrdersOpen, setIsHeldOrdersOpen] = useState(false);
   const [isCancelSaleOpen, setIsCancelSaleOpen] = useState(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const customersQuery = useQuery({
@@ -686,7 +692,7 @@ export function PosPage() {
       setIsAddCustomerOpen(false);
       setNewCustomerName("");
       setNewCustomerTaxTreatmentId("");
-      pushMessage("Customer created successfully / تم إنشاء العميل بنجاح");
+      pushMessage(getLocalizedText("Customer created successfully / تم إنشاء العميل بنجاح", language));
     },
     onError: (err: any) => {
       pushMessage(`Error creating customer: ${err?.message || "Unknown error"}`);
@@ -1175,24 +1181,24 @@ export function PosPage() {
     setSessionState(
       activeSession
         ? {
-            isOpen: true,
-            terminalName: activeSession.terminalName,
-            branchName: activeSession.branchName ?? "",
-            openingCash: activeSession.openingCash,
-            openedAt: activeSession.openedAt,
-            warehouseId: activeSession.warehouse.id,
-            cashAccountId: activeSession.cashAccount.id,
-            expectedCash: parseAmount(activeSession.expectedCash),
-            completedSales: 0,
-          }
+          isOpen: true,
+          terminalName: activeSession.terminalName,
+          branchName: activeSession.branchName ?? "",
+          openingCash: activeSession.openingCash,
+          openedAt: activeSession.openedAt,
+          warehouseId: activeSession.warehouse.id,
+          cashAccountId: activeSession.cashAccount.id,
+          expectedCash: parseAmount(activeSession.expectedCash),
+          completedSales: 0,
+        }
         : {
-            isOpen: false,
-            terminalName: sessionState.terminalName || "الجهاز رقم 01",
-            branchName: sessionState.branchName || "",
-            openingCash: "",
-            expectedCash: 0,
-            completedSales: 0,
-          },
+          isOpen: false,
+          terminalName: sessionState.terminalName || "الجهاز رقم 01",
+          branchName: sessionState.branchName || "",
+          openingCash: "",
+          expectedCash: 0,
+          completedSales: 0,
+        },
     );
   }, [activeSession]);
 
@@ -1393,10 +1399,10 @@ export function PosPage() {
       invoiceDiscountValue,
       taxPolicy === "AFTER_TAX"
         ? taxableBase +
-            cartLines.reduce(
-              (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
-              0,
-            )
+        cartLines.reduce(
+          (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
+          0,
+        )
         : taxableBase,
     );
     const tax = cartLines.reduce((sum, line) => {
@@ -1487,13 +1493,13 @@ export function PosPage() {
       const invoiceShare =
         cartMetrics.taxableBase > 0 && taxPolicy === "BEFORE_TAX"
           ? cartMetrics.invoiceDiscount *
-            (netBeforeInvoiceDiscount / cartMetrics.taxableBase)
+          (netBeforeInvoiceDiscount / cartMetrics.taxableBase)
           : 0;
       const afterTaxShare =
         taxPolicy === "AFTER_TAX" && cartMetrics.total > 0
           ? cartMetrics.invoiceDiscount *
-            ((netBeforeInvoiceDiscount + getLineTaxAmount(line, 0, "AFTER_TAX")) /
-              (cartMetrics.taxableBase + cartMetrics.tax))
+          ((netBeforeInvoiceDiscount + getLineTaxAmount(line, 0, "AFTER_TAX")) /
+            (cartMetrics.taxableBase + cartMetrics.tax))
           : 0;
       const totalDiscountAmount = getLineDiscountAmount(line) + invoiceShare;
       const taxAmount = getLineTaxAmount(line, invoiceShare, taxPolicy);
@@ -1611,13 +1617,13 @@ export function PosPage() {
     setPaymentEntries(
       defaultCash
         ? [
-            {
-              id: createLocalId(),
-              bankCashAccountId: defaultCash.id,
-              amount: "",
-              reference: "",
-            },
-          ]
+          {
+            id: createLocalId(),
+            bankCashAccountId: defaultCash.id,
+            amount: "",
+            reference: "",
+          },
+        ]
         : [],
     );
   };
@@ -1704,6 +1710,21 @@ export function PosPage() {
       return;
     }
     addItemToCart(match);
+    setSearch("");
+  };
+
+  const handleCameraScan = (decodedText: string) => {
+    const normalized = decodedText.trim().toLowerCase();
+    if (!normalized) return;
+    const match =
+      items.find((item) => item.barcode?.trim().toLowerCase() === normalized) ||
+      items.find((item) => item.code.trim().toLowerCase() === normalized);
+    if (!match) {
+      pushMessage(t("pos.sales.alert.noBarcodeMatch"));
+      return;
+    }
+    addItemToCart(match);
+    setIsCameraScannerOpen(false);
     setSearch("");
   };
 
@@ -1878,7 +1899,7 @@ export function PosPage() {
 
     if (cartMetrics.amountDue > 0 && !selectedCustomerId) {
       pushMessage(
-        "Select a customer for partial payment or credit / اختر عميلاً للبيع الآجل أو الجزئي",
+        getLocalizedText("Select a customer for partial payment or credit / اختر عميلاً للبيع الآجل أو الجزئي", language),
       );
       return;
     }
@@ -1894,8 +1915,8 @@ export function PosPage() {
         !inventoryViolation.warehouseId
           ? t("pos.sales.alert.warehouseRequired")
           : t("pos.sales.alert.stockExceeded", {
-              item: inventoryViolation.name,
-            }),
+            item: inventoryViolation.name,
+          }),
       );
       return;
     }
@@ -2080,12 +2101,12 @@ export function PosPage() {
               !posSettings?.runtime.allowCloseWithDrafts;
             if (blockDrafts) {
               pushError(
-                "Close blocked: drafts or held sales exist / الإغلاق ممنوع: توجد مسودات أو معلقة",
+                getLocalizedText("Close blocked: drafts or held sales exist / الإغلاق ممنوع: توجد مسودات أو معلقة", language),
               );
               return;
             }
             const raw = window.prompt(
-              "Enter actual cash counted in the drawer / أدخل النقد الفعلي",
+              getLocalizedText("Enter actual cash counted in the drawer / أدخل النقد الفعلي", language),
               String(sessionState.expectedCash.toFixed(2)),
             );
             if (raw === null) return;
@@ -2100,433 +2121,468 @@ export function PosPage() {
         <PosRegisterMainGrid
           catalog={
             <section className="space-y-3">
-            <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
-              <div className="flex flex-wrap items-end gap-3">
-                <Field
-                  label={t("pos.sales.barcodeSearch")}
-                  className="mb-0 min-w-0 flex-1"
-                >
-                  <div className="relative flex gap-2">
-                    <LuScanLine className="pointer-events-none absolute left-3 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3" />
-                    <Input
-                      ref={searchInputRef}
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          handleBarcodeSubmit();
-                        }
-                      }}
-                      placeholder={t("pos.sales.barcodePlaceholder")}
-                      className="h-9 rounded-[6px] border-[#d7dfda] bg-white py-2 pl-9 pr-3 text-xs focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-9"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void queryClient.invalidateQueries({
-                          queryKey: ["inventory-items", token],
-                        });
-                      }}
-                      className="h-9 shrink-0 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                    >
-                      Refresh / تحديث
-                    </button>
-                  </div>
-                </Field>
-              </div>
-
-              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-                {POS_CATALOG_CHIPS.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => setActiveCategory(chip)}
-                    className={cn(
-                      "min-h-[28px] whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-bold transition",
-                      activeCategory === chip
-                        ? "border-[#5f8a67] bg-[#5f8a67] text-white"
-                        : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
-                    )}
+              <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field
+                    label={t("pos.sales.barcodeSearch")}
+                    className="mb-0 min-w-0 flex-1"
                   >
-                    {chip === "all"
-                      ? t("pos.sales.allCategories")
-                      : chip === "drinks"
-                        ? "Drinks / مشروبات"
-                        : chip === "food"
-                          ? "Food / طعام"
-                          : chip === "services"
-                            ? "Services / خدمات"
-                            : chip === "offers"
-                              ? "Offers / عروض"
-                              : "Favorites / المفضلة"}
-                  </button>
-                ))}
-              </div>
-            </Card>
-
-            {itemsQuery.isLoading ? (
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {Array.from({ length: 10 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-[244px] animate-pulse rounded-[7px] border border-[#e4e9e6] bg-white"
-                  />
-                ))}
-              </div>
-            ) : itemsQuery.isError ? (
-              <Card className="rounded-[12px] border-[#ead8d4] bg-white p-6 text-center shadow-none">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f8eded] text-[#96665f]">
-                  <LuPackage className="h-5 w-5" />
-                </div>
-                <div className="mt-3 text-sm font-bold text-[#233329] arabic-heading">
-                  {t("pos.sales.loadErrorTitle")}
-                </div>
-                <p className="mt-1 text-xs leading-6 text-[#6a776f] arabic-auto">
-                  {t("pos.sales.loadErrorDescription")}
-                </p>
-              </Card>
-            ) : filteredItems.length === 0 ? (
-              <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-6 text-center shadow-none">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#eef5ef] text-[#5f8a67]">
-                  <LuShoppingBasket className="h-5 w-5" />
-                </div>
-                <div className="mt-3 text-sm font-bold text-[#233329] arabic-heading">
-                  {t("pos.sales.emptyTitle")}
-                </div>
-                <p className="mt-1 text-xs leading-6 text-[#6a776f] arabic-auto">
-                  {t("pos.sales.emptyDescription")}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void queryClient.invalidateQueries({ queryKey: ["inventory-items", token] });
-                  }}
-                  className="mt-3 rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-4 py-2 text-xs font-bold text-[#4f6556] hover:bg-white"
-                >
-                  Refresh products / تحديث المنتجات
-                </button>
-              </Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {filteredItems.map((item) => (
-                  <PosProductCard
-                    key={item.id}
-                    item={item}
-                    currencyCode={currencyCode}
-                    isFavorite={favoriteIdSet.has(item.id)}
-                    onToggleFavorite={() => toggleItemFavorite(item.id)}
-                    allowNegativeStock={Boolean(posSettings?.runtime.negativeStockAllowed)}
-                    onAdd={() => addItemToCart(item)}
-                  />
-                ))}
-              </div>
-            )}
-            {!itemsQuery.isLoading && !itemsQuery.isError && filteredItems.length > 0 && catalogTotalPages > 1 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#e4e9e6] bg-white px-3 py-2">
-                <button
-                  type="button"
-                  disabled={productPage <= 1 || itemsQuery.isFetching}
-                  onClick={() => setProductPage((p) => Math.max(1, p - 1))}
-                  className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
-                >
-                  Previous / السابق
-                </button>
-                <span className="text-xs font-bold text-[#42564a]">
-                  Page {itemsQuery.data?.page ?? productPage} / {catalogTotalPages}
-                </span>
-                <button
-                  type="button"
-                  disabled={productPage >= catalogTotalPages || itemsQuery.isFetching}
-                  onClick={() => setProductPage((p) => p + 1)}
-                  className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
-                >
-                  Next / التالي
-                </button>
-              </div>
-            ) : null}
-          </section>
-          }
-          salePanel={
-          <div className="w-full">
-            <Card className="overflow-hidden rounded-[12px] border-[#e4e9e6] bg-white p-0 shadow-none">
-              <div className="border-b border-[#edf1ef] px-3.5 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[15px] font-black text-[#223328] arabic-heading">
-                      {t("pos.sales.orderSummary")}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-[#7a8780] arabic-auto">
-                      {t("pos.sales.itemsCount", { count: cartLines.length })}
-                    </div>
-                  </div>
-                  {hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsHeldOrdersOpen(true)}
-                      className="relative inline-flex min-h-[28px] shrink-0 items-center rounded-full border border-[#d6e1d9] bg-[#f8faf9] px-2.5 py-1 text-[10px] font-bold text-[#42564a] hover:bg-white"
-                    >
-                      Held
-                      {heldListCount > 0 ? (
-                        <span className="ms-1.5 rounded-full bg-[#5f8a67] px-1.5 py-0.5 text-[9px] font-black text-white">
-                          {heldListCount}
-                        </span>
-                      ) : null}
-                    </button>
-                  ) : null}
-                </div>
-                {editingInvoiceId ? (
-                  <span className="mt-2 inline-flex rounded-full bg-[#edf5ef] px-2 py-0.5 text-[10px] font-bold text-[#4f7059]">
-                    Held / معلقة
-                  </span>
-                ) : null}
-              </div>
-
-              {/* ── Customer Selector ── */}
-              <div className="border-b border-[#edf1ef] px-3.5 py-2.5">
-                {selectedCustomer ? (
-                  <div className="flex items-center justify-between gap-2 rounded-[8px] bg-[#edf5ef] px-2.5 py-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <LuUser className="h-3.5 w-3.5 shrink-0 text-[#5f8a67]" />
-                      <span className="truncate text-xs font-bold text-[#233329]">{selectedCustomer.name}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCustomerId(null)}
-                      className="shrink-0 text-xs font-bold text-[#8aad92] transition hover:text-[#96665f]"
-                      title="Remove customer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <LuUser className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8aad92]" />
-                      <input
-                        type="text"
-                        placeholder="Walk-In Customer / زبون عابر"
-                        value={searchCustomer}
-                        onChange={(e) => setSearchCustomer(e.target.value)}
-                        className="h-8 w-full rounded-[6px] border border-[#d6e1d9] bg-[#fbfcfb] py-1.5 pl-7 pr-2 text-[11px] font-medium text-[#233329] placeholder-[#a0b0a6] focus:border-[#5f8a67] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/15"
+                    <div className="relative flex gap-2">
+                      <LuScanLine className="pointer-events-none absolute left-3 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3" />
+                      <Input
+                        ref={searchInputRef}
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleBarcodeSubmit();
+                          }
+                        }}
+                        placeholder={t("pos.sales.barcodePlaceholder")}
+                        className="h-9 rounded-[6px] border-[#d7dfda] bg-white py-2 pl-9 pr-3 text-xs focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-9"
                       />
-                      {searchCustomer && customers.length > 0 && (
-                        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[8px] border border-[#d6e1d9] bg-white shadow-[0_8px_32px_-12px_rgba(43,79,54,0.25)]">
-                          <div className="max-h-48 divide-y divide-[#eef5ef] overflow-y-auto">
-                            {customers
-                              .filter((c: Customer) =>
-                                c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                              )
-                              .slice(0, 8)
-                              .map((c: Customer) => (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedCustomerId(c.id);
-                                    setSearchCustomer("");
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#233329] hover:bg-[#f4f8f5]"
-                                >
-                                  <LuUser className="h-3.5 w-3.5 shrink-0 text-[#5f8a67]" />
-                                  <span className="truncate font-medium">{c.name}</span>
-                                </button>
-                              ))}
-                            {customers.filter((c: Customer) =>
-                              c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                            ).length === 0 && (
-                              <div className="px-3 py-2 text-[11px] text-[#8aad92]">No customer found / لا يوجد عميل</div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsCameraScannerOpen(true)}
+                        className="flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                        title="Scan Barcode with Camera"
+                      >
+                        <LuCamera className="mr-1.5 h-3.5 w-3.5" />
+                        Scan / كاميرا
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void queryClient.invalidateQueries({
+                            queryKey: ["inventory-items", token],
+                          });
+                        }}
+                        className="h-9 shrink-0 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                      >
+                        Refresh / تحديث
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddCustomerOpen(true)}
-                      title="Quick-add customer / إضافة عميل سريع"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border border-[#d6e1d9] bg-[#fbfcfb] text-[#5f8a67] transition hover:border-[#5f8a67] hover:bg-[#edf5ef]"
-                    >
-                      <LuUserPlus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="max-h-[360px] space-y-2 overflow-y-auto px-3.5 py-3">
-                {cartLines.length === 0 ? (
-                  <div className="rounded-[8px] border border-dashed border-[#d4ddd6] bg-[#fafbfa] px-4 py-6 text-center">
-                    <div className="text-xs font-bold text-[#233329]">
-                      {t("pos.sales.cartEmptyTitle")}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-5 text-[#6c7a72]">
-                      {t("pos.sales.cartEmptyDescription")}
-                    </p>
-                  </div>
-                ) : (
-                  cartLines.map((line) => (
-                    <CompactCartLine
-                      key={line.itemId}
-                      line={line}
-                      currencyCode={currencyCode}
-                      canEditUnitPrice={hasPermission(user, "POS_CHANGE_UNIT_PRICE")}
-                      canEditLineDiscount={
-                        hasPermission(user, "POS_COMPLETE_SALE") &&
-                        hasPermission(user, "POS_UPDATE_ITEM_QUANTITY")
-                      }
-                      onIncrease={() => bumpLineQty(line, 1)}
-                      onDecrease={() => bumpLineQty(line, -1)}
-                      onRemove={() => updateLine(line.itemId, () => null)}
-                      onUnitPriceChange={(next) =>
-                        updateLine(line.itemId, (current) => ({
-                          ...current,
-                          unitPrice: Math.max(0, next),
-                        }))
-                      }
-                      onDiscountChange={(type, value) =>
-                        updateLine(line.itemId, (current) => ({
-                          ...current,
-                          discountType: type,
-                          discountValue: value,
-                        }))
-                      }
-                    />
-                  ))
-                )}
-              </div>
-
-              {hasPermission(user, "POS_COMPLETE_SALE") ? (
-                <div className="space-y-2 border-t border-[#edf1ef] px-3.5 py-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7a8780]">
-                    Invoice discount / خصم الفاتورة
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setInvoiceDiscountType((current) =>
-                          current === "FIXED" ? "PERCENT" : "FIXED",
-                        )
-                      }
-                      className="rounded-[6px] border border-[#d6e1d9] bg-[#f8faf9] px-2.5 py-1.5 text-[10px] font-bold text-[#4f6556]"
-                    >
-                      {invoiceDiscountType === "FIXED" ? "Fixed JOD" : "Percent %"}
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={invoiceDiscountValue === 0 ? "" : invoiceDiscountValue}
-                      onChange={(e) =>
-                        setInvoiceDiscountValue(Math.max(0, Number(e.target.value) || 0))
-                      }
-                      className="min-w-0 flex-1 rounded-[6px] border border-[#d6e1d9] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#233329]"
-                      placeholder="0"
-                    />
-                  </div>
-                  {invoiceDiscountType === "PERCENT" &&
-                  invoiceDiscountValue >
-                    (posSettings?.runtime.cashierDiscountLimitPercent ?? 15) ? (
-                    <p className="text-[10px] font-semibold text-[#b08040]">
-                      Above cashier discount limit ({posSettings?.runtime.cashierDiscountLimitPercent ?? 15}
-                      %) — accountant approval may be required.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="sticky bottom-0 space-y-3 border-t border-[#edf1ef] bg-white px-3.5 py-3">
-                <div className="rounded-[8px] bg-[#f7f9f8] p-3">
-                  <div className="grid gap-2">
-                    <TotalRow
-                      label={t("pos.sales.totalSubtotal")}
-                      value={formatCurrency(
-                        cartMetrics.subtotalBeforeDiscount,
-                        currencyCode,
-                      )}
-                    />
-                    <TotalRow
-                      label={t("pos.sales.totalDiscount")}
-                      value={formatCurrency(cartMetrics.discountTotal, currencyCode)}
-                    />
-                    <TotalRow
-                      label={t("pos.sales.totalTax")}
-                      value={formatCurrency(cartMetrics.tax, currencyCode)}
-                    />
-                    <TotalRow
-                      label={t("pos.sales.totalGrand")}
-                      value={formatCurrency(cartMetrics.total, currencyCode)}
-                      emphasized
-                    />
-                  </div>
+                  </Field>
                 </div>
 
-                <div className="grid grid-cols-4 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={saveDraftSale}
-                    disabled={!hasPermission(user, "POS_HOLD_SALE")}
-                    className="inline-flex min-h-[42px] flex-col items-center justify-center gap-1 rounded-[7px] border border-[#d7e2d8] bg-[#f8faf9] px-1.5 py-2 text-[9px] font-bold text-[#4e6455] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <LuSave className="h-3.5 w-3.5" />
-                    Draft
-                  </button>
-                  <button
-                    type="button"
-                    onClick={holdSale}
-                    disabled={!hasPermission(user, "POS_HOLD_SALE")}
-                    className="inline-flex min-h-[42px] flex-col items-center justify-center gap-1 rounded-[7px] border border-[#d7e2d8] bg-white px-1.5 py-2 text-[9px] font-bold text-[#4e6455] transition hover:bg-[#f8fbf8] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <LuSave className="h-3.5 w-3.5" />
-                    Hold
-                  </button>
+                <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
+                  {POS_CATALOG_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setActiveCategory(chip)}
+                      className={cn(
+                        "min-h-[28px] whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-bold transition",
+                        activeCategory === chip
+                          ? "border-[#5f8a67] bg-[#5f8a67] text-white"
+                          : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
+                      )}
+                    >
+                      {chip === "all"
+                        ? t("pos.sales.allCategories")
+                        : chip === "drinks"
+                          ? "Drinks / مشروبات"
+                          : chip === "food"
+                            ? "Food / طعام"
+                            : chip === "services"
+                              ? "Services / خدمات"
+                              : chip === "offers"
+                                ? "Offers / عروض"
+                                : "Favorites / المفضلة"}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+
+              {itemsQuery.isLoading ? (
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {Array.from({ length: 10 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-[244px] animate-pulse rounded-[7px] border border-[#e4e9e6] bg-white"
+                    />
+                  ))}
+                </div>
+              ) : itemsQuery.isError ? (
+                <Card className="rounded-[12px] border-[#ead8d4] bg-white p-6 text-center shadow-none">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f8eded] text-[#96665f]">
+                    <LuPackage className="h-5 w-5" />
+                  </div>
+                  <div className="mt-3 text-sm font-bold text-[#233329] arabic-heading">
+                    {t("pos.sales.loadErrorTitle")}
+                  </div>
+                  <p className="mt-1 text-xs leading-6 text-[#6a776f] arabic-auto">
+                    {t("pos.sales.loadErrorDescription")}
+                  </p>
+                </Card>
+              ) : filteredItems.length === 0 ? (
+                <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-6 text-center shadow-none">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#eef5ef] text-[#5f8a67]">
+                    <LuShoppingBasket className="h-5 w-5" />
+                  </div>
+                  <div className="mt-3 text-sm font-bold text-[#233329] arabic-heading">
+                    {t("pos.sales.emptyTitle")}
+                  </div>
+                  <p className="mt-1 text-xs leading-6 text-[#6a776f] arabic-auto">
+                    {t("pos.sales.emptyDescription")}
+                  </p>
                   <button
                     type="button"
                     onClick={() => {
-                      if (!hasPermission(user, "POS_VOID_DRAFT_SALE")) {
-                        pushError(
-                          "You do not have permission to cancel this sale / لا تملك صلاحية إلغاء البيع",
-                        );
-                        return;
-                      }
-                      if (cartLines.length === 0) {
-                        resetSale();
-                        return;
-                      }
-                      setIsCancelSaleOpen(true);
+                      void queryClient.invalidateQueries({ queryKey: ["inventory-items", token] });
                     }}
-                    className="inline-flex min-h-[42px] flex-col items-center justify-center gap-1 rounded-[7px] border border-[#ead8d4] bg-[#fffafa] px-1.5 py-2 text-[9px] font-bold text-[#8a5952] transition hover:bg-white"
+                    className="mt-3 rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-4 py-2 text-xs font-bold text-[#4f6556] hover:bg-white"
                   >
-                    <LuRefreshCcw className="h-3.5 w-3.5" />
-                    Cancel
+                    Refresh products / تحديث المنتجات
                   </button>
+                </Card>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {filteredItems.map((item) => (
+                    <PosProductCard
+                      key={item.id}
+                      item={item}
+                      currencyCode={currencyCode}
+                      isFavorite={favoriteIdSet.has(item.id)}
+                      onToggleFavorite={() => toggleItemFavorite(item.id)}
+                      allowNegativeStock={Boolean(posSettings?.runtime.negativeStockAllowed)}
+                      onAdd={() => addItemToCart(item)}
+                    />
+                  ))}
+                </div>
+              )}
+              {!itemsQuery.isLoading && !itemsQuery.isError && filteredItems.length > 0 && catalogTotalPages > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#e4e9e6] bg-white px-3 py-2">
                   <button
                     type="button"
-                    onClick={openPayModal}
-                    disabled={
-                      cartLines.length === 0 ||
-                      !hasPermission(user, "POS_COMPLETE_SALE") ||
-                      !hasPermission(user, "POS_SELECT_PAYMENT_METHOD")
-                    }
-                    className="inline-flex min-h-[42px] flex-col items-center justify-center gap-1 rounded-[7px] bg-[#5f8a67] px-1.5 py-2 text-[9px] font-black text-white transition hover:bg-[#557b5c] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={productPage <= 1 || itemsQuery.isFetching}
+                    onClick={() => setProductPage((p) => Math.max(1, p - 1))}
+                    className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
                   >
-                    <LuWallet className="h-3.5 w-3.5" />
-                    Pay
+                    Previous / السابق
+                  </button>
+                  <span className="text-xs font-bold text-[#42564a]">
+                    Page {itemsQuery.data?.page ?? productPage} / {catalogTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={productPage >= catalogTotalPages || itemsQuery.isFetching}
+                    onClick={() => setProductPage((p) => p + 1)}
+                    className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
+                  >
+                    Next / التالي
                   </button>
                 </div>
+              ) : null}
+            </section>
+          }
+          salePanel={
+            <div className="w-full">
+              <Card className="overflow-hidden rounded-[12px] border-[#e4e9e6] bg-white p-0 shadow-none">
+                <div className="border-b border-[#edf1ef] px-3.5 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-black text-[#223328] arabic-heading">
+                        {t("pos.sales.orderSummary")}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[#7a8780] arabic-auto">
+                        {t("pos.sales.itemsCount", { count: cartLines.length })}
+                      </div>
+                    </div>
+                    {hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsHeldOrdersOpen(true)}
+                        className="relative inline-flex min-h-[28px] shrink-0 items-center rounded-full border border-[#d6e1d9] bg-[#f8faf9] px-2.5 py-1 text-[10px] font-bold text-[#42564a] hover:bg-white"
+                      >
+                        Held
+                        {heldListCount > 0 ? (
+                          <span className="ms-1.5 rounded-full bg-[#5f8a67] px-1.5 py-0.5 text-[9px] font-black text-white">
+                            {heldListCount}
+                          </span>
+                        ) : null}
+                      </button>
+                    ) : null}
+                  </div>
+                  {editingInvoiceId ? (
+                    <span className="mt-2 inline-flex rounded-full bg-[#edf5ef] px-2 py-0.5 text-[10px] font-bold text-[#4f7059]">
+                      Held / معلقة
+                    </span>
+                  ) : null}
+                </div>
 
-                {lastReceipt ? (
-                  <button
-                    type="button"
-                    onClick={() => printReceipt(lastReceipt)}
-                    className="w-full rounded-[7px] border border-[#d7e2d8] bg-[#f8faf9] px-3 py-2 text-xs font-bold text-[#4e6455] transition hover:bg-white"
-                  >
-                    {t("pos.sales.printLastReceipt")}
-                  </button>
+                {/* ── Customer Selector ── */}
+                <div className="border-b border-[#edf1ef] px-3.5 py-2.5">
+                  {selectedCustomer ? (
+                    <div className="flex items-center justify-between gap-2 rounded-[8px] bg-[#edf5ef] px-2.5 py-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <LuUser className="h-3.5 w-3.5 shrink-0 text-[#5f8a67]" />
+                        <span className="truncate text-xs font-bold text-[#233329]">{selectedCustomer.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCustomerId(null)}
+                        className="shrink-0 text-xs font-bold text-[#8aad92] transition hover:text-[#96665f]"
+                        title="Remove customer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <LuUser className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8aad92]" />
+                      <input
+                        type="text"
+                        placeholder={getLocalizedText("Walk-In Customer / زبون عابر", language)}
+                        value={searchCustomer}
+                        onChange={(e) => setSearchCustomer(e.target.value)}
+                        className="h-8 w-full rounded-[6px] border border-[#d6e1d9] bg-[#fbfcfb] py-1.5 pl-7 pr-8 text-[11px] font-medium text-[#233329] placeholder-[#a0b0a6] focus:border-[#5f8a67] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/15"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsAddCustomerOpen(true)}
+                        title={getLocalizedText("Add customer / إضافة عميل", language)}
+                        className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[4px] text-[#5f8a67] transition hover:bg-[#edf5ef]"
+                      >
+                        <LuUserPlus className="h-3.5 w-3.5" />
+                      </button>
+                        {searchCustomer && customers.length > 0 && (
+                          <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[8px] border border-[#d6e1d9] bg-white shadow-[0_8px_32px_-12px_rgba(43,79,54,0.25)]">
+                            <div className="max-h-48 divide-y divide-[#eef5ef] overflow-y-auto">
+                              {customers
+                                .filter((c: Customer) =>
+                                  c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                                )
+                                .slice(0, 8)
+                                .map((c: Customer) => (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCustomerId(c.id);
+                                      setSearchCustomer("");
+                                    }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#233329] hover:bg-[#f4f8f5]"
+                                  >
+                                    <LuUser className="h-3.5 w-3.5 shrink-0 text-[#5f8a67]" />
+                                    <span className="truncate font-medium">{c.name}</span>
+                                  </button>
+                                ))}
+                              {customers.filter((c: Customer) =>
+                                c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                              ).length === 0 && (
+                                  <div className="px-3 py-2 text-[11px] text-[#8aad92]">{getLocalizedText("No customer found / لا يوجد عميل", language)}</div>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="max-h-[360px] space-y-2 overflow-y-auto px-3.5 py-3">
+                  {cartLines.length === 0 ? (
+                    <div className="rounded-[8px] border border-dashed border-[#d4ddd6] bg-[#fafbfa] px-4 py-6 text-center">
+                      <div className="text-xs font-bold text-[#233329]">
+                        {t("pos.sales.cartEmptyTitle")}
+                      </div>
+                      <p className="mt-1 text-[11px] leading-5 text-[#6c7a72]">
+                        {t("pos.sales.cartEmptyDescription")}
+                      </p>
+                    </div>
+                  ) : (
+                    cartLines.map((line) => (
+                      <CompactCartLine
+                        key={line.itemId}
+                        line={line}
+                        currencyCode={currencyCode}
+                        canEditUnitPrice={hasPermission(user, "POS_CHANGE_UNIT_PRICE")}
+                        canEditLineDiscount={
+                          hasPermission(user, "POS_COMPLETE_SALE") &&
+                          hasPermission(user, "POS_UPDATE_ITEM_QUANTITY")
+                        }
+                        onIncrease={() => bumpLineQty(line, 1)}
+                        onDecrease={() => bumpLineQty(line, -1)}
+                        onRemove={() => updateLine(line.itemId, () => null)}
+                        onUnitPriceChange={(next) =>
+                          updateLine(line.itemId, (current) => ({
+                            ...current,
+                            unitPrice: Math.max(0, next),
+                          }))
+                        }
+                        onDiscountChange={(type, value) =>
+                          updateLine(line.itemId, (current) => ({
+                            ...current,
+                            discountType: type,
+                            discountValue: value,
+                          }))
+                        }
+                      />
+                    ))
+                  )}
+                </div>
+
+                {hasPermission(user, "POS_COMPLETE_SALE") ? (
+                  <div className="border-t border-[#edf1ef] px-3.5 py-3">
+                    {!isInvoiceDiscountOpen && invoiceDiscountValue === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsInvoiceDiscountOpen(true)}
+                        className="text-[11px] font-bold text-[#5f8a67] hover:text-[#46644b] transition flex items-center gap-1"
+                      >
+                        <LuPlus className="h-3 w-3" /> Add Invoice Discount
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7a8780]">
+                            Invoice discount / خصم الفاتورة
+                          </div>
+                          {invoiceDiscountValue === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setIsInvoiceDiscountOpen(false)}
+                              className="text-[10px] text-[#a0b0a6] hover:text-slate-600"
+                            >
+                              ✕ Close
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setInvoiceDiscountType((current) =>
+                                current === "FIXED" ? "PERCENT" : "FIXED",
+                              )
+                            }
+                            className="rounded-[6px] border border-[#d6e1d9] bg-[#f8faf9] px-2.5 py-1.5 text-[10px] font-bold text-[#4f6556]"
+                          >
+                            {invoiceDiscountType === "FIXED" ? "Fixed JOD" : "Percent %"}
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={invoiceDiscountValue === 0 ? "" : invoiceDiscountValue}
+                            onChange={(e) =>
+                              setInvoiceDiscountValue(Math.max(0, Number(e.target.value) || 0))
+                            }
+                            className="min-w-0 flex-1 rounded-[6px] border border-[#d6e1d9] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#233329]"
+                            placeholder="0"
+                          />
+                        </div>
+                        {invoiceDiscountType === "PERCENT" &&
+                          invoiceDiscountValue >
+                          (posSettings?.runtime.cashierDiscountLimitPercent ?? 15) ? (
+                          <p className="text-[10px] font-semibold text-[#b08040]">
+                            Above cashier discount limit ({posSettings?.runtime.cashierDiscountLimitPercent ?? 15}
+                            %) — accountant approval may be required.
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 ) : null}
-              </div>
-            </Card>
-          </div>
+
+                <div className="sticky bottom-0 space-y-3 border-t border-[#edf1ef] bg-white px-3.5 py-3">
+                  <div className="rounded-[8px] bg-[#f7f9f8] p-3">
+                    <div className="grid gap-2">
+                      <TotalRow
+                        label={t("pos.sales.totalSubtotal")}
+                        value={formatCurrency(
+                          cartMetrics.subtotalBeforeDiscount,
+                          currencyCode,
+                        )}
+                      />
+                      <TotalRow
+                        label={t("pos.sales.totalDiscount")}
+                        value={formatCurrency(cartMetrics.discountTotal, currencyCode)}
+                      />
+                      <TotalRow
+                        label={t("pos.sales.totalTax")}
+                        value={formatCurrency(cartMetrics.tax, currencyCode)}
+                      />
+                      <TotalRow
+                        label={t("pos.sales.totalGrand")}
+                        value={formatCurrency(cartMetrics.total, currencyCode)}
+                        emphasized
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {/* Primary Pay Button */}
+                    <button
+                      type="button"
+                      onClick={openPayModal}
+                      disabled={
+                        cartLines.length === 0 ||
+                        !hasPermission(user, "POS_COMPLETE_SALE") ||
+                        !hasPermission(user, "POS_SELECT_PAYMENT_METHOD")
+                      }
+                      className="flex w-full h-[52px] items-center justify-center gap-2 rounded-[8px] bg-[#5f8a67] text-[16px] font-black text-white shadow-md transition hover:bg-[#527859] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <LuWallet className="h-5 w-5" />
+                      Pay
+                    </button>
+
+                    {/* Secondary Actions */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <button
+                        type="button"
+                        onClick={saveDraftSale}
+                        disabled={!hasPermission(user, "POS_HOLD_SALE")}
+                        className="flex h-10 items-center justify-center gap-1.5 text-[11px] font-bold text-[#6a8071] transition hover:text-[#213327] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <LuSave className="h-3.5 w-3.5" />
+                        Draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={holdSale}
+                        disabled={cartLines.length === 0 || !hasPermission(user, "POS_HOLD_SALE")}
+                        className="flex h-10 items-center justify-center gap-1.5 text-[11px] font-bold text-[#6a8071] transition hover:text-[#213327] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <LuArchive className="h-3.5 w-3.5" />
+                        Hold
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!hasPermission(user, "POS_VOID_DRAFT_SALE")) {
+                            pushError(
+                              getLocalizedText("You do not have permission to cancel this sale / لا تملك صلاحية إلغاء البيع", language),
+                            );
+                            return;
+                          }
+                          if (cartLines.length === 0) {
+                            resetSale();
+                            return;
+                          }
+                          setIsCancelSaleOpen(true);
+                        }}
+                        className="flex h-10 items-center justify-center gap-1.5 text-[11px] font-bold text-[#a06863] transition hover:text-[#e53810] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <LuRefreshCcw className="h-3.5 w-3.5" />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+
+                  {lastReceipt ? (
+                    <button
+                      type="button"
+                      onClick={() => printReceipt(lastReceipt)}
+                      className="w-full rounded-[7px] border border-[#d7e2d8] bg-[#f8faf9] px-3 py-2 text-xs font-bold text-[#4e6455] transition hover:bg-white"
+                    >
+                      {t("pos.sales.printLastReceipt")}
+                    </button>
+                  ) : null}
+                </div>
+              </Card>
+            </div>
           }
         />
 
@@ -2538,8 +2594,8 @@ export function PosPage() {
           }}
           title={
             payFlowStep === "success"
-              ? "Paid / تم الدفع"
-              : "Pay Sale / دفع الفاتورة"
+              ? getLocalizedText("Paid / تم الدفع", language)
+              : getLocalizedText("Pay Sale / دفع الفاتورة", language)
           }
         >
           {payFlowStep === "success" && lastReceipt ? (
@@ -2576,257 +2632,257 @@ export function PosPage() {
             </div>
           ) : (
             <div className="space-y-5">
-            <div className="rounded-[22px] bg-[#f3f8f4] p-4 text-center">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-[#66826e]">
-                Total Amount
-              </div>
-              <div className="mt-2 text-3xl font-black text-[#1f3427]">
-                {formatCurrency(cartMetrics.total, currencyCode)}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#6b7c70]">
-                Bank transfer highlighted / تحويل بنكي بارز
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {(["CASH", "CARD", "BANK_TRANSFER", "CLIQ", "MIXED"] as const).map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPayMethod(method);
-                      if (method !== "MIXED") {
-                        setSinglePaymentMethod(method);
-                      }
-                    }}
-                    className={cn(
-                      "rounded-[18px] border px-4 py-3 text-sm font-bold transition min-h-[48px]",
-                      selectedPayMethod === method
-                        ? "border-[#5f8a67] bg-[#5f8a67] text-white ring-0"
-                        : method === "BANK_TRANSFER"
-                          ? "border-2 border-[#c3dec9] bg-[#f0faf2] text-[#274a33] hover:border-[#5f8a67]"
-                          : "border-[#d7e2d8] bg-white text-[#4f6556] hover:bg-[#f7faf8]",
-                    )}
-                  >
-                    {getPaymentMethodLabel(method)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {posSettings?.runtime.allowCreditSale ? (
-              <div className="rounded-[18px] border border-[#d6e8db] bg-[#f8fcfa] px-4 py-3 text-xs font-semibold text-[#3d5c45]">
-                Credit or partial payment allowed when a customer is selected / يُسمح بالبيع الآجل أو الجزئي
-                بعد اختيار عميل حقيقي
-              </div>
-            ) : null}
-
-            {selectedPayMethod === "MIXED" ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-bold text-[#233329]">
-                    Mixed payment / دفعات متعددة
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addPaymentEntry}
-                    className="rounded-full border border-[#d7e2d8] px-3 py-1.5 text-xs font-bold text-[#4f6556]"
-                  >
-                    Add split / إضافة دفعة
-                  </button>
+              <div className="rounded-[22px] bg-[#f3f8f4] p-4 text-center">
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-[#66826e]">
+                  Total Amount
                 </div>
-                {paymentEntriesResolved.map((entry) => {
-                  const entryMethod = entry.account
-                    ? normalizePaymentAccountMethod(entry.account)
-                    : "CASH";
-                  const methodAccounts =
-                    getAccountsForMethod(entryMethod).length > 0
-                      ? getAccountsForMethod(entryMethod)
-                      : paymentAccounts;
-                  return (
-                    <div
-                      key={entry.id}
-                      className="space-y-3 rounded-[20px] border border-[#e2eae4] bg-[#fbfdfb] p-4"
+                <div className="mt-2 text-3xl font-black text-[#1f3427]">
+                  {formatCurrency(cartMetrics.total, currencyCode)}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#6b7c70]">
+                  Bank transfer highlighted / تحويل بنكي بارز
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {(["CASH", "CARD", "BANK_TRANSFER", "CLIQ", "MIXED"] as const).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPayMethod(method);
+                        if (method !== "MIXED") {
+                          setSinglePaymentMethod(method);
+                        }
+                      }}
+                      className={cn(
+                        "rounded-[18px] border px-4 py-3 text-sm font-bold transition min-h-[48px]",
+                        selectedPayMethod === method
+                          ? "border-[#5f8a67] bg-[#5f8a67] text-white ring-0"
+                          : method === "BANK_TRANSFER"
+                            ? "border-2 border-[#c3dec9] bg-[#f0faf2] text-[#274a33] hover:border-[#5f8a67]"
+                            : "border-[#d7e2d8] bg-white text-[#4f6556] hover:bg-[#f7faf8]",
+                      )}
                     >
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <select
-                          value={entryMethod}
-                          onChange={(event) =>
-                            updatePaymentEntryMethod(
-                              entry.id,
-                              event.target.value as
+                      {getPaymentMethodLabel(method)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {posSettings?.runtime.allowCreditSale ? (
+                <div className="rounded-[18px] border border-[#d6e8db] bg-[#f8fcfa] px-4 py-3 text-xs font-semibold text-[#3d5c45]">
+                  Credit or partial payment allowed when a customer is selected / يُسمح بالبيع الآجل أو الجزئي
+                  بعد اختيار عميل حقيقي
+                </div>
+              ) : null}
+
+              {selectedPayMethod === "MIXED" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-bold text-[#233329]">
+                      Mixed payment / دفعات متعددة
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addPaymentEntry}
+                      className="rounded-full border border-[#d7e2d8] px-3 py-1.5 text-xs font-bold text-[#4f6556]"
+                    >
+                      Add split / إضافة دفعة
+                    </button>
+                  </div>
+                  {paymentEntriesResolved.map((entry) => {
+                    const entryMethod = entry.account
+                      ? normalizePaymentAccountMethod(entry.account)
+                      : "CASH";
+                    const methodAccounts =
+                      getAccountsForMethod(entryMethod).length > 0
+                        ? getAccountsForMethod(entryMethod)
+                        : paymentAccounts;
+                    return (
+                      <div
+                        key={entry.id}
+                        className="space-y-3 rounded-[20px] border border-[#e2eae4] bg-[#fbfdfb] p-4"
+                      >
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select
+                            value={entryMethod}
+                            onChange={(event) =>
+                              updatePaymentEntryMethod(
+                                entry.id,
+                                event.target.value as
                                 | "CASH"
                                 | "CARD"
                                 | "CLIQ"
                                 | "BANK_TRANSFER"
                                 | "WALLET",
-                            )
-                          }
-                          className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                              )
+                            }
+                            className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                          >
+                            <option value="CASH">Cash / نقد</option>
+                            <option value="CARD">Card / بطاقة</option>
+                            <option value="CLIQ">CliQ / كليك</option>
+                            <option value="BANK_TRANSFER">Bank / بنك</option>
+                            <option value="WALLET">Wallet / محفظة</option>
+                          </select>
+                          <select
+                            value={entry.bankCashAccountId}
+                            onChange={(event) =>
+                              updatePaymentEntry(entry.id, {
+                                bankCashAccountId: event.target.value,
+                              })
+                            }
+                            className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                          >
+                            {methodAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={entry.amount}
+                            onChange={(event) =>
+                              updatePaymentEntry(entry.id, { amount: event.target.value })
+                            }
+                            placeholder={getLocalizedText("Amount / المبلغ", language)}
+                            className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                          />
+                          <Input
+                            value={entry.reference}
+                            onChange={(event) =>
+                              updatePaymentEntry(entry.id, { reference: event.target.value })
+                            }
+                            placeholder={getLocalizedText("Reference / المرجع", language)}
+                            className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePaymentEntry(entry.id)}
+                          disabled={paymentEntriesResolved.length === 1}
+                          className="rounded-full border border-[#ead8d4] px-3 py-1.5 text-xs font-bold text-[#8a5952] disabled:opacity-40"
                         >
-                          <option value="CASH">Cash / نقد</option>
-                          <option value="CARD">Card / بطاقة</option>
-                          <option value="CLIQ">CliQ / كليك</option>
-                          <option value="BANK_TRANSFER">Bank / بنك</option>
-                          <option value="WALLET">Wallet / محفظة</option>
-                        </select>
-                        <select
-                          value={entry.bankCashAccountId}
-                          onChange={(event) =>
-                            updatePaymentEntry(entry.id, {
-                              bankCashAccountId: event.target.value,
-                            })
-                          }
-                          className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                        >
-                          {methodAccounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name}
-                            </option>
-                          ))}
-                        </select>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={entry.amount}
-                          onChange={(event) =>
-                            updatePaymentEntry(entry.id, { amount: event.target.value })
-                          }
-                          placeholder="Amount / المبلغ"
-                          className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                        />
-                        <Input
-                          value={entry.reference}
-                          onChange={(event) =>
-                            updatePaymentEntry(entry.id, { reference: event.target.value })
-                          }
-                          placeholder="Reference / المرجع"
-                          className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                        />
+                          Remove / حذف
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removePaymentEntry(entry.id)}
-                        disabled={paymentEntriesResolved.length === 1}
-                        className="rounded-full border border-[#ead8d4] px-3 py-1.5 text-xs font-bold text-[#8a5952] disabled:opacity-40"
-                      >
-                        Remove / حذف
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="space-y-4 rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
-                <Field label={t("pos.sales.accountLabel")} className="mb-0">
-                  <select
-                    value={singlePaymentEntry?.bankCashAccountId ?? ""}
-                    onChange={(event) =>
-                      singlePaymentEntry
-                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-4 rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
+                  <Field label={t("pos.sales.accountLabel")} className="mb-0">
+                    <select
+                      value={singlePaymentEntry?.bankCashAccountId ?? ""}
+                      onChange={(event) =>
+                        singlePaymentEntry
+                          ? updatePaymentEntry(singlePaymentEntry.id, {
                             bankCashAccountId: event.target.value,
                           })
-                        : undefined
-                    }
-                    className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                  >
-                    {singleMethodAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label={t("pos.sales.tenderedAmountLabel")} className="mb-0">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={singlePaymentEntry?.amount ?? ""}
-                    onChange={(event) =>
-                      singlePaymentEntry
-                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                          : undefined
+                      }
+                      className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                    >
+                      {singleMethodAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label={t("pos.sales.tenderedAmountLabel")} className="mb-0">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={singlePaymentEntry?.amount ?? ""}
+                      onChange={(event) =>
+                        singlePaymentEntry
+                          ? updatePaymentEntry(singlePaymentEntry.id, {
                             amount: event.target.value,
                           })
-                        : undefined
-                    }
-                    className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                  />
-                </Field>
-                <Field label={t("pos.sales.paymentReference")} className="mb-0">
-                  <Input
-                    value={singlePaymentEntry?.reference ?? ""}
-                    onChange={(event) =>
-                      singlePaymentEntry
-                        ? updatePaymentEntry(singlePaymentEntry.id, {
+                          : undefined
+                      }
+                      className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                    />
+                  </Field>
+                  <Field label={t("pos.sales.paymentReference")} className="mb-0">
+                    <Input
+                      value={singlePaymentEntry?.reference ?? ""}
+                      onChange={(event) =>
+                        singlePaymentEntry
+                          ? updatePaymentEntry(singlePaymentEntry.id, {
                             reference: event.target.value,
                           })
-                        : undefined
-                    }
-                    placeholder={t("pos.sales.referencePlaceholder")}
-                    className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                          : undefined
+                      }
+                      placeholder={t("pos.sales.referencePlaceholder")}
+                      className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              <div className="rounded-[22px] bg-[#f6f8f6] p-4">
+                <div className="grid gap-3">
+                  <TotalRow
+                    label={t("pos.sales.tenderedLabel")}
+                    value={formatCurrency(cartMetrics.tendered, currencyCode)}
                   />
-                </Field>
+                  <TotalRow
+                    label={t("pos.sales.changeLabel")}
+                    value={formatCurrency(cartMetrics.change, currencyCode)}
+                    emphasized={cartMetrics.change > 0}
+                  />
+                  <TotalRow
+                    label={t("pos.sales.amountDueLabel")}
+                    value={formatCurrency(cartMetrics.amountDue, currencyCode)}
+                    emphasized={cartMetrics.amountDue > 0}
+                  />
+                </div>
               </div>
-            )}
 
-            <div className="rounded-[22px] bg-[#f6f8f6] p-4">
-              <div className="grid gap-3">
-                <TotalRow
-                  label={t("pos.sales.tenderedLabel")}
-                  value={formatCurrency(cartMetrics.tendered, currencyCode)}
+              {payCannotCompleteCredit && cartMetrics.amountDue > 0 ? (
+                <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-950">
+                  {posSettings?.runtime.allowCreditSale
+                    ? getLocalizedText("Select a customer to continue with partial or credit payment / اختر عميلاً لإكمال الدفع الجزئي أو الآجل", language)
+                    : getLocalizedText("Tendered amount is below total and credit is disabled / المدفوع أقل من الإجمالي والبيع الآجل غير مفعّل", language)}
+                </div>
+              ) : null}
+
+              <label className="flex items-center gap-3 rounded-[18px] border border-[#e2eae4] bg-white px-4 py-3 text-sm font-semibold text-[#42564a]">
+                <input
+                  type="checkbox"
+                  checked={autoPrintReceipt}
+                  onChange={(event) => setAutoPrintReceipt(event.target.checked)}
+                  className="h-4 w-4 rounded border-[#c8d7cc] text-[#5f8a67] focus:ring-[#5f8a67]/20"
                 />
-                <TotalRow
-                  label={t("pos.sales.changeLabel")}
-                  value={formatCurrency(cartMetrics.change, currencyCode)}
-                  emphasized={cartMetrics.change > 0}
-                />
-                <TotalRow
-                  label={t("pos.sales.amountDueLabel")}
-                  value={formatCurrency(cartMetrics.amountDue, currencyCode)}
-                  emphasized={cartMetrics.amountDue > 0}
-                />
-              </div>
+                {t("pos.sales.printReceiptLabel")}
+              </label>
+
+              <button
+                type="button"
+                onClick={completeSale}
+                disabled={!canCompleteThisSale || completeSaleMutation.isPending}
+                className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:opacity-50"
+              >
+                {completeSaleMutation.isPending
+                  ? t("pos.sales.completingAction")
+                  : t("pos.sales.completeAction")}
+              </button>
             </div>
-
-            {payCannotCompleteCredit && cartMetrics.amountDue > 0 ? (
-              <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-950">
-                {posSettings?.runtime.allowCreditSale
-                  ? "Select a customer to continue with partial or credit payment / اختر عميلاً لإكمال الدفع الجزئي أو الآجل"
-                  : "Tendered amount is below total and credit is disabled / المدفوع أقل من الإجمالي والبيع الآجل غير مفعّل"}
-              </div>
-            ) : null}
-
-            <label className="flex items-center gap-3 rounded-[18px] border border-[#e2eae4] bg-white px-4 py-3 text-sm font-semibold text-[#42564a]">
-              <input
-                type="checkbox"
-                checked={autoPrintReceipt}
-                onChange={(event) => setAutoPrintReceipt(event.target.checked)}
-                className="h-4 w-4 rounded border-[#c8d7cc] text-[#5f8a67] focus:ring-[#5f8a67]/20"
-              />
-              {t("pos.sales.printReceiptLabel")}
-            </label>
-
-            <button
-              type="button"
-              onClick={completeSale}
-              disabled={!canCompleteThisSale || completeSaleMutation.isPending}
-              className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:opacity-50"
-            >
-              {completeSaleMutation.isPending
-                ? t("pos.sales.completingAction")
-                : t("pos.sales.completeAction")}
-            </button>
-          </div>
           )}
         </Modal>
 
         <Modal
           isOpen={isHeldOrdersOpen}
           onClose={() => setIsHeldOrdersOpen(false)}
-          title="Held & drafts / معلقة ومسودات"
+          title={getLocalizedText("Held & drafts / معلقة ومسودات", language)}
         >
           <div className="max-h-[min(70vh,520px)] space-y-6 overflow-y-auto text-sm text-[#42564a]">
             {draftSales.length === 0 && heldSales.length === 0 ? (
@@ -2913,6 +2969,12 @@ export function PosPage() {
           </div>
         </Modal>
 
+        <PosCameraScanner
+          isOpen={isCameraScannerOpen}
+          onClose={() => setIsCameraScannerOpen(false)}
+          onScan={handleCameraScan}
+        />
+
         <Modal
           isOpen={isCancelSaleOpen}
           onClose={() => setIsCancelSaleOpen(false)}
@@ -2963,7 +3025,7 @@ export function PosPage() {
             setNewCustomerName("");
             setNewCustomerTaxTreatmentId("");
           }}
-          title="New Customer / عميل جديد"
+          title={getLocalizedText("New Customer / عميل جديد", language)}
         >
           <div className="space-y-5">
             <p className="text-sm text-[#6b7c70] arabic-auto">
@@ -3009,7 +3071,7 @@ export function PosPage() {
               }
               className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(95,138,103,0.95)] transition hover:bg-[#557b5c] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {createCustomerMutation.isPending ? "Creating… / جارٍ الإنشاء…" : "Create & Select / إنشاء واختيار"}
+              {createCustomerMutation.isPending ? getLocalizedText("Creating… / جارٍ الإنشاء…", language) : getLocalizedText("Create & Select / إنشاء واختيار", language)}
             </button>
           </div>
         </Modal>
@@ -3029,9 +3091,9 @@ export function PosPage() {
           <p className="mt-2 text-sm text-[#64736b] arabic-auto">
             {activeSession
               ? t("pos.sessions.activeDescription", {
-                  sessionNumber: activeSession.sessionNumber,
-                  terminalName: activeSession.terminalName,
-                })
+                sessionNumber: activeSession.sessionNumber,
+                terminalName: activeSession.terminalName,
+              })
               : t("pos.sessions.noOpen")}
           </p>
           {report ? (
@@ -3206,49 +3268,49 @@ export function PosPage() {
             <div className="grid gap-4 xl:grid-cols-2">
               {heldSales.length > 0 ? (
                 heldSales.map((heldSale) => (
-              <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
-                    <div className="mt-1 text-sm text-[#66756d]">
-                      {new Date(heldSale.createdAt).toLocaleString()}
+                  <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
+                        <div className="mt-1 text-sm text-[#66756d]">
+                          {new Date(heldSale.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
+                        {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
+                      </div>
                     </div>
-                  </div>
-                  <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
-                    {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
-                  {heldSale.cartLines.slice(0, 4).map((line) => (
-                    <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
-                      <span>{line.name}</span>
-                      <span>
-                        {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
-                      </span>
+                    <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
+                      {heldSale.cartLines.slice(0, 4).map((line) => (
+                        <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
+                          <span>{line.name}</span>
+                          <span>
+                            {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-5 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      startRoutingTransition(() => {
-                        router.replace(`/pos/register?resume=${heldSale.id}`);
-                      });
-                    }}
-                    className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-                  >
-                    {t("pos.sales.resumeHeld")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => voidSaleMutation.mutate(heldSale.id)}
-                    className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-                  >
-                    {t("pos.sales.voidAction")}
-                  </button>
-                </div>
-              </Card>
+                    <div className="mt-5 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          startRoutingTransition(() => {
+                            router.replace(`/pos/register?resume=${heldSale.id}`);
+                          });
+                        }}
+                        className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+                      >
+                        {t("pos.sales.resumeHeld")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => voidSaleMutation.mutate(heldSale.id)}
+                        className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+                      >
+                        {t("pos.sales.voidAction")}
+                      </button>
+                    </div>
+                  </Card>
                 ))
               ) : (
                 <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
@@ -3610,37 +3672,37 @@ export function PosPage() {
                   >
                     {createReturnMutation.isPending ? "..." : t("pos.returns.createTitle")}
                   </button>
-                  </>
-                  ) : (
-                  <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
+                </>
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-[#dbe2dd] bg-[#fafcf9] p-6 text-sm text-[#64736b]">
                   {t("pos.returns.selectSaleHelp")}
-                  </div>
-                  )}
-                  </div>
-                  </Card>
+                </div>
+              )}
+            </div>
+          </Card>
 
-                  <div className="space-y-4">
-                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                  <SoftMetric
+          <div className="space-y-4">
+            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <SoftMetric
                   label={t("pos.returns.returnsMetric")}
                   value={formatCount(returns.length)}
                   hint={t("pos.returns.returnsHint")}
-                  />
-                  <SoftMetric
+                />
+                <SoftMetric
                   label={t("pos.returns.refundedMetric")}
                   value={formatCurrency(
                     returns.reduce((sum, row) => sum + parseAmount(row.refundAmount), 0),
                   )}
                   hint={t("pos.returns.refundedHint")}
-                  />
-                  <SoftMetric
+                />
+                <SoftMetric
                   label={t("pos.returns.pendingMetric")}
                   value={formatCount(
                     returns.filter((row) => row.accountingStatus === "PENDING_REVIEW").length,
                   )}
                   hint={t("pos.returns.pendingHint")}
-                  />              </div>
+                />              </div>
             </Card>
             {returns.map((posReturn) => (
               <Card key={posReturn.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
@@ -3985,18 +4047,18 @@ function FlashNoticeBanner({
   const isError = tone === "error";
   const accentClasses = isError
     ? {
-        panel: "bg-[#e53810] text-white shadow-[0_26px_70px_-24px_rgba(15,23,42,0.6)]",
-        badge: "bg-white/14",
-        eyebrow: "text-white/80",
-        button: "border-white/30 text-white hover:bg-white/12",
-      }
+      panel: "bg-[#e53810] text-white shadow-[0_26px_70px_-24px_rgba(15,23,42,0.6)]",
+      badge: "bg-white/14",
+      eyebrow: "text-white/80",
+      button: "border-white/30 text-white hover:bg-white/12",
+    }
     : {
-        panel:
-          "bg-[#0f8f67] text-white shadow-[0_26px_70px_-24px_rgba(6,95,70,0.55)]",
-        badge: "bg-white/14",
-        eyebrow: "text-white/80",
-        button: "border-white/30 text-white hover:bg-white/12",
-      };
+      panel:
+        "bg-[#0f8f67] text-white shadow-[0_26px_70px_-24px_rgba(6,95,70,0.55)]",
+      badge: "bg-white/14",
+      eyebrow: "text-white/80",
+      button: "border-white/30 text-white hover:bg-white/12",
+    };
 
   if (typeof document === "undefined") {
     return null;
@@ -4171,7 +4233,7 @@ function OpenShiftPanel({
   isPending?: boolean;
   canOpenShift?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [openingCash, setOpeningCash] = useState(sessionState.openingCash);
   const [warehouseId, setWarehouseId] = useState(sessionState.warehouseId ?? "");
   const [cashAccountId, setCashAccountId] = useState(sessionState.cashAccountId ?? "");
@@ -4262,7 +4324,7 @@ function OpenShiftPanel({
           onClick={() => onOpenSession(openingCash, warehouseId, cashAccountId)}
           disabled={isPending || !canOpenShift}
           title={
-            !canOpenShift ? "Requires POS_OPEN_SESSION permission / يتطلب صلاحية فتح الجلسة" : undefined
+            !canOpenShift ? getLocalizedText("Requires POS_OPEN_SESSION permission / يتطلب صلاحية فتح الجلسة", language) : undefined
           }
           className="w-full rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white shadow-[0_18px_42px_-28px_rgba(95,138,103,0.9)] transition hover:bg-[#557b5c] disabled:opacity-50"
         >
@@ -4295,128 +4357,64 @@ function CompactCartLine({
   canEditLineDiscount?: boolean;
   onUnitPriceChange?: (next: number) => void;
 }) {
+  const { language } = useTranslation();
   const [showDiscount, setShowDiscount] = useState(false);
+  const [isEditingPrice, setIsEditingPrice] = useState(false);
   const lineTotal = getLineTotal(line);
   const hasDiscount = line.discountValue > 0;
 
   return (
-    <div className={cn(
-      "rounded-[8px] border bg-white p-2.5 transition",
-      hasDiscount ? "border-[#c8deca]" : "border-[#e2eae4]"
-    )}>
-      {/* Top row: name + remove */}
+    <div className="border-b border-[#f0f3f1] py-3 last:border-0 transition-colors">
+      {/* Top row: name + Line Total */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-xs font-black text-[#213327] arabic-heading">
+          <div className="truncate text-xs font-bold text-[#213327] arabic-heading">
             {line.name}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-[#728579]">
-            <span>{line.code}</span>
-            <span aria-hidden className="text-[#cdd8d0]">
-              ·
-            </span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-[#728579]">
             {canEditUnitPrice && onUnitPriceChange ? (
-              <label className="inline-flex items-center gap-1 ps-1">
-                <span className="whitespace-nowrap font-semibold text-[#5f6d66]">Unit:</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={line.unitPrice === 0 ? "" : line.unitPrice}
-                  onChange={(e) =>
-                    onUnitPriceChange(Math.max(0, Number(e.target.value) || 0))
-                  }
-                  className="w-20 rounded-[5px] border border-[#d6e1d9] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#213327] focus:border-[#5f8a67] focus:outline-none"
-                />
-              </label>
+              isEditingPrice ? (
+                <label className="inline-flex items-center gap-1">
+                  <span className="whitespace-nowrap font-semibold text-[#5f6d66]">Unit:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    autoFocus
+                    onBlur={() => setIsEditingPrice(false)}
+                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingPrice(false)}
+                    value={line.unitPrice === 0 ? "" : line.unitPrice}
+                    onChange={(e) =>
+                      onUnitPriceChange(Math.max(0, Number(e.target.value) || 0))
+                    }
+                    className="w-16 border-b border-[#5f8a67] bg-transparent px-1 py-0.5 text-[10px] font-bold text-[#213327] focus:outline-none"
+                  />
+                </label>
+              ) : (
+                <span 
+                  onClick={() => setIsEditingPrice(true)} 
+                  className="cursor-pointer hover:text-[#5f8a67] transition-colors"
+                  title="Click to edit price"
+                >
+                  {formatCurrency(line.unitPrice, currencyCode)}
+                </span>
+              )
             ) : (
               <span>{formatCurrency(line.unitPrice, currencyCode)}</span>
             )}
-            {line.trackInventory && (
-              <span
-                className={cn(
-                  "ps-1",
-                  line.onHandQuantity <= 0
-                    ? "text-[#b85c52]"
-                    : line.onHandQuantity <= 5
-                      ? "text-[#b08040]"
-                      : "text-[#5a8a62]",
-                )}
-              >
-                (
-                {line.onHandQuantity <= 0 ? "Out of stock / نفد" : `${formatCount(line.onHandQuantity)} avail`})
+
+            {/* Only show stock if low */}
+            {line.trackInventory && line.onHandQuantity <= 5 && (
+              <span className={cn("px-1.5 py-0.5 rounded-full text-[9px] font-bold", line.onHandQuantity <= 0 ? "bg-rose-50 text-rose-600" : "bg-orange-50 text-orange-600")}>
+                {line.onHandQuantity <= 0 ? getLocalizedText("Out of stock / نفد", language) : `${formatCount(line.onHandQuantity)} left`}
               </span>
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="shrink-0 rounded-full bg-[#fff1ef] p-1 text-[#965f58] transition hover:bg-[#ffe7e4]"
-          title="Remove"
-        >
-          <LuTrash2 className="h-3 w-3" />
-        </button>
-      </div>
-
-      {/* Bottom row: qty controls + discount toggle + line total */}
-      <div className="mt-2 flex items-center gap-1.5">
-        {/* Quantity stepper */}
-        <div className="inline-flex items-center rounded-full border border-[#d7e2d8] bg-[#fbfcfb] p-0.5">
-          <button
-            type="button"
-            onClick={onDecrease}
-            className="rounded-full p-1 text-[#4f6556] transition hover:bg-white"
-          >
-            <LuMinus className="h-3 w-3" />
-          </button>
-          <span className="min-w-7 px-1.5 text-center text-xs font-black text-[#213327]">
-            {formatCount(line.quantity)}
-          </span>
-          <button
-            type="button"
-            onClick={onIncrease}
-            className="rounded-full p-1 text-[#4f6556] transition hover:bg-white"
-          >
-            <LuPlus className="h-3 w-3" />
-          </button>
-        </div>
-
-        {canEditLineDiscount ? (
-          <button
-            type="button"
-            onClick={() => setShowDiscount((v) => !v)}
-            title="Line discount / خصم السطر"
-            className={cn(
-              "flex items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-bold transition",
-              hasDiscount
-                ? "border-[#5f8a67] bg-[#edf5ef] text-[#3f6e47]"
-                : "border-[#d7e2d8] bg-white text-[#8aad92] hover:border-[#b7cbb9] hover:text-[#4f6556]",
-            )}
-          >
-            %
-            {hasDiscount && (
-              <span>
-                {line.discountType === "PERCENT"
-                  ? `${line.discountValue}%`
-                  : formatCurrency(line.discountValue, currencyCode)}
-              </span>
-            )}
-          </button>
-        ) : (
-          hasDiscount && (
-            <span className="text-[9px] font-semibold text-[#8aad92]">
-              {line.discountType === "PERCENT"
-                ? `${line.discountValue}%`
-                : formatCurrency(line.discountValue, currencyCode)}{" "}
-              off
-            </span>
-          )
-        )}
-
-        {/* Line total */}
-        <div className="ms-auto text-end">
-          <div className="text-xs font-black text-[#31543a]">
+        
+        {/* Line Total aligned to top right */}
+        <div className="shrink-0 text-end">
+          <div className="text-xs font-black text-[#213327]">
             {formatCurrency(lineTotal, currencyCode)}
           </div>
           {hasDiscount && (
@@ -4427,9 +4425,74 @@ function CompactCartLine({
         </div>
       </div>
 
+      {/* Bottom row: qty controls + discount toggle + remove */}
+      <div className="mt-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* Quantity stepper */}
+          <div className="inline-flex items-center rounded-full bg-[#f4f7f5] p-0.5 border border-[#e8efe9]">
+            <button
+              type="button"
+              onClick={onDecrease}
+              className="rounded-full p-1 text-[#64736b] transition hover:bg-white hover:text-[#213327] hover:shadow-sm"
+            >
+              <LuMinus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[28px] px-1 text-center text-[11px] font-black text-[#213327]">
+              {formatCount(line.quantity)}
+            </span>
+            <button
+              type="button"
+              onClick={onIncrease}
+              className="rounded-full p-1 text-[#64736b] transition hover:bg-white hover:text-[#213327] hover:shadow-sm"
+            >
+              <LuPlus className="h-3 w-3" />
+            </button>
+          </div>
+
+          {canEditLineDiscount && (
+            <button
+              type="button"
+              onClick={() => setShowDiscount((v) => !v)}
+              className={cn(
+                "flex h-7 items-center gap-1 rounded-full px-2 text-[10px] font-bold transition",
+                hasDiscount || showDiscount
+                  ? "bg-[#edf5ef] text-[#3f6e47]"
+                  : "bg-transparent text-[#8aad92] hover:bg-[#f4f7f5] hover:text-[#4f6556]"
+              )}
+            >
+              {hasDiscount ? (
+                <>
+                  <LuTag className="h-3 w-3" />
+                  <span>
+                    {line.discountType === "PERCENT"
+                      ? `${line.discountValue}%`
+                      : formatCurrency(line.discountValue, currencyCode)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <LuTag className="h-3.5 w-3.5" />
+                  <span>Discount</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Remove button moved to bottom right */}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded-full p-1.5 text-[#aebbb3] transition hover:bg-[#ffe7e4] hover:text-[#e06555]"
+          title="Remove"
+        >
+          <LuTrash2 className="h-4 w-4" />
+        </button>
+      </div>
+
       {/* Expandable discount editor */}
       {showDiscount && canEditLineDiscount && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-[7px] border border-[#d6e1d9] bg-[#f7fbf8] px-2 py-1.5">
+        <div className="mt-2.5 flex items-center gap-1.5 rounded-[7px] border border-[#d6e1d9] bg-[#f7fbf8] px-2 py-1.5">
           <button
             type="button"
             onClick={() => onDiscountChange(

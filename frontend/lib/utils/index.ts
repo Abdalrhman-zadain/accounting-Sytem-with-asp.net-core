@@ -79,3 +79,12 @@ export function formatItemServiceLabel(code?: string | null, name?: string | nul
   }
   return "";
 }
+
+export function getLocalizedText(text: string, language: string) {
+  if (!text) return text;
+  const parts = text.split(" / ");
+  if (parts.length > 1) {
+    return language === "ar" ? parts[1].trim() : parts[0].trim();
+  }
+  return text;
+}
