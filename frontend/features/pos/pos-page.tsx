@@ -40,6 +40,7 @@ import {
   LuCamera,
   LuArchive,
   LuTag,
+  LuCalculator,
 } from "react-icons/lu";
 
 import { Card, Modal, PageShell } from "@/components/ui";
@@ -615,6 +616,7 @@ export function PosPage() {
     useState<DiscountType>("FIXED");
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState(0);
   const [isInvoiceDiscountOpen, setIsInvoiceDiscountOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
@@ -2153,6 +2155,15 @@ export function PosPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setIsCalculatorOpen(true)}
+                        className="flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                        title="Calculator"
+                      >
+                        <LuCalculator className="mr-1.5 h-3.5 w-3.5" />
+                        Calc / حاسبة
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           void queryClient.invalidateQueries({
                             queryKey: ["inventory-items", token],
@@ -2973,6 +2984,10 @@ export function PosPage() {
           isOpen={isCameraScannerOpen}
           onClose={() => setIsCameraScannerOpen(false)}
           onScan={handleCameraScan}
+        />
+        <PosCalculatorModal
+          isOpen={isCalculatorOpen}
+          onClose={() => setIsCalculatorOpen(false)}
         />
 
         <Modal
@@ -4504,5 +4519,78 @@ function PosCartRow({
         <LuTrash2 className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+function PosCalculatorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [display, setDisplay] = useState("0");
+  const [equation, setEquation] = useState("");
+
+  if (!isOpen) return null;
+
+  const handlePress = (val: string) => {
+    if (val === "C") {
+      setDisplay("0");
+      setEquation("");
+      return;
+    }
+    if (val === "=") {
+      try {
+        const safeExpr = display.replace(/[^-()\d/*+.]/g, '');
+        // eslint-disable-next-line no-new-func
+        const result = new Function("return " + safeExpr)();
+        setEquation(display + " =");
+        setDisplay(String(result));
+      } catch (e) {
+        setDisplay("Error");
+      }
+      return;
+    }
+    
+    if (display === "0" || display === "Error") {
+      setDisplay(val);
+    } else {
+      setDisplay(display + val);
+    }
+  };
+
+  const buttons = [
+    "7", "8", "9", "/",
+    "4", "5", "6", "*",
+    "1", "2", "3", "-",
+    "0", ".", "=", "+"
+  ];
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Calculator / حاسبة" size="sm">
+      <div className="p-4 bg-[#f8faf9] rounded-2xl">
+        <div className="mb-4 bg-white p-3 text-right rounded-xl border border-[#d7dfda] shadow-inner h-20 flex flex-col justify-end">
+          <div className="text-[11px] text-gray-500 h-4">{equation}</div>
+          <div className="text-3xl font-black text-[#1f3427] tracking-wider truncate" dir="ltr">{display}</div>
+        </div>
+        <div className="grid grid-cols-4 gap-2" dir="ltr">
+          <button
+            onClick={() => handlePress("C")}
+            className="col-span-4 bg-[#ffe7e4] text-[#e06555] h-12 rounded-xl text-sm font-bold hover:brightness-95 transition"
+          >
+            Clear / مسح
+          </button>
+          {buttons.map((btn) => (
+            <button
+              key={btn}
+              onClick={() => handlePress(btn)}
+              className={cn(
+                "h-14 rounded-xl text-xl font-bold shadow-sm transition hover:-translate-y-0.5 active:translate-y-0",
+                ["/", "*", "-", "+", "="].includes(btn) 
+                  ? "bg-[#5f8a67] text-white hover:bg-[#527859]" 
+                  : "bg-white text-[#213327] border border-[#e4e9e6] hover:bg-[#f4f7f5]"
+              )}
+            >
+              {btn}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Modal>
   );
 }
