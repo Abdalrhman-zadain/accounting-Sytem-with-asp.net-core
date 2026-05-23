@@ -1874,15 +1874,29 @@ export function PosPage() {
 
   const printReceipt = (receipt: CompletedReceipt) => {
     if (typeof window === "undefined") return;
-    const popup = window.open("", "_blank", "width=720,height=900");
-    if (!popup) {
+    try {
+      const popup = window.open("", "_blank", "width=720,height=900");
+      if (!popup) {
+        pushMessage(t("pos.sales.alert.printBlocked"));
+        return;
+      }
+      popup.document.write(buildReceiptHtml(receipt));
+      popup.document.close();
+      popup.focus();
+      
+      // Delay printing to allow document to render and avoid NotAllowedError
+      setTimeout(() => {
+        try {
+          popup.print();
+        } catch (err) {
+          console.error("Print failed:", err);
+          pushMessage(t("pos.sales.alert.printBlocked"));
+        }
+      }, 250);
+    } catch (err) {
+      console.error("Failed to open print receipt:", err);
       pushMessage(t("pos.sales.alert.printBlocked"));
-      return;
     }
-    popup.document.write(buildReceiptHtml(receipt));
-    popup.document.close();
-    popup.focus();
-    popup.print();
   };
 
   const completeSale = () => {
@@ -3239,7 +3253,7 @@ export function PosPage() {
                     <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
                       {heldSale.cartLines.slice(0, 4).map((line) => (
                         <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
-                          <span>{line.name}</span>
+                          <span>{getLocalizedText(line.name, language)}</span>
                           <span>
                             {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
                           </span>
@@ -3298,7 +3312,7 @@ export function PosPage() {
                     <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
                       {heldSale.cartLines.slice(0, 4).map((line) => (
                         <div key={`${heldSale.id}-${line.itemId}`} className="flex items-center justify-between gap-3">
-                          <span>{line.name}</span>
+                          <span>{getLocalizedText(line.name, language)}</span>
                           <span>
                             {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
                           </span>
@@ -4385,7 +4399,7 @@ function CompactCartLine({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-[13px] font-bold text-[#1f2937] arabic-heading">
-            {line.name}
+            {getLocalizedText(line.name, language)}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] text-[#6b7280]">
             <span className="font-bold text-[#374151]">{formatCount(line.quantity)}</span> 
@@ -4492,6 +4506,7 @@ function PosCartRow({
   onDecrease: () => void;
   onRemove: () => void;
 }) {
+  const { language } = useTranslation();
   const lineTotal = getLineTotal(line);
   return (
     <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white p-2 hover:border-gray-200 transition">
@@ -4499,7 +4514,7 @@ function PosCartRow({
         <LuPackage className="h-5 w-5 text-gray-300" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[12px] font-bold text-gray-900">{line.name}</p>
+        <p className="truncate text-[12px] font-bold text-gray-900">{getLocalizedText(line.name, language)}</p>
         <p className="text-[11px] text-gray-400">{line.code}</p>
       </div>
       <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-1 py-0.5">
