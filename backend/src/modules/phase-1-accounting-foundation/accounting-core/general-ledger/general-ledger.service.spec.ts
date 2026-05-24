@@ -29,6 +29,7 @@ describe('GeneralLedgerService', () => {
         debitAmount: { toString: () => '100.00' },
         creditAmount: { toString: () => '0.00' },
         createdAt: new Date('2026-04-01T01:00:00.000Z'),
+        journalEntry: { reference: 'JE-001' },
         account: {
           code: '1000',
           name: 'Cash',
@@ -47,6 +48,7 @@ describe('GeneralLedgerService', () => {
         debitAmount: { toString: () => '0.00' },
         creditAmount: { toString: () => '25.00' },
         createdAt: new Date('2026-04-02T01:00:00.000Z'),
+        journalEntry: { reference: 'JE-002' },
         account: {
           code: '1000',
           name: 'Cash',

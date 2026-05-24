@@ -37,7 +37,7 @@ export function AccountRow({
   const displayParentName = account.parentAccount ? getLocalizedAccountName(account.parentAccount, language) : null;
 
   return (
-    <tr className={cn("group transition-all hover:bg-gray-50", !account.isPosting && "cursor-pointer")} onClick={onEnter}>
+    <tr className={cn("group transition-all hover:bg-gray-100", !account.isPosting && "cursor-pointer")} onClick={onEnter}>
       <td className="px-10 py-4">
         <div className="flex items-center gap-6">
           <div

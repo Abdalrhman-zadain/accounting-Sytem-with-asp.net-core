@@ -963,7 +963,7 @@ Object.assign(enTranslations, {
   "salesReceivables.creditNote.postSaleDiscountHint":
     "Issue a credit note to discount part of a sales invoice.",
   "salesReceivables.creditNote.availableDiscount":
-    "Available discount balance: {amount}",
+    "Invoice outstanding balance (tax-inclusive credit limit): {amount}",
   "salesReceivables.creditNote.discountDetails": "Discount Details",
   "salesReceivables.creditNote.defaultDiscountLabel": "Post-sale discount 5%",
   "salesReceivables.creditNote.discountType": "Discount Type / Description",
@@ -1018,6 +1018,14 @@ Object.assign(enTranslations, {
     "Receipt amount must be greater than zero.",
   "salesReceivables.validation.allocationExceedsOutstanding":
     "Allocation amount cannot exceed the invoice outstanding balance.",
+  "salesReceivables.validation.linkedInvoiceRequired":
+    "Select the sales invoice this credit note applies to.",
+  "salesReceivables.validation.creditNoteReasonRequired":
+    "Enter the discount reason before saving the credit note.",
+  "salesReceivables.validation.creditNoteExceedsOutstanding":
+    "Credit note total {total} exceeds the invoice outstanding balance of {outstanding}. Reduce the discount lines or tax so the total stays within the available balance.",
+  "salesReceivables.validation.revenueAccountRequired":
+    "Line {index} requires a revenue account.",
   "salesReceivables.validation.receiptCreationFailed":
     "Receipt creation failed. Please review the entered values and try again.",
   "salesReceivables.tooltip.postAndCreateReceipt":
@@ -1849,6 +1857,9 @@ Object.assign(enTranslations, {
   "reporting.tab.cashMovement": "Cash Movement",
   "reporting.tab.generalLedger": "General Ledger",
   "reporting.tab.audit": "Audit",
+  "reporting.filter.periodLabel": "Period:",
+  "reporting.filter.allPeriods": "All periods",
+  "reporting.tab.activity": "Reporting activity",
   "reporting.filter.dateFrom": "Date from",
   "reporting.filter.dateTo": "Date to",
   "reporting.filter.comparisonFrom": "Comparison from",
@@ -1863,6 +1874,13 @@ Object.assign(enTranslations, {
   "reporting.filter.segment4": "Branch",
   "reporting.filter.segment5": "Project",
   "reporting.filter.journalEntryType": "Journal type",
+  "reporting.search.placeholder": "Search and add filters…",
+  "reporting.search.filters": "Filters",
+  "reporting.search.favorites": "Favorites",
+  "reporting.filter.section.period": "Period",
+  "reporting.filter.section.comparison": "Comparison",
+  "reporting.filter.section.dimensions": "Dimensions",
+  "reporting.filter.section.options": "Options",
   "reporting.field.definitionName": "Definition name",
   "reporting.field.selectedDefinition": "Selected definition",
   "reporting.field.shareDefinition": "Share this definition with managers and admins",
@@ -1923,6 +1941,12 @@ Object.assign(enTranslations, {
   "reporting.summary.metric.netIncome": "Net income",
   "reporting.summary.metric.netCashMovement": "Net cash movement",
   "reporting.summary.metric.trialBalanceDifference": "Trial balance difference",
+  "reporting.footer.totalAssets": "Total assets",
+  "reporting.footer.balanceDifference": "Balance difference",
+  "reporting.footer.cashAccounts": "Cash accounts",
+  "reporting.footer.auditEvents": "Audit events",
+  "reporting.footer.generatedAt": "Generated at",
+  "reporting.column.statement": "Statement",
   "reporting.metric.comparison": "Comparison",
   "reporting.metric.variance": "Variance",
   "reporting.trialBalance.total.debit": "Total debit",

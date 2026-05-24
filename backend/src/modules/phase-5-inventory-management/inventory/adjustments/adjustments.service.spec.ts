@@ -36,6 +36,7 @@ describe('AdjustmentsService', () => {
   const inventoryPostingService = {
     preventNegativeStock: jest.fn().mockReturnValue(true),
     isAccountingEnabled: jest.fn().mockReturnValue(false),
+    getCostingMethod: jest.fn().mockResolvedValue("WEIGHTED_AVERAGE"),
     averageUnitCost: jest.fn(),
     resolveIssueCost: jest.fn(),
     addCostLayer: jest.fn(),

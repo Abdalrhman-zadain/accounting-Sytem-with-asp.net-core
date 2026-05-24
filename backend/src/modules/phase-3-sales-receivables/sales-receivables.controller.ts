@@ -23,7 +23,12 @@ import { SalesReceivablesService } from './sales-receivables.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('sales-receivables')
-export class SalesReceivablesController {
+export class SalesReceivablesController { 
+  @Post("debug-payload")
+  debugPayload(@Body() body: any) {
+    console.log(JSON.stringify(body, null, 2));
+    return body;
+  }
   constructor(private readonly service: SalesReceivablesService) {}
 
   @Get('customers')

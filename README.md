@@ -162,41 +162,40 @@ http://localhost:5555
 
 ## Seeding the database
 
-From the `backend` folder, run the seed script to populate demo data.
+From the `backend` folder, choose a seed command. **Both commands truncate all public tables** — back up any important data first.
+
+| Command | When to use | What you get | Typical runtime |
+|---------|-------------|--------------|-----------------|
+| `npm run seed` or `npx prisma db seed` | Daily dev, CI, quick reset | Full chart of accounts, masters, users, ~6 posted journals (FY 2026), POS demo | ~30–60s |
+| `npm run seed:volume` | Reporting screenshots, module walkthroughs, “big company” demos | Same foundation **plus** fiscal years 2024–2026, ~15k+ posted journals, enterprise masters, reporting audit activity, quarterly operational samples, POS demo | ~2–8 min |
+
+Login after either seed: **admin** / **admin123** (cashier: **cashier** / **cashier123**).
 
 Prerequisites:
-- Ensure `DATABASE_URL` points to a running PostgreSQL instance (you can start one with the project's Docker compose).
 
-Recommended commands (run from the project root or `backend`):
+- `DATABASE_URL` must point to a running PostgreSQL instance (start with `npm run db:up` from `backend/`).
 
-```powershell
+```bash
 cd backend
-# start local postgres (if not already running)
-npm run db:up
-
-# install dependencies (if needed)
-npm install
-
-# generate Prisma client
+npm run db:up          # if Postgres is not running
+npm install            # first time
 npm run prisma:generate
 
-# run the Prisma seed (reads the "prisma.seed" entry from backend/package.json)
-npx prisma db seed
-````
+# Basic demo (also what `npx prisma db seed` runs)
+npm run seed
 
-Alternative (runs the TypeScript seed file directly):
-
-```powershell
-npx ts-node prisma/seed.ts
+# Enterprise volume demo (opt-in; not wired to prisma db seed)
+npm run seed:volume
 ```
+
+From the **repository root**, the same commands work via `npm run seed` and `npm run seed:volume` (they forward to `backend/`). If you see `Missing script: "seed:volume"`, you are not in `backend/` or the repo root — `cd` into one of those first.
+
+Optional volume tuning via environment variables (see `backend/prisma/seed-volume/config.ts`): `SEED_VOLUME_YEARS`, `SEED_MONTHLY_JOURNALS`, `SEED_CUSTOMERS`, `SEED_SUPPLIERS`, `SEED_AUDIT_EVENTS`, etc.
 
 Notes:
 
-- The seed script truncates public tables and inserts demo/test data — back up any important data first.
-- If you use `pnpm`, replace `npm install` with `pnpm install`.
-- If `npx prisma db seed` fails, verify `DATABASE_URL` and that Postgres is reachable.
-
-````
+- `npx prisma db seed` always runs the **basic** seed only (`prisma/seed.ts`).
+- If seeding fails, verify `DATABASE_URL` and that Postgres is reachable.
 
 ## Run Tests
 

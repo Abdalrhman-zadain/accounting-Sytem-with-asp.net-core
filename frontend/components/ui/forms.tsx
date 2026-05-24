@@ -85,3 +85,40 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   );
 });
 Textarea.displayName = "Textarea";
+
+/** Combined [CURRENCY | number-input] in a single box */
+export const CurrencyAmountInput = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & {
+    currencyCode?: string;
+    isRtl?: boolean;
+  }
+>(({ currencyCode = "JOD", isRtl = false, className, ...props }, ref) => {
+  return (
+    <div className="relative flex overflow-hidden rounded-xl border border-gray-200 bg-white transition-all focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10">
+      {/* Currency badge — left side for LTR, right side for RTL */}
+      <span
+        className={cn(
+          "flex shrink-0 items-center border-gray-200 bg-gray-50 px-3 text-[13px] font-bold uppercase tracking-wider text-gray-500",
+          isRtl ? "order-last border-l" : "order-first border-r",
+        )}
+      >
+        {currencyCode || "JOD"}
+      </span>
+      <input
+        type="number"
+        ref={ref}
+        min="0"
+        step="0.01"
+        {...props}
+        className={cn(
+          "w-full min-w-0 bg-transparent px-4 py-3 text-[15px] font-medium text-gray-900 outline-none placeholder:font-medium placeholder:text-gray-500",
+          isRtl ? "text-right" : "text-left",
+          className,
+        )}
+      />
+    </div>
+  );
+});
+CurrencyAmountInput.displayName = "CurrencyAmountInput";
+

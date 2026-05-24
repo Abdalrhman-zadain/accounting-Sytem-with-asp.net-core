@@ -206,6 +206,7 @@ What else to check:
 - sales document references must remain unique across quotations, sales orders, invoices, receipts, and credit notes
 - customer balance must increase on posted invoices and decrease on posted credit notes
 - inventory-bearing sales-return credit notes must also create `InventoryStockMovement` rows with movement type `SALES_RETURN`, increment item/warehouse balances, add cost layers, and book inventory/COGS reversal lines in the same posting flow
+- linked sales credit notes must keep their tax-inclusive total at or below the referenced invoice outstanding balance at save and post time
 - customer receipts created from Sales must still use the Phase 2 bank/cash posting behavior and remain allocatable to one or more invoices
 - sales-invoice posting must debit the customer's receivable account for the invoice grand total, credit one or more revenue accounts from the invoice lines for the net subtotal, and credit the mapped tax account for any applied tax amount
 - inventory-tracked sales-invoice lines must default warehouse selection from the item preferred warehouse when available, require a warehouse before save/post, validate warehouse stock at posting time, create one `InventoryStockMovement` issue row per posted line without duplicating by `sourceLineId`, and add matching COGS/inventory-relief journal lines inside the same database transaction
@@ -442,6 +443,8 @@ What else to check:
 - trial balance, balance sheet, profit and loss, and general-ledger inquiry should stay reconcilable to the same posted ledger source for the same filters/period
 - cash movement reporting should continue to derive from the linked bank/cash posting accounts rather than inventing a parallel balance store
 - Arabic and English terminology must stay aligned when adding report names, column labels, filters, export labels, and drill-down actions
+- the `/reporting` dashboard body uses a flat layout: tools row, primary filter bar (period/account/segment chips plus export), secondary filters row, KPI cards, content tabs (activity / trial balance / general ledger), and a sticky summary footer
+- KPI sparklines on the reporting dashboard are derived client-side from comparison and current metric amounts; they are illustrative, not a historical time series from the API
 
 Must remain compatible:
 
@@ -694,6 +697,32 @@ Where to edit:
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
 - POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+
+### Volume seed (enterprise demo dataset)
+
+Where to edit:
+
+- shared foundation (truncate, COA, masters, users): `backend/prisma/seed-foundation.ts`, `backend/prisma/seed-database.ts`
+- batched journal posting helpers: `backend/prisma/seed-posting.ts`
+- basic FY 2026 demo journals: `backend/prisma/seed-basic-demo.ts`
+- volume entry and generators: `backend/prisma/seed-volume.ts`, `backend/prisma/seed-volume/*`
+
+Commands:
+
+- `npm run seed` — fast basic dataset (`prisma/seed.ts`); also used by `npx prisma db seed`
+- `npm run seed:volume` — same foundation plus 3 fiscal years of bulk GL, enterprise masters, reporting audit rows, and quarterly operational samples (truncates DB; ~2–8 min)
+
+Checks to run after volume seed changes:
+
+- `npm run seed:volume` from `backend/`
+- `/reporting` — KPIs, segment filters, activity tab, footer totals
+
+Dashboard KPI sparklines:
+
+- `GET /reporting/summary` returns `trendLabels` plus per-metric `trend[]` (monthly buckets within the selected primary date range, or the last 12 months when open-ended)
+- UI: `frontend/features/phase-8-reporting-control/reporting/components/mini-bar-sparkline.tsx` and `reporting-kpi-cards.tsx`
+- Comparison totals stay at `0` until `comparisonFrom` / `comparisonTo` are set (avoids duplicating the main period)
+- `/general-ledger`, sales/purchases/inventory/bank modules have representative rows
 
 What else to check:
 

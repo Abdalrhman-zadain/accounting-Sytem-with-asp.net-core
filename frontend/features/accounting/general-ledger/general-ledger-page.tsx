@@ -103,78 +103,95 @@ export function GeneralLedgerPage() {
                     )}
 
                     {/* Ledger Table */}
-                    <Card className="p-0 border border-gray-200 bg-panel/40  overflow-hidden">
-                        <table className="w-full text-left text-sm border-collapse">
-                            <thead className="border-b border-gray-200 bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.date")}</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.voucherName")}</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.descriptionStatement")}</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.debit")}</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.credit")}</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.runningBalance")}</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.reference")}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {ledgerQuery.isLoading ? (
-                                    <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-600">{t("ledger.loading")}</td></tr>
-                                ) : (
-                                    <>
-                                        {/* Opening Balance Row */}
-                                        <tr className="bg-teal-500/5 transition-colors">
-                                            <td className="px-6 py-3 text-xs text-gray-500 tabular-nums italic">{dateFrom ? formatDate(dateFrom) : t("ledger.openingBalance.start")}</td>
-                                            <td className="px-6 py-3"><span className="font-mono text-[10px] font-bold text-gray-600">OPEN-BAL</span></td>
-                                            <td className="px-6 py-3 text-xs text-gray-400 font-bold uppercase tracking-wider">{t("ledger.openingBalance.label")}</td>
-                                            <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-gray-600">—</td>
-                                            <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-gray-600">—</td>
-                                            <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-teal-400 font-black">
-                                                {formatCurrency(openingBalance)}
-                                            </td>
-                                            <td className="px-6 py-3 text-xs text-gray-500">—</td>
-                                        </tr>
+                    <Card className="overflow-hidden border border-gray-200 bg-panel/40 p-0">
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
+                                <colgroup>
+                                    <col className="w-[100px]" />
+                                    <col className="w-[112px]" />
+                                    <col />
+                                    <col className="w-[118px]" />
+                                    <col className="w-[118px]" />
+                                    <col className="w-[132px]" />
+                                    <col className="w-[104px]" />
+                                </colgroup>
+                                <thead className="border-b border-gray-200 bg-gray-50">
+                                    <tr>
+                                        <th className="px-3 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.date")}</th>
+                                        <th className="px-3 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.voucherName")}</th>
+                                        <th className="px-3 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.descriptionStatement")}</th>
+                                        <th className="px-3 py-3 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.debit")}</th>
+                                        <th className="px-3 py-3 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.credit")}</th>
+                                        <th className="px-3 py-3 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.runningBalance")}</th>
+                                        <th className="px-3 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("ledger.table.reference")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {ledgerQuery.isLoading ? (
+                                        <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-gray-600">{t("ledger.loading")}</td></tr>
+                                    ) : (
+                                        <>
+                                            {/* Opening Balance Row */}
+                                            <tr className="bg-teal-500/5 transition-colors">
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-gray-500 italic">{dateFrom ? formatDate(dateFrom) : t("ledger.openingBalance.start")}</td>
+                                                <td className="px-3 py-2.5">
+                                                    <span dir="ltr" className="font-mono text-[10px] font-bold text-gray-600">OPEN-BAL</span>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-gray-500">{t("ledger.openingBalance.label")}</td>
+                                                <td className="px-3 py-2.5 text-end font-mono text-xs tabular-nums text-gray-400">—</td>
+                                                <td className="px-3 py-2.5 text-end font-mono text-xs tabular-nums text-gray-400">—</td>
+                                                <td className="px-3 py-2.5 text-end font-mono text-xs font-black tabular-nums text-teal-600">
+                                                    {formatCurrency(openingBalance)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-xs text-gray-400">—</td>
+                                            </tr>
 
-                                        {entries.length === 0 ? (
-                                            <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-600 italic">{t("ledger.empty.noMovements")}</td></tr>
-                                        ) : entries.map((entry, idx) => {
-                                            const dr = parseFloat(entry.debitAmount);
-                                            const cr = parseFloat(entry.creditAmount);
-                                            const runBal = parseFloat(entry.runningBalance);
-                                            return (
-                                                <tr key={entry.id} className={cn("hover:bg-gray-50 transition-colors", idx % 2 === 0 ? "" : "bg-gray-50")}>
-                                                    <td className="px-6 py-3 text-xs text-gray-400 tabular-nums">{formatDate(entry.entryDate)}</td>
-                                                    <td className="px-6 py-3">
-                                                        <span className="font-mono text-xs font-bold text-teal-400">{entry.journalReference || entry.reference || "—"}</span>
-                                                    </td>
-                                                    <td className="px-6 py-3 text-xs text-gray-500 max-w-[260px] truncate">{entry.description || "—"}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-teal-400 font-bold">
-                                                        {dr > 0 ? formatCurrency(dr) : "—"}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-orange-400 font-bold">
-                                                        {cr > 0 ? formatCurrency(cr) : "—"}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-zinc-200 font-black">
-                                                        {formatCurrency(runBal)}
-                                                    </td>
-                                                    <td className="px-6 py-3">
-                                                        <span className="font-mono text-xs font-bold text-teal-400">{entry.reference || "—"}</span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </>
-                                )}
-                            </tbody>
-                            <tfoot className="border-t border-gray-200 bg-black/20">
-                                <tr>
-                                    <td colSpan={3} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-600">{t("ledger.closingBalance")}</td>
-                                    <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-teal-400">{formatCurrency(totalDebit)}</td>
-                                    <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-orange-400">{formatCurrency(totalCredit)}</td>
-                                    <td className="px-6 py-4 text-right font-mono text-sm font-black tabular-nums text-gray-900">{formatCurrency(selectedAccount?.currentBalance ?? "0")}</td>
-                                    <td className="px-6 py-4" />
-                                </tr>
-                            </tfoot>
-                        </table>
+                                            {entries.length === 0 ? (
+                                                <tr><td colSpan={7} className="px-3 py-10 text-center text-sm italic text-gray-600">{t("ledger.empty.noMovements")}</td></tr>
+                                            ) : entries.map((entry, idx) => {
+                                                const dr = parseFloat(entry.debitAmount);
+                                                const cr = parseFloat(entry.creditAmount);
+                                                const runBal = parseFloat(entry.runningBalance);
+                                                return (
+                                                    <tr key={entry.id} className={cn("transition-colors hover:bg-gray-50", idx % 2 !== 0 && "bg-gray-50/60")}>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-gray-500">{formatDate(entry.entryDate)}</td>
+                                                        <td className="px-3 py-2.5">
+                                                            <span dir="ltr" className="block truncate font-mono text-xs font-bold text-teal-600">{entry.journalReference || entry.reference || "—"}</span>
+                                                        </td>
+                                                        <td className="px-3 py-2.5 text-xs text-gray-700">
+                                                            <span className="line-clamp-2">{entry.description || "—"}</span>
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-end font-mono text-xs font-bold tabular-nums text-teal-600">
+                                                            {dr > 0 ? formatCurrency(dr) : "—"}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-end font-mono text-xs font-bold tabular-nums text-orange-500">
+                                                            {cr > 0 ? formatCurrency(cr) : "—"}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-end font-mono text-xs font-black tabular-nums text-gray-900">
+                                                            {formatCurrency(runBal)}
+                                                        </td>
+                                                        <td className="px-3 py-2.5">
+                                                            <span dir="ltr" className="block truncate font-mono text-xs font-bold text-teal-600">{entry.reference || "—"}</span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </>
+                                    )}
+                                </tbody>
+                                <tfoot className="border-t border-gray-200 bg-gray-100">
+                                    <tr>
+                                        <td className="px-3 py-3" />
+                                        <td className="px-3 py-3" />
+                                        <td className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-gray-700">{t("ledger.closingBalance")}</td>
+                                        <td className="whitespace-nowrap px-3 py-3 text-end font-mono text-sm font-black tabular-nums text-teal-600">{formatCurrency(totalDebit)}</td>
+                                        <td className="whitespace-nowrap px-3 py-3 text-end font-mono text-sm font-black tabular-nums text-orange-500">{formatCurrency(totalCredit)}</td>
+                                        <td className="whitespace-nowrap px-3 py-3 text-end font-mono text-sm font-black tabular-nums text-gray-900">{formatCurrency(selectedAccount?.currentBalance ?? "0")}</td>
+                                        <td className="px-3 py-3" />
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </Card>
                 </>
             )}

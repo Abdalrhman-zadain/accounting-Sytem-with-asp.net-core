@@ -27,6 +27,8 @@ describe("SalesReceivablesService", () => {
     },
     creditNote: {
       aggregate: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     receiptAllocation: {
       aggregate: jest.fn(),
@@ -398,6 +400,37 @@ describe("SalesReceivablesService", () => {
         { userId: "user-1" },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("prevents posting linked credit notes above invoice outstanding balance", async () => {
+    prisma.creditNote.findUnique.mockResolvedValue({
+      id: "cn-1",
+      status: "DRAFT",
+      reference: "CN-001",
+      noteDate: new Date("2026-05-12"),
+      salesInvoiceId: "inv-1",
+      totalAmount: decimal("120.00"),
+      taxAmount: decimal("0"),
+      description: "Post-sale discount",
+      customer: {
+        id: "cust-1",
+        isActive: true,
+        receivableAccountId: "recv-1",
+      },
+      lines: [
+        {
+          revenueAccountId: "rev-1",
+          lineSubtotalAmount: decimal("120.00"),
+          description: null,
+        },
+      ],
+    });
+    prisma.salesInvoice.findUnique.mockResolvedValue({
+      outstandingAmount: decimal("100.00"),
+    });
+
+    await expect(service.postCreditNote("cn-1")).rejects.toThrow(BadRequestException);
+    await expect(service.postCreditNote("cn-1")).rejects.toThrow(/outstanding balance/);
   });
 
   it("prevents posting receipts without a valid bank or cash account", async () => {

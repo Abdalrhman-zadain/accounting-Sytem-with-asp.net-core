@@ -99,7 +99,7 @@ import type {
   InventoryUnitOfMeasure,
   InventoryWarehouse,
 } from "@/types/api";
-import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import {
   ItemEditorModal,
@@ -123,7 +123,7 @@ const STOCK_MOVEMENT_TYPE_OPTIONS: InventoryStockMovementType[] = [
   "ADJUSTMENT_IN",
   "ADJUSTMENT_OUT",
 ];
-const INVENTORY_ITEMS_PAGE_SIZE = 20;
+const INVENTORY_ITEMS_PAGE_SIZE = 9;
 const INVENTORY_RECEIPTS_PAGE_SIZE = 20;
 const INVENTORY_ISSUES_PAGE_SIZE = 20;
 const INVENTORY_TRANSFERS_PAGE_SIZE = 20;
@@ -1546,17 +1546,61 @@ export function InventoryPage() {
                 ) : items.length === 0 ? (
                   <EmptyState message={t("inventory.empty")} />
                 ) : (
-                  items.map((item) => {
+                  items.map((item, index) => {
                     const isSelected = selectedItem?.id === item.id;
+                    const isEven = index % 2 === 1;
+
+                    // Derive dot color
+                    const isDrink = item.code?.startsWith("POS-DRK") || item.category?.includes("Drinks") || item.category?.includes("مشروبات");
+                    const isService = item.type === "SERVICE" || item.code?.startsWith("POS-SRV");
+                    let dotColor = "#1D9E75"; // active sellable
+                    if (isService) {
+                      dotColor = "#9CA3AF"; // service
+                    } else if (isDrink) {
+                      dotColor = "#3B82F6"; // drinks/variants
+                    }
+
+                    // Derive badge info
+                    let badgeText = "";
+                    let badgeBg = "";
+                    if (isService) {
+                      badgeText = "خدمة";
+                      badgeBg = "bg-blue-50/10 text-blue-400 border-blue-500/20";
+                    } else if (item.code?.startsWith("OFFER-") || item.name?.includes("Bundle") || item.name?.includes("مجموعة") || item.type === "MANUFACTURED_ITEM") {
+                      badgeText = "مجموعة";
+                      badgeBg = "bg-amber-50/10 text-amber-400 border-amber-500/20";
+                    } else {
+                      badgeText = "للبيع";
+                      badgeBg = "bg-teal-50/10 text-teal-400 border-teal-500/20";
+                    }
+
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => setSelectedItemId(item.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-teal-200 bg-teal-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
+                        className={`w-full rounded-2xl border px-6 py-5 transition flex items-center gap-4 ${
+                          isSelected
+                            ? "border-teal-200 bg-teal-50/60"
+                            : isEven
+                              ? "border-gray-200 bg-slate-50/60 hover:border-gray-300 hover:bg-gray-100/70"
+                              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                        }`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        {/* 1. Status Dot */}
+                        <div className="shrink-0 flex items-center justify-center">
+                          <span
+                            className="inline-block rounded-full"
+                            style={{
+                              width: "7px",
+                              height: "7px",
+                              backgroundColor: dotColor,
+                            }}
+                          />
+                        </div>
+
+                        {/* 2. Main Content */}
+                        <div className="flex-1 min-w-0 text-start">
                           <div className="space-y-1">
                             <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{item.code}</div>
                             <div className="text-lg font-black tracking-tight text-gray-900">{formatItemServiceLabel(item.code, item.name)}</div>
@@ -1566,10 +1610,13 @@ export function InventoryPage() {
                               {item.itemCategory ? ` · ${item.itemCategory.name}` : item.category ? ` · ${item.category}` : ""}
                             </div>
                           </div>
-                          <StatusPill
-                            label={item.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
-                            tone={item.isActive ? "positive" : "warning"}
-                          />
+                        </div>
+
+                        {/* 3. Badge */}
+                        <div className="shrink-0 flex items-center justify-end">
+                          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold shadow-sm", badgeBg)}>
+                            {badgeText}
+                          </span>
                         </div>
                       </button>
                     );
@@ -1603,13 +1650,13 @@ export function InventoryPage() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
+            <Card className="space-y-6">
               {selectedItem ? (
                 <>
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
                     <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedItem.code}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">
+                      <div className="text-[10px] font-medium uppercase tracking-widest text-gray-400">{selectedItem.code}</div>
+                      <h2 className="text-[16px] font-medium tracking-tight text-gray-900">
                         {formatItemServiceLabel(selectedItem.code, selectedItem.name)}
                       </h2>
                     </div>
@@ -1619,48 +1666,173 @@ export function InventoryPage() {
                     />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailCard label={t("inventory.detail.type")} value={t(`inventory.type.${selectedItem.type}`)} />
-                    <DetailCard label={t("inventory.detail.unit")} value={selectedItem.unitOfMeasure} />
-                    <DetailCard label={t("inventory.detail.itemGroup")} value={selectedItem.itemGroup?.name ?? t("inventory.emptyValue")} />
-                    <DetailCard label={t("inventory.detail.itemCategory")} value={selectedItem.itemCategory?.name ?? selectedItem.category ?? t("inventory.emptyValue")} />
-                    <DetailCard label={t("inventory.detail.onHand")} value={selectedItem.onHandQuantity} />
-                    <DetailCard label={t("inventory.detail.valuation")} value={selectedItem.valuationAmount} />
-                    <DetailCard label={t("inventory.detail.reorderLevel")} value={selectedItem.reorderLevel} />
-                    <DetailCard label={t("inventory.detail.reorderQuantity")} value={selectedItem.reorderQuantity} />
-                    <DetailCard label="الباركود" value={selectedItem.barcode || t("inventory.emptyValue")} />
-                    <DetailCard label="رمز QR" value={selectedItem.qrCodeValue || t("inventory.emptyValue")} />
-                  </div>
-
-                  {selectedItem.description ? <p className="text-sm leading-7 text-gray-600">{selectedItem.description}</p> : null}
-
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
-                    <AccountLine label={t("inventory.detail.inventoryAccount")} account={selectedItem.inventoryAccount} />
-                    <AccountLine label={t("inventory.detail.cogsAccount")} account={selectedItem.cogsAccount} />
-                    <AccountLine label={t("inventory.detail.salesAccount")} account={selectedItem.salesAccount} />
-                    <AccountLine label={t("inventory.detail.adjustmentAccount")} account={selectedItem.adjustmentAccount} />
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.detail.preferredWarehouse")}:</span>{" "}
-                      {selectedItem.preferredWarehouse
-                        ? `${selectedItem.preferredWarehouse.code} · ${selectedItem.preferredWarehouse.name}`
-                        : selectedItem.preferredWarehouseCode || t("inventory.emptyValue")}
+                  {/* Section 1: معلومات أساسية */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">معلومات أساسية</div>
+                    <div className="divide-y divide-gray-100/50">
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.unit")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.unitOfMeasure}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.type")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{t(`inventory.type.${selectedItem.type}`)}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.itemCategory")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.itemCategory?.name ?? selectedItem.category ?? t("inventory.emptyValue")}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.itemGroup")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.itemGroup?.name ?? t("inventory.emptyValue")}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">الباركود</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.barcode || t("inventory.emptyValue")}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">رمز QR</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.qrCodeValue || t("inventory.emptyValue")}</span>
+                      </div>
                     </div>
                   </div>
 
+                  <hr className="border-gray-200/50 my-4" />
+
+                  {/* Section 2: التسعير والمخزون */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">التسعير والمخزون</div>
+                    <div className="divide-y divide-gray-100/50">
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.valuation")}</span>
+                        <span className="text-[12px] font-medium text-[#1D9E75]">{selectedItem.valuationAmount}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.onHand")}</span>
+                        <span className="text-[12px] font-medium text-[#1D9E75]">{selectedItem.onHandQuantity}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.reorderQuantity")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.reorderQuantity}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.reorderLevel")}</span>
+                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.reorderLevel}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-gray-200/50 my-4" />
+
+                  {/* Section 3: الحسابات */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">الحسابات</div>
+                    <div className="divide-y divide-gray-100/50">
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.inventoryAccount")}</span>
+                        <span className="text-[12px] font-medium text-gray-900 text-left">
+                          {selectedItem.inventoryAccount
+                            ? `${selectedItem.inventoryAccount.code} · ${(selectedItem.inventoryAccount as any).nameAr || selectedItem.inventoryAccount.name}`
+                            : t("inventory.emptyValue")}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.cogsAccount")}</span>
+                        <span className="text-[12px] font-medium text-gray-900 text-left">
+                          {selectedItem.cogsAccount
+                            ? `${selectedItem.cogsAccount.code} · ${(selectedItem.cogsAccount as any).nameAr || selectedItem.cogsAccount.name}`
+                            : t("inventory.emptyValue")}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.salesAccount")}</span>
+                        <span className="text-[12px] font-medium text-gray-900 text-left">
+                          {selectedItem.salesAccount
+                            ? `${selectedItem.salesAccount.code} · ${(selectedItem.salesAccount as any).nameAr || selectedItem.salesAccount.name}`
+                            : t("inventory.emptyValue")}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.adjustmentAccount")}</span>
+                        <span className="text-[12px] font-medium text-gray-900 text-left">
+                          {selectedItem.adjustmentAccount
+                            ? `${selectedItem.adjustmentAccount.code} · ${(selectedItem.adjustmentAccount as any).nameAr || selectedItem.adjustmentAccount.name}`
+                            : t("inventory.emptyValue")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-gray-200/50 my-4" />
+
+                  {/* Section 4: الموقع */}
+                  {(() => {
+                    const rawWarehouseName = selectedItem.preferredWarehouse?.name || "";
+                    let warehouseDisplay = rawWarehouseName;
+                    let branchDisplay = "";
+
+                    if (rawWarehouseName.includes(" — ")) {
+                      const parts = rawWarehouseName.split(" — ");
+                      warehouseDisplay = parts[0];
+                      branchDisplay = parts[1]?.replace(" / ", " · ") || "";
+                    } else if (rawWarehouseName.includes(" - ")) {
+                      const parts = rawWarehouseName.split(" - ");
+                      warehouseDisplay = parts[0];
+                      branchDisplay = parts[1]?.replace(" / ", " · ") || "";
+                    }
+
+                    return (
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">الموقع</div>
+                        <div className="divide-y divide-gray-100/50">
+                          <div className="flex items-center justify-between py-2.5">
+                            <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.preferredWarehouse")}</span>
+                            <span className="text-[12px] font-medium text-gray-900">
+                              {selectedItem.preferredWarehouse
+                                ? `${selectedItem.preferredWarehouse.code} · ${warehouseDisplay}`
+                                : selectedItem.preferredWarehouseCode || t("inventory.emptyValue")}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-2.5">
+                            <span className="text-[12px] text-gray-500 font-normal">الفرع</span>
+                            <span className="text-[12px] font-medium text-gray-900">{branchDisplay || t("inventory.emptyValue")}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {selectedItem.description ? (
+                    <>
+                      <hr className="border-gray-200/50 my-4" />
+                      <p className="text-sm leading-7 text-gray-600 font-normal">{selectedItem.description}</p>
+                    </>
+                  ) : null}
+
                   {selectedItem.barcode || selectedItem.qrCodeValue ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <PreviewCard
-                        label="الباركود"
-                        value={selectedItem.barcode}
-                        emptyMessage="لا يوجد باركود بعد."
-                        svg={selectedItem.barcode ? getBarcodePreviewSvg(selectedItem.barcode) : null}
-                      />
-                      <PreviewCard
-                        label="رمز QR"
-                        value={selectedItem.qrCodeValue}
-                        emptyMessage="لا يوجد رمز QR بعد."
-                        svg={selectedItem.qrCodeValue ? getQrPreviewSvg(selectedItem.qrCodeValue) : null}
-                      />
+                    <div className="grid gap-4 lg:grid-cols-2 pt-2">
+                      {selectedItem.barcode ? (
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
+                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">الباركود</div>
+                          <div
+                            className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
+                            style={{ minHeight: "80px" }}
+                            dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(selectedItem.barcode) }}
+                          />
+                          <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider">{selectedItem.barcode}</div>
+                        </div>
+                      ) : null}
+                      {selectedItem.qrCodeValue ? (
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
+                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">رمز QR</div>
+                          <div
+                            className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
+                            style={{ minHeight: "80px" }}
+                            dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(selectedItem.qrCodeValue) }}
+                          />
+                          <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider">{selectedItem.qrCodeValue}</div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -3891,10 +4063,23 @@ export function InventoryPage() {
 }
 
 function MetricCard({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
+  const numValue = Number(value) || 0;
+  const isActive = numValue > 0;
+
   return (
-    <Card className="space-y-2">
+    <Card 
+      className={cn(
+        "space-y-2 transition-all duration-300",
+        isActive ? "bg-[#F0FBF6] border border-[#1D9E75]" : ""
+      )}
+    >
       <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{label}</div>
-      <div className="text-3xl font-black tracking-tight text-gray-900">
+      <div 
+        className="text-3xl font-black tracking-tight"
+        style={{
+          color: isActive ? "#0F6E56" : "#9CA3AF",
+        }}
+      >
         {value}
         {suffix ? <span className="ms-2 text-base text-gray-500">{suffix}</span> : null}
       </div>
@@ -3904,9 +4089,43 @@ function MetricCard({ label, value, suffix }: { label: string; value: string; su
 
 function DetailCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-gray-200 px-4 py-3">
-      <div className="text-xs font-black uppercase tracking-[0.16em] text-gray-500">{label}</div>
-      <div className="mt-1 text-lg font-bold text-gray-900">{value}</div>
+    <div className="rounded-2xl border border-gray-200 px-4 py-3 bg-white">
+      <div className="text-[12px] font-normal uppercase tracking-[0.08em] text-gray-500">{label}</div>
+      <div className="mt-1 text-[12px] font-medium text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  action,
+}: {
+  title: string | ReactNode;
+  description?: string;
+  action?: ReactNode;
+}) {
+  const isPageTitle = typeof title === "string" && (title.includes("المخزون") || title.includes("Inventory"));
+  const titleSize = isPageTitle ? "20px" : "16px";
+
+  return (
+    <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between mb-8">
+      <div className="space-y-3">
+        <h1 
+          className="app-title font-medium tracking-tight text-gray-900"
+          style={{ fontSize: titleSize, fontWeight: 500 }}
+        >
+          {title}
+        </h1>
+        {description ? (
+          <p className="app-subtitle text-[12px] leading-relaxed text-gray-500 font-normal">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex-shrink-0">
+        {action}
+      </div>
     </div>
   );
 }

@@ -26,11 +26,11 @@ const WORKSPACE_TABS: Array<{
   kind?: BankCashTransactionKind;
   icon: ComponentType<{ className?: string }>;
 }> = [
-  { id: "accounts", href: "/bank-cash-accounts?tab=accounts", labelKey: "nav.item.bankCashAccounts", icon: WalletMinimal },
-  { id: "receipts", href: "/bank-cash-accounts?tab=receipts", labelKey: "bankCashTransactions.tab.RECEIPT", kind: "RECEIPT", icon: Inbox },
-  { id: "payments", href: "/bank-cash-accounts?tab=payments", labelKey: "bankCashTransactions.tab.PAYMENT", kind: "PAYMENT", icon: Send },
-  { id: "transfers", href: "/bank-cash-accounts?tab=transfers", labelKey: "bankCashTransactions.tab.TRANSFER", kind: "TRANSFER", icon: ArrowLeftRight },
-];
+    { id: "accounts", href: "/bank-cash-accounts?tab=accounts", labelKey: "nav.item.bankCashAccounts", icon: WalletMinimal },
+    { id: "receipts", href: "/bank-cash-accounts?tab=receipts", labelKey: "bankCashTransactions.tab.RECEIPT", kind: "RECEIPT", icon: Inbox },
+    { id: "payments", href: "/bank-cash-accounts?tab=payments", labelKey: "bankCashTransactions.tab.PAYMENT", kind: "PAYMENT", icon: Send },
+    { id: "transfers", href: "/bank-cash-accounts?tab=transfers", labelKey: "bankCashTransactions.tab.TRANSFER", kind: "TRANSFER", icon: ArrowLeftRight },
+  ];
 
 export function BankCashWorkspacePage() {
   const searchParams = useSearchParams();
@@ -60,7 +60,7 @@ export function BankCashWorkspacePage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className="!pt-2">
       {activeWorkspace === "accounts" ? <BankCashAccountsPage headerTabs={tabs} /> : null}
       {transactionTab?.kind ? <BankCashTransactionsPage kind={transactionTab.kind} showKindTabs={false} headerTabs={tabs} /> : null}
     </PageShell>

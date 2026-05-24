@@ -865,7 +865,7 @@ Object.assign(arTranslations, {
   "salesReceivables.creditNote.postSaleDiscountHint":
     "إشعار دائن لغرض خصم مبلغ من فاتورة بيع.",
   "salesReceivables.creditNote.availableDiscount":
-    "الرصيد المتاح للخصم: {amount}",
+    "الرصيد المتبقي على الفاتورة (الحد الأقصى شامل الضريبة): {amount}",
   "salesReceivables.creditNote.discountDetails": "تفاصيل الخصم",
   "salesReceivables.creditNote.defaultDiscountLabel": "خصم بعد البيع بنسبة 5%",
   "salesReceivables.creditNote.discountType": "نوع الخصم / وصف الخصم",
@@ -917,6 +917,12 @@ Object.assign(arTranslations, {
     "يجب أن يكون مبلغ المقبوض أكبر من صفر.",
   "salesReceivables.validation.allocationExceedsOutstanding":
     "لا يجوز أن يتجاوز مبلغ التخصيص الرصيد المتبقي على الفاتورة.",
+  "salesReceivables.validation.linkedInvoiceRequired":
+    "يرجى اختيار فاتورة المبيعات المرتبطة بإشعار الدائن.",
+  "salesReceivables.validation.creditNoteReasonRequired":
+    "يرجى إدخال سبب الخصم قبل حفظ إشعار الدائن.",
+  "salesReceivables.validation.creditNoteExceedsOutstanding":
+    "إجمالي إشعار الدائن {total} يتجاوز الرصيد المتبقي على الفاتورة البالغ {outstanding}. قلّل مبالغ الخصم أو الضريبة ليبقى الإجمالي ضمن الرصيد المتاح.",
   "salesReceivables.validation.receiptCreationFailed":
     "تعذّر إنشاء المقبوض. يرجى مراجعة البيانات المدخلة ثم المحاولة مرة أخرى.",
   "salesReceivables.tooltip.postAndCreateReceipt":
@@ -2181,6 +2187,9 @@ Object.assign(arTranslations, {
   "reporting.tab.cashMovement": "حركة النقد",
   "reporting.tab.generalLedger": "دفتر الأستاذ",
   "reporting.tab.audit": "التدقيق",
+  "reporting.filter.periodLabel": "الفترة:",
+  "reporting.filter.allPeriods": "كل الفترات",
+  "reporting.tab.activity": "نشاط التقارير",
   "reporting.filter.dateFrom": "من تاريخ",
   "reporting.filter.dateTo": "إلى تاريخ",
   "reporting.filter.comparisonFrom": "المقارنة من",
@@ -2195,6 +2204,13 @@ Object.assign(arTranslations, {
   "reporting.filter.segment4": "الفرع",
   "reporting.filter.segment5": "المشروع",
   "reporting.filter.journalEntryType": "نوع القيد",
+  "reporting.search.placeholder": "ابحث وأضف فلاتر…",
+  "reporting.search.filters": "الفلاتر",
+  "reporting.search.favorites": "المفضلة",
+  "reporting.filter.section.period": "الفترة",
+  "reporting.filter.section.comparison": "المقارنة",
+  "reporting.filter.section.dimensions": "الأبعاد",
+  "reporting.filter.section.options": "الخيارات",
   "reporting.field.definitionName": "اسم التعريف",
   "reporting.field.selectedDefinition": "التعريف المحدد",
   "reporting.field.shareDefinition": "مشاركة هذا التعريف مع المديرين والمسؤولين",
@@ -2255,6 +2271,12 @@ Object.assign(arTranslations, {
   "reporting.summary.metric.netIncome": "صافي الدخل",
   "reporting.summary.metric.netCashMovement": "صافي حركة النقد",
   "reporting.summary.metric.trialBalanceDifference": "فرق ميزان المراجعة",
+  "reporting.footer.totalAssets": "إجمالي الأصول",
+  "reporting.footer.balanceDifference": "فرق الميزان",
+  "reporting.footer.cashAccounts": "حسابات النقد",
+  "reporting.footer.auditEvents": "أحداث التدقيق",
+  "reporting.footer.generatedAt": "تاريخ الإنشاء",
+  "reporting.column.statement": "البيان",
   "reporting.metric.comparison": "المقارنة",
   "reporting.metric.variance": "الانحراف",
   "reporting.trialBalance.total.debit": "إجمالي المدين",

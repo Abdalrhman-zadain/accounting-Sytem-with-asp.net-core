@@ -137,8 +137,13 @@ describe('AccountsService', () => {
           id: true,
           code: true,
           name: true,
-          currentBalance: true,
+          nameAr: true,
           currencyCode: true,
+          currentBalance: true,
+          isActive: true,
+          isPosting: true,
+          type: true,
+          subtype: true,
         },
       }),
     );
@@ -188,16 +193,14 @@ describe('AccountsService', () => {
           id: true,
           code: true,
           name: true,
+          nameAr: true,
           type: true,
-          isPosting: true,
           isActive: true,
-          currentBalance: true,
+          isPosting: true,
           parentAccountId: true,
+          currentBalance: true,
           parentAccount: {
-            select: {
-              id: true,
-              name: true,
-            },
+            select: { id: true, name: true, nameAr: true },
           },
           _count: {
             select: {

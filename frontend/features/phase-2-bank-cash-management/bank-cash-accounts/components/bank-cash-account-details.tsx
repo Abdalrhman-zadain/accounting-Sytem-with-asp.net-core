@@ -66,7 +66,7 @@ export function BankCashAccountDetails({
           <div className="text-sm font-bold text-gray-900 arabic-heading">{t("bankCash.history.title")}</div>
           <div className="text-xs text-gray-500 arabic-muted">{t("bankCash.history.description")}</div>
         </div>
-        <div className="max-h-[620px] overflow-auto">
+        <div className="overflow-auto">
           {!selectedId ? (
             <div className="px-6 py-10 text-sm text-gray-500 arabic-muted">{t("bankCash.history.description")}</div>
           ) : isLoading ? (

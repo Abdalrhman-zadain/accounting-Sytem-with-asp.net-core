@@ -15,7 +15,7 @@ import {
 } from "react-icons/lu";
 
 import { Button } from "@/components/ui";
-import { Field, Input, Select } from "@/components/ui/forms";
+import { CurrencyAmountInput, Field, Input, Select } from "@/components/ui/forms";
 import { getActiveTaxes } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn, formatItemServiceLabel } from "@/lib/utils";
@@ -223,64 +223,94 @@ export function SalesDocumentEditorModal({
                 </div>
               </div>
 
-              <div className={cn("grid gap-4 border-b pb-3 lg:grid-cols-[minmax(0,1.35fr)_320px]", sectionBorderClass)}>
-                <Field label={t("salesReceivables.field.customer")} required labelClassName={labelClassName}>
+              {/* Header: 4-column grid that fills the full width */}
+              <div className="grid gap-x-4 gap-y-3 border-b pb-4 sm:grid-cols-2 xl:grid-cols-4" style={{ borderColor: "#e2e8f0" }}>
+                {/* Customer — spans 2 columns on xl */}
+                <div className="sm:col-span-2">
+                  <Field label={t("salesReceivables.field.customer")} required labelClassName={labelClassName}>
+                    <div className="relative">
+                      <Select
+                        value={customerId}
+                        onChange={(event) => onCustomerChange(event.target.value)}
+                        className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
+                      >
+                        <option value="">{t("salesReceivables.empty.selectActiveCustomer")}</option>
+                        {customers.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.code} · {row.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
+                    </div>
+                    <div className={cn("mt-1 text-[11px] text-slate-500", isArabic ? "text-right" : "text-left")}>
+                      اختر العميل لعرض المعاملة الضريبية
+                    </div>
+                  </Field>
+                </div>
+
+                {/* Invoice Date */}
+                <Field label={dateLabel} required labelClassName={labelClassName}>
                   <div className="relative">
-                    <Select
-                      value={customerId}
-                      onChange={(event) => onCustomerChange(event.target.value)}
+                    <Input
+                      type="date"
+                      value={dateValue}
+                      onChange={(event) => onDateChange(event.target.value)}
                       className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
-                    >
-                      <option value="">{t("salesReceivables.empty.selectActiveCustomer")}</option>
-                      {customers.map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {row.code} · {row.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <UserRound className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
-                  </div>
-                  <div className={cn("mt-1 text-[11px] text-slate-500", isArabic ? "text-right" : "text-left")}>
-                    اختر العميل لعرض المعاملة الضريبية
+                    />
+                    <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
                   </div>
                 </Field>
 
-                <div className="space-y-3">
-                  <Field label={dateLabel} required labelClassName={labelClassName}>
+                {/* Secondary Date (Due Date) or Currency */}
+                {secondaryDateLabel && onSecondaryDateChange ? (
+                  <Field label={secondaryDateLabel} labelClassName={labelClassName}>
                     <div className="relative">
                       <Input
                         type="date"
-                        value={dateValue}
-                        onChange={(event) => onDateChange(event.target.value)}
+                        value={secondaryDateValue ?? ""}
+                        onChange={(event) => onSecondaryDateChange(event.target.value)}
                         className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
                       />
                       <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
                     </div>
                   </Field>
-
-                  {secondaryDateLabel && onSecondaryDateChange ? (
-                    <Field label={secondaryDateLabel} labelClassName={labelClassName}>
-                      <div className="relative">
-                        <Input
-                          type="date"
-                          value={secondaryDateValue ?? ""}
-                          onChange={(event) => onSecondaryDateChange(event.target.value)}
-                          className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
-                        />
-                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
-                      </div>
-                    </Field>
-                  ) : null}
-
+                ) : (
                   <Field label={t("salesReceivables.field.currency")} required labelClassName={labelClassName}>
-                    <Input
+                    <Select
                       value={currencyCode}
-                      onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())}
-                      maxLength={3}
-                      className={cn(controlClassName, "uppercase")}
-                    />
+                      onChange={(event) => onCurrencyChange(event.target.value)}
+                      className={cn(controlClassName)}
+                    >
+                      <option value="JOD">JOD — دينار أردني</option>
+                      <option value="USD">USD — Dollar</option>
+                      <option value="EUR">EUR — Euro</option>
+                      <option value="GBP">GBP — Pound</option>
+                      <option value="SAR">SAR — ريال سعودي</option>
+                      <option value="AED">AED — درهم إماراتي</option>
+                      <option value="EGP">EGP — جنيه مصري</option>
+                    </Select>
                   </Field>
-                </div>
+                )}
+
+                {/* If secondary date exists, show currency as 4th column */}
+                {secondaryDateLabel && onSecondaryDateChange ? (
+                  <Field label={t("salesReceivables.field.currency")} required labelClassName={labelClassName}>
+                    <Select
+                      value={currencyCode}
+                      onChange={(event) => onCurrencyChange(event.target.value)}
+                      className={cn(controlClassName)}
+                    >
+                      <option value="JOD">JOD — دينار أردني</option>
+                      <option value="USD">USD — Dollar</option>
+                      <option value="EUR">EUR — Euro</option>
+                      <option value="GBP">GBP — Pound</option>
+                      <option value="SAR">SAR — ريال سعودي</option>
+                      <option value="AED">AED — درهم إماراتي</option>
+                      <option value="EGP">EGP — جنيه مصري</option>
+                    </Select>
+                  </Field>
+                ) : null}
               </div>
 
               <div className={cn("flex flex-wrap items-end gap-1.5 border-b py-2", sectionBorderClass)}>
@@ -445,27 +475,27 @@ export function SalesDocumentEditorModal({
                                     />
                                   </td>
                                   <td className="border-b border-slate-200 px-2.5 py-2">
-                                    <Input
-                                      type="number"
+                                    <CurrencyAmountInput
+                                      currencyCode={currencyCode || "JOD"}
+                                      isRtl={isArabic}
                                       min="0"
                                       step="0.01"
                                       value={line.unitPrice}
                                       onChange={(event) =>
                                         updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
                                       }
-                                      className={cn(controlClassName, "text-center")}
                                     />
                                   </td>
                                   <td className="border-b border-slate-200 px-2.5 py-2">
-                                    <Input
-                                      type="number"
+                                    <CurrencyAmountInput
+                                      currencyCode={currencyCode || "JOD"}
+                                      isRtl={isArabic}
                                       min="0"
                                       step="0.01"
                                       value={line.discountAmount}
                                       onChange={(event) =>
                                         updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
                                       }
-                                      className={cn(controlClassName, "text-center")}
                                     />
                                   </td>
                                   <td className="border-b border-slate-200 px-2.5 py-2">
@@ -491,23 +521,16 @@ export function SalesDocumentEditorModal({
                                     </Select>
                                   </td>
                                   <td className="border-b border-slate-200 px-2.5 py-2">
-                                    <div className="relative">
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={line.lineAmount}
-                                        readOnly
-                                        disabled
-                                        className={cn(
-                                          "h-10 rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-center text-sm font-bold text-emerald-700 disabled:opacity-100",
-                                          isArabic && "arabic-ui",
-                                        )}
-                                      />
-                                      <span className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500", isArabic ? "left-3" : "right-3")}>
-                                        {currencyCode}
-                                      </span>
-                                    </div>
+                                    <CurrencyAmountInput
+                                      currencyCode={currencyCode || "JOD"}
+                                      isRtl={isArabic}
+                                      min="0"
+                                      step="0.01"
+                                      value={line.lineAmount}
+                                      readOnly
+                                      disabled
+                                      className="bg-slate-100 text-emerald-700 font-bold disabled:opacity-100"
+                                    />
                                   </td>
                                   <td className="border-b border-slate-200 px-2.5 py-2">
                                     <button

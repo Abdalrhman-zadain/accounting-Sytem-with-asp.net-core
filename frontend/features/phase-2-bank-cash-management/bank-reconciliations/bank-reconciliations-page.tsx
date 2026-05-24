@@ -39,8 +39,8 @@ import type {
   BankReconciliationStatus,
   CreateBankStatementLinePayload,
 } from "@/types/api";
-import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
-import { Field, Input, Select, Textarea } from "@/components/ui/forms";
+import { Button, Card, Modal, PageShell, SectionHeading, StatusPill } from "@/components/ui";
+import { CurrencyAmountInput, Field, Input, Select, Textarea } from "@/components/ui/forms";
 
 type ReconciliationMetrics = {
   statementBalance: string;
@@ -363,7 +363,7 @@ export function BankReconciliationsPage() {
   }, [detail, matchedLines, reconciliationLines, unmatchedLines]);
 
   return (
-    <PageShell>
+    <PageShell className="!pt-2">
       <div dir={isArabic ? "rtl" : "ltr"} className="space-y-6">
         <SectionHeading title={labels.title} description={labels.listHint} />
 
@@ -424,8 +424,8 @@ export function BankReconciliationsPage() {
                     key={row.id}
                     onClick={() => { setSelectedId(row.id); setSelectedStatementLineId(null); setSelectedSystemTransactionId(null); }}
                     className={cn(
-                      "w-full border-r-2 px-6 py-4 text-right transition-colors",
-                      activeSelectedId === row.id ? "border-green-600 bg-green-50" : "border-transparent hover:bg-gray-50",
+                      "w-full cursor-pointer border-r-2 px-6 py-4 text-right transition-colors",
+                      activeSelectedId === row.id ? "border-green-600 bg-green-50" : "border-transparent hover:bg-gray-100",
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -806,10 +806,20 @@ export function BankReconciliationsPage() {
                       </Field>
                     </div>
                     <Field label={labels.debit}>
-                      <Input type="number" min="0" step="0.01" value={statementLine.debitAmount} onChange={(event) => setStatementLine((current) => ({ ...current, debitAmount: event.target.value }))} />
+                      <CurrencyAmountInput
+                        currencyCode="JOD"
+                        isRtl={isArabic}
+                        value={statementLine.debitAmount}
+                        onChange={(event) => setStatementLine((current) => ({ ...current, debitAmount: event.target.value }))}
+                      />
                     </Field>
                     <Field label={labels.credit}>
-                      <Input type="number" min="0" step="0.01" value={statementLine.creditAmount} onChange={(event) => setStatementLine((current) => ({ ...current, creditAmount: event.target.value }))} />
+                      <CurrencyAmountInput
+                        currencyCode="JOD"
+                        isRtl={isArabic}
+                        value={statementLine.creditAmount}
+                        onChange={(event) => setStatementLine((current) => ({ ...current, creditAmount: event.target.value }))}
+                      />
                     </Field>
                   </div>
                   <div className="flex justify-end mt-4">
@@ -844,7 +854,7 @@ export function BankReconciliationsPage() {
       </div>
 
       {/* Modal */}
-      <SidePanel isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={labels.newReconciliation}>
+      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={labels.newReconciliation} size="lg">
         <div className="space-y-5">
           <Field label={labels.account}>
             <Select value={editor.bankCashAccountId} onChange={(event) => setEditor((current) => ({ ...current, bankCashAccountId: event.target.value }))}>
@@ -860,7 +870,12 @@ export function BankReconciliationsPage() {
             <Input type="date" value={editor.statementDate} onChange={(event) => setEditor((current) => ({ ...current, statementDate: event.target.value }))} />
           </Field>
           <Field label={labels.balance}>
-            <Input type="number" min="0" step="0.01" value={editor.statementEndingBalance} onChange={(event) => setEditor((current) => ({ ...current, statementEndingBalance: event.target.value }))} />
+            <CurrencyAmountInput
+              currencyCode={detail?.bankCashAccount?.currencyCode || "JOD"}
+              isRtl={isArabic}
+              value={editor.statementEndingBalance}
+              onChange={(event) => setEditor((current) => ({ ...current, statementEndingBalance: event.target.value }))}
+            />
           </Field>
           <Field label={labels.notes}>
             <Textarea rows={4} value={editor.notes} onChange={(event) => setEditor((current) => ({ ...current, notes: event.target.value }))} />
@@ -875,7 +890,7 @@ export function BankReconciliationsPage() {
             </Button>
           </div>
         </div>
-      </SidePanel>
+      </Modal>
     </PageShell>
   );
 }

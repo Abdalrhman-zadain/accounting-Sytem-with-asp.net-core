@@ -64,17 +64,19 @@ export class ReportingService {
     const netCashMovement = Number(cashMovement.totals.netMovement.amount);
     const comparisonNetCashMovement = Number(cashMovement.totals.netMovement.comparisonAmount);
     const trialBalanceDifference = Number(trialBalance.totals.difference);
+    const kpiTrends = await this.buildSummaryKpiTrends(query);
 
     const payload = {
       generatedAt: new Date().toISOString(),
       basis: this.getBasis(query),
       period: this.buildPeriodLabel(query.dateFrom, query.dateTo),
       comparisonPeriod: this.buildPeriodLabel(query.comparisonFrom, query.comparisonTo),
+      trendLabels: kpiTrends.labels,
       metrics: [
-        this.metric("assets", "Total assets", totalAssets, comparisonAssets),
-        this.metric("liabilities", "Total liabilities", totalLiabilities, comparisonLiabilities),
-        this.metric("equity", "Total equity", totalEquity, comparisonEquity),
-        this.metric("netIncome", "Net income", netIncome, comparisonNetIncome),
+        this.metric("assets", "Total assets", totalAssets, comparisonAssets, kpiTrends.series.assets),
+        this.metric("liabilities", "Total liabilities", totalLiabilities, comparisonLiabilities, kpiTrends.series.liabilities),
+        this.metric("equity", "Total equity", totalEquity, comparisonEquity, kpiTrends.series.equity),
+        this.metric("netIncome", "Net income", netIncome, comparisonNetIncome, kpiTrends.series.netIncome),
         this.metric("netCashMovement", "Net cash movement", netCashMovement, comparisonNetCashMovement),
         {
           key: "trialBalanceDifference",
@@ -170,9 +172,12 @@ export class ReportingService {
   async getBalanceSheet(query: ReportingQueryDto, user?: AuthUser, shouldLog = true) {
     const accounts = await this.getPostingAccounts(query, ["ASSET", "LIABILITY", "EQUITY"]);
     const accountIds = accounts.map((account) => account.id);
+    const hasComparison = Boolean(query.comparisonFrom || query.comparisonTo);
     const [currentMap, comparisonMap] = await Promise.all([
       this.aggregateLedger(accountIds, query, undefined, query.dateTo, false),
-      this.aggregateLedger(accountIds, query, undefined, query.comparisonTo, false),
+      hasComparison
+        ? this.aggregateLedger(accountIds, query, undefined, query.comparisonTo ?? query.dateTo, false)
+        : Promise.resolve(new Map<string, { debit: number; credit: number }>()),
     ]);
 
     const buildSection = (types: AccountRow["type"][]) => {
@@ -233,9 +238,12 @@ export class ReportingService {
   async getProfitLoss(query: ReportingQueryDto, user?: AuthUser, shouldLog = true) {
     const accounts = await this.getPostingAccounts(query, ["REVENUE", "EXPENSE"]);
     const accountIds = accounts.map((account) => account.id);
+    const hasComparison = Boolean(query.comparisonFrom || query.comparisonTo);
     const [currentMap, comparisonMap] = await Promise.all([
       this.aggregateLedger(accountIds, query, query.dateFrom, query.dateTo, false),
-      this.aggregateLedger(accountIds, query, query.comparisonFrom, query.comparisonTo, false),
+      hasComparison
+        ? this.aggregateLedger(accountIds, query, query.comparisonFrom, query.comparisonTo, false)
+        : Promise.resolve(new Map<string, { debit: number; credit: number }>()),
     ]);
 
     const revenueRows = accounts
@@ -1132,14 +1140,111 @@ export class ReportingService {
     return query.basis ?? "ACCRUAL";
   }
 
-  private metric(key: string, label: string, amount: number, comparisonAmount: number) {
+  private metric(key: string, label: string, amount: number, comparisonAmount: number, trend?: number[]) {
     return {
       key,
       label,
       amount: this.toAmount(amount),
       comparisonAmount: this.toAmount(comparisonAmount),
       varianceAmount: this.toAmount(amount - comparisonAmount),
+      ...(trend && trend.length > 0 ? { trend: trend.map((value) => this.toAmount(value)) } : {}),
     };
+  }
+
+  private async buildSummaryKpiTrends(query: ReportingQueryDto, maxPoints = 12) {
+    const [balanceSheetAccounts, profitLossAccounts] = await Promise.all([
+      this.getPostingAccounts(query, ["ASSET", "LIABILITY", "EQUITY"]),
+      this.getPostingAccounts(query, ["REVENUE", "EXPENSE"]),
+    ]);
+    const balanceSheetAccountIds = balanceSheetAccounts.map((account) => account.id);
+    const profitLossAccountIds = profitLossAccounts.map((account) => account.id);
+    const buckets = this.buildTrendMonthBuckets(query, maxPoints);
+
+    const assets: number[] = [];
+    const liabilities: number[] = [];
+    const equity: number[] = [];
+    const netIncome: number[] = [];
+
+    for (const bucket of buckets) {
+      const [balanceSheetMap, profitLossMap] = await Promise.all([
+        this.aggregateLedger(balanceSheetAccountIds, query, undefined, bucket.end, false),
+        this.aggregateLedger(profitLossAccountIds, query, bucket.start, bucket.end, false),
+      ]);
+
+      assets.push(this.sumAccountsByTypes(balanceSheetAccounts, balanceSheetMap, ["ASSET"]));
+      liabilities.push(this.sumAccountsByTypes(balanceSheetAccounts, balanceSheetMap, ["LIABILITY"]));
+      equity.push(this.sumAccountsByTypes(balanceSheetAccounts, balanceSheetMap, ["EQUITY"]));
+
+      const revenue = this.sumAccountsByTypes(profitLossAccounts, profitLossMap, ["REVENUE"]);
+      const expenses = this.sumAccountsByTypes(profitLossAccounts, profitLossMap, ["EXPENSE"]);
+      netIncome.push(revenue - expenses);
+    }
+
+    return {
+      labels: buckets.map((bucket) => bucket.label),
+      series: { assets, liabilities, equity, netIncome },
+    };
+  }
+
+  private sumAccountsByTypes(accounts: AccountRow[], map: AmountMap, types: AccountRow["type"][]) {
+    return accounts
+      .filter((account) => types.includes(account.type))
+      .reduce((sum, account) => sum + this.normalizeByType(account.type, this.net(map.get(account.id))), 0);
+  }
+
+  private buildTrendMonthBuckets(query: ReportingQueryDto, maxPoints: number) {
+    const rangeEnd = query.dateTo ? this.parseIsoDate(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? this.parseIsoDate(query.dateFrom)
+      : new Date(Date.UTC(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - (maxPoints - 1), 1));
+
+    const allMonths: Array<{ label: string; start: string; end: string }> = [];
+    let cursor = new Date(Date.UTC(rangeStart.getUTCFullYear(), rangeStart.getUTCMonth(), 1));
+
+    while (cursor <= rangeEnd) {
+      const year = cursor.getUTCFullYear();
+      const month = cursor.getUTCMonth();
+      const monthStart = new Date(Date.UTC(year, month, 1));
+      const monthEnd = new Date(Date.UTC(year, month + 1, 0));
+      const effectiveEnd = monthEnd > rangeEnd ? rangeEnd : monthEnd;
+
+      allMonths.push({
+        label: `${year}-${String(month + 1).padStart(2, "0")}`,
+        start: this.formatIsoDate(monthStart),
+        end: this.formatIsoDate(effectiveEnd),
+      });
+
+      cursor = new Date(Date.UTC(year, month + 1, 1));
+    }
+
+    if (!allMonths.length) {
+      const today = this.formatIsoDate(rangeEnd);
+      return [{ label: today.slice(0, 7), start: today, end: today }];
+    }
+
+    if (allMonths.length <= maxPoints) {
+      return allMonths;
+    }
+
+    const lastIndex = allMonths.length - 1;
+    const picked = new Set<number>();
+    for (let index = 0; index < maxPoints; index += 1) {
+      picked.add(Math.round((index * lastIndex) / (maxPoints - 1)));
+    }
+
+    return [...picked].sort((left, right) => left - right).map((index) => allMonths[index]);
+  }
+
+  private parseIsoDate(value: string) {
+    const [year, month, day] = value.split("-").map((part) => Number(part));
+    return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+  }
+
+  private formatIsoDate(date: Date) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   private buildPeriodLabel(dateFrom?: string, dateTo?: string) {

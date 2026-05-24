@@ -180,9 +180,9 @@ export function BankCashAccountEditor({
                     label={t("bankCash.form.openingBalance")}
                     value={editor.openingBalance}
                     onChange={(value) => onChange({ ...editor, openingBalance: value })}
-                    type="text"
+                    type="number"
                     inputMode="decimal"
-                    numericOnly
+                    numericOnly={false}
                     labelClassName={fieldLabelClassName}
                     inputClassName={fieldInputClassName}
                   />

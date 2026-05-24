@@ -32,8 +32,8 @@ import type {
   BankCashTransactionKind,
   BankCashTransactionStatus,
 } from "@/types/api";
-import { Button, Card, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
-import { Field, Input, Select, Textarea } from "@/components/ui/forms";
+import { Button, Card, SectionHeading, Modal, StatusPill } from "@/components/ui";
+import { CurrencyAmountInput, Field, Input, Select, Textarea } from "@/components/ui/forms";
 
 type EditorState = {
   id?: string;
@@ -270,7 +270,9 @@ export function BankCashTransactionsPage({
                   <th className={cn("px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600", textAlign)}>{t("bankCashTransactions.table.date")}</th>
                   <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCashTransactions.table.amount")}</th>
                   <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCashTransactions.table.status")}</th>
-                  <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCashTransactions.table.actions")}</th>
+                  {rows.some((row) => row.status === "DRAFT") && (
+                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCashTransactions.table.actions")}</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -284,16 +286,17 @@ export function BankCashTransactionsPage({
                   rows.map((row) => (
                     <tr
                       key={row.id}
+                      onClick={() => setSelectedId(row.id)}
                       className={cn(
-                        "border-t border-gray-100 transition-colors hover:bg-gray-50",
+                        "border-t border-gray-100 transition-colors hover:bg-gray-50 cursor-pointer",
                         selected?.id === row.id && "bg-gray-50",
                       )}
                     >
                       <td className="px-6 py-4">
-                        <button className={textAlign} onClick={() => setSelectedId(row.id)}>
+                        <div className={textAlign}>
                           <div className="font-bold text-gray-900">{row.reference}</div>
                           <div className="text-xs text-gray-500">{row.journalReference ?? t("bankCashTransactions.table.noJournal")}</div>
-                        </button>
+                        </div>
                       </td>
                       <td className={cn("px-6 py-4", textAlign)}>
                         <div className="font-semibold text-gray-900">{primaryLabel(row)}</div>
@@ -307,37 +310,36 @@ export function BankCashTransactionsPage({
                           tone={row.status === "POSTED" ? "positive" : "warning"}
                         />
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-end gap-2">
-                          {row.status === "DRAFT" ? (
-                            <>
-                              <button
-                                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                                onClick={() => openEdit(row)}
-                              >
-                                {t("bankCashTransactions.action.edit")}
-                              </button>
-                              <button
-                                className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                                onClick={() => {
-                                  if (window.confirm(t("bankCashTransactions.confirm.post"))) {
-                                    postMutation.mutate(row.id);
-                                  }
-                                }}
-                              >
-                                {t("bankCashTransactions.action.post")}
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                              onClick={() => setSelectedId(row.id)}
-                            >
-                              {t("bankCashTransactions.action.view")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                      {rows.some((r) => r.status === "DRAFT") && (
+                        <td className="px-6 py-4">
+                          <div className="flex justify-end gap-2">
+                            {row.status === "DRAFT" ? (
+                              <>
+                                <button
+                                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEdit(row);
+                                  }}
+                                >
+                                  {t("bankCashTransactions.action.edit")}
+                                </button>
+                                <button
+                                  className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(t("bankCashTransactions.confirm.post"))) {
+                                      postMutation.mutate(row.id);
+                                    }
+                                  }}
+                                >
+                                  {t("bankCashTransactions.action.post")}
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -374,7 +376,8 @@ export function BankCashTransactionsPage({
         </Card>
       </div>
 
-      <SidePanel
+      <Modal
+        size="2xl"
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
         title={editor.id ? t("bankCashTransactions.form.editTitle") : t(transactionButtonKey(kind))}
@@ -387,10 +390,12 @@ export function BankCashTransactionsPage({
           </div>
 
           <Field label={t("bankCashTransactions.form.amount")}>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
+            <CurrencyAmountInput
+              currencyCode={
+                activeBankCashAccounts.find(a => a.id === editor.bankCashAccountId)?.currencyCode ||
+                activeBankCashAccounts.find(a => a.id === editor.sourceBankCashAccountId)?.currencyCode ||
+                "JOD"
+              }
               value={editor.amount}
               onChange={(event) => setEditor((current) => ({ ...current, amount: event.target.value }))}
             />
@@ -482,7 +487,7 @@ export function BankCashTransactionsPage({
             </Button>
           </div>
         </div>
-      </SidePanel>
+      </Modal>
     </div>
   );
 }

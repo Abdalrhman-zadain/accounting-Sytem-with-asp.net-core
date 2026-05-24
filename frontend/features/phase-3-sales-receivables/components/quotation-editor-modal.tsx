@@ -15,7 +15,7 @@ import {
 } from "react-icons/lu";
 
 import { Button } from "@/components/ui";
-import { Field, Input, Select, Textarea } from "@/components/ui/forms";
+import { CurrencyAmountInput, Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { getActiveTaxes } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn, formatCurrency, formatItemServiceLabel } from "@/lib/utils";
@@ -417,17 +417,24 @@ export function QuotationEditorModal({
                 </Field>
 
                 <Field label={t("salesReceivables.field.currency")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
-                  <Input
+                  <Select
                     value={editor.currencyCode}
                     onChange={(event) =>
                       updateEditor((current) => ({
                         ...current,
-                        currencyCode: event.target.value.toUpperCase(),
+                        currencyCode: event.target.value,
                       }))
                     }
-                    maxLength={3}
-                    className={cn("border-slate-200 bg-slate-50/70 uppercase", isArabic && "arabic-ui text-right")}
-                  />
+                    className={cn("border-slate-200 bg-slate-50/70", isArabic && "arabic-ui text-right")}
+                  >
+                    <option value="JOD">JOD — دينار أردني</option>
+                    <option value="USD">USD — Dollar</option>
+                    <option value="EUR">EUR — Euro</option>
+                    <option value="GBP">GBP — Pound</option>
+                    <option value="SAR">SAR — ريال سعودي</option>
+                    <option value="AED">AED — درهم إماراتي</option>
+                    <option value="EGP">EGP — جنيه مصري</option>
+                  </Select>
                 </Field>
               </div>
 
@@ -604,26 +611,28 @@ export function QuotationEditorModal({
                             className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
                           />
 
-                          <Input
-                            type="number"
+                          <CurrencyAmountInput
+                            currencyCode={editor.currencyCode || "JOD"}
+                            isRtl={isArabic}
                             min="0"
                             step="0.01"
                             value={line.unitPrice}
                             onChange={(event) =>
                               updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
                             }
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
+                            className={cn(isArabic && "arabic-ui")}
                           />
 
-                          <Input
-                            type="number"
+                          <CurrencyAmountInput
+                            currencyCode={editor.currencyCode || "JOD"}
+                            isRtl={isArabic}
                             min="0"
                             step="0.01"
                             value={line.discountAmount}
                             onChange={(event) =>
                               updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
                             }
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
+                            className={cn(isArabic && "arabic-ui")}
                           />
 
                           <Select
@@ -653,25 +662,16 @@ export function QuotationEditorModal({
                             <div className={cn("mb-2 px-1 text-sm font-bold text-slate-900", isArabic ? "arabic-ui text-right" : "text-left")}>
                               {t("salesReceivables.field.lineAmount")}
                             </div>
-                            <div className="relative">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={line.lineAmount}
-                                readOnly
-                                disabled
-                                className={cn("border-slate-200 bg-slate-100 text-emerald-700 disabled:opacity-100", isArabic && "arabic-ui text-right")}
-                              />
-                              <span
-                                className={cn(
-                                  "pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500",
-                                  isArabic ? "left-4" : "right-4",
-                                )}
-                              >
-                                {editor.currencyCode || "JOD"}
-                              </span>
-                            </div>
+                            <CurrencyAmountInput
+                              currencyCode={editor.currencyCode || "JOD"}
+                              isRtl={isArabic}
+                              min="0"
+                              step="0.01"
+                              value={line.lineAmount}
+                              readOnly
+                              disabled
+                              className={cn("bg-slate-100 text-emerald-700 disabled:opacity-100", isArabic && "arabic-ui")}
+                            />
                           </div>
                         </div>
                       </div>

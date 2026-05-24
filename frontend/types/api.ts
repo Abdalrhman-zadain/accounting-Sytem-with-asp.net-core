@@ -3979,6 +3979,8 @@ export type ReportingMetric = {
   amount: string;
   comparisonAmount: string;
   varianceAmount: string;
+  /** Monthly (or sub-sampled) amounts for dashboard KPI sparklines, oldest first. */
+  trend?: string[];
 };
 
 export type ReportingSummary = {
@@ -3986,6 +3988,8 @@ export type ReportingSummary = {
   basis: ReportingBasis;
   period: string;
   comparisonPeriod?: string | null;
+  /** Labels aligned with each metric `trend` bucket (e.g. YYYY-MM). */
+  trendLabels?: string[];
   metrics: ReportingMetric[];
   warnings?: ReportingWarning[];
   operational: {

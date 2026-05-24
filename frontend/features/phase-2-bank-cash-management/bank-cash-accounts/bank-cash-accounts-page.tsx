@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
-import { Button, SectionHeading } from "@/components/ui";
+import { Button, SectionHeading, Modal } from "@/components/ui";
 import { useTranslation } from "@/lib/i18n";
 
 import { EMPTY_EDITOR, type EditorState } from "./bank-cash-accounts.types";
@@ -242,7 +242,7 @@ export function BankCashAccountsPage({ headerTabs }: { headerTabs?: ReactNode })
         onStatusFilterChange={setStatusFilter}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6">
         <BankCashAccountsTable
           rows={rows}
           selectedId={selectedId}
@@ -253,12 +253,21 @@ export function BankCashAccountsPage({ headerTabs }: { headerTabs?: ReactNode })
           onDeactivate={(id) => deactivateMutation.mutate(id)}
         />
 
-        <BankCashAccountDetails
-          selectedId={selectedId}
-          selectedDetails={selectedDetails}
-          historyRows={historyRows}
-          isLoading={transactionsQuery.isLoading}
-        />
+        <Modal
+          isOpen={!!selectedId}
+          onClose={() => setSelectedId(null)}
+          title={t("bankCash.title")}
+          size="4xl"
+        >
+          <div className="max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
+            <BankCashAccountDetails
+              selectedId={selectedId}
+              selectedDetails={selectedDetails}
+              historyRows={historyRows}
+              isLoading={transactionsQuery.isLoading}
+            />
+          </div>
+        </Modal>
       </div>
 
       <BankCashAccountEditor
