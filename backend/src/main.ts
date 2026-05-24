@@ -1,10 +1,11 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
   // Enable CORS for frontend integration
@@ -39,9 +40,21 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3007;
-  await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}/api`);
-  console.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+  try {
+    await app.listen(port);
+    logger.log(`Application is running on: http://localhost:${port}/api`);
+    logger.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === 'EADDRINUSE') {
+      logger.error(
+        `Port ${port} is already in use. The ERP backend is likely already running in another terminal. Stop the existing process or use a different PORT before starting a new instance.`,
+      );
+      await app.close();
+      process.exit(1);
+    }
+
+    throw error;
+  }
 }
 
 bootstrap();

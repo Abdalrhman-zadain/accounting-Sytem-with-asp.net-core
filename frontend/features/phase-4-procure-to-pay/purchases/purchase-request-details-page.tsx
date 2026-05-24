@@ -1,119 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import {
-  approvePurchaseRequest,
-  convertPurchaseRequestToOrder,
-  getPurchaseRequestById,
-  getSuppliers,
-  rejectPurchaseRequest,
-  submitPurchaseRequest,
-} from "@/lib/api";
+import { getPurchaseRequestById } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
-import { cleanDisplayName, cn, formatDate } from "@/lib/utils";
+import { cleanDisplayName, formatDate } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { PurchaseOrderStatus, PurchaseRequest } from "@/types/api";
-import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
-import { Field, Input, Select, Textarea } from "@/components/ui/forms";
-
-type ConversionState = {
-  supplierId: string;
-  orderDate: string;
-  currencyCode: string;
-  description: string;
-};
-
-const EMPTY_CONVERSION_STATE = (): ConversionState => ({
-  supplierId: "",
-  orderDate: todayValue(),
-  currencyCode: "JOD",
-  description: "",
-});
+import { Button, Card, PageShell, SectionHeading, StatusPill } from "@/components/ui";
 
 export function PurchaseRequestDetailsPage({ purchaseRequestId }: { purchaseRequestId: string }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { token } = useAuth();
   const { t, language } = useTranslation();
   const isArabic = language === "ar";
-  const [isConversionOpen, setIsConversionOpen] = useState(false);
-  const [conversionEditor, setConversionEditor] = useState<ConversionState>(EMPTY_CONVERSION_STATE);
 
   const purchaseRequestQuery = useQuery({
     queryKey: queryKeys.purchaseRequestById(token, purchaseRequestId),
     queryFn: () => getPurchaseRequestById(purchaseRequestId, token),
   });
 
-  const suppliersQuery = useQuery({
-    queryKey: queryKeys.purchaseSuppliers(token, { isActive: "true" }),
-    queryFn: () => getSuppliers({ isActive: "true" }, token),
-  });
-
   const purchaseRequest = purchaseRequestQuery.data;
-  const activeSuppliers = suppliersQuery.data ?? [];
-
-  async function invalidatePurchaseRequestWorkspace() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["purchase-requests", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-request", token, purchaseRequestId] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-orders", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-invoices", token] }),
-    ]);
-  }
-
-  const submitMutation = useMutation({
-    mutationFn: () => submitPurchaseRequest(purchaseRequestId, {}, token),
-    onSuccess: invalidatePurchaseRequestWorkspace,
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: () => approvePurchaseRequest(purchaseRequestId, {}, token),
-    onSuccess: invalidatePurchaseRequestWorkspace,
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: () => rejectPurchaseRequest(purchaseRequestId, {}, token),
-    onSuccess: invalidatePurchaseRequestWorkspace,
-  });
-
-  const convertToOrderMutation = useMutation({
-    mutationFn: () =>
-      convertPurchaseRequestToOrder(
-        purchaseRequestId,
-        {
-          supplierId: conversionEditor.supplierId,
-          orderDate: conversionEditor.orderDate,
-          currencyCode: conversionEditor.currencyCode || undefined,
-          description: conversionEditor.description || undefined,
-        },
-        token,
-      ),
-    onSuccess: async () => {
-      await invalidatePurchaseRequestWorkspace();
-      setIsConversionOpen(false);
-      setConversionEditor(EMPTY_CONVERSION_STATE());
-    },
-  });
-
-  const activeActionPending =
-    submitMutation.isPending ||
-    approveMutation.isPending ||
-    rejectMutation.isPending ||
-    convertToOrderMutation.isPending;
-
-  const actionError = getErrorMessage(
-    submitMutation.error ??
-      approveMutation.error ??
-      rejectMutation.error ??
-      convertToOrderMutation.error,
-  );
-
-  const conversionError = getConversionError(conversionEditor, t);
-  const detailsError = getErrorMessage(purchaseRequestQuery.error ?? suppliersQuery.error);
+  const detailsError = getErrorMessage(purchaseRequestQuery.error);
 
   const historyDateFormatter = useMemo(
     () =>
@@ -123,22 +34,6 @@ export function PurchaseRequestDetailsPage({ purchaseRequestId }: { purchaseRequ
       }),
     [isArabic],
   );
-
-  const handleConvertToInvoice = () => {
-    router.push(`/purchases?tab=invoices&sourceRequestId=${purchaseRequestId}`);
-  };
-
-  const openConversionEditor = () => {
-    const defaultSupplier = activeSuppliers[0];
-    setConversionEditor({
-      supplierId: defaultSupplier?.id ?? "",
-      orderDate: todayValue(),
-      currencyCode: defaultSupplier?.defaultCurrency ?? "JOD",
-      description: purchaseRequest?.description ?? "",
-    });
-    setIsConversionOpen(true);
-    convertToOrderMutation.reset();
-  };
 
   return (
     <PageShell>
@@ -176,58 +71,11 @@ export function PurchaseRequestDetailsPage({ purchaseRequestId }: { purchaseRequ
                   </div>
                   <div className="text-sm text-gray-500">{formatDate(purchaseRequest.requestDate)}</div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusPill
-                    label={translatePurchaseRequestStatus(purchaseRequest.status, t)}
-                    tone={requestStatusTone(purchaseRequest.status)}
-                  />
-                  {purchaseRequest.canSubmit ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.requests.confirm.submit"), () => submitMutation.mutate())}
-                    >
-                      {t("purchases.action.submitRequest")}
-                    </Button>
-                  ) : null}
-                  {purchaseRequest.canApprove ? (
-                    <Button
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.requests.confirm.approve"), () => approveMutation.mutate())}
-                    >
-                      {t("purchases.action.approveRequest")}
-                    </Button>
-                  ) : null}
-                  {purchaseRequest.canReject ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.requests.confirm.reject"), () => rejectMutation.mutate())}
-                    >
-                      {t("purchases.action.rejectRequest")}
-                    </Button>
-                  ) : null}
-                  {purchaseRequest.canConvertToOrder ? (
-                    <Button size="sm" disabled={activeActionPending} onClick={openConversionEditor}>
-                      {t("purchases.action.convertToOrder")}
-                    </Button>
-                  ) : null}
-                  {purchaseRequest.canConvertToInvoice ? (
-                    <Button size="sm" disabled={activeActionPending} onClick={handleConvertToInvoice}>
-                      {t("purchases.action.convertToInvoice")}
-                    </Button>
-                  ) : null}
-                </div>
+                <StatusPill
+                  label={translatePurchaseRequestStatus(purchaseRequest.status, t)}
+                  tone={requestStatusTone(purchaseRequest.status)}
+                />
               </div>
-
-              {actionError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {actionError}
-                </div>
-              ) : null}
 
               <div className="grid gap-4 md:grid-cols-4">
                 <MiniMetric label={t("purchases.requests.metric.date")} value={formatDate(purchaseRequest.requestDate)} />
@@ -389,85 +237,6 @@ export function PurchaseRequestDetailsPage({ purchaseRequestId }: { purchaseRequ
         ) : null}
       </div>
 
-      <SidePanel
-        isOpen={isConversionOpen}
-        onClose={() => setIsConversionOpen(false)}
-        title={t("purchases.dialog.convertToOrder")}
-      >
-        <div className="space-y-5">
-          <Field label={t("purchases.requests.field.supplier")}>
-            <Select
-              value={conversionEditor.supplierId}
-              onChange={(event) => {
-                const supplier = activeSuppliers.find((row) => row.id === event.target.value);
-                setConversionEditor((current) => ({
-                  ...current,
-                  supplierId: event.target.value,
-                  currencyCode: supplier?.defaultCurrency ?? current.currencyCode,
-                }));
-              }}
-            >
-              <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
-              {activeSuppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.code} · {supplier.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t("purchases.requests.field.orderDate")}>
-              <Input
-                type="date"
-                value={conversionEditor.orderDate}
-                onChange={(event) => setConversionEditor((current) => ({ ...current, orderDate: event.target.value }))}
-              />
-            </Field>
-            <Field label={t("purchases.requests.field.currency")}>
-              <Input
-                value={conversionEditor.currencyCode}
-                maxLength={8}
-                onChange={(event) =>
-                  setConversionEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))
-                }
-              />
-            </Field>
-          </div>
-
-          <Field label={t("purchases.requests.field.orderDescription")}>
-            <Textarea
-              rows={3}
-              value={conversionEditor.description}
-              onChange={(event) => setConversionEditor((current) => ({ ...current, description: event.target.value }))}
-            />
-          </Field>
-
-          {conversionError ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {conversionError}
-            </div>
-          ) : null}
-
-          {convertToOrderMutation.error instanceof Error ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-              {convertToOrderMutation.error.message}
-            </div>
-          ) : null}
-
-          <div className={cn("flex justify-end gap-3", isArabic && "flex-row-reverse")}>
-            <Button variant="secondary" onClick={() => setIsConversionOpen(false)}>
-              {t("purchases.action.cancel")}
-            </Button>
-            <Button
-              onClick={() => convertToOrderMutation.mutate()}
-              disabled={Boolean(conversionError) || convertToOrderMutation.isPending}
-            >
-              {t("purchases.action.convertToOrder")}
-            </Button>
-          </div>
-        </div>
-      </SidePanel>
     </PageShell>
   );
 }
@@ -573,24 +342,4 @@ function purchaseInvoiceStatusTone(status: string) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : null;
-}
-
-function getConversionError(
-  editor: ConversionState,
-  t: (key: string, vars?: Record<string, string | number>) => string,
-) {
-  if (!editor.supplierId) return t("purchases.requests.empty.selectSupplier");
-  if (!editor.orderDate) return t("purchases.validation.dateRequired");
-  if (!editor.currencyCode.trim()) return t("purchases.validation.currencyRequired");
-  return null;
-}
-
-function todayValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function confirmAndRun(message: string, action: () => void) {
-  if (window.confirm(message)) {
-    action();
-  }
 }

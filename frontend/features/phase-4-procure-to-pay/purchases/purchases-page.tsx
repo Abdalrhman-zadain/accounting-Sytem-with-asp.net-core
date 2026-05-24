@@ -24,14 +24,17 @@ import {
 } from "react-icons/lu";
 
 import {
+  approvePurchaseRequest,
   cancelDebitNote,
   cancelSupplierPayment,
+  closePurchaseRequest,
   createDebitNote,
   createPaymentTerm,
   createPurchaseInvoice,
   createPurchaseOrder,
   createPurchaseReceipt,
   createPurchaseRequest,
+  convertPurchaseRequestToOrder,
   createSupplierPayment,
   createSupplier,
   deactivateSupplier,
@@ -52,11 +55,14 @@ import {
   getPurchaseRequestById,
   getPurchaseRequests,
   issuePurchaseOrder,
+  markPurchaseOrderFullyReceived,
+  markPurchaseOrderPartiallyReceived,
   postPurchaseInvoice,
   postPurchaseReceipt,
   reverseDebitNote,
   reversePurchaseInvoice,
   reverseSupplierPayment,
+  rejectPurchaseRequest,
   getSupplierBalance,
   getSupplierPaymentById,
   getSupplierPayments,
@@ -71,6 +77,8 @@ import {
   updatePurchaseRequest,
   updateSupplierPayment,
   updateSupplier,
+  cancelPurchaseOrder,
+  closePurchaseOrder,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -148,6 +156,15 @@ type PurchaseOrderEditorState = {
   currencyCode: string;
   description: string;
   lines: PurchaseOrderLineEditorState[];
+};
+
+type PurchaseRequestConversionState = {
+  requestId: string;
+  requestReference: string;
+  supplierId: string;
+  orderDate: string;
+  currencyCode: string;
+  description: string;
 };
 
 type PurchaseReceiptLineEditorState = {
@@ -277,6 +294,15 @@ const EMPTY_ORDER_EDITOR = (): PurchaseOrderEditorState => ({
   lines: [createEmptyOrderLine()],
 });
 
+const EMPTY_REQUEST_CONVERSION_EDITOR = (): PurchaseRequestConversionState => ({
+  requestId: "",
+  requestReference: "",
+  supplierId: "",
+  orderDate: todayValue(),
+  currencyCode: "JOD",
+  description: "",
+});
+
 const EMPTY_RECEIPT_EDITOR = (): PurchaseReceiptEditorState => ({
   reference: "",
   receiptDate: todayValue(),
@@ -344,6 +370,8 @@ export function PurchasesPage() {
   >("");
   const [isOrderEditorOpen, setIsOrderEditorOpen] = useState(false);
   const [orderEditor, setOrderEditor] = useState<PurchaseOrderEditorState>(EMPTY_ORDER_EDITOR);
+  const [isRequestConversionOpen, setIsRequestConversionOpen] = useState(false);
+  const [requestConversionEditor, setRequestConversionEditor] = useState<PurchaseRequestConversionState>(EMPTY_REQUEST_CONVERSION_EDITOR);
   const [isReceiptEditorOpen, setIsReceiptEditorOpen] = useState(false);
   const [receiptEditor, setReceiptEditor] = useState<PurchaseReceiptEditorState>(EMPTY_RECEIPT_EDITOR);
   const [invoiceSearch, setInvoiceSearch] = useState("");
@@ -712,6 +740,27 @@ export function PurchasesPage() {
     },
   });
 
+  const approvePurchaseRequestMutation = useMutation({
+    mutationFn: (id: string) => approvePurchaseRequest(id, {}, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const rejectPurchaseRequestMutation = useMutation({
+    mutationFn: (id: string) => rejectPurchaseRequest(id, {}, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const closePurchaseRequestMutation = useMutation({
+    mutationFn: (id: string) => closePurchaseRequest(id, {}, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
   const createPurchaseOrderMutation = useMutation({
     mutationFn: () =>
       createPurchaseOrder(
@@ -751,6 +800,55 @@ export function PurchasesPage() {
     mutationFn: (id: string) => issuePurchaseOrder(id, token),
     onSuccess: async () => {
       await invalidatePurchases(queryClient);
+    },
+  });
+
+  const markPurchaseOrderPartiallyReceivedMutation = useMutation({
+    mutationFn: (id: string) => markPurchaseOrderPartiallyReceived(id, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const markPurchaseOrderFullyReceivedMutation = useMutation({
+    mutationFn: (id: string) => markPurchaseOrderFullyReceived(id, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const cancelPurchaseOrderMutation = useMutation({
+    mutationFn: (id: string) => cancelPurchaseOrder(id, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const closePurchaseOrderMutation = useMutation({
+    mutationFn: (id: string) => closePurchaseOrder(id, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
+    },
+  });
+
+  const convertPurchaseRequestToOrderMutation = useMutation({
+    mutationFn: () =>
+      convertPurchaseRequestToOrder(
+        requestConversionEditor.requestId,
+        {
+          supplierId: requestConversionEditor.supplierId,
+          orderDate: requestConversionEditor.orderDate,
+          currencyCode: requestConversionEditor.currencyCode || undefined,
+          description: requestConversionEditor.description || undefined,
+        },
+        token,
+      ),
+    onSuccess: async (result) => {
+      await invalidatePurchases(queryClient);
+      closeRequestConversionEditor();
+      const nextSearchParams = new URLSearchParams(searchParams.toString());
+      nextSearchParams.set("tab", "orders");
+      router.replace(`/purchases?${nextSearchParams.toString()}`);
     },
   });
 
@@ -1147,10 +1245,35 @@ export function PurchasesPage() {
     nextField?.focus();
   }
   const requestSaveError = getMutationErrorMessage(createPurchaseRequestMutation.error ?? updatePurchaseRequestMutation.error);
-  const requestActionError = getMutationErrorMessage(submitPurchaseRequestMutation.error);
+  const requestActionError = getMutationErrorMessage(
+    submitPurchaseRequestMutation.error ??
+      approvePurchaseRequestMutation.error ??
+      rejectPurchaseRequestMutation.error ??
+      closePurchaseRequestMutation.error ??
+      convertPurchaseRequestToOrderMutation.error,
+  );
+  const requestConversionError = getPurchaseRequestConversionError(requestConversionEditor, t);
   const requestFormError = getPurchaseRequestFormError(requestEditor);
+  const activeRequestActionMutationPending =
+    submitPurchaseRequestMutation.isPending ||
+    approvePurchaseRequestMutation.isPending ||
+    rejectPurchaseRequestMutation.isPending ||
+    closePurchaseRequestMutation.isPending ||
+    convertPurchaseRequestToOrderMutation.isPending;
   const orderSaveError = getMutationErrorMessage(createPurchaseOrderMutation.error ?? updatePurchaseOrderMutation.error);
-  const orderActionError = getMutationErrorMessage(issuePurchaseOrderMutation.error);
+  const orderActionError = getMutationErrorMessage(
+    issuePurchaseOrderMutation.error ??
+      markPurchaseOrderPartiallyReceivedMutation.error ??
+      markPurchaseOrderFullyReceivedMutation.error ??
+      cancelPurchaseOrderMutation.error ??
+      closePurchaseOrderMutation.error,
+  );
+  const activeOrderActionMutationPending =
+    issuePurchaseOrderMutation.isPending ||
+    markPurchaseOrderPartiallyReceivedMutation.isPending ||
+    markPurchaseOrderFullyReceivedMutation.isPending ||
+    cancelPurchaseOrderMutation.isPending ||
+    closePurchaseOrderMutation.isPending;
   const orderFormError = getPurchaseOrderFormError(orderEditor, t);
   const receiptSaveError = getMutationErrorMessage(receivePurchaseOrderMutation.error);
   const receiptFormError = getPurchaseReceiptFormError(receiptEditor, t);
@@ -1760,6 +1883,12 @@ export function PurchasesPage() {
                 </div>
               </div>
 
+              {requestActionError ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {requestActionError}
+                </div>
+              ) : null}
+
               <div className="overflow-hidden rounded-2xl border border-gray-200">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
@@ -1798,6 +1927,79 @@ export function PurchasesPage() {
                               {row.canEdit ? (
                                 <Button variant="secondary" size="sm" onClick={() => openEditPurchaseRequestEditor(row)}>
                                   {t("purchases.action.edit")}
+                                </Button>
+                              ) : null}
+                              {row.canSubmit ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeRequestActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.requests.confirm.submit"),
+                                      () => submitPurchaseRequestMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.submitRequest")}
+                                </Button>
+                              ) : null}
+                              {row.canApprove ? (
+                                <Button
+                                  size="sm"
+                                  disabled={activeRequestActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.requests.confirm.approve"),
+                                      () => approvePurchaseRequestMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.approveRequest")}
+                                </Button>
+                              ) : null}
+                              {row.canReject ? (
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  disabled={activeRequestActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.requests.confirm.reject"),
+                                      () => rejectPurchaseRequestMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.rejectRequest")}
+                                </Button>
+                              ) : null}
+                              {row.canClose ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeRequestActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.requests.confirm.close"),
+                                      () => closePurchaseRequestMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.closeRequest")}
+                                </Button>
+                              ) : null}
+                              {row.canConvertToOrder ? (
+                                <Button size="sm" disabled={activeRequestActionMutationPending} onClick={() => openRequestConversionEditor(row)}>
+                                  {t("purchases.action.convertToOrder")}
+                                </Button>
+                              ) : null}
+                              {row.canConvertToInvoice ? (
+                                <Button
+                                  size="sm"
+                                  disabled={activeRequestActionMutationPending}
+                                  onClick={() => router.push(`/purchases?tab=invoices&sourceRequestId=${row.id}`)}
+                                >
+                                  {t("purchases.action.convertToInvoice")}
                                 </Button>
                               ) : null}
                             </div>
@@ -1841,6 +2043,12 @@ export function PurchasesPage() {
                 </div>
               </div>
 
+              {orderActionError ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {orderActionError}
+                </div>
+              ) : null}
+
               <div className="overflow-hidden rounded-2xl border border-gray-200">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
@@ -1881,14 +2089,93 @@ export function PurchasesPage() {
                               <Button variant="secondary" size="sm" onClick={() => router.push(`/purchases/orders/${row.id}`)}>
                                 {t("purchases.action.view")}
                               </Button>
+                              {row.canIssue ? (
+                                <Button
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.orders.confirm.issue"),
+                                      () => issuePurchaseOrderMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.issueOrder")}
+                                </Button>
+                              ) : null}
                               {row.canReceive ? (
-                                <Button variant="secondary" size="sm" onClick={() => openReceivePurchaseOrderEditor(row)}>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() => openReceivePurchaseOrderEditor(row)}
+                                >
                                   {t("purchases.action.receiveOrder")}
+                                </Button>
+                              ) : null}
+                              {row.canMarkPartiallyReceived ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.orders.confirm.markPartiallyReceived"),
+                                      () => markPurchaseOrderPartiallyReceivedMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.markPartiallyReceived")}
+                                </Button>
+                              ) : null}
+                              {row.canMarkFullyReceived ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.orders.confirm.markFullyReceived"),
+                                      () => markPurchaseOrderFullyReceivedMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.markFullyReceived")}
                                 </Button>
                               ) : null}
                               {row.canEdit ? (
                                 <Button variant="secondary" size="sm" onClick={() => openEditPurchaseOrderEditor(row)}>
                                   {t("purchases.action.edit")}
+                                </Button>
+                              ) : null}
+                              {row.canCancel ? (
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.orders.confirm.cancel"),
+                                      () => cancelPurchaseOrderMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.cancelOrder")}
+                                </Button>
+                              ) : null}
+                              {row.canClose ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={activeOrderActionMutationPending}
+                                  onClick={() =>
+                                    confirmAndRun(
+                                      t("purchases.orders.confirm.close"),
+                                      () => closePurchaseOrderMutation.mutate(row.id),
+                                    )
+                                  }
+                                >
+                                  {t("purchases.action.closeOrder")}
                                 </Button>
                               ) : null}
                             </div>
@@ -2498,6 +2785,92 @@ export function PurchasesPage() {
           </div>
         )}
 
+        <SidePanel
+          isOpen={isRequestConversionOpen}
+          onClose={closeRequestConversionEditor}
+          title={t("purchases.dialog.convertToOrder")}
+        >
+          <div className="space-y-5">
+            {requestConversionEditor.requestReference ? (
+              <div className="inline-flex rounded-full bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-700">
+                {requestConversionEditor.requestReference}
+              </div>
+            ) : null}
+
+            <Field label={t("purchases.requests.field.supplier")}>
+              <Select
+                value={requestConversionEditor.supplierId}
+                onChange={(event) => {
+                  const supplier = activeSuppliers.find((row) => row.id === event.target.value);
+                  setRequestConversionEditor((current) => ({
+                    ...current,
+                    supplierId: event.target.value,
+                    currencyCode: supplier?.defaultCurrency ?? current.currencyCode,
+                  }));
+                }}
+              >
+                <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
+                {activeSuppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.code} · {supplier.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label={t("purchases.requests.field.orderDate")}>
+                <Input
+                  type="date"
+                  value={requestConversionEditor.orderDate}
+                  onChange={(event) => setRequestConversionEditor((current) => ({ ...current, orderDate: event.target.value }))}
+                />
+              </Field>
+              <Field label={t("purchases.requests.field.currency")}>
+                <Input
+                  value={requestConversionEditor.currencyCode}
+                  maxLength={8}
+                  onChange={(event) =>
+                    setRequestConversionEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))
+                  }
+                />
+              </Field>
+            </div>
+
+            <Field label={t("purchases.requests.field.orderDescription")}>
+              <Textarea
+                rows={3}
+                value={requestConversionEditor.description}
+                onChange={(event) => setRequestConversionEditor((current) => ({ ...current, description: event.target.value }))}
+              />
+            </Field>
+
+            {requestConversionError ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {requestConversionError}
+              </div>
+            ) : null}
+
+            {convertPurchaseRequestToOrderMutation.error instanceof Error ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {convertPurchaseRequestToOrderMutation.error.message}
+              </div>
+            ) : null}
+
+            <div className={cn("flex justify-end gap-3", isArabic && "flex-row-reverse")}>
+              <Button variant="secondary" onClick={closeRequestConversionEditor}>
+                {t("purchases.action.cancel")}
+              </Button>
+              <Button
+                onClick={() => convertPurchaseRequestToOrderMutation.mutate()}
+                disabled={Boolean(requestConversionError) || convertPurchaseRequestToOrderMutation.isPending}
+              >
+                {t("purchases.action.convertToOrder")}
+              </Button>
+            </div>
+          </div>
+        </SidePanel>
+
         {isRequestEditorOpen ? (
           <div className="fixed inset-0 z-50 p-3 sm:p-6">
             <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={closeRequestEditor} />
@@ -2651,6 +3024,7 @@ export function PurchasesPage() {
                               <Field label={t("purchases.requests.field.deliveryDate")} labelClassName={isArabic ? "arabic-ui" : undefined} labelAlign={isArabic ? "end" : "start"}>
                                 <Input
                                   type="date"
+                                  min={requestEditor.requestDate || "2000-01-01"}
                                   value={line.requestedDeliveryDate}
                                   onChange={(event) => updateRequestLine(line.key, "requestedDeliveryDate", event.target.value)}
                                   className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
@@ -4443,23 +4817,51 @@ export function PurchasesPage() {
     setIsRequestEditorOpen(false);
   }
 
-  async function savePurchaseRequestDraft() {
-    if (requestEditor.id) {
-      await updatePurchaseRequestMutation.mutateAsync();
-    } else {
-      await createPurchaseRequestMutation.mutateAsync();
-    }
+  function openRequestConversionEditor(request: PurchaseRequest) {
+    const defaultSupplier = activeSuppliers[0];
+    setRequestConversionEditor({
+      requestId: request.id,
+      requestReference: request.reference,
+      supplierId: defaultSupplier?.id ?? "",
+      orderDate: todayValue(),
+      currencyCode: defaultSupplier?.defaultCurrency ?? "JOD",
+      description: request.description ?? "",
+    });
+    convertPurchaseRequestToOrderMutation.reset();
+    setIsRequestConversionOpen(true);
+  }
 
-    closeRequestEditor();
+  function closeRequestConversionEditor() {
+    convertPurchaseRequestToOrderMutation.reset();
+    setRequestConversionEditor(EMPTY_REQUEST_CONVERSION_EDITOR());
+    setIsRequestConversionOpen(false);
+  }
+
+  async function savePurchaseRequestDraft() {
+    try {
+      if (requestEditor.id) {
+        await updatePurchaseRequestMutation.mutateAsync();
+      } else {
+        await createPurchaseRequestMutation.mutateAsync();
+      }
+
+      closeRequestEditor();
+    } catch {
+      // Keep the editor open so the existing inline error state can render.
+    }
   }
 
   async function confirmPurchaseRequest() {
-    const request = requestEditor.id
-      ? await updatePurchaseRequestMutation.mutateAsync()
-      : await createPurchaseRequestMutation.mutateAsync();
+    try {
+      const request = requestEditor.id
+        ? await updatePurchaseRequestMutation.mutateAsync()
+        : await createPurchaseRequestMutation.mutateAsync();
 
-    await submitPurchaseRequestMutation.mutateAsync(request.id);
-    closeRequestEditor();
+      await submitPurchaseRequestMutation.mutateAsync(request.id);
+      closeRequestEditor();
+    } catch {
+      // Keep the editor open so the existing inline error state can render.
+    }
   }
 
   function addRequestLine() {
@@ -4552,22 +4954,30 @@ export function PurchasesPage() {
   }
 
   async function savePurchaseOrderDraft() {
-    if (orderEditor.id) {
-      await updatePurchaseOrderMutation.mutateAsync();
-    } else {
-      await createPurchaseOrderMutation.mutateAsync();
-    }
+    try {
+      if (orderEditor.id) {
+        await updatePurchaseOrderMutation.mutateAsync();
+      } else {
+        await createPurchaseOrderMutation.mutateAsync();
+      }
 
-    closeOrderEditor();
+      closeOrderEditor();
+    } catch {
+      // Keep the editor open so the existing inline error state can render.
+    }
   }
 
   async function confirmPurchaseOrder() {
-    const order = orderEditor.id
-      ? await updatePurchaseOrderMutation.mutateAsync()
-      : await createPurchaseOrderMutation.mutateAsync();
+    try {
+      const order = orderEditor.id
+        ? await updatePurchaseOrderMutation.mutateAsync()
+        : await createPurchaseOrderMutation.mutateAsync();
 
-    await issuePurchaseOrderMutation.mutateAsync(order.id);
-    closeOrderEditor();
+      await issuePurchaseOrderMutation.mutateAsync(order.id);
+      closeOrderEditor();
+    } catch {
+      // Keep the editor open so the existing inline error state can render.
+    }
   }
 
   function openReceivePurchaseOrderEditor(order: PurchaseOrder) {
@@ -5135,6 +5545,34 @@ function TableHead({ children, className }: { children: ReactNode; className?: s
   return <th className={cn("px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600", className)}>{children}</th>;
 }
 
+function parseDateOnlyValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function isReasonableBusinessDate(value: string) {
+  const date = parseDateOnlyValue(value);
+  return Boolean(date && date.getUTCFullYear() >= 2000);
+}
+
 async function invalidatePurchases(queryClient: ReturnType<typeof useQueryClient>) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["purchase-suppliers"] }),
@@ -5202,9 +5640,13 @@ function getPurchaseRequestFormError(editor: PurchaseRequestEditorState) {
   if (!editor.requestDate) {
     return "Request date is required. تاريخ الطلب مطلوب.";
   }
+  if (!isReasonableBusinessDate(editor.requestDate)) {
+    return "Request date must be a valid modern date. تاريخ الطلب يجب أن يكون تاريخًا صحيحًا وحديثًا.";
+  }
   if (editor.lines.length === 0) {
     return "At least one request line is required. يجب إضافة سطر طلب واحد على الأقل.";
   }
+  const requestDate = parseDateOnlyValue(editor.requestDate);
   for (const line of editor.lines) {
     if (!line.itemId) {
       return "Each request line needs an inventory item. كل سطر طلب يحتاج إلى صنف من المخزون.";
@@ -5215,6 +5657,31 @@ function getPurchaseRequestFormError(editor: PurchaseRequestEditorState) {
     if (!line.quantity || Number(line.quantity) <= 0) {
       return "Each request line needs a quantity greater than zero. كل سطر طلب يحتاج إلى كمية أكبر من صفر.";
     }
+    if (line.requestedDeliveryDate) {
+      const deliveryDate = parseDateOnlyValue(line.requestedDeliveryDate);
+      if (!deliveryDate || !isReasonableBusinessDate(line.requestedDeliveryDate)) {
+        return "Requested delivery date must be a valid modern date. تاريخ الاستلام المطلوب يجب أن يكون تاريخًا صحيحًا وحديثًا.";
+      }
+      if (requestDate && deliveryDate < requestDate) {
+        return "Requested delivery date cannot be before the request date. تاريخ الاستلام المطلوب لا يمكن أن يسبق تاريخ الطلب.";
+      }
+    }
+  }
+  return null;
+}
+
+function getPurchaseRequestConversionError(
+  editor: PurchaseRequestConversionState,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (!editor.supplierId) {
+    return t("purchases.requests.empty.selectSupplier");
+  }
+  if (!editor.orderDate) {
+    return t("purchases.validation.dateRequired");
+  }
+  if (!editor.currencyCode.trim()) {
+    return t("purchases.validation.currencyRequired");
   }
   return null;
 }

@@ -1,16 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import {
-  cancelPurchaseOrder,
-  closePurchaseOrder,
-  getPurchaseOrderById,
-  issuePurchaseOrder,
-  markPurchaseOrderFullyReceived,
-  markPurchaseOrderPartiallyReceived,
-} from "@/lib/api";
+import { getPurchaseOrderById } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -20,7 +13,6 @@ import { Button, Card, PageShell, SectionHeading, StatusPill } from "@/component
 
 export function PurchaseOrderDetailsPage({ purchaseOrderId }: { purchaseOrderId: string }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { token } = useAuth();
   const { t } = useTranslation();
 
@@ -30,57 +22,6 @@ export function PurchaseOrderDetailsPage({ purchaseOrderId }: { purchaseOrderId:
   });
 
   const purchaseOrder = purchaseOrderQuery.data;
-
-  async function invalidatePurchaseOrderWorkspace() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["purchase-orders", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-order", token, purchaseOrderId] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-requests", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-request", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-receipts", token] }),
-      queryClient.invalidateQueries({ queryKey: ["purchase-invoices", token] }),
-    ]);
-  }
-
-  const issueMutation = useMutation({
-    mutationFn: () => issuePurchaseOrder(purchaseOrderId, token),
-    onSuccess: invalidatePurchaseOrderWorkspace,
-  });
-
-  const markPartiallyReceivedMutation = useMutation({
-    mutationFn: () => markPurchaseOrderPartiallyReceived(purchaseOrderId, token),
-    onSuccess: invalidatePurchaseOrderWorkspace,
-  });
-
-  const markFullyReceivedMutation = useMutation({
-    mutationFn: () => markPurchaseOrderFullyReceived(purchaseOrderId, token),
-    onSuccess: invalidatePurchaseOrderWorkspace,
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: () => cancelPurchaseOrder(purchaseOrderId, token),
-    onSuccess: invalidatePurchaseOrderWorkspace,
-  });
-
-  const closeMutation = useMutation({
-    mutationFn: () => closePurchaseOrder(purchaseOrderId, token),
-    onSuccess: invalidatePurchaseOrderWorkspace,
-  });
-
-  const activeActionPending =
-    issueMutation.isPending ||
-    markPartiallyReceivedMutation.isPending ||
-    markFullyReceivedMutation.isPending ||
-    cancelMutation.isPending ||
-    closeMutation.isPending;
-
-  const actionError = getErrorMessage(
-    issueMutation.error ??
-      markPartiallyReceivedMutation.error ??
-      markFullyReceivedMutation.error ??
-      cancelMutation.error ??
-      closeMutation.error,
-  );
   const detailsError = getErrorMessage(purchaseOrderQuery.error);
 
   return (
@@ -124,73 +65,8 @@ export function PurchaseOrderDetailsPage({ purchaseOrderId }: { purchaseOrderId:
                     label={translatePurchaseOrderStatus(purchaseOrder.status, t)}
                     tone={purchaseOrderStatusTone(purchaseOrder.status)}
                   />
-                  {purchaseOrder.canIssue ? (
-                    <Button
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.orders.confirm.issue"), () => issueMutation.mutate())}
-                    >
-                      {t("purchases.action.issueOrder")}
-                    </Button>
-                  ) : null}
-                  {purchaseOrder.canMarkPartiallyReceived ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() =>
-                        confirmAndRun(
-                          t("purchases.orders.confirm.markPartiallyReceived"),
-                          () => markPartiallyReceivedMutation.mutate(),
-                        )
-                      }
-                    >
-                      {t("purchases.action.markPartiallyReceived")}
-                    </Button>
-                  ) : null}
-                  {purchaseOrder.canMarkFullyReceived ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() =>
-                        confirmAndRun(
-                          t("purchases.orders.confirm.markFullyReceived"),
-                          () => markFullyReceivedMutation.mutate(),
-                        )
-                      }
-                    >
-                      {t("purchases.action.markFullyReceived")}
-                    </Button>
-                  ) : null}
-                  {purchaseOrder.canCancel ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.orders.confirm.cancel"), () => cancelMutation.mutate())}
-                    >
-                      {t("purchases.action.cancelOrder")}
-                    </Button>
-                  ) : null}
-                  {purchaseOrder.canClose ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={activeActionPending}
-                      onClick={() => confirmAndRun(t("purchases.orders.confirm.close"), () => closeMutation.mutate())}
-                    >
-                      {t("purchases.action.closeOrder")}
-                    </Button>
-                  ) : null}
                 </div>
               </div>
-
-              {actionError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {actionError}
-                </div>
-              ) : null}
 
               <div className="grid gap-4 md:grid-cols-4">
                 <MiniMetric label={t("purchases.orders.metric.date")} value={formatDate(purchaseOrder.orderDate)} />
@@ -384,10 +260,4 @@ function purchaseReceiptStatusTone(status: PurchaseReceipt["status"]) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : null;
-}
-
-function confirmAndRun(message: string, action: () => void) {
-  if (window.confirm(message)) {
-    action();
-  }
 }

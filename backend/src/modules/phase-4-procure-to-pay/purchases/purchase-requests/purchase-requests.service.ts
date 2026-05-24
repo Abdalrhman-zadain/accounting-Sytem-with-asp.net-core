@@ -124,12 +124,13 @@ export class PurchaseRequestsService {
   }
 
   async create(dto: CreatePurchaseRequestDto, user?: AuthUser) {
-    const requestDate = new Date(dto.requestDate);
+    const requestDate = this.parseBusinessDate(dto.requestDate, 'Request date');
     const reference = await this.generateDailyReference(requestDate);
-    const lines = await this.resolveLines(dto.lines);
+    const lines = await this.resolveLines(dto.lines, requestDate);
 
     try {
       const created = await this.prisma.$transaction(async (tx) => {
+        const auditUserId = await this.resolveAuditUserId(tx, user);
         const request = await tx.purchaseRequest.create({
           data: {
             reference,
@@ -146,7 +147,7 @@ export class PurchaseRequestsService {
             INSERT INTO "PurchaseRequestStatusHistory"
               ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
             VALUES
-              (${crypto.randomUUID()}, ${request.id}, ${PurchaseRequestStatus.DRAFT}::"PurchaseRequestStatus", ${'Request created in draft status.'}, NOW(), NOW(), ${user?.userId || null})
+              (${crypto.randomUUID()}, ${request.id}, ${PurchaseRequestStatus.DRAFT}::"PurchaseRequestStatus", ${'Request created in draft status.'}, NOW(), NOW(), ${auditUserId})
           `,
         );
 
@@ -172,7 +173,10 @@ export class PurchaseRequestsService {
       throw new BadRequestException('Only draft or rejected purchase requests can be edited.');
     }
 
-    const lines = dto.lines ? await this.resolveLines(dto.lines) : null;
+    const resolvedRequestDate = dto.requestDate
+      ? this.parseBusinessDate(dto.requestDate, 'Request date')
+      : current.requestDate;
+    const lines = dto.lines ? await this.resolveLines(dto.lines, resolvedRequestDate) : null;
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -183,7 +187,7 @@ export class PurchaseRequestsService {
         return tx.purchaseRequest.update({
           where: { id },
           data: {
-            requestDate: dto.requestDate ? new Date(dto.requestDate) : undefined,
+            requestDate: dto.requestDate ? resolvedRequestDate : undefined,
             description: dto.description === undefined ? undefined : dto.description.trim() || null,
             lines: lines
               ? {
@@ -254,6 +258,7 @@ export class PurchaseRequestsService {
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        const auditUserId = await this.resolveAuditUserId(tx, user);
         const order = await tx.purchaseOrder.create({
           data: {
             reference,
@@ -291,7 +296,7 @@ export class PurchaseRequestsService {
             INSERT INTO "PurchaseRequestStatusHistory"
               ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
             VALUES
-              (${crypto.randomUUID()}, ${request.id}, ${request.status}::"PurchaseRequestStatus", ${`Converted to purchase order ${order.reference}.`}, NOW(), NOW(), ${user?.userId || null})
+              (${crypto.randomUUID()}, ${request.id}, ${request.status}::"PurchaseRequestStatus", ${`Converted to purchase order ${order.reference}.`}, NOW(), NOW(), ${auditUserId})
           `,
         );
 
@@ -337,6 +342,7 @@ export class PurchaseRequestsService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const auditUserId = await this.resolveAuditUserId(tx, user);
       await tx.purchaseRequest.update({
         where: { id },
         data: {
@@ -349,7 +355,7 @@ export class PurchaseRequestsService {
           INSERT INTO "PurchaseRequestStatusHistory"
             ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
           VALUES
-            (${crypto.randomUUID()}, ${id}, ${nextStatus}::"PurchaseRequestStatus", ${options.note}, NOW(), NOW(), ${user?.userId || null})
+            (${crypto.randomUUID()}, ${id}, ${nextStatus}::"PurchaseRequestStatus", ${options.note}, NOW(), NOW(), ${auditUserId})
         `,
       );
 
@@ -363,7 +369,10 @@ export class PurchaseRequestsService {
     return mapped;
   }
 
-  private async resolveLines(lines: PurchaseRequestLineDto[]): Promise<ResolvedPurchaseRequestLine[]> {
+  private async resolveLines(
+    lines: PurchaseRequestLineDto[],
+    requestDate: Date,
+  ): Promise<ResolvedPurchaseRequestLine[]> {
     const itemIds = Array.from(new Set(lines.map((line) => line.itemId?.trim()).filter(Boolean))) as string[];
     const validItems = new Map(
       (
@@ -379,9 +388,15 @@ export class PurchaseRequestsService {
     return lines.map((line) => {
       const itemId = line.itemId?.trim() || null;
       const item = itemId ? validItems.get(itemId) : null;
+      const requestedDeliveryDate = line.requestedDeliveryDate
+        ? this.parseBusinessDate(line.requestedDeliveryDate, 'Requested delivery date')
+        : null;
 
       if (itemId && !item) {
         throw new BadRequestException('Each linked purchase request item must reference an active inventory item.');
+      }
+      if (requestedDeliveryDate && requestedDeliveryDate < requestDate) {
+        throw new BadRequestException('Requested delivery date cannot be before the request date.');
       }
 
       return {
@@ -389,7 +404,7 @@ export class PurchaseRequestsService {
         itemName: line.itemName?.trim() || item?.name || null,
         description: line.description.trim(),
         quantity: Number(line.quantity),
-        requestedDeliveryDate: line.requestedDeliveryDate ? new Date(line.requestedDeliveryDate) : null,
+        requestedDeliveryDate,
         justification: line.justification?.trim() || null,
       };
     });
@@ -655,6 +670,33 @@ export class PurchaseRequestsService {
     }
 
     return `PR-${compactDate}-${maxSequence + 1}`;
+  }
+
+  private parseBusinessDate(value: string, label: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException(`${label} is invalid.`);
+    }
+    if (date.getUTCFullYear() < 2000) {
+      throw new BadRequestException(`${label} must be in year 2000 or later.`);
+    }
+    return date;
+  }
+
+  private async resolveAuditUserId(
+    db: Prisma.TransactionClient,
+    user?: AuthUser,
+  ) {
+    if (!user?.userId) {
+      return null;
+    }
+
+    const existingUser = await db.user.findUnique({
+      where: { id: user.userId },
+      select: { id: true },
+    });
+
+    return existingUser?.id ?? null;
   }
 
   private hasStatus(current: PurchaseRequestStatus, allowed: PurchaseRequestStatus[]) {
