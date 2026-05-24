@@ -146,15 +146,23 @@ Accounting meaning:
 - customer creation can automatically create the linked posting receivable account under `1121000 Customer Receivables / ذمم عملاء`, or link an existing active posting Asset account from that subtree; sales invoices, receipts, and credit notes use the customer's linked posting account rather than receivables header accounts
 - each customer must reference one active `TaxTreatment`; the selected treatment can optionally point to a default `Tax` record that downstream invoice entry uses for default line taxation
 - customer `salesRepId` links to an active `SalesRepresentative` record managed inside Sales & Receivables for follow-up, reporting, commissions, collection ownership, and future sales-rep analysis; it never replaces the customer's receivable account and is not used as the invoice receivable posting account
+- newly generated sales representative codes follow the sequential `REP-<number>` pattern (for example `REP-1`, `REP-2`, `REP-3`); older random-style `REP-YYYYMMDD-...` values may still exist historically and should not affect the next sequential number
 - a sales representative may either have no employee-payables account, create one automatically under `2130000 Employee Payables / ذمم الموظفين`, or link an existing active posting account from that subtree; that account is used only for employee-side advances, custody, settlements, and commissions, not customer receivables
 - customer names are treated as unique by the Sales & Receivables service, and automatic receivable account creation rejects duplicate detail-account names under `1121000`
 - quotations and sales orders preserve commercial traceability before accounting is created
+- newly generated sales quotation references follow a daily sequential pattern such as `QUO-20260524-1`, `QUO-20260524-2`, and `QUO-20260524-3`; older quotation references that do not match the current day's pattern may still exist historically and should not affect the next daily value
 - quotation lines may optionally point to an active inventory/service item, persist the linked `itemId`, and still store editable `itemName` snapshots so dropdown labels, print views, and commercial history can show the item/service code plus name without depending on later item-master edits
+- newly generated sales order references follow a daily sequential pattern such as `SO-20260524-1`, `SO-20260524-2`, and `SO-20260524-3`; older sales order references that do not match the current day's pattern may still exist historically and should not affect the next daily value
 - sales-order lines may optionally point to an active inventory/service item, persist the linked `itemId`, and still store editable `itemName` snapshots so downstream invoicing can inherit the item link while preserving code/name display context
+- newly generated sales invoice references follow a daily sequential pattern such as `INV-20260524-1`, `INV-20260524-2`, and `INV-20260524-3`; older sales invoice references that do not match the current day's pattern may still exist historically and should not affect the next daily value
 - sales-invoice lines may optionally point to an active inventory/service item, persist the linked `itemId`, and still store editable `itemName` snapshots so posted invoice history stays linked to the item card while print/report displays can resolve the item/service code when available
 - when a sales-invoice line points to an inventory-tracked item, the draft line also resolves/stores a warehouse selection using the item preferred warehouse as the default when available; service lines keep `warehouseId` empty
 - when a sales invoice customer is selected, draft invoice lines inherit the customer's tax-treatment default tax; out-of-scope treatment clears line tax, and reverse-charge behavior currently follows the treatment's configured default tax when one exists, otherwise no tax is defaulted
 - invoices and credit notes can be drafted, then posted through Phase 1 journal/posting logic
+- `CreditNoteType` is now dedicated master data for sales credit notes and stores `code`, `name`, `effect`, linked-invoice requirement, inventory/tax flags, one default posting account, helper text, and active status
+- `SupplierDebitNoteType` is now dedicated master data for supplier debit notes and stores `code`, `name`, `effect`, linked-purchase-invoice requirement, inventory/tax flags, one default posting account, helper text, and active status
+- each `CreditNote` now stores `creditNoteTypeId` so the selected business meaning is persisted historically instead of being inferred from one generic discount layout
+- `CreditNoteLine` now also stores optional `salesInvoiceLineId`, `itemId`, `warehouseId`, tax-correction and price-correction snapshots, `returnToStock`, optional inventory/COGS accounts, and cost snapshots so sales returns can reverse both commercial and inventory impact
 - POS sales are stored as normal `SalesInvoice` rows with `invoiceType = POS`; draft/held/completed operational flow is tracked on the POS-specific status fields instead of the standard invoice status alone
 - completed POS sales keep `allocatedAmount = totalAmount` and `outstandingAmount = 0` because payment is captured operationally at the terminal rather than through later receipt allocation
 - POS completion creates `PosPayment` rows plus a draft journal entry that debits the mapped payment accounts, credits revenue/tax, and includes COGS/inventory-relief lines for stock items
@@ -162,11 +170,16 @@ Accounting meaning:
 - POS returns are stored separately from invoices in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, stay linked back to the original POS sale, create immediate stock-in for inventory items, and prepare their own refund/sales-return draft journal for accountant approval
 - completed POS sales can move to `REFUNDED` operational status once linked return quantities fully offset the original sale lines, while accounting status can independently move through `PENDING_REVIEW`, `POSTED`, `REJECTED`, and `REVERSED`
 - invoice posting debits receivables and credits revenue plus sales tax/VAT liability when tax is present
+- credit-note posting still credits the customer's receivable account for the note total, but the debit side now depends on the stored `CreditNoteType`:
+  - discount / price-difference / customer-settlement notes debit the resolved default-or-selected financial account plus tax when present
+  - tax-correction notes debit tax only
+  - sales-return notes debit sales-return accounts plus tax and, when `returnToStock = true`, also debit inventory and credit COGS using the stored return cost
 - for inventory-tracked sales-invoice lines, posting also validates warehouse availability, creates a warehouse-linked `InventoryStockMovement` with movement type `SALES_ISSUE`, decreases item-level and warehouse-level quantity/value balances using the configured inventory costing policy, and adds COGS/inventory-relief journal lines in the same posting transaction
 - sales-invoice posting uses the customer's linked receivable account only; sales representative links and employee payable accounts remain non-posting context for customer invoices
 - customer receipts are stored as Phase 2 posted receipt transactions and can be created from either the Sales module or the Bank & Cash module
 - the Sales invoice form may launch a guided `Post & Create Receipt` handoff that posts the invoice first, then opens a separate customer-receipt document prefilled with the invoice/customer/currency/outstanding context; the receipt remains its own Phase 2 posted transaction plus allocation record
 - draft invoice saves remain non-posting document writes only, while normal invoice posting and `Post & Create Receipt` both create the same invoice journal entry before any receipt activity begins
+- newly generated customer receipt references follow a daily sequential pattern such as `RCPT-20260524-1`, `RCPT-20260524-2`, and `RCPT-20260524-3`; older receipt references that do not match the current day's pattern may still exist historically and should not affect the next daily value
 - posting creates journal/ledger history and links each document to its generated journal reference
 - customer balance is incremented on posted invoices and decremented on posted credit notes
 - receipt allocation updates invoice outstanding status while preventing over-allocation
@@ -202,8 +215,8 @@ Key fields:
 - purchase invoice line optional `itemId` link to `InventoryItem`, optional `warehouseId` link to `InventoryWarehouse`, snapshot `itemName`, `description`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineTotalAmount`, and `accountId`
 - supplier payment `reference`, `status`, `paymentDate`, `supplierId`, `amount`, `allocatedAmount`, `unappliedAmount`, `bankCashAccountId`, and optional `bankCashTransactionId`
 - supplier payment allocation `amount`, `allocatedAt`, `purchaseInvoiceId`, and `supplierPaymentId`
-- debit note `reference`, `status`, `noteDate`, `supplierId`, optional `purchaseInvoiceId`, `currencyCode`, `subtotalAmount`, `taxAmount`, `totalAmount`, and optional `journalEntryId`
-- debit note line `quantity`, `amount`, `discountAccountId`, `taxId`, `taxAmount`, `reason`, and `lineTotalAmount`
+- debit note `reference`, `status`, `noteDate`, `supplierId`, required `supplierDebitNoteTypeId`, optional `purchaseInvoiceId`, `currencyCode`, `subtotalAmount`, `taxAmount`, `totalAmount`, and optional `journalEntryId`
+- debit note line `purchaseInvoiceLineId`, optional `itemId`, optional `warehouseId`, optional `itemName`, optional `description`, `quantity`, `unitPrice`, `amount`, `discountAccountId`, `taxId`, `taxAmount`, original/corrected price and tax snapshots, `returnToStock`, optional `returnReason`, optional `itemCondition`, `lineSubtotalAmount`, optional `inventoryAccountId`, optional `unitCost`, optional `totalCost`, `reason`, and `lineTotalAmount`
 - purchase policy single-row configuration with `purchaseDiscountAccountId`
 - purchase-order, purchase-invoice, and debit-note lines may optionally reference `Tax` through `taxId`; the stored `taxAmount` remains the historical calculated amount
 
@@ -221,9 +234,9 @@ Accounting meaning:
 - supplier payments can be drafted, allocated across one or more purchase invoices, and posted through the Phase 2 Bank & Cash payment flow, which creates the underlying journal entry and bank/cash transaction link
 - posted supplier payments decrement supplier balances and recompute invoice allocated/outstanding amounts while preventing over-allocation
 - the Purchase Invoice workspace may launch a guided `Post and Create Supplier Payment` handoff that posts the invoice first, then opens a separate supplier-payment draft prefilled with the supplier, invoice reference, outstanding amount, and linked allocation; payment posting remains a separate Bank & Cash-backed journal event
-- debit notes can be drafted, optionally linked to purchase invoices, then posted to reduce supplier balances and reduce the remaining payable amount of linked purchase invoices
-- debit note lines default their credit-side purchase discount / purchase returns account from Phase 4 purchase policy, while authorized accounting users may override that account per line
-- posted debit notes create journal history that debits the supplier payable account, credits the purchase discount / purchase returns account, and credits mapped input VAT accounts for any tax reduction
+- debit notes can be drafted, optionally linked to purchase invoices depending on `SupplierDebitNoteType`, then posted to reduce supplier balances and reduce the remaining payable amount of linked purchase invoices
+- supplier debit-note posting now branches by `SupplierDebitNoteType` so purchase discounts, purchase returns, price corrections, tax corrections, and supplier settlements each keep their own validation, line shape, and accounting preview behavior
+- posted supplier debit notes create journal history that debits the supplier payable account, credits the selected/default supplier debit-note account, credits mapped input VAT accounts for any tax reduction, and for inventory-bearing purchase returns also books inventory-value adjustment lines
 - when a debit note is linked to a purchase invoice, payable reduction still uses the linked invoice's supplier/AP posting account and updates invoice outstanding after posting or reversal
 
 ### Inventory

@@ -183,6 +183,10 @@ export class UpdateCustomerDto {
 export class SalesLineDto {
   @IsOptional()
   @IsString()
+  salesInvoiceLineId?: string;
+
+  @IsOptional()
+  @IsString()
   itemId?: string;
 
   @IsOptional()
@@ -219,6 +223,30 @@ export class SalesLineDto {
   taxAmount?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  originalUnitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  correctedUnitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  originalTaxAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  correctedTaxAmount?: number;
+
+  @IsOptional()
   @IsString()
   taxId?: string;
 
@@ -232,6 +260,16 @@ export class SalesLineDto {
   @IsString()
   @Length(0, 255)
   description?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  returnToStock?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 120)
+  itemCondition?: string;
 
   @IsOptional()
   @IsString()
@@ -448,6 +486,9 @@ export class CreateCreditNoteDto extends SalesDocumentBaseDto {
   @IsString()
   customerId!: string;
 
+  @IsString()
+  creditNoteTypeId!: string;
+
   @IsOptional()
   @IsString()
   salesInvoiceId?: string;
@@ -466,6 +507,10 @@ export class UpdateCreditNoteDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  @IsOptional()
+  @IsString()
+  creditNoteTypeId?: string;
 
   @IsOptional()
   @IsString()

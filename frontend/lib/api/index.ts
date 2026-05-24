@@ -70,8 +70,10 @@ import {
   CreateInventoryWarehousePayload,
   CreateAccountPayload,
   CreateAccountSubtypePayload,
+  CreateCreditNoteTypePayload,
   CreateCreditNotePayload,
   CreateCustomerPayload,
+  CreateSupplierDebitNoteTypePayload,
   CreateSalesRepresentativePayload,
   CreatePurchaseRequestPayload,
   CreatePurchaseOrderPayload,
@@ -203,6 +205,8 @@ import {
   SupplierTransactionsResponse,
   SuppliersQuery,
   CreditNote,
+  CreditNoteType,
+  SupplierDebitNoteType,
   SalesDocumentsQuery,
   UpdateAccountPayload,
   UpdateAccountSubtypePayload,
@@ -220,6 +224,8 @@ import {
   UpdateBankCashTransactionPayload,
   UpdateDebitNotePayload,
   UpdateCreditNotePayload,
+  UpdateCreditNoteTypePayload,
+  UpdateSupplierDebitNoteTypePayload,
   UpdateCustomerPayload,
   UpdateSalesRepresentativePayload,
   UpdateJournalEntryTypePayload,
@@ -3267,6 +3273,76 @@ export async function updateTaxTreatment(
     body: JSON.stringify(payload),
     token,
   });
+}
+
+export async function getCreditNoteTypes(token?: string | null) {
+  return apiRequest<CreditNoteType[]>("/credit-note-types", { token });
+}
+
+export async function getActiveCreditNoteTypes(token?: string | null) {
+  return apiRequest<CreditNoteType[]>("/credit-note-types/active", { token });
+}
+
+export async function createCreditNoteType(
+  payload: CreateCreditNoteTypePayload,
+  token?: string | null,
+) {
+  return apiRequest<CreditNoteType>("/credit-note-types", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateCreditNoteType(
+  id: string,
+  payload: UpdateCreditNoteTypePayload,
+  token?: string | null,
+) {
+  return apiRequest<CreditNoteType>(`/credit-note-types/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function getSupplierDebitNoteTypes(token?: string | null) {
+  return apiRequest<SupplierDebitNoteType[]>("/supplier-debit-note-types", {
+    token,
+  });
+}
+
+export async function getActiveSupplierDebitNoteTypes(token?: string | null) {
+  return apiRequest<SupplierDebitNoteType[]>(
+    "/supplier-debit-note-types/active",
+    { token },
+  );
+}
+
+export async function createSupplierDebitNoteType(
+  payload: CreateSupplierDebitNoteTypePayload,
+  token?: string | null,
+) {
+  return apiRequest<SupplierDebitNoteType>("/supplier-debit-note-types", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateSupplierDebitNoteType(
+  id: string,
+  payload: UpdateSupplierDebitNoteTypePayload,
+  token?: string | null,
+) {
+  return apiRequest<SupplierDebitNoteType>(
+    `/supplier-debit-note-types/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      token,
+    },
+  );
 }
 
 // ─── Payment Terms ───────────────────────────────────────────────────────────

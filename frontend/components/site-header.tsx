@@ -77,6 +77,8 @@ type NavGroup = {
   }>;
 };
 
+const HIDDEN_NAV_HREFS = new Set(["/bank-reconciliations"]);
+
 const navGroups: NavGroup[] = [
   {
     labelKey: "nav.group.ledger",
@@ -410,6 +412,10 @@ export function SiteHeader({
       ...group,
       items: group.items
         .map((item) => {
+          if (HIDDEN_NAV_HREFS.has(item.href)) {
+            return null;
+          }
+
           const visibleChildren = item.children?.filter((child) => canAccessRoute(user, child.href)) ?? [];
           const isVisible = canAccessRoute(user, item.href) || visibleChildren.length > 0;
 

@@ -177,6 +177,17 @@ enum CreditNoteStatus {
   CANCELLED
 }
 
+enum CreditNoteTypeEffect {
+  FINANCIAL_ONLY
+  FINANCIAL_INVENTORY
+  TAX_ONLY
+}
+
+enum CreditNoteLinkedInvoiceRequirement {
+  REQUIRED
+  OPTIONAL
+}
+
 enum AllocationStatus {
   UNALLOCATED
   PARTIAL
@@ -278,6 +289,7 @@ enum InventoryCostingMethod {
 enum InventoryStockMovementType {
   GOODS_RECEIPT
   PURCHASE_RECEIPT
+  PURCHASE_RETURN
   GOODS_ISSUE
   SALES_ISSUE
   SALES_RETURN
@@ -435,10 +447,15 @@ model Account {
   purchaseRequestExpenseLines               PurchaseRequestLine[]   @relation("PurchaseRequestExpenseAccount")
   purchaseInvoiceAccountLines               PurchaseInvoiceLine[]   @relation("PurchaseInvoiceClassificationAccount")
   debitNoteDiscountLines                    DebitNoteLine[]         @relation("DebitNoteDiscountAccount")
+  debitNoteInventoryLines                   DebitNoteLine[]         @relation("DebitNoteInventoryAccount")
   salesQuotationRevenueLines                SalesQuotationLine[]    @relation("SalesQuotationRevenueAccount")
   salesOrderRevenueLines                    SalesOrderLine[]        @relation("SalesOrderRevenueAccount")
   salesInvoiceRevenueLines                  SalesInvoiceLine[]      @relation("SalesInvoiceRevenueAccount")
   creditNoteRevenueLines                    CreditNoteLine[]        @relation("CreditNoteRevenueAccount")
+  creditNoteInventoryLines                  CreditNoteLine[]        @relation("CreditNoteInventoryAccount")
+  creditNoteCogsLines                       CreditNoteLine[]        @relation("CreditNoteCogsAccount")
+  creditNoteTypeDefaultAccounts             CreditNoteType[]        @relation("CreditNoteTypeDefaultAccount")
+  supplierDebitNoteTypeDefaultAccounts      SupplierDebitNoteType[] @relation("SupplierDebitNoteTypeDefaultAccount")
   posReturnRevenueLines                     PosReturnLine[]         @relation("PosReturnRevenueAccount")
   posReturnInventoryLines                   PosReturnLine[]         @relation("PosReturnInventoryAccount")
   posReturnCogsLines                        PosReturnLine[]         @relation("PosReturnCogsAccount")
@@ -700,6 +717,46 @@ model TaxTreatment {
   @@index([defaultTaxId])
 }
 
+model CreditNoteType {
+  id                       String                           @id @default(cuid())
+  code                     String                           @unique
+  name                     String
+  effect                   CreditNoteTypeEffect
+  linkedInvoiceRequirement CreditNoteLinkedInvoiceRequirement
+  affectsInventory         Boolean                          @default(false)
+  allowsTaxAdjustment      Boolean                          @default(false)
+  defaultAccountId         String
+  defaultAccount           Account                          @relation("CreditNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
+  helperText               String?
+  isActive                 Boolean                          @default(true)
+  creditNotes              CreditNote[]
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+
+  @@index([isActive, code])
+  @@index([defaultAccountId])
+}
+
+model SupplierDebitNoteType {
+  id                       String                           @id @default(cuid())
+  code                     String                           @unique
+  name                     String
+  effect                   CreditNoteTypeEffect
+  linkedInvoiceRequirement CreditNoteLinkedInvoiceRequirement
+  affectsInventory         Boolean                          @default(false)
+  allowsTaxAdjustment      Boolean                          @default(false)
+  defaultAccountId         String
+  defaultAccount           Account                          @relation("SupplierDebitNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
+  helperText               String?
+  isActive                 Boolean                          @default(true)
+  debitNotes               DebitNote[]
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+
+  @@index([isActive, code])
+  @@index([defaultAccountId])
+}
+
 model JournalEntryType {
   id        String         @id @default(cuid())
   name      String         @unique
@@ -912,6 +969,8 @@ model InventoryItem {
   salesQuotationLines    SalesQuotationLine[]
   salesOrderLines        SalesOrderLine[]
   salesInvoiceLines      SalesInvoiceLine[]
+  creditNoteLines        CreditNoteLine[]
+  debitNoteLines         DebitNoteLine[]
   posReturnLines         PosReturnLine[]
   purchaseRequestLines   PurchaseRequestLine[]         @relation("PurchaseRequestLineInventoryItem")
   purchaseOrderLines     PurchaseOrderLine[]           @relation("PurchaseOrderLineInventoryItem")
@@ -1039,6 +1098,8 @@ model InventoryWarehouse {
   stockMovements       InventoryStockMovement[]
   purchaseInvoiceLines PurchaseInvoiceLine[]
   salesInvoiceLines    SalesInvoiceLine[]
+  creditNoteLines      CreditNoteLine[]
+  debitNoteLines       DebitNoteLine[]
   posReturnLines       PosReturnLine[]
   posSessions          PosSession[]
   createdAt            DateTime                    @default(now())
@@ -1930,6 +1991,7 @@ model PurchaseInvoiceLine {
   lineTotalAmount    Decimal         @default(0) @db.Decimal(18, 2)
   accountId          String
   account            Account         @relation("PurchaseInvoiceClassificationAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  debitNoteLines     DebitNoteLine[]
   createdAt          DateTime        @default(now())
 
   @@unique([purchaseInvoiceId, lineNumber])
@@ -1986,6 +2048,8 @@ model DebitNote {
   supplier          Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchaseInvoiceId String?
   purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Restrict)
+  supplierDebitNoteTypeId String
+  supplierDebitNoteType SupplierDebitNoteType @relation(fields: [supplierDebitNoteTypeId], references: [id], onDelete: Restrict)
   currencyCode      String           @default("JOD")
   description       String?
   subtotalAmount    Decimal          @default(0) @db.Decimal(18, 2)
@@ -2000,6 +2064,7 @@ model DebitNote {
 
   @@index([supplierId, status, noteDate])
   @@index([purchaseInvoiceId])
+  @@index([supplierDebitNoteTypeId])
 }
 
 model DebitNoteLine {
@@ -2007,19 +2072,44 @@ model DebitNoteLine {
   debitNoteId     String
   debitNote       DebitNote @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
   lineNumber      Int
+  purchaseInvoiceLineId String?
+  purchaseInvoiceLine PurchaseInvoiceLine? @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
+  itemId          String?
+  item            InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId     String?
+  warehouse       InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  itemName        String?
+  description     String?
   quantity        Decimal   @default(1) @db.Decimal(18, 4)
+  unitPrice       Decimal   @default(0) @db.Decimal(18, 2)
   amount          Decimal   @default(0) @db.Decimal(18, 2)
   discountAccountId String?
   discountAccount Account?  @relation("DebitNoteDiscountAccount", fields: [discountAccountId], references: [id], onDelete: Restrict)
   taxId           String?
   tax             Tax?      @relation(fields: [taxId], references: [id], onDelete: Restrict)
   taxAmount       Decimal   @default(0) @db.Decimal(18, 2)
+  originalUnitPrice  Decimal?   @db.Decimal(18, 2)
+  correctedUnitPrice Decimal?   @db.Decimal(18, 2)
+  originalTaxAmount  Decimal?   @db.Decimal(18, 2)
+  correctedTaxAmount Decimal?   @db.Decimal(18, 2)
+  returnToStock   Boolean   @default(false)
+  returnReason    String?
+  itemCondition   String?
+  lineSubtotalAmount Decimal @default(0) @db.Decimal(18, 2)
+  inventoryAccountId String?
+  inventoryAccount Account? @relation("DebitNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  unitCost        Decimal?  @db.Decimal(18, 4)
+  totalCost       Decimal?  @db.Decimal(18, 2)
   reason          String
   lineTotalAmount Decimal   @default(0) @db.Decimal(18, 2)
   createdAt       DateTime  @default(now())
 
   @@unique([debitNoteId, lineNumber])
+  @@index([purchaseInvoiceLineId])
+  @@index([itemId])
+  @@index([warehouseId])
   @@index([discountAccountId])
+  @@index([inventoryAccountId])
   @@index([taxId])
 }
 
@@ -2353,6 +2443,7 @@ model SalesInvoiceLine {
   revenueAccountId   String
   revenueAccount     Account        @relation("SalesInvoiceRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
   createdAt          DateTime       @default(now())
+  creditNoteLines    CreditNoteLine[]
   posReturnLines     PosReturnLine[]
 
   @@unique([salesInvoiceId, lineNumber])
@@ -2371,6 +2462,8 @@ model CreditNote {
   customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
   salesInvoiceId String?
   salesInvoice   SalesInvoice?    @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  creditNoteTypeId String
+  creditNoteType   CreditNoteType @relation(fields: [creditNoteTypeId], references: [id], onDelete: Restrict)
   currencyCode   String           @default("JOD")
   description    String?
   subtotalAmount Decimal          @default(0) @db.Decimal(18, 2)
@@ -2386,6 +2479,7 @@ model CreditNote {
 
   @@index([customerId, status, noteDate])
   @@index([salesInvoiceId])
+  @@index([creditNoteTypeId])
 }
 
 model CreditNoteLine {
@@ -2393,6 +2487,12 @@ model CreditNoteLine {
   creditNoteId       String
   creditNote         CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   lineNumber         Int
+  salesInvoiceLineId String?
+  salesInvoiceLine   SalesInvoiceLine? @relation(fields: [salesInvoiceLineId], references: [id], onDelete: Restrict)
+  itemId             String?
+  item               InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId        String?
+  warehouse          InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   itemName           String?
   description        String?
   quantity           Decimal    @default(1) @db.Decimal(18, 4)
@@ -2401,13 +2501,28 @@ model CreditNoteLine {
   taxId              String?
   tax                Tax?       @relation(fields: [taxId], references: [id], onDelete: Restrict)
   taxAmount          Decimal    @default(0) @db.Decimal(18, 2)
+  originalUnitPrice  Decimal?   @db.Decimal(18, 2)
+  correctedUnitPrice Decimal?   @db.Decimal(18, 2)
+  originalTaxAmount  Decimal?   @db.Decimal(18, 2)
+  correctedTaxAmount Decimal?   @db.Decimal(18, 2)
+  returnToStock      Boolean    @default(false)
+  itemCondition      String?
   lineSubtotalAmount Decimal    @db.Decimal(18, 2)
   lineAmount         Decimal    @db.Decimal(18, 2)
   revenueAccountId   String
   revenueAccount     Account    @relation("CreditNoteRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  inventoryAccountId String?
+  inventoryAccount   Account?   @relation("CreditNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  cogsAccountId      String?
+  cogsAccount        Account?   @relation("CreditNoteCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  unitCost           Decimal?   @db.Decimal(18, 4)
+  totalCost          Decimal?   @db.Decimal(18, 2)
   createdAt          DateTime   @default(now())
 
   @@unique([creditNoteId, lineNumber])
+  @@index([salesInvoiceLineId])
+  @@index([itemId])
+  @@index([warehouseId])
   @@index([revenueAccountId])
   @@index([taxId])
 }

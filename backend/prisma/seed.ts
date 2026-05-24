@@ -686,6 +686,15 @@ async function main() {
     subtype: 'Receivable',
     parentAccountId: customerReceivables.id,
   });
+  const inputVat = await createAccount({
+    code: '1122001',
+    name: 'Input VAT',
+    nameAr: 'ضريبة مدخلات',
+    type: 'ASSET',
+    isPosting: true,
+    subtype: 'Tax',
+    parentAccountId: receivables.id,
+  });
   const suppliers = await createAccount({
     code: '2110001',
     name: 'Suppliers',
@@ -1295,6 +1304,78 @@ async function main() {
     subtype: 'Revenue',
     parentAccountId: sales.id,
   });
+  const salesDiscounts = await createAccount({
+    code: '4110002',
+    name: 'Sales Discounts',
+    nameAr: 'خصومات مسموحة',
+    type: 'REVENUE',
+    isPosting: true,
+    subtype: 'Revenue',
+    parentAccountId: sales.id,
+  });
+  const salesReturns = await createAccount({
+    code: '4110003',
+    name: 'Sales Returns',
+    nameAr: 'مردودات المبيعات',
+    type: 'REVENUE',
+    isPosting: true,
+    subtype: 'Revenue',
+    parentAccountId: sales.id,
+  });
+  const priceDifferences = await createAccount({
+    code: '4110004',
+    name: 'Price Differences',
+    nameAr: 'فروقات أسعار',
+    type: 'REVENUE',
+    isPosting: true,
+    subtype: 'Revenue',
+    parentAccountId: sales.id,
+  });
+  const customerSettlements = await createAccount({
+    code: '4110005',
+    name: 'Customer Settlements',
+    nameAr: 'تسويات عملاء',
+    type: 'REVENUE',
+    isPosting: true,
+    subtype: 'Revenue',
+    parentAccountId: sales.id,
+  });
+  const purchaseDiscounts = await createAccount({
+    code: '5110002',
+    name: 'Purchase Discounts',
+    nameAr: 'خصومات مكتسبة',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
+  const purchaseReturns = await createAccount({
+    code: '5110003',
+    name: 'Purchase Returns',
+    nameAr: 'مردودات المشتريات',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
+  const purchasePriceDifferences = await createAccount({
+    code: '5110004',
+    name: 'Purchase Price Differences',
+    nameAr: 'فروقات أسعار شراء',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
+  const supplierSettlements = await createAccount({
+    code: '5110005',
+    name: 'Supplier Settlements',
+    nameAr: 'تسويات موردين',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
   const rentExpense = await createAccount({
     code: '5110001',
     name: 'Rent Expense',
@@ -1315,6 +1396,127 @@ async function main() {
   });
 
   // Payment Terms seed data
+  await prisma.creditNoteType.createMany({
+    data: [
+      {
+        code: 'CN-DISCOUNT',
+        name: 'خصم بعد البيع',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: salesDiscounts.id,
+        helperText: 'هذا النوع يؤثر ماليًا فقط ولا ينشئ حركة مخزون.',
+        isActive: true,
+      },
+      {
+        code: 'CN-SALES-RETURN',
+        name: 'مرتجع مبيعات',
+        effect: 'FINANCIAL_INVENTORY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: true,
+        allowsTaxAdjustment: true,
+        defaultAccountId: salesReturns.id,
+        helperText:
+          'هذا النوع يؤثر على حساب العميل والمبيعات وقد ينشئ حركة مخزون عند إرجاع البضاعة.',
+        isActive: true,
+      },
+      {
+        code: 'CN-PRICE-DIFF',
+        name: 'فرق سعر',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: priceDifferences.id,
+        helperText: 'هذا النوع يصحح فرق السعر دون أي أثر على المخزون.',
+        isActive: true,
+      },
+      {
+        code: 'CN-TAX-CORRECTION',
+        name: 'تصحيح ضريبة',
+        effect: 'TAX_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: salesTaxPayable.id,
+        helperText: 'هذا النوع يصحح ضريبة الفاتورة فقط بدون تعديل بنود المبيعات أو المخزون.',
+        isActive: true,
+      },
+      {
+        code: 'CN-CUSTOMER-SETTLEMENT',
+        name: 'تسوية عميل',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'OPTIONAL',
+        affectsInventory: false,
+        allowsTaxAdjustment: false,
+        defaultAccountId: customerSettlements.id,
+        helperText: 'هذا النوع يستخدم لتسويات العميل المالية ولا يفرض ربطًا إلزاميًا بفاتورة.',
+        isActive: true,
+      },
+    ],
+  });
+
+  await prisma.supplierDebitNoteType.createMany({
+    data: [
+      {
+        code: 'DN-PURCHASE-DISCOUNT',
+        name: 'خصم بعد الشراء',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: purchaseDiscounts.id,
+        helperText: 'هذا النوع يستخدم لتخفيض ذمة المورد ماليًا فقط ولا ينشئ حركة مخزون.',
+        isActive: true,
+      },
+      {
+        code: 'DN-PURCHASE-RETURN',
+        name: 'مرتجع شراء',
+        effect: 'FINANCIAL_INVENTORY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: true,
+        allowsTaxAdjustment: true,
+        defaultAccountId: purchaseReturns.id,
+        helperText: 'هذا النوع يخفض ذمة المورد ويؤثر على المخزون عند إرجاع البضاعة للمورد.',
+        isActive: true,
+      },
+      {
+        code: 'DN-PRICE-CORRECTION',
+        name: 'تصحيح سعر الشراء',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: purchasePriceDifferences.id,
+        helperText: 'هذا النوع يستخدم لتصحيح سعر الشراء دون تغيير الكمية أو إنشاء حركة مخزون.',
+        isActive: true,
+      },
+      {
+        code: 'DN-TAX-CORRECTION',
+        name: 'تصحيح ضريبة',
+        effect: 'TAX_ONLY',
+        linkedInvoiceRequirement: 'REQUIRED',
+        affectsInventory: false,
+        allowsTaxAdjustment: true,
+        defaultAccountId: inputVat.id,
+        helperText: 'هذا النوع يستخدم لتصحيح ضريبة المدخلات فقط دون التأثير على الكمية أو المخزون.',
+        isActive: true,
+      },
+      {
+        code: 'DN-SUPPLIER-SETTLEMENT',
+        name: 'تسوية مورد',
+        effect: 'FINANCIAL_ONLY',
+        linkedInvoiceRequirement: 'OPTIONAL',
+        affectsInventory: false,
+        allowsTaxAdjustment: false,
+        defaultAccountId: supplierSettlements.id,
+        helperText: 'هذا النوع يستخدم لتسويات الموردين المالية غير المرتبطة بالضرورة بفاتورة شراء محددة.',
+        isActive: true,
+      },
+    ],
+  });
+
   await prisma.paymentTerm.createMany({
     data: [
       {

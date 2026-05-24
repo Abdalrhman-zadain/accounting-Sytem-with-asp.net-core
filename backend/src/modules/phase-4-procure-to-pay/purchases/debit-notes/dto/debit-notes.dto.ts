@@ -12,10 +12,32 @@ import {
 } from 'class-validator';
 
 export class DebitNoteLineDto {
+  @IsOptional()
+  @IsString()
+  purchaseInvoiceLineId?: string;
+
+  @IsOptional()
+  @IsString()
+  itemId?: string;
+
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
+  @IsOptional()
+  @IsString()
+  itemName?: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0.0001)
   quantity!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
 
   @Type(() => Number)
   @IsNumber()
@@ -35,6 +57,42 @@ export class DebitNoteLineDto {
   @IsString()
   taxId?: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalUnitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  correctedUnitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalTaxAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  correctedTaxAmount?: number;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  returnToStock?: boolean;
+
+  @IsOptional()
+  @IsString()
+  itemCondition?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @IsString()
   @Length(1, 255)
   reason!: string;
@@ -51,6 +109,9 @@ export class CreateDebitNoteDto {
 
   @IsString()
   supplierId!: string;
+
+  @IsString()
+  supplierDebitNoteTypeId!: string;
 
   @IsOptional()
   @IsString()
@@ -86,6 +147,10 @@ export class UpdateDebitNoteDto {
   @IsOptional()
   @IsString()
   supplierId?: string;
+
+  @IsOptional()
+  @IsString()
+  supplierDebitNoteTypeId?: string;
 
   @IsOptional()
   @IsString()

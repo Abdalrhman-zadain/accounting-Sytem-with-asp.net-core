@@ -39,6 +39,7 @@ import {
   getActivePaymentTerms,
   getBankCashAccounts,
   getAccountOptions,
+  getActiveSupplierDebitNoteTypes,
   getDebitNoteById,
   getDebitNotes,
   getActiveTaxes,
@@ -73,7 +74,7 @@ import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn, formatCurrency, formatDate, cleanDisplayName } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { AccountOption, AccountTreeNode, DebitNote, DueDateCalculationMethod, InventoryItem, InventoryWarehouse, PaymentTerm, PurchaseInvoice, PurchaseOrder, PurchasePolicy, PurchaseRequest, Supplier, SupplierPayment, Tax } from "@/types/api";
+import type { AccountOption, AccountTreeNode, DebitNote, DueDateCalculationMethod, InventoryItem, InventoryWarehouse, PaymentTerm, PurchaseInvoice, PurchaseOrder, PurchasePolicy, PurchaseRequest, Supplier, SupplierDebitNoteType, SupplierPayment, Tax } from "@/types/api";
 import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
@@ -214,12 +215,24 @@ type SupplierPaymentEditorState = {
 
 type DebitNoteLineEditorState = {
   key: string;
+  purchaseInvoiceLineId: string;
+  itemId: string;
+  warehouseId: string;
+  itemName: string;
+  description: string;
   quantity: string;
+  unitPrice: string;
   amount: string;
   discountAccountId: string;
   taxId: string;
   taxRate: string;
   taxAmount: string;
+  originalUnitPrice: string;
+  correctedUnitPrice: string;
+  originalTaxAmount: string;
+  correctedTaxAmount: string;
+  returnToStock: boolean;
+  itemCondition: string;
   reason: string;
 };
 
@@ -228,6 +241,7 @@ type DebitNoteEditorState = {
   reference: string;
   noteDate: string;
   supplierId: string;
+  supplierDebitNoteTypeId: string;
   purchaseInvoiceId: string;
   currencyCode: string;
   description: string;
@@ -290,10 +304,11 @@ const EMPTY_PAYMENT_EDITOR = (): SupplierPaymentEditorState => ({
   allocations: [createEmptyPaymentAllocation()],
 });
 
-const EMPTY_DEBIT_NOTE_EDITOR = (): DebitNoteEditorState => ({
+const EMPTY_DEBIT_NOTE_EDITOR = (supplierDebitNoteTypeId = ""): DebitNoteEditorState => ({
   reference: "",
   noteDate: todayValue(),
   supplierId: "",
+  supplierDebitNoteTypeId,
   purchaseInvoiceId: "",
   currencyCode: "JOD",
   description: "",
@@ -430,6 +445,14 @@ export function PurchasesPage() {
     staleTime: 5 * 60 * 1000,
   });
   const activeTaxes = taxesQuery.data ?? [];
+
+  const supplierDebitNoteTypesQuery = useQuery({
+    queryKey: ["supplier-debit-note-types", "active", token],
+    queryFn: () => getActiveSupplierDebitNoteTypes(token),
+    enabled: workspace === "notes" || isDebitNoteEditorOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+  const activeSupplierDebitNoteTypes = supplierDebitNoteTypesQuery.data ?? [];
 
   const purchasePolicyQuery = useQuery({
     queryKey: ["purchase-policy", token],
@@ -874,6 +897,7 @@ export function PurchasesPage() {
           reference: debitNoteEditor.reference || undefined,
           noteDate: debitNoteEditor.noteDate,
           supplierId: debitNoteEditor.supplierId,
+          supplierDebitNoteTypeId: debitNoteEditor.supplierDebitNoteTypeId,
           purchaseInvoiceId: debitNoteEditor.purchaseInvoiceId || undefined,
           currencyCode: debitNoteEditor.currencyCode || undefined,
           description: debitNoteEditor.description || undefined,
@@ -896,6 +920,7 @@ export function PurchasesPage() {
           reference: debitNoteEditor.reference || undefined,
           noteDate: debitNoteEditor.noteDate,
           supplierId: debitNoteEditor.supplierId,
+          supplierDebitNoteTypeId: debitNoteEditor.supplierDebitNoteTypeId,
           purchaseInvoiceId: debitNoteEditor.purchaseInvoiceId || undefined,
           currencyCode: debitNoteEditor.currencyCode || undefined,
           description: debitNoteEditor.description || undefined,
@@ -1039,7 +1064,10 @@ export function PurchasesPage() {
   });
   const debitNoteDiscountAccounts = debitNoteDiscountAccountsQuery.data ?? [];
   const purchasePolicy: PurchasePolicy | null = purchasePolicyQuery.data ?? null;
-  const defaultDebitNoteDiscountAccountId = purchasePolicy?.purchaseDiscountAccountId ?? "";
+  const defaultDebitNoteDiscountAccountId =
+    activeSupplierDebitNoteTypes.find((type) => type.id === debitNoteEditor.supplierDebitNoteTypeId)?.defaultAccount?.id ??
+    purchasePolicy?.purchaseDiscountAccountId ??
+    "";
   const canOverrideDebitNoteDiscountAccount = user?.role === "ADMIN" || user?.role === "MANAGER";
   const paymentEligibleInvoiceRows = guidedPaymentSourceInvoice
     ? [guidedPaymentSourceInvoice, ...purchaseInvoices.filter((invoice) => invoice.id !== guidedPaymentSourceInvoice.id)]
@@ -1121,10 +1149,13 @@ export function PurchasesPage() {
     postSupplierPaymentMutation.error ?? cancelSupplierPaymentMutation.error ?? reverseSupplierPaymentMutation.error,
   );
   const debitNoteSaveError = getMutationErrorMessage(createDebitNoteMutation.error ?? updateDebitNoteMutation.error);
+  const selectedSupplierDebitNoteType =
+    activeSupplierDebitNoteTypes.find((type) => type.id === debitNoteEditor.supplierDebitNoteTypeId) ?? null;
+  const debitNoteTypeCode = selectedSupplierDebitNoteType?.code ?? "";
   const debitNoteFormError = getDebitNoteFormError(
     debitNoteEditor,
     {
-      defaultDiscountAccountId: defaultDebitNoteDiscountAccountId,
+      selectedType: selectedSupplierDebitNoteType,
       availableInvoiceBalance: debitNoteEditor.purchaseInvoiceId
         ? Number(
             purchaseInvoices.find((invoice) => invoice.id === debitNoteEditor.purchaseInvoiceId)?.outstandingAmount ?? 0,
@@ -1239,31 +1270,116 @@ export function PurchasesPage() {
 
     setDebitNoteEditor((current) => {
       let changed = false;
+      const selectedType = activeSupplierDebitNoteTypes.find(
+        (type) => type.id === current.supplierDebitNoteTypeId,
+      );
+      const selectedInvoice = purchaseInvoices.find(
+        (invoice) => invoice.id === current.purchaseInvoiceId,
+      );
       const lines = current.lines.map((line) => {
-        const resolvedTaxRate = resolveTaxRate(activeTaxes, line.taxId);
-        const resolvedTaxAmount = calculateDebitNoteLineTaxAmount(line.amount, resolvedTaxRate);
+        const sourceLine = selectedInvoice?.lines?.find(
+          (candidate) => candidate.id === line.purchaseInvoiceLineId,
+        );
+        const resolvedTaxRate = resolveTaxRate(activeTaxes, line.taxId || sourceLine?.taxId || "");
+        let nextLine = {
+          ...line,
+          taxId: line.taxId || sourceLine?.taxId || "",
+        };
         const resolvedDiscountAccountId = line.discountAccountId || defaultDebitNoteDiscountAccountId;
+        let resolvedTaxAmount = calculateDebitNoteLineTaxAmount(line.amount, resolvedTaxRate);
 
-        if (
-          line.taxRate !== resolvedTaxRate ||
-          line.taxAmount !== resolvedTaxAmount ||
-          line.discountAccountId !== resolvedDiscountAccountId
-        ) {
+        if (selectedType?.code === "DN-PURCHASE-RETURN" && sourceLine) {
+          const quantity = Number(line.quantity || 0);
+          const purchasedQuantity = Number(sourceLine.quantity || 0);
+          const ratio = purchasedQuantity > 0 ? quantity / purchasedQuantity : 0;
+          const amount = Number((((Number(sourceLine.lineSubtotalAmount) - Number(sourceLine.discountAmount)) * ratio)).toFixed(2));
+          resolvedTaxAmount = selectedType.allowsTaxAdjustment
+            ? (line.taxAmount || calculateDebitNoteLineTaxAmount(String(amount), resolvedTaxRate))
+            : Number((Number(sourceLine.taxAmount) * ratio).toFixed(2)).toFixed(2);
+          nextLine = {
+            ...nextLine,
+            itemId: sourceLine.itemId || "",
+            itemName: sourceLine.itemName || sourceLine.description || "",
+            warehouseId: line.warehouseId || sourceLine.warehouseId || "",
+            unitPrice: sourceLine.unitPrice,
+            amount: amount.toFixed(2),
+            originalUnitPrice: sourceLine.unitPrice,
+            originalTaxAmount: Number((Number(sourceLine.taxAmount) * ratio).toFixed(2)).toFixed(2),
+            returnToStock: true,
+          };
+        }
+
+        if (selectedType?.code === "DN-PRICE-CORRECTION" && sourceLine) {
+          const originalUnitPrice = Number(sourceLine.unitPrice || 0);
+          const correctedUnitPrice = Number(line.correctedUnitPrice || 0);
+          const quantity = Number(sourceLine.quantity || 0);
+          const amount = correctedUnitPrice >= 0
+            ? Number(((originalUnitPrice - correctedUnitPrice) * quantity).toFixed(2))
+            : 0;
+          resolvedTaxAmount = selectedType.allowsTaxAdjustment
+            ? Number((Number(sourceLine.taxAmount) - Number(line.correctedTaxAmount || sourceLine.taxAmount)).toFixed(2)).toFixed(2)
+            : calculateDebitNoteLineTaxAmount(String(amount), resolvedTaxRate);
+          nextLine = {
+            ...nextLine,
+            itemId: sourceLine.itemId || "",
+            itemName: sourceLine.itemName || sourceLine.description || "",
+            quantity: sourceLine.quantity,
+            unitPrice: amount.toFixed(2),
+            amount: amount.toFixed(2),
+            originalUnitPrice: sourceLine.unitPrice,
+            originalTaxAmount: sourceLine.taxAmount,
+          };
+        }
+
+        if (selectedType?.code === "DN-TAX-CORRECTION" && sourceLine) {
+          const originalTaxAmount = Number(line.originalTaxAmount || sourceLine.taxAmount || 0);
+          const correctedTaxAmount = Number(line.correctedTaxAmount || 0);
+          const taxDifference = correctedTaxAmount >= 0
+            ? Number((originalTaxAmount - correctedTaxAmount).toFixed(2))
+            : 0;
+          resolvedTaxAmount = taxDifference.toFixed(2);
+          nextLine = {
+            ...nextLine,
+            itemId: sourceLine.itemId || "",
+            itemName: sourceLine.itemName || sourceLine.description || "",
+            quantity: "1",
+            unitPrice: "0.00",
+            amount: "0.00",
+            originalUnitPrice: sourceLine.unitPrice,
+            originalTaxAmount: originalTaxAmount.toFixed(2),
+          };
+        }
+
+        const lineChanged =
+          nextLine.taxId !== line.taxId ||
+          nextLine.itemId !== line.itemId ||
+          nextLine.itemName !== line.itemName ||
+          nextLine.warehouseId !== line.warehouseId ||
+          nextLine.unitPrice !== line.unitPrice ||
+          nextLine.amount !== line.amount ||
+          nextLine.originalUnitPrice !== line.originalUnitPrice ||
+          nextLine.originalTaxAmount !== line.originalTaxAmount ||
+          nextLine.returnToStock !== line.returnToStock ||
+          nextLine.taxRate !== resolvedTaxRate ||
+          nextLine.taxAmount !== resolvedTaxAmount ||
+          nextLine.discountAccountId !== resolvedDiscountAccountId;
+
+        if (lineChanged) {
           changed = true;
           return {
-            ...line,
+            ...nextLine,
             taxRate: resolvedTaxRate,
             taxAmount: resolvedTaxAmount,
             discountAccountId: resolvedDiscountAccountId,
           };
         }
 
-        return line;
+        return nextLine;
       });
 
       return changed ? { ...current, lines } : current;
     });
-  }, [activeTaxes, defaultDebitNoteDiscountAccountId, isDebitNoteEditorOpen]);
+  }, [activeSupplierDebitNoteTypes, activeTaxes, defaultDebitNoteDiscountAccountId, isDebitNoteEditorOpen, purchaseInvoices]);
 
   useEffect(() => {
     if (!sourcePurchaseRequestId || !sourcePurchaseRequestQuery.data) return;
@@ -3791,7 +3907,7 @@ export function PurchasesPage() {
 
                     <div className="mt-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                       <div className="space-y-3">
-                        <Field label={t("purchases.debitNotes.field.purchaseInvoice")} required labelAlign={isArabic ? "end" : "start"}>
+                        <Field label={t("purchases.debitNotes.field.purchaseInvoice")} required={selectedSupplierDebitNoteType?.linkedInvoiceRequirement === "REQUIRED"} labelAlign={isArabic ? "end" : "start"}>
                           <Select
                             value={debitNoteEditor.purchaseInvoiceId}
                             onChange={(event) => {
@@ -3800,11 +3916,22 @@ export function PurchasesPage() {
                                 ...current,
                                 purchaseInvoiceId: event.target.value,
                                 currencyCode: invoice?.currencyCode || current.currencyCode,
+                                lines: current.lines.map((line) => ({
+                                  ...line,
+                                  purchaseInvoiceLineId: "",
+                                  itemId: "",
+                                  itemName: "",
+                                  warehouseId: "",
+                                  unitPrice: "0.00",
+                                  amount: "0.00",
+                                  originalUnitPrice: "",
+                                  originalTaxAmount: "",
+                                })),
                               }));
                             }}
                             className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
                           >
-                            <option value="">{t("purchases.debitNotes.discountNotice.selectRelatedInvoice")}</option>
+                            <option value="">{selectedSupplierDebitNoteType?.linkedInvoiceRequirement === "OPTIONAL" ? "بدون فاتورة شراء مرتبطة" : t("purchases.debitNotes.discountNotice.selectRelatedInvoice")}</option>
                             {purchaseInvoices
                               .filter((invoice) => !debitNoteEditor.supplierId || invoice.supplier.id === debitNoteEditor.supplierId)
                               .filter((invoice) => invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && invoice.status !== "REVERSED")
@@ -3827,16 +3954,45 @@ export function PurchasesPage() {
 
                       <div>
                         <div className={cn("mb-2 text-sm font-semibold text-slate-900", isArabic && "text-right")}>
-                          {t("purchases.debitNotes.discountNotice.noticeType")}
+                          نوع إشعار مدين للمورد
                         </div>
-                        <div className="flex min-h-[110px] items-center justify-between gap-4 rounded-xl border border-emerald-400 bg-emerald-50/40 px-5 py-4">
-                          <div className={cn("space-y-2", isArabic ? "text-right" : "text-left")}>
-                            <div className="text-base font-bold text-slate-950">{t("purchases.debitNotes.discountNotice.supplierDiscount")}</div>
-                            <div className="text-sm font-medium text-slate-500">{t("purchases.debitNotes.discountNotice.supplierDiscountHint")}</div>
-                          </div>
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                            <Tag className="h-5 w-5" />
-                          </div>
+                        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 px-5 py-4">
+                          <Select
+                            value={debitNoteEditor.supplierDebitNoteTypeId}
+                            onChange={(event) =>
+                              setDebitNoteEditor((current) => ({
+                                ...current,
+                                supplierDebitNoteTypeId: event.target.value,
+                                purchaseInvoiceId: "",
+                                lines: [createEmptyDebitNoteLine(activeSupplierDebitNoteTypes.find((type) => type.id === event.target.value)?.code)],
+                              }))
+                            }
+                            className={cn("h-12 border-emerald-200 bg-white", isArabic && "text-right")}
+                          >
+                            <option value="">اختر نوع إشعار مدين للمورد</option>
+                            {activeSupplierDebitNoteTypes.map((type) => (
+                              <option key={type.id} value={type.id}>
+                                {type.code} - {type.name}
+                              </option>
+                            ))}
+                          </Select>
+                          {selectedSupplierDebitNoteType ? (
+                            <div className="flex items-start justify-between gap-4">
+                              <div className={cn("space-y-2", isArabic ? "text-right" : "text-left")}>
+                                <div className="text-base font-bold text-slate-950">{selectedSupplierDebitNoteType.name}</div>
+                                <div className="text-sm font-medium text-slate-500">
+                                  {selectedSupplierDebitNoteType.helperText || "سيتم تحديث الحقول والقيود المحاسبية حسب النوع المختار."}
+                                </div>
+                              </div>
+                              <div className="inline-flex rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-bold text-emerald-700">
+                                {selectedSupplierDebitNoteType.effect === "FINANCIAL_INVENTORY"
+                                  ? "مالي + مخزون"
+                                  : selectedSupplierDebitNoteType.effect === "TAX_ONLY"
+                                    ? "ضريبة فقط"
+                                    : "مالي فقط"}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -3860,97 +4016,189 @@ export function PurchasesPage() {
                     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
                         <div className={cn("text-lg text-slate-950", isArabic ? "arabic-ui-heading" : "font-black")}>
-                          {t("purchases.debitNotes.discountNotice.discountDetails")}
+                          {debitNoteTypeCode === "DN-PURCHASE-RETURN"
+                            ? "تفاصيل الأصناف المرتجعة للمورد"
+                            : debitNoteTypeCode === "DN-PRICE-CORRECTION"
+                              ? "تفاصيل تصحيح سعر الشراء"
+                              : debitNoteTypeCode === "DN-TAX-CORRECTION"
+                                ? "تفاصيل تصحيح الضريبة"
+                                : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT"
+                                  ? "تفاصيل تسوية المورد"
+                                  : "بنود خصم الشراء"}
                         </div>
-                        <div className="text-sm font-medium text-slate-500">{t("purchases.debitNotes.discountNotice.discountDetailsHint")}</div>
+                        <div className="text-sm font-medium text-slate-500">
+                          {selectedSupplierDebitNoteType?.helperText || "اعرض فقط الحقول المطلوبة حسب نوع إشعار مدين المورد المختار."}
+                        </div>
                       </div>
                       <Button variant="secondary" size="sm" onClick={addDebitNoteLine} className="rounded-2xl border-emerald-200 px-4 text-emerald-700 hover:bg-emerald-50">
                         <CirclePlus className="h-4 w-4" />
-                        {t("purchases.debitNotes.discountNotice.addDiscountLine")}
+                        {debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? "إضافة بند تسوية" : "إضافة سطر"}
                       </Button>
                     </div>
 
                     <div className="overflow-x-auto">
-                      <div className="min-w-[980px]">
-                        <div className="mb-3 grid grid-cols-[0.4fr_1.2fr_1.3fr_1fr_1fr_1fr_0.55fr] gap-3 px-1 text-sm font-bold text-slate-900">
-                          <div className="text-center">#</div>
-                          <div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.discountNotice.discountType")}</div>
-                          <div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.discountNotice.discountAccount")}</div>
-                          <div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.discountNotice.amountBeforeTax")}</div>
-                          <div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.field.tax")}</div>
-                          <div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.field.lineTotal")}</div>
-                          <div>{t("purchases.action.remove")}</div>
+                      <div className={cn(
+                        debitNoteTypeCode === "DN-PURCHASE-RETURN" ? "min-w-[1420px]" :
+                        debitNoteTypeCode === "DN-PRICE-CORRECTION" ? "min-w-[1160px]" :
+                        debitNoteTypeCode === "DN-TAX-CORRECTION" ? "min-w-[980px]" :
+                        debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? "min-w-[980px]" :
+                        "min-w-[980px]"
+                      )}>
+                        <div className={cn(
+                          "mb-3 gap-3 px-1 text-sm font-bold text-slate-900",
+                          debitNoteTypeCode === "DN-PURCHASE-RETURN"
+                            ? "grid grid-cols-[0.3fr_1.2fr_0.8fr_0.8fr_0.9fr_0.9fr_0.8fr_1fr_1fr_0.9fr_0.7fr_0.8fr_0.45fr]"
+                            : debitNoteTypeCode === "DN-PRICE-CORRECTION"
+                              ? "grid grid-cols-[0.35fr_1.1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.8fr_0.45fr]"
+                              : debitNoteTypeCode === "DN-TAX-CORRECTION"
+                                ? "grid grid-cols-[0.35fr_1.2fr_0.9fr_0.9fr_0.8fr_0.45fr]"
+                                : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT"
+                                  ? "grid grid-cols-[0.35fr_1.1fr_1.1fr_0.8fr_1fr_0.45fr]"
+                                  : "grid grid-cols-[0.4fr_1.2fr_1.3fr_1fr_1fr_1fr_0.55fr]"
+                        )}>
+                          {debitNoteTypeCode === "DN-PURCHASE-RETURN" ? (
+                            <>
+                              <div className="text-center">#</div><div className={cn(isArabic && "text-right")}>الصنف</div><div className={cn(isArabic && "text-right")}>الكمية المشتراة</div><div className={cn(isArabic && "text-right")}>المرتجع سابقًا</div><div className={cn(isArabic && "text-right")}>المتاحة للإرجاع</div><div className={cn(isArabic && "text-right")}>الكمية المرتجعة الآن</div><div className={cn(isArabic && "text-right")}>سعر الوحدة</div><div className={cn(isArabic && "text-right")}>المستودع</div><div className={cn(isArabic && "text-right")}>سبب المرتجع</div><div className={cn(isArabic && "text-right")}>حالة البضاعة</div><div className={cn(isArabic && "text-right")}>الضريبة</div><div className={cn(isArabic && "text-right")}>الإجمالي</div><div>{t("purchases.action.remove")}</div>
+                            </>
+                          ) : debitNoteTypeCode === "DN-PRICE-CORRECTION" ? (
+                            <>
+                              <div className="text-center">#</div><div className={cn(isArabic && "text-right")}>السطر / الصنف</div><div className={cn(isArabic && "text-right")}>السعر الأصلي</div><div className={cn(isArabic && "text-right")}>السعر الصحيح</div><div className={cn(isArabic && "text-right")}>الفرق</div><div className={cn(isArabic && "text-right")}>الضريبة</div><div className={cn(isArabic && "text-right")}>الإجمالي</div><div>{t("purchases.action.remove")}</div>
+                            </>
+                          ) : debitNoteTypeCode === "DN-TAX-CORRECTION" ? (
+                            <>
+                              <div className="text-center">#</div><div className={cn(isArabic && "text-right")}>السطر</div><div className={cn(isArabic && "text-right")}>الضريبة الأصلية</div><div className={cn(isArabic && "text-right")}>الضريبة الصحيحة</div><div className={cn(isArabic && "text-right")}>فرق الضريبة</div><div>{t("purchases.action.remove")}</div>
+                            </>
+                          ) : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? (
+                            <>
+                              <div className="text-center">#</div><div className={cn(isArabic && "text-right")}>سبب التسوية</div><div className={cn(isArabic && "text-right")}>الحساب المحاسبي</div><div className={cn(isArabic && "text-right")}>المبلغ</div><div className={cn(isArabic && "text-right")}>ملاحظات</div><div>{t("purchases.action.remove")}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-center">#</div><div className={cn(isArabic && "text-right")}>وصف الخصم</div><div className={cn(isArabic && "text-right")}>حساب الخصم</div><div className={cn(isArabic && "text-right")}>مبلغ الخصم قبل الضريبة</div><div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.field.tax")}</div><div className={cn(isArabic && "text-right")}>{t("purchases.debitNotes.field.lineTotal")}</div><div>{t("purchases.action.remove")}</div>
+                            </>
+                          )}
                         </div>
 
                         <div className="space-y-3">
                           {debitNoteEditor.lines.map((line, index) => {
                             const lineTotal = Number((Number(line.amount || 0) + Number(line.taxAmount || 0)).toFixed(2));
+                            const sourceLine = selectedDebitNoteInvoice?.lines?.find((candidate) => candidate.id === line.purchaseInvoiceLineId);
+                            const purchasedQuantity = Number(sourceLine?.quantity ?? 0);
+                            const previouslyReturned = 0;
+                            const availableReturn = Math.max(0, purchasedQuantity - previouslyReturned);
                             const lineDiscountAccount =
                               debitNoteDiscountAccounts.find((account) => account.id === line.discountAccountId) ??
                               debitNoteDiscountAccounts.find((account) => account.id === defaultDebitNoteDiscountAccountId) ??
                               null;
 
                             return (
-                              <div key={line.key} className="grid grid-cols-[0.4fr_1.2fr_1.3fr_1fr_1fr_1fr_0.55fr] gap-3">
+                              <div key={line.key} className={cn(
+                                "grid gap-3",
+                                debitNoteTypeCode === "DN-PURCHASE-RETURN"
+                                  ? "grid-cols-[0.3fr_1.2fr_0.8fr_0.8fr_0.9fr_0.9fr_0.8fr_1fr_1fr_0.9fr_0.7fr_0.8fr_0.45fr]"
+                                  : debitNoteTypeCode === "DN-PRICE-CORRECTION"
+                                    ? "grid-cols-[0.35fr_1.1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.8fr_0.45fr]"
+                                    : debitNoteTypeCode === "DN-TAX-CORRECTION"
+                                      ? "grid-cols-[0.35fr_1.2fr_0.9fr_0.9fr_0.8fr_0.45fr]"
+                                      : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT"
+                                        ? "grid-cols-[0.35fr_1.1fr_1.1fr_0.8fr_1fr_0.45fr]"
+                                        : "grid-cols-[0.4fr_1.2fr_1.3fr_1fr_1fr_1fr_0.55fr]"
+                              )}>
                                 <Input value={`${index + 1}`} readOnly className="h-12 border-slate-200 bg-white text-center font-bold" />
-                                <Select
-                                  value={line.reason || t("purchases.debitNotes.discountNotice.defaultReason")}
-                                  onChange={(event) => updateDebitNoteLine(line.key, "reason", event.target.value)}
-                                  className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                                >
-                                  <option value={t("purchases.debitNotes.discountNotice.defaultReason")}>{t("purchases.debitNotes.discountNotice.defaultReason")}</option>
-                                  <option value={t("purchases.debitNotes.discountNotice.priceCorrection")}>{t("purchases.debitNotes.discountNotice.priceCorrection")}</option>
-                                  <option value={t("purchases.debitNotes.discountNotice.purchaseReturn")}>{t("purchases.debitNotes.discountNotice.purchaseReturn")}</option>
-                                </Select>
-                                {canOverrideDebitNoteDiscountAccount ? (
-                                  <Select
-                                    value={line.discountAccountId}
-                                    onChange={(event) => updateDebitNoteLine(line.key, "discountAccountId", event.target.value)}
-                                    className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                                  >
-                                    <option value="">{t("purchases.debitNotes.discountNotice.selectDiscountAccount")}</option>
-                                    {debitNoteDiscountAccounts.map((account) => (
-                                      <option key={account.id} value={account.id}>
-                                        {account.code} - {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)}
-                                      </option>
-                                    ))}
-                                  </Select>
+                                {debitNoteTypeCode === "DN-PURCHASE-RETURN" ? (
+                                  <>
+                                    <Select value={line.purchaseInvoiceLineId} onChange={(event) => updateDebitNoteLine(line.key, "purchaseInvoiceLineId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر صنفًا من الفاتورة</option>
+                                      {selectedDebitNoteInvoice?.lines?.map((invoiceLine) => (
+                                        <option key={invoiceLine.id} value={invoiceLine.id}>
+                                          #{invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                    <Input value={purchasedQuantity ? String(purchasedQuantity) : ""} readOnly className="h-12 border-slate-200 bg-slate-50 text-center" />
+                                    <Input value={String(previouslyReturned)} readOnly className="h-12 border-slate-200 bg-slate-50 text-center" />
+                                    <Input value={String(availableReturn)} readOnly className="h-12 border-slate-200 bg-slate-50 text-center" />
+                                    <Input value={line.quantity} onChange={(event) => updateDebitNoteLine(line.key, "quantity", event.target.value)} className="h-12 border-slate-200 bg-white text-center" />
+                                    <Input value={line.unitPrice || sourceLine?.unitPrice || ""} readOnly className="h-12 border-slate-200 bg-slate-50 text-center" />
+                                    <Select value={line.warehouseId} onChange={(event) => updateDebitNoteLine(line.key, "warehouseId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر المستودع</option>
+                                      {activeInventoryWarehouses.map((warehouse) => (
+                                        <option key={warehouse.id} value={warehouse.id}>{warehouse.code} - {warehouse.name}</option>
+                                      ))}
+                                    </Select>
+                                    <Input value={line.reason} onChange={(event) => updateDebitNoteLine(line.key, "reason", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")} />
+                                    <Select value={line.itemCondition} onChange={(event) => updateDebitNoteLine(line.key, "itemCondition", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر الحالة</option>
+                                      <option value="صالحة">صالحة</option>
+                                      <option value="تالفة">تالفة</option>
+                                      <option value="تحتاج فحص">تحتاج فحص</option>
+                                    </Select>
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.taxAmount} readOnly isArabic={isArabic} />
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={lineTotal.toFixed(2)} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
+                                  </>
+                                ) : debitNoteTypeCode === "DN-PRICE-CORRECTION" ? (
+                                  <>
+                                    <Select value={line.purchaseInvoiceLineId} onChange={(event) => updateDebitNoteLine(line.key, "purchaseInvoiceLineId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر السطر / الصنف</option>
+                                      {selectedDebitNoteInvoice?.lines?.map((invoiceLine) => (
+                                        <option key={invoiceLine.id} value={invoiceLine.id}>#{invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description}</option>
+                                      ))}
+                                    </Select>
+                                    <Input value={line.originalUnitPrice || sourceLine?.unitPrice || ""} readOnly className="h-12 border-slate-200 bg-slate-50 text-center" />
+                                    <Input value={line.correctedUnitPrice} onChange={(event) => updateDebitNoteLine(line.key, "correctedUnitPrice", event.target.value)} className="h-12 border-slate-200 bg-white text-center" />
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.amount} readOnly isArabic={isArabic} />
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.taxAmount} readOnly isArabic={isArabic} />
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={lineTotal.toFixed(2)} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
+                                  </>
+                                ) : debitNoteTypeCode === "DN-TAX-CORRECTION" ? (
+                                  <>
+                                    <Select value={line.purchaseInvoiceLineId} onChange={(event) => updateDebitNoteLine(line.key, "purchaseInvoiceLineId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر السطر</option>
+                                      {selectedDebitNoteInvoice?.lines?.map((invoiceLine) => (
+                                        <option key={invoiceLine.id} value={invoiceLine.id}>#{invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description}</option>
+                                      ))}
+                                    </Select>
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.originalTaxAmount || sourceLine?.taxAmount || "0.00"} readOnly isArabic={isArabic} />
+                                    <Input value={line.correctedTaxAmount} onChange={(event) => updateDebitNoteLine(line.key, "correctedTaxAmount", event.target.value)} className="h-12 border-slate-200 bg-white text-center" />
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.taxAmount} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
+                                  </>
+                                ) : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? (
+                                  <>
+                                    <Input value={line.reason} onChange={(event) => updateDebitNoteLine(line.key, "reason", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")} />
+                                    <Select value={line.discountAccountId} onChange={(event) => updateDebitNoteLine(line.key, "discountAccountId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">اختر الحساب</option>
+                                      {debitNoteDiscountAccounts.map((account) => (
+                                        <option key={account.id} value={account.id}>{account.code} - {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)}</option>
+                                      ))}
+                                    </Select>
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.amount} onChange={(value) => updateDebitNoteLine(line.key, "amount", value)} isArabic={isArabic} />
+                                    <Input value={line.description} onChange={(event) => updateDebitNoteLine(line.key, "description", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")} />
+                                  </>
                                 ) : (
-                                  <Input
-                                    value={
-                                      lineDiscountAccount
-                                        ? `${lineDiscountAccount.code} - ${cleanDisplayName(isArabic ? lineDiscountAccount.nameAr || lineDiscountAccount.name : lineDiscountAccount.name)}`
-                                        : t("purchases.debitNotes.discountNotice.accountFromSettingsPending")
-                                    }
-                                    readOnly
-                                    className={cn("h-12 border-slate-200 bg-slate-50 text-slate-700", isArabic && "text-right")}
-                                  />
+                                  <>
+                                    <Input value={line.reason} onChange={(event) => updateDebitNoteLine(line.key, "reason", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")} />
+                                    <Select
+                                      value={line.discountAccountId}
+                                      onChange={(event) => updateDebitNoteLine(line.key, "discountAccountId", event.target.value)}
+                                      className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                                    >
+                                      <option value="">اختر الحساب</option>
+                                      {debitNoteDiscountAccounts.map((account) => (
+                                        <option key={account.id} value={account.id}>
+                                          {account.code} - {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={line.amount} onChange={(value) => updateDebitNoteLine(line.key, "amount", value)} isArabic={isArabic} />
+                                    <Select value={line.taxId} onChange={(event) => updateDebitNoteLine(line.key, "taxId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
+                                      <option value="">{t("purchases.invoices.form.noTax")}</option>
+                                      {activeTaxes.map((tax) => (
+                                        <option key={tax.id} value={tax.id}>{tax.taxCode} - {tax.taxName} ({Number(tax.rate).toFixed(2)}%)</option>
+                                      ))}
+                                    </Select>
+                                    <CurrencyInput currencyCode={debitNoteCurrency} value={lineTotal.toFixed(3)} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
+                                  </>
                                 )}
-                                <CurrencyInput
-                                  currencyCode={debitNoteCurrency}
-                                  value={line.amount}
-                                  onChange={(value) => updateDebitNoteLine(line.key, "amount", value)}
-                                  isArabic={isArabic}
-                                />
-                                <Select
-                                  value={line.taxId}
-                                  onChange={(event) => updateDebitNoteLine(line.key, "taxId", event.target.value)}
-                                  className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                                >
-                                  <option value="">{t("purchases.invoices.form.noTax")}</option>
-                                  {activeTaxes.map((tax) => (
-                                    <option key={tax.id} value={tax.id}>
-                                      {tax.taxCode} - {tax.taxName} ({Number(tax.rate).toFixed(2)}%)
-                                    </option>
-                                  ))}
-                                </Select>
-                                <CurrencyInput
-                                  currencyCode={debitNoteCurrency}
-                                  value={lineTotal.toFixed(3)}
-                                  readOnly
-                                  isArabic={isArabic}
-                                  className="font-bold text-slate-950"
-                                />
                                 <button
                                   type="button"
                                   onClick={() => removeDebitNoteLine(line.key)}
@@ -3978,25 +4226,38 @@ export function PurchasesPage() {
                         {t("purchases.debitNotes.discountNotice.journalPreview")}
                       </div>
                       <div className={cn("space-y-2 text-sm text-slate-700", isArabic ? "text-right" : "text-left")}>
-                        <div>{t("purchases.debitNotes.discountNotice.postingHint")}</div>
-                        <PostingPreviewRow label={t("purchases.debitNotes.discountNotice.journalDebit")} value={`${debitNoteCurrency} ${debitNoteTotals.totalAmount.toFixed(3)}`} isArabic={isArabic} />
-                        <PostingPreviewRow label={t("purchases.debitNotes.discountNotice.journalCreditDiscount")} value={`${debitNoteCurrency} ${debitNoteTotals.subtotalAmount.toFixed(3)}`} isArabic={isArabic} />
+                        <div>{selectedSupplierDebitNoteType?.helperText || t("purchases.debitNotes.discountNotice.postingHint")}</div>
+                        <PostingPreviewRow label="مدين: المورد / Supplier" value={`${debitNoteCurrency} ${debitNoteTotals.totalAmount.toFixed(3)}`} isArabic={isArabic} />
+                        <PostingPreviewRow
+                          label={
+                            debitNoteTypeCode === "DN-PURCHASE-RETURN"
+                              ? "دائن: مردودات المشتريات / Purchase Returns"
+                              : debitNoteTypeCode === "DN-PRICE-CORRECTION"
+                                ? "دائن: فروقات أسعار شراء / Purchase Price Differences"
+                                : debitNoteTypeCode === "DN-TAX-CORRECTION"
+                                  ? "تسوية: ضريبة مدخلات / Input VAT"
+                                  : debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT"
+                                    ? "دائن: الحساب المحاسبي المختار"
+                                    : "دائن: خصومات مكتسبة / Purchase Discounts"
+                          }
+                          value={`${debitNoteCurrency} ${debitNoteTotals.subtotalAmount.toFixed(3)}`}
+                          isArabic={isArabic}
+                        />
                         {debitNoteTotals.taxAmount > 0 ? (
-                          <PostingPreviewRow label={t("purchases.debitNotes.discountNotice.journalCreditTax")} value={`${debitNoteCurrency} ${debitNoteTotals.taxAmount.toFixed(3)}`} isArabic={isArabic} />
+                          <PostingPreviewRow label="دائن: ضريبة مدخلات / Input VAT" value={`${debitNoteCurrency} ${debitNoteTotals.taxAmount.toFixed(3)}`} isArabic={isArabic} />
+                        ) : null}
+                        {debitNoteTypeCode === "DN-PURCHASE-RETURN" ? (
+                          <PostingPreviewRow label="تأثير المخزون: سيتم تخفيض المخزون" value={`${debitNoteCurrency} ${debitNoteEditor.lines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(3)}`} isArabic={isArabic} />
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                      <MetricCard label={t("purchases.debitNotes.discountNotice.subtotalBeforeTax")} value={`${debitNoteCurrency} ${debitNoteTotals.subtotalAmount.toFixed(2)}`} />
-                      <MetricCard label={t("purchases.debitNotes.discountNotice.totalDiscount")} value={`${debitNoteCurrency} ${debitNoteTotals.totalAmount.toFixed(2)}`} highlight />
+                    <div className="mt-5 grid gap-4 lg:grid-cols-4">
+                      <MetricCard label="الإجمالي قبل الضريبة" value={`${debitNoteCurrency} ${debitNoteTotals.subtotalAmount.toFixed(2)}`} />
+                      <MetricCard label="الضريبة" value={`${debitNoteCurrency} ${debitNoteTotals.taxAmount.toFixed(2)}`} />
+                      <MetricCard label="إجمالي الإشعار" value={`${debitNoteCurrency} ${debitNoteTotals.totalAmount.toFixed(2)}`} highlight />
+                      <MetricCard label="تأثير المخزون" value={debitNoteTypeCode === "DN-PURCHASE-RETURN" ? "سيتم تخفيض المخزون" : "لا يوجد تأثير على المخزون"} />
                     </div>
-
-                    {!canOverrideDebitNoteDiscountAccount ? (
-                      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-700">
-                        {t("purchases.debitNotes.discountNotice.accountFromSettingsHint")}
-                      </div>
-                    ) : null}
 
                     <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-800">
                       {t("purchases.debitNotes.discountNotice.supplierBalanceWarning")}
@@ -4610,7 +4871,7 @@ export function PurchasesPage() {
   function openNewDebitNoteEditor() {
     createDebitNoteMutation.reset();
     updateDebitNoteMutation.reset();
-    setDebitNoteEditor(EMPTY_DEBIT_NOTE_EDITOR());
+    setDebitNoteEditor(EMPTY_DEBIT_NOTE_EDITOR(activeSupplierDebitNoteTypes[0]?.id ?? ""));
     setIsDebitNoteEditorOpen(true);
   }
 
@@ -4622,21 +4883,34 @@ export function PurchasesPage() {
       reference: note.reference,
       noteDate: note.noteDate.slice(0, 10),
       supplierId: note.supplier.id,
+      supplierDebitNoteTypeId: note.supplierDebitNoteType?.id ?? "",
       purchaseInvoiceId: note.purchaseInvoice?.id ?? "",
       currencyCode: note.currencyCode,
       description: note.description ?? "",
       lines: note.lines.length
         ? note.lines.map((line) => ({
             key: line.id,
+            purchaseInvoiceLineId: line.purchaseInvoiceLineId ?? "",
+            itemId: line.itemId ?? "",
+            warehouseId: line.warehouseId ?? "",
+            itemName: line.itemName ?? "",
+            description: line.description ?? "",
             quantity: line.quantity,
+            unitPrice: line.unitPrice,
             amount: line.amount,
             discountAccountId: line.discountAccountId ?? "",
             taxId: line.taxId ?? "",
             taxRate: "",
             taxAmount: line.taxAmount,
+            originalUnitPrice: line.originalUnitPrice ?? "",
+            correctedUnitPrice: line.correctedUnitPrice ?? "",
+            originalTaxAmount: line.originalTaxAmount ?? "",
+            correctedTaxAmount: line.correctedTaxAmount ?? "",
+            returnToStock: Boolean(line.returnToStock),
+            itemCondition: line.itemCondition ?? "",
             reason: line.reason,
           }))
-        : [createEmptyDebitNoteLine()],
+        : [createEmptyDebitNoteLine(note.supplierDebitNoteType?.code)],
     });
     setIsDebitNoteEditorOpen(true);
   }
@@ -4644,14 +4918,14 @@ export function PurchasesPage() {
   function closeDebitNoteEditor() {
     createDebitNoteMutation.reset();
     updateDebitNoteMutation.reset();
-    setDebitNoteEditor(EMPTY_DEBIT_NOTE_EDITOR());
+    setDebitNoteEditor(EMPTY_DEBIT_NOTE_EDITOR(activeSupplierDebitNoteTypes[0]?.id ?? ""));
     setIsDebitNoteEditorOpen(false);
   }
 
   function addDebitNoteLine() {
     setDebitNoteEditor((current) => ({
       ...current,
-      lines: [...current.lines, createEmptyDebitNoteLine()],
+      lines: [...current.lines, createEmptyDebitNoteLine(selectedSupplierDebitNoteType?.code)],
     }));
   }
 
@@ -4974,7 +5248,7 @@ function getSupplierPaymentFormError(editor: SupplierPaymentEditorState, t: any)
 
 function getDebitNoteFormError(
   editor: DebitNoteEditorState,
-  options: { defaultDiscountAccountId?: string; availableInvoiceBalance?: number | null },
+  options: { selectedType?: SupplierDebitNoteType | null; availableInvoiceBalance?: number | null },
   t: any,
 ) {
   if (!editor.supplierId) {
@@ -4986,21 +5260,52 @@ function getDebitNoteFormError(
   if (!editor.currencyCode.trim()) {
     return t("purchases.validation.currencyRequired");
   }
+  if (!editor.supplierDebitNoteTypeId) {
+    return "يجب اختيار نوع إشعار مدين للمورد.";
+  }
+  if (
+    options.selectedType?.linkedInvoiceRequirement === "REQUIRED" &&
+    !editor.purchaseInvoiceId
+  ) {
+    return "يجب اختيار فاتورة شراء مرتبطة لهذا النوع.";
+  }
   if (editor.lines.length === 0) {
     return t("purchases.validation.atLeastOneLine");
   }
+  const typeCode = options.selectedType?.code ?? "";
   for (const line of editor.lines) {
-    if (!line.reason.trim()) {
-      return t("purchases.validation.descriptionRequired");
-    }
-    if (!(line.discountAccountId || options.defaultDiscountAccountId)) {
-      return "يجب تحديد حساب الخصم / مردودات المشتريات.";
-    }
-    if (!line.quantity || Number(line.quantity) <= 0) {
-      return t("purchases.validation.quantityPositive");
-    }
-    if (!line.amount || Number(line.amount) <= 0) {
-      return "يجب أن يكون مبلغ الخصم أكبر من صفر.";
+    if (typeCode === "DN-PURCHASE-RETURN") {
+      if (!line.purchaseInvoiceLineId) {
+        return "يجب اختيار صنف من فاتورة الشراء المرتبطة.";
+      }
+      if (!line.quantity || Number(line.quantity) <= 0) {
+        return "يجب أن تكون الكمية المرتجعة أكبر من صفر.";
+      }
+      if (!line.warehouseId) {
+        return "يجب اختيار المستودع لسطر مرتجع الشراء.";
+      }
+    } else if (typeCode === "DN-PRICE-CORRECTION") {
+      if (!line.purchaseInvoiceLineId) return "يجب اختيار سطر من فاتورة الشراء.";
+      if (!line.correctedUnitPrice || Number(line.correctedUnitPrice) < 0) {
+        return "يجب إدخال السعر الصحيح لكل سطر تصحيح سعر.";
+      }
+    } else if (typeCode === "DN-TAX-CORRECTION") {
+      if (!line.purchaseInvoiceLineId) return "يجب اختيار سطر من فاتورة الشراء.";
+      if (!line.correctedTaxAmount || Number(line.correctedTaxAmount) < 0) {
+        return "يجب إدخال الضريبة الصحيحة لكل سطر تصحيح ضريبة.";
+      }
+    } else {
+      if (!line.reason.trim()) {
+        return t("purchases.validation.descriptionRequired");
+      }
+      if (!(line.discountAccountId || options.selectedType?.defaultAccount?.id)) {
+        return "يجب تحديد الحساب الافتراضي أو حساب السطر.";
+      }
+      if (!line.amount || Number(line.amount) <= 0) {
+        return typeCode === "DN-SUPPLIER-SETTLEMENT"
+          ? "يجب أن يكون مبلغ التسوية أكبر من صفر."
+          : "يجب أن يكون مبلغ الخصم أكبر من صفر.";
+      }
     }
   }
   if (options.availableInvoiceBalance !== null && options.availableInvoiceBalance !== undefined) {
@@ -5101,16 +5406,29 @@ function createEmptyPaymentAllocation(): SupplierPaymentAllocationEditorState {
   };
 }
 
-function createEmptyDebitNoteLine(): DebitNoteLineEditorState {
+function createEmptyDebitNoteLine(typeCode?: string): DebitNoteLineEditorState {
+  const isSettlement = typeCode === "DN-SUPPLIER-SETTLEMENT";
   return {
     key: randomKey(),
+    purchaseInvoiceLineId: "",
+    itemId: "",
+    warehouseId: "",
+    itemName: "",
+    description: "",
     quantity: "1",
+    unitPrice: "0.00",
     amount: "0.00",
     discountAccountId: "",
     taxId: "",
     taxRate: "",
     taxAmount: "0.00",
-    reason: "خصم بعد الشراء",
+    originalUnitPrice: "",
+    correctedUnitPrice: "",
+    originalTaxAmount: "",
+    correctedTaxAmount: "",
+    returnToStock: typeCode === "DN-PURCHASE-RETURN",
+    itemCondition: "",
+    reason: isSettlement ? "تسوية مورد" : "خصم بعد الشراء",
   };
 }
 
@@ -5201,11 +5519,23 @@ function mapPaymentEditorAllocations(lines: SupplierPaymentAllocationEditorState
 
 function mapDebitNoteEditorLines(lines: DebitNoteLineEditorState[]) {
   return lines.map((line) => ({
+    purchaseInvoiceLineId: line.purchaseInvoiceLineId || undefined,
+    itemId: line.itemId || undefined,
+    warehouseId: line.warehouseId || undefined,
+    itemName: line.itemName || undefined,
     quantity: Number(line.quantity),
+    unitPrice: Number(line.unitPrice || 0),
     amount: Number(line.amount),
     discountAccountId: line.discountAccountId || undefined,
     taxId: line.taxId || undefined,
     taxAmount: Number(line.taxAmount),
+    originalUnitPrice: line.originalUnitPrice ? Number(line.originalUnitPrice) : undefined,
+    correctedUnitPrice: line.correctedUnitPrice ? Number(line.correctedUnitPrice) : undefined,
+    originalTaxAmount: line.originalTaxAmount ? Number(line.originalTaxAmount) : undefined,
+    correctedTaxAmount: line.correctedTaxAmount ? Number(line.correctedTaxAmount) : undefined,
+    returnToStock: line.returnToStock,
+    itemCondition: line.itemCondition || undefined,
+    description: line.description || undefined,
     reason: line.reason,
   }));
 }

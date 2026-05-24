@@ -1906,6 +1906,11 @@ export type SalesInvoiceStatus =
   | "CANCELLED";
 export type SalesInvoiceType = "STANDARD" | "POS";
 export type CreditNoteStatus = "DRAFT" | "POSTED" | "APPLIED" | "CANCELLED";
+export type CreditNoteTypeEffect =
+  | "FINANCIAL_ONLY"
+  | "FINANCIAL_INVENTORY"
+  | "TAX_ONLY";
+export type CreditNoteLinkedInvoiceRequirement = "REQUIRED" | "OPTIONAL";
 export type AllocationStatus = "UNALLOCATED" | "PARTIAL" | "FULLY_ALLOCATED";
 export type SalesRepStatus = "ACTIVE" | "INACTIVE";
 export type PosOperationalStatus =
@@ -2549,7 +2554,13 @@ export type UpdateSupplierPaymentPayload =
 export type DebitNoteLine = {
   id: string;
   lineNumber: number;
+  purchaseInvoiceLineId?: string | null;
+  itemId?: string | null;
+  warehouseId?: string | null;
+  itemName?: string | null;
+  description?: string | null;
   quantity: string;
+  unitPrice: string;
   amount: string;
   discountAccountId?: string | null;
   discountAccount?: {
@@ -2559,9 +2570,50 @@ export type DebitNoteLine = {
     nameAr?: string | null;
   } | null;
   taxId?: string | null;
+  tax?: Tax | null;
   taxAmount: string;
+  originalUnitPrice?: string | null;
+  correctedUnitPrice?: string | null;
+  originalTaxAmount?: string | null;
+  correctedTaxAmount?: string | null;
+  returnToStock?: boolean;
+  returnReason?: string | null;
+  itemCondition?: string | null;
+  lineSubtotalAmount: string;
+  inventoryAccountId?: string | null;
+  inventoryAccount?: AccountOption | null;
+  unitCost?: string | null;
+  totalCost?: string | null;
   reason: string;
   lineTotalAmount: string;
+  item?: Pick<
+    InventoryItem,
+    "id" | "code" | "name" | "description" | "type" | "trackInventory"
+  > | null;
+  warehouse?: {
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+  } | null;
+  purchaseInvoiceLine?: {
+    id: string;
+    lineNumber: number;
+    quantity: string;
+  } | null;
+};
+
+export type SupplierDebitNoteType = {
+  id: string;
+  code: string;
+  name: string;
+  effect: CreditNoteTypeEffect;
+  linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+  affectsInventory: boolean;
+  allowsTaxAdjustment: boolean;
+  helperText?: string | null;
+  isActive: boolean;
+  defaultAccount: AccountOption;
 };
 
 export type DebitNote = {
@@ -2588,6 +2640,7 @@ export type DebitNote = {
     defaultCurrency: string;
     isActive: boolean;
   };
+  supplierDebitNoteType: SupplierDebitNoteType | null;
   purchaseInvoice?: {
     id: string;
     reference: string;
@@ -2596,6 +2649,21 @@ export type DebitNote = {
     totalAmount: string;
     allocatedAmount: string;
     outstandingAmount: string;
+    lines: Array<{
+      id: string;
+      lineNumber: number;
+      itemId?: string | null;
+      itemName?: string | null;
+      description: string;
+      quantity: string;
+      unitPrice: string;
+      discountAmount: string;
+      taxId?: string | null;
+      taxAmount: string;
+      lineSubtotalAmount: string;
+      lineTotalAmount: string;
+      warehouseId?: string | null;
+    }>;
   } | null;
   lines: DebitNoteLine[];
   createdAt: string;
@@ -2611,11 +2679,23 @@ export type DebitNotesQuery = {
 };
 
 export type DebitNoteLinePayload = {
+  purchaseInvoiceLineId?: string;
+  itemId?: string;
+  warehouseId?: string;
+  itemName?: string;
   quantity: number;
+  unitPrice?: number;
   amount: number;
   discountAccountId?: string;
   taxId?: string;
   taxAmount: number;
+  originalUnitPrice?: number;
+  correctedUnitPrice?: number;
+  originalTaxAmount?: number;
+  correctedTaxAmount?: number;
+  returnToStock?: boolean;
+  itemCondition?: string;
+  description?: string;
   reason: string;
 };
 
@@ -2636,6 +2716,7 @@ export type CreateDebitNotePayload = {
   reference?: string;
   noteDate: string;
   supplierId: string;
+  supplierDebitNoteTypeId: string;
   purchaseInvoiceId?: string;
   currencyCode?: string;
   description?: string;
@@ -2644,9 +2725,25 @@ export type CreateDebitNotePayload = {
 
 export type UpdateDebitNotePayload = Partial<CreateDebitNotePayload>;
 
+export type CreateSupplierDebitNoteTypePayload = {
+  code: string;
+  name: string;
+  effect: CreditNoteTypeEffect;
+  linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+  affectsInventory: boolean;
+  allowsTaxAdjustment: boolean;
+  defaultAccountId: string;
+  helperText?: string;
+  isActive?: boolean;
+};
+
+export type UpdateSupplierDebitNoteTypePayload =
+  Partial<CreateSupplierDebitNoteTypePayload>;
+
 export type SalesLine = {
   id: string;
   lineNumber: number;
+  salesInvoiceLineId?: string | null;
   itemId?: string | null;
   warehouseId?: string | null;
   itemName?: string | null;
@@ -2670,6 +2767,12 @@ export type SalesLine = {
   discountAmount: string;
   taxId?: string | null;
   taxAmount: string;
+  originalUnitPrice?: string | null;
+  correctedUnitPrice?: string | null;
+  originalTaxAmount?: string | null;
+  correctedTaxAmount?: string | null;
+  returnToStock?: boolean;
+  itemCondition?: string | null;
   lineSubtotalAmount: string;
   lineAmount: string;
   revenueAccount: {
@@ -2681,6 +2784,44 @@ export type SalesLine = {
     isActive: boolean;
     isPosting: boolean;
   } | null;
+  inventoryAccount?: {
+    id: string;
+    code: string;
+    name: string;
+    type: AccountType;
+    currencyCode: string;
+    isActive: boolean;
+    isPosting: boolean;
+  } | null;
+  cogsAccount?: {
+    id: string;
+    code: string;
+    name: string;
+    type: AccountType;
+    currencyCode: string;
+    isActive: boolean;
+    isPosting: boolean;
+  } | null;
+  unitCost?: string | null;
+  totalCost?: string | null;
+  salesInvoiceLine?: {
+    id: string;
+    lineNumber: number;
+    quantity: string;
+  } | null;
+};
+
+export type CreditNoteType = {
+  id: string;
+  code: string;
+  name: string;
+  effect: CreditNoteTypeEffect;
+  linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+  affectsInventory: boolean;
+  allowsTaxAdjustment: boolean;
+  helperText?: string | null;
+  isActive: boolean;
+  defaultAccount: AccountOption;
 };
 
 export type SalesQuotation = {
@@ -2801,6 +2942,7 @@ export type CreditNote = {
   journalEntryId?: string | null;
   journalReference?: string | null;
   linkedInvoice?: { id: string; reference: string } | null;
+  creditNoteType: CreditNoteType | null;
   customer: SalesInvoice["customer"];
   lines: SalesLine[];
   createdAt: string;
@@ -2971,6 +3113,7 @@ export type CreateSalesRepresentativePayload = {
 export type UpdateSalesRepresentativePayload = Partial<CreateSalesRepresentativePayload>;
 
 export type SalesLinePayload = {
+  salesInvoiceLineId?: string;
   itemId?: string;
   warehouseId?: string;
   itemName?: string;
@@ -2979,6 +3122,12 @@ export type SalesLinePayload = {
   discountAmount?: number;
   taxId?: string;
   taxAmount?: number;
+  originalUnitPrice?: number;
+  correctedUnitPrice?: number;
+  originalTaxAmount?: number;
+  correctedTaxAmount?: number;
+  returnToStock?: boolean;
+  itemCondition?: string;
   lineAmount?: number;
   description?: string;
   revenueAccountId?: string;
@@ -3032,6 +3181,7 @@ export type CreateCreditNotePayload = {
   reference?: string;
   noteDate: string;
   customerId: string;
+  creditNoteTypeId: string;
   currencyCode?: string;
   salesInvoiceId?: string;
   description?: string;
@@ -3039,6 +3189,21 @@ export type CreateCreditNotePayload = {
 };
 
 export type UpdateCreditNotePayload = Partial<CreateCreditNotePayload>;
+
+export type CreateCreditNoteTypePayload = {
+  code: string;
+  name: string;
+  effect: CreditNoteTypeEffect;
+  linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+  affectsInventory: boolean;
+  allowsTaxAdjustment: boolean;
+  defaultAccountId: string;
+  helperText?: string;
+  isActive?: boolean;
+};
+
+export type UpdateCreditNoteTypePayload =
+  Partial<CreateCreditNoteTypePayload>;
 
 export type AllocateReceiptPayload = {
   salesInvoiceId: string;

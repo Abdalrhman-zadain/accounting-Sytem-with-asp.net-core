@@ -3,36 +3,42 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { LuPlus as Plus, LuPencil as Pencil, LuX as X, LuCheck as Check, LuBuilding2 as Building2, LuMapPin as MapPin, LuUsers as Users2, LuBookMarked as BookMarked, LuFolderKanban as FolderKanban, LuWallet as Wallet, LuPercent as Percent, LuTrash2 as Trash2, LuCreditCard } from "react-icons/lu";
+import { LuPlus as Plus, LuPencil as Pencil, LuX as X, LuCheck as Check, LuBuilding2 as Building2, LuMapPin as MapPin, LuUsers as Users2, LuBookMarked as BookMarked, LuFolderKanban as FolderKanban, LuWallet as Wallet, LuPercent as Percent, LuTrash2 as Trash2, LuCreditCard, LuBadgePercent } from "react-icons/lu";
 import {
     createTax,
     createAccountSubtype,
+    createCreditNoteType,
     createJournalEntryType,
     createPaymentMethodType,
     createSegmentValue,
+    createSupplierDebitNoteType,
     deactivateAccountSubtype,
     deactivateJournalEntryType,
     deactivatePaymentMethodType,
     deactivateSegmentValue,
     getAccountSubtypes,
+    getCreditNoteTypes,
     getAccountOptions,
     getJournalEntryTypes,
     getPaymentMethodTypes,
     getPaymentTerms,
     getSegmentDefinitions,
+    getSupplierDebitNoteTypes,
     getTaxTreatments,
     getTaxes,
     createTaxTreatment,
     updateAccountSubtype,
+    updateCreditNoteType,
     updateJournalEntryType,
     updatePaymentMethodType,
     updateSegmentValue,
+    updateSupplierDebitNoteType,
     updateTaxTreatment,
     updateTax,
     deleteTax,
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import { AccountOption, AccountSubtype, JournalEntryType, PaymentMethodType, SegmentDefinition, SegmentValue, Tax, TaxTreatment, TaxType } from "@/types/api";
+import { AccountOption, AccountSubtype, CreditNoteLinkedInvoiceRequirement, CreditNoteType, CreditNoteTypeEffect, JournalEntryType, PaymentMethodType, SegmentDefinition, SegmentValue, SupplierDebitNoteType, Tax, TaxTreatment, TaxType } from "@/types/api";
 import { SectionHeading, StatusPill, Card, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
@@ -69,6 +75,32 @@ type TaxTreatmentEditorState = {
     isActive: boolean;
 };
 
+type CreditNoteTypeEditorState = {
+    id?: string;
+    code: string;
+    name: string;
+    effect: CreditNoteTypeEffect;
+    linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+    affectsInventory: boolean;
+    allowsTaxAdjustment: boolean;
+    defaultAccountId: string;
+    helperText: string;
+    isActive: boolean;
+};
+
+type SupplierDebitNoteTypeEditorState = {
+    id?: string;
+    code: string;
+    name: string;
+    effect: CreditNoteTypeEffect;
+    linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+    affectsInventory: boolean;
+    allowsTaxAdjustment: boolean;
+    defaultAccountId: string;
+    helperText: string;
+    isActive: boolean;
+};
+
 const emptyTaxEditor: TaxEditorState = {
     taxCode: "",
     taxName: "",
@@ -86,6 +118,41 @@ const emptyTaxTreatmentEditor: TaxTreatmentEditorState = {
     defaultTaxId: "",
     isActive: true,
 };
+
+const emptyCreditNoteTypeEditor: CreditNoteTypeEditorState = {
+    code: "",
+    name: "",
+    effect: "FINANCIAL_ONLY",
+    linkedInvoiceRequirement: "REQUIRED",
+    affectsInventory: false,
+    allowsTaxAdjustment: true,
+    defaultAccountId: "",
+    helperText: "",
+    isActive: true,
+};
+
+const emptySupplierDebitNoteTypeEditor: SupplierDebitNoteTypeEditorState = {
+    code: "",
+    name: "",
+    effect: "FINANCIAL_ONLY",
+    linkedInvoiceRequirement: "REQUIRED",
+    affectsInventory: false,
+    allowsTaxAdjustment: true,
+    defaultAccountId: "",
+    helperText: "",
+    isActive: true,
+};
+
+function describeCreditNoteEffect(effect: CreditNoteTypeEffect) {
+    switch (effect) {
+        case "FINANCIAL_INVENTORY":
+            return "مالي + مخزون";
+        case "TAX_ONLY":
+            return "ضريبة فقط";
+        default:
+            return "مالي فقط";
+    }
+}
 
 export function MasterDataPage() {
     const { token } = useAuth();
@@ -115,6 +182,8 @@ export function MasterDataPage() {
     const [showAddPaymentMethodType, setShowAddPaymentMethodType] = useState(false);
     const [taxEditor, setTaxEditor] = useState<TaxEditorState | null>(null);
     const [taxTreatmentEditor, setTaxTreatmentEditor] = useState<TaxTreatmentEditorState | null>(null);
+    const [creditNoteTypeEditor, setCreditNoteTypeEditor] = useState<CreditNoteTypeEditorState | null>(null);
+    const [supplierDebitNoteTypeEditor, setSupplierDebitNoteTypeEditor] = useState<SupplierDebitNoteTypeEditorState | null>(null);
     const [taxSetupView, setTaxSetupView] = useState<"taxes" | "treatments">("taxes");
 
     const { data: definitions = [], isLoading } = useQuery({
@@ -147,6 +216,16 @@ export function MasterDataPage() {
         queryFn: () => getTaxTreatments(token),
     });
 
+    const { data: creditNoteTypes = [], isLoading: isLoadingCreditNoteTypes } = useQuery({
+        queryKey: ["credit-note-types", token],
+        queryFn: () => getCreditNoteTypes(token),
+    });
+
+    const { data: supplierDebitNoteTypes = [], isLoading: isLoadingSupplierDebitNoteTypes } = useQuery({
+        queryKey: ["supplier-debit-note-types", token],
+        queryFn: () => getSupplierDebitNoteTypes(token),
+    });
+
     const { data: paymentTerms = [], isLoading: isLoadingPaymentTerms } = useQuery({
         queryKey: ["payment-terms", token],
         queryFn: () => getPaymentTerms(token),
@@ -155,6 +234,11 @@ export function MasterDataPage() {
     const { data: taxAccounts = [] } = useQuery({
         queryKey: ["accounts", "tax-account-options", token],
         queryFn: () => getAccountOptions({ isActive: "true", isPosting: "true", type: "LIABILITY" }, token),
+    });
+
+    const { data: creditNoteDefaultAccounts = [] } = useQuery({
+        queryKey: ["accounts", "credit-note-default-account-options", token],
+        queryFn: () => getAccountOptions({ isActive: "true", isPosting: "true" }, token),
     });
 
     const createMutation = useMutation({
@@ -284,12 +368,58 @@ export function MasterDataPage() {
         },
     });
 
+    const saveCreditNoteTypeMutation = useMutation({
+        mutationFn: (editor: CreditNoteTypeEditorState) => {
+            const payload = {
+                code: editor.code,
+                name: editor.name,
+                effect: editor.effect,
+                linkedInvoiceRequirement: editor.linkedInvoiceRequirement,
+                affectsInventory: editor.affectsInventory,
+                allowsTaxAdjustment: editor.allowsTaxAdjustment,
+                defaultAccountId: editor.defaultAccountId,
+                helperText: editor.helperText,
+                isActive: editor.isActive,
+            };
+            return editor.id
+                ? updateCreditNoteType(editor.id, payload, token)
+                : createCreditNoteType(payload, token);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["credit-note-types"] });
+            setCreditNoteTypeEditor(null);
+        },
+    });
+
+    const saveSupplierDebitNoteTypeMutation = useMutation({
+        mutationFn: (editor: SupplierDebitNoteTypeEditorState) => {
+            const payload = {
+                code: editor.code,
+                name: editor.name,
+                effect: editor.effect,
+                linkedInvoiceRequirement: editor.linkedInvoiceRequirement,
+                affectsInventory: editor.affectsInventory,
+                allowsTaxAdjustment: editor.allowsTaxAdjustment,
+                defaultAccountId: editor.defaultAccountId,
+                helperText: editor.helperText,
+                isActive: editor.isActive,
+            };
+            return editor.id
+                ? updateSupplierDebitNoteType(editor.id, payload, token)
+                : createSupplierDebitNoteType(payload, token);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["supplier-debit-note-types"] });
+            setSupplierDebitNoteTypeEditor(null);
+        },
+    });
+
     const deleteTaxMutation = useMutation({
         mutationFn: (id: string) => deleteTax(id, token),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["taxes"] }),
     });
 
-    if (isLoading || isLoadingSubtypes || isLoadingTypes || isLoadingPaymentMethodTypes || isLoadingTaxes || isLoadingTaxTreatments) return <div className="flex items-center justify-center py-40 text-gray-500">{t("master.loading")}</div>;
+    if (isLoading || isLoadingSubtypes || isLoadingTypes || isLoadingPaymentMethodTypes || isLoadingTaxes || isLoadingTaxTreatments || isLoadingCreditNoteTypes || isLoadingSupplierDebitNoteTypes) return <div className="flex items-center justify-center py-40 text-gray-500">{t("master.loading")}</div>;
 
     const TABS = [
         ...definitions.map((def) => ({ kind: "segment" as const, def })),
@@ -298,6 +428,8 @@ export function MasterDataPage() {
         { kind: "payment-method-types" as const, def: null },
         { kind: "payment-terms" as const, def: null },
         { kind: "taxes" as const, def: null },
+        { kind: "credit-note-types" as const, def: null },
+        { kind: "supplier-debit-note-types" as const, def: null },
     ];
 
     const active = TABS[activeTab];
@@ -328,6 +460,42 @@ export function MasterDataPage() {
                 : emptyTaxTreatmentEditor,
         );
     };
+    const openCreditNoteTypeEditor = (row?: CreditNoteType) => {
+        setCreditNoteTypeEditor(
+            row
+                ? {
+                    id: row.id,
+                    code: row.code,
+                    name: row.name,
+                    effect: row.effect,
+                    linkedInvoiceRequirement: row.linkedInvoiceRequirement,
+                    affectsInventory: row.affectsInventory,
+                    allowsTaxAdjustment: row.allowsTaxAdjustment,
+                    defaultAccountId: row.defaultAccount?.id ?? "",
+                    helperText: row.helperText ?? "",
+                    isActive: row.isActive,
+                }
+                : emptyCreditNoteTypeEditor,
+        );
+    };
+    const openSupplierDebitNoteTypeEditor = (row?: SupplierDebitNoteType) => {
+        setSupplierDebitNoteTypeEditor(
+            row
+                ? {
+                    id: row.id,
+                    code: row.code,
+                    name: row.name,
+                    effect: row.effect,
+                    linkedInvoiceRequirement: row.linkedInvoiceRequirement,
+                    affectsInventory: row.affectsInventory,
+                    allowsTaxAdjustment: row.allowsTaxAdjustment,
+                    defaultAccountId: row.defaultAccount?.id ?? "",
+                    helperText: row.helperText ?? "",
+                    isActive: row.isActive,
+                }
+                : emptySupplierDebitNoteTypeEditor,
+        );
+    };
     const accountLabel = (account?: AccountOption | null) =>
         account ? `${account.code} - ${account.nameAr || account.name}` : t("master.taxes.noAccount");
     const selectedTaxTypeRequiresAccount = taxEditor?.taxType === "SALES" || taxEditor?.taxType === "PURCHASE";
@@ -356,6 +524,16 @@ export function MasterDataPage() {
         taxTreatmentEditor?.arabicName.trim() &&
         taxTreatmentEditor?.englishName.trim()
     );
+    const canSaveCreditNoteType = Boolean(
+        creditNoteTypeEditor?.code.trim() &&
+        creditNoteTypeEditor?.name.trim() &&
+        creditNoteTypeEditor?.defaultAccountId
+    );
+    const canSaveSupplierDebitNoteType = Boolean(
+        supplierDebitNoteTypeEditor?.code.trim() &&
+        supplierDebitNoteTypeEditor?.name.trim() &&
+        supplierDebitNoteTypeEditor?.defaultAccountId
+    );
 
     return (
         <div className="space-y-8 animate-in fade-in duration-200 motion-reduce:animate-none">
@@ -372,8 +550,10 @@ export function MasterDataPage() {
                     const isPaymentMethodTypeTab = tab.kind === "payment-method-types";
                     const isPaymentTermsTab = tab.kind === "payment-terms";
                     const isTaxTab = tab.kind === "taxes";
+                    const isCreditNoteTypeTab = tab.kind === "credit-note-types";
+                    const isSupplierDebitNoteTypeTab = tab.kind === "supplier-debit-note-types";
                     const def = tab.def as SegmentDefinition | null;
-                    const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isTaxTab ? Percent : (SEGMENT_ICONS[i] ?? Building2);
+                    const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isTaxTab ? Percent : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? LuBadgePercent : (SEGMENT_ICONS[i] ?? Building2);
                     const color =
                         isSubtypeTab
                             ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
@@ -385,10 +565,12 @@ export function MasterDataPage() {
                                         ? "text-purple-400 bg-purple-400/10 border-purple-400/20"
                                         : isTaxTab
                                             ? "text-green-400 bg-green-400/10 border-green-400/20"
+                                            : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab
+                                                ? "text-amber-400 bg-amber-400/10 border-amber-400/20"
                                             : (SEGMENT_COLORS[i] ?? SEGMENT_COLORS[0]);
                     return (
                         <button
-                            key={isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isTaxTab ? "taxes" : def!.id}
+                            key={isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isTaxTab ? "taxes" : isCreditNoteTypeTab ? "credit-note-types" : isSupplierDebitNoteTypeTab ? "supplier-debit-note-types" : def!.id}
                             onClick={() => {
                                 setActiveTab(i);
                                 setShowAddSegmentValue(false);
@@ -401,6 +583,8 @@ export function MasterDataPage() {
                                 setPaymentMethodTypeEditingId(null);
                                 setTaxEditor(null);
                                 setTaxTreatmentEditor(null);
+                                setCreditNoteTypeEditor(null);
+                                setSupplierDebitNoteTypeEditor(null);
                                 setTaxSetupView("taxes");
                             }}
                             className={cn(
@@ -409,7 +593,7 @@ export function MasterDataPage() {
                             )}
                         >
                             <Icon className="h-4 w-4" />
-                            {isSubtypeTab ? t("master.tab.accountSubtypes") : isTypeTab ? t("master.tab.journalEntryTypes") : isPaymentMethodTypeTab ? t("master.tab.paymentMethodTypes") : isPaymentTermsTab ? t("master.tab.paymentTerms") : isTaxTab ? t("master.tab.taxes") : def!.name}
+                            {isSubtypeTab ? t("master.tab.accountSubtypes") : isTypeTab ? t("master.tab.journalEntryTypes") : isPaymentMethodTypeTab ? t("master.tab.paymentMethodTypes") : isPaymentTermsTab ? t("master.tab.paymentTerms") : isTaxTab ? t("master.tab.taxes") : isCreditNoteTypeTab ? "أنواع إشعار الدائن" : isSupplierDebitNoteTypeTab ? "أنواع إشعار مدين للمورد" : def!.name}
                             <span className={cn(
                                 "ml-1 rounded-full px-2 py-0.5 text-[10px] font-black",
                                 activeTab === i ? "bg-gray-100" : "bg-gray-100"
@@ -424,6 +608,10 @@ export function MasterDataPage() {
                                                 ? paymentTerms.filter((t) => t.isActive).length
                                                 : isTaxTab
                                                     ? taxes.filter((tax) => tax.isActive).length
+                                                    : isCreditNoteTypeTab
+                                                        ? creditNoteTypes.filter((type) => type.isActive).length
+                                                        : isSupplierDebitNoteTypeTab
+                                                            ? supplierDebitNoteTypes.filter((type) => type.isActive).length
                                                     : def!.values.filter(v => v.isActive).length}
                             </span>
                         </button>
@@ -870,6 +1058,138 @@ export function MasterDataPage() {
 
             {active?.kind === "payment-terms" && <PaymentTermsTab />}
 
+            {active?.kind === "credit-note-types" && (
+                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">أنواع إشعار الدائن</h2>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                                إدارة أنواع إشعار الدائن المستخدمة في نماذج الخصومات والمرتجعات والتسويات.
+                            </p>
+                        </div>
+                        <Button onClick={() => openCreditNoteTypeEditor()}>
+                            <Plus className="mr-2 h-4 w-4" /> إضافة نوع
+                        </Button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="border-b border-gray-200 bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الرمز</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الاسم</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">التأثير</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يحتاج فاتورة مرتبطة؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يؤثر على المخزون؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يسمح بتعديل الضريبة؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الحساب الافتراضي</th>
+                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">الحالة</th>
+                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {creditNoteTypes.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-600">
+                                            لا توجد أنواع إشعار دائن بعد.
+                                        </td>
+                                    </tr>
+                                ) : creditNoteTypes.map((row) => (
+                                    <tr key={row.id} className="group transition-colors hover:bg-gray-50">
+                                        <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-amber-700">{row.code}</span></td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.name}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect)}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? "نعم" : "اختياري"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{accountLabel(row.defaultAccount)}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <StatusPill label={row.isActive ? t("common.status.active") : t("common.status.inactive")} tone={row.isActive ? "positive" : "neutral"} />
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => openCreditNoteTypeEditor(row)}
+                                                    className="rounded-lg p-1.5 text-gray-500 transition-all hover:bg-green-400/10 hover:text-green-600"
+                                                    title={t("common.action.edit")}
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+
+            {active?.kind === "supplier-debit-note-types" && (
+                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">أنواع إشعار مدين للمورد</h2>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                                إدارة أنواع إشعار مدين المورد المستخدمة في إشعارات الخصم ومرتجعات الشراء وتسويات الموردين.
+                            </p>
+                        </div>
+                        <Button onClick={() => openSupplierDebitNoteTypeEditor()}>
+                            <Plus className="mr-2 h-4 w-4" /> إضافة نوع
+                        </Button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="border-b border-gray-200 bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الرمز</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الاسم</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">التأثير</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يحتاج فاتورة شراء مرتبطة؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يؤثر على المخزون؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يسمح بتعديل الضريبة؟</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الحساب الافتراضي</th>
+                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">الحالة</th>
+                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {supplierDebitNoteTypes.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-600">
+                                            لا توجد أنواع إشعار مدين للمورد بعد.
+                                        </td>
+                                    </tr>
+                                ) : supplierDebitNoteTypes.map((row) => (
+                                    <tr key={row.id} className="group transition-colors hover:bg-gray-50">
+                                        <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-amber-700">{row.code}</span></td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.name}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect)}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? "نعم" : "اختياري"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{accountLabel(row.defaultAccount)}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <StatusPill label={row.isActive ? t("common.status.active") : t("common.status.inactive")} tone={row.isActive ? "positive" : "neutral"} />
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => openSupplierDebitNoteTypeEditor(row)}
+                                                    className="rounded-lg p-1.5 text-gray-500 transition-all hover:bg-green-400/10 hover:text-green-600"
+                                                    title={t("common.action.edit")}
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+
             {active?.kind === "taxes" && (
                 <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
@@ -1185,6 +1505,226 @@ export function MasterDataPage() {
                             <Button variant="secondary" onClick={() => setTaxTreatmentEditor(null)}>{t("common.action.cancel")}</Button>
                             <Button onClick={() => saveTaxTreatmentMutation.mutate(taxTreatmentEditor)} disabled={!canSaveTaxTreatment || saveTaxTreatmentMutation.isPending}>
                                 <Check className="h-4 w-4 mr-2" /> {t("common.action.save")}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {creditNoteTypeEditor && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                            <h3 className="text-base font-bold text-gray-900">
+                                {creditNoteTypeEditor.id ? "تعديل نوع إشعار الدائن" : "إضافة نوع إشعار دائن"}
+                            </h3>
+                            <button onClick={() => setCreditNoteTypeEditor(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
+                            <Field label="الرمز">
+                                <input
+                                    value={creditNoteTypeEditor.code}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, code: event.target.value.toUpperCase() }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                />
+                            </Field>
+                            <Field label="الاسم">
+                                <input
+                                    value={creditNoteTypeEditor.name}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, name: event.target.value }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                />
+                            </Field>
+                            <Field label="التأثير">
+                                <select
+                                    value={creditNoteTypeEditor.effect}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, effect: event.target.value as CreditNoteTypeEffect }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="FINANCIAL_ONLY">مالي فقط</option>
+                                    <option value="FINANCIAL_INVENTORY">مالي + مخزون</option>
+                                    <option value="TAX_ONLY">ضريبة فقط</option>
+                                </select>
+                            </Field>
+                            <Field label="الفاتورة المرتبطة">
+                                <select
+                                    value={creditNoteTypeEditor.linkedInvoiceRequirement}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, linkedInvoiceRequirement: event.target.value as CreditNoteLinkedInvoiceRequirement }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="REQUIRED">إلزامية</option>
+                                    <option value="OPTIONAL">اختيارية</option>
+                                </select>
+                            </Field>
+                            <Field label="الحساب الافتراضي">
+                                <select
+                                    value={creditNoteTypeEditor.defaultAccountId}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, defaultAccountId: event.target.value }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="">اختر حسابًا افتراضيًا</option>
+                                    {creditNoteDefaultAccounts.map((account) => (
+                                        <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label={t("common.table.status")}>
+                                <select
+                                    value={creditNoteTypeEditor.isActive ? "true" : "false"}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, isActive: event.target.value === "true" }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="true">{t("common.status.active")}</option>
+                                    <option value="false">{t("common.status.inactive")}</option>
+                                </select>
+                            </Field>
+                            <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={creditNoteTypeEditor.affectsInventory}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, affectsInventory: event.target.checked }))}
+                                />
+                                يؤثر على المخزون
+                            </label>
+                            <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={creditNoteTypeEditor.allowsTaxAdjustment}
+                                    onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, allowsTaxAdjustment: event.target.checked }))}
+                                />
+                                يسمح بتعديل الضريبة
+                            </label>
+                            <div className="sm:col-span-2">
+                                <Field label="النص الإرشادي">
+                                    <textarea
+                                        value={creditNoteTypeEditor.helperText}
+                                        onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, helperText: event.target.value }))}
+                                        className="min-h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                    />
+                                </Field>
+                            </div>
+                        </div>
+                        {saveCreditNoteTypeMutation.isError && (
+                            <div className="mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {(saveCreditNoteTypeMutation.error as Error).message || "تعذر حفظ نوع إشعار الدائن."}
+                            </div>
+                        )}
+                        <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                            <Button variant="secondary" onClick={() => setCreditNoteTypeEditor(null)}>{t("common.action.cancel")}</Button>
+                            <Button onClick={() => saveCreditNoteTypeMutation.mutate(creditNoteTypeEditor)} disabled={!canSaveCreditNoteType || saveCreditNoteTypeMutation.isPending}>
+                                <Check className="mr-2 h-4 w-4" /> {t("common.action.save")}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {supplierDebitNoteTypeEditor && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                            <h3 className="text-base font-bold text-gray-900">
+                                {supplierDebitNoteTypeEditor.id ? "تعديل نوع إشعار مدين للمورد" : "إضافة نوع إشعار مدين للمورد"}
+                            </h3>
+                            <button onClick={() => setSupplierDebitNoteTypeEditor(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
+                            <Field label="الرمز">
+                                <input
+                                    value={supplierDebitNoteTypeEditor.code}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, code: event.target.value.toUpperCase() }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                />
+                            </Field>
+                            <Field label="الاسم">
+                                <input
+                                    value={supplierDebitNoteTypeEditor.name}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, name: event.target.value }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                />
+                            </Field>
+                            <Field label="التأثير">
+                                <select
+                                    value={supplierDebitNoteTypeEditor.effect}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, effect: event.target.value as CreditNoteTypeEffect }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="FINANCIAL_ONLY">مالي فقط</option>
+                                    <option value="FINANCIAL_INVENTORY">مالي + مخزون</option>
+                                    <option value="TAX_ONLY">ضريبة فقط</option>
+                                </select>
+                            </Field>
+                            <Field label="فاتورة الشراء المرتبطة">
+                                <select
+                                    value={supplierDebitNoteTypeEditor.linkedInvoiceRequirement}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, linkedInvoiceRequirement: event.target.value as CreditNoteLinkedInvoiceRequirement }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="REQUIRED">إلزامية</option>
+                                    <option value="OPTIONAL">اختيارية</option>
+                                </select>
+                            </Field>
+                            <Field label="الحساب الافتراضي">
+                                <select
+                                    value={supplierDebitNoteTypeEditor.defaultAccountId}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, defaultAccountId: event.target.value }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="">اختر حسابًا افتراضيًا</option>
+                                    {creditNoteDefaultAccounts.map((account) => (
+                                        <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label={t("common.table.status")}>
+                                <select
+                                    value={supplierDebitNoteTypeEditor.isActive ? "true" : "false"}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, isActive: event.target.value === "true" }))}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                >
+                                    <option value="true">{t("common.status.active")}</option>
+                                    <option value="false">{t("common.status.inactive")}</option>
+                                </select>
+                            </Field>
+                            <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={supplierDebitNoteTypeEditor.affectsInventory}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, affectsInventory: event.target.checked }))}
+                                />
+                                يؤثر على المخزون
+                            </label>
+                            <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={supplierDebitNoteTypeEditor.allowsTaxAdjustment}
+                                    onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, allowsTaxAdjustment: event.target.checked }))}
+                                />
+                                يسمح بتعديل الضريبة
+                            </label>
+                            <div className="sm:col-span-2">
+                                <Field label="النص الإرشادي">
+                                    <textarea
+                                        value={supplierDebitNoteTypeEditor.helperText}
+                                        onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, helperText: event.target.value }))}
+                                        className="min-h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                                    />
+                                </Field>
+                            </div>
+                        </div>
+                        {saveSupplierDebitNoteTypeMutation.isError && (
+                            <div className="mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {(saveSupplierDebitNoteTypeMutation.error as Error).message || "تعذر حفظ نوع إشعار مدين للمورد."}
+                            </div>
+                        )}
+                        <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                            <Button variant="secondary" onClick={() => setSupplierDebitNoteTypeEditor(null)}>{t("common.action.cancel")}</Button>
+                            <Button onClick={() => saveSupplierDebitNoteTypeMutation.mutate(supplierDebitNoteTypeEditor)} disabled={!canSaveSupplierDebitNoteType || saveSupplierDebitNoteTypeMutation.isPending}>
+                                <Check className="mr-2 h-4 w-4" /> {t("common.action.save")}
                             </Button>
                         </div>
                     </div>

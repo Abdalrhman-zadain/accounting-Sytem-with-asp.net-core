@@ -174,24 +174,38 @@ What else to check:
 - customer records must remain deactivatable without deleting history
 - customer creation supports either creating a new posting receivable account automatically under `1121000 Customer Receivables / ذمم عملاء` or linking an existing active posting Asset account from that same subtree
 - customer sales-rep assignment should use optional `salesRepId` to an active Sales & Receivables `SalesRepresentative` for follow-up, reports, commissions, and collections; never substitute the representative's employee-payables account for the customer receivable account
+- new sales representatives should default their generated codes to sequential `REP-<number>` values such as `REP-1`, `REP-2`, and `REP-3`; when calculating the next number, ignore legacy non-sequential `REP-YYYYMMDD-...` codes
 - sales representative account linking may create a new posting liability account under `2130000 Employee Payables / ذمم الموظفين`, link an existing active posting account from that subtree, or leave the representative without an account; this link remains employee-side context only
 - customer names should remain unique, and automatic customer-receivable account creation must not create a second detail account with the same customer name under `1121000`
 - customer creation and editing must require an active `TaxTreatment`; the old free-text tax-information field is no longer the authoritative sales tax selector
 - deactivated customers must not be selectable for new quotations, sales orders, invoices, receipts, or credit notes
 - quotation drafts must stay editable until approved/cancelled, and approved quotations must preserve downstream traceability after conversion
+- new sales quotation references should default to a daily sequential format such as `QUO-20260524-1`, `QUO-20260524-2`, and `QUO-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching quotation references
 - sales quotation lines may now optionally link to active inventory items for UI-assisted item/service selection, must persist the linked `itemId`, and must still keep `itemName`, `description`, and `revenueAccountId` snapshot context so commercial history and print displays do not depend on future item-master edits
+- new sales order references should default to a daily sequential format such as `SO-20260524-1`, `SO-20260524-2`, and `SO-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching sales-order references
 - sales-order lines may now optionally link to active inventory items for UI-assisted item/service selection, must persist the linked `itemId`, and must still keep `itemName`, `description`, and resolved revenue-account context so downstream invoice conversion keeps commercial traceability even if the item master changes later
 - sales-invoice lines may now optionally link to active inventory items for UI-assisted item/service selection, must persist the linked `itemId`, optional `warehouseId` for stock-tracked items, and must still keep `itemName`, `description`, and resolved revenue-account context so posted commercial history stays readable even if the item master changes later
 - selecting or changing an invoice customer should offer to re-apply the customer's tax-treatment default across existing draft invoice lines, and newly added lines should inherit that same default tax automatically
 - converting an approved quotation or sales order into an invoice should prefill the invoice editor, let the user choose revenue accounts per line, and only call the convert API when the draft is saved
 - the quotation editor supports both `save draft` and immediate `approve quotation` from the same form; when approving a brand-new quotation, the UI should save first and then approve the created draft in the same flow
 - sales-order drafts must stay editable until confirmed, and confirmed orders must preserve quotation/invoice traceability
+- new sales invoice references should default to a daily sequential format such as `INV-20260524-1`, `INV-20260524-2`, and `INV-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching invoice references
 - invoice and credit-note drafts must stay editable, but posted documents must be locked
+- credit-note type selection must come from active `CreditNoteType` master data (`GET /credit-note-types/active`) rather than a hardcoded frontend-only option list
+- `CreditNoteType` now controls whether a linked invoice is required, whether inventory can be affected, whether tax adjustment is allowed, which default posting account is used, and which helper text the credit-note editor should show
+- sales credit notes must support distinct business types instead of treating every note as a post-sale discount:
+  - `CN-DISCOUNT` remains financial-only and keeps the discount-style line editor
+  - `CN-SALES-RETURN` must stay separate from discounts because it may restock inventory, reverse COGS, and use sales-return accounts
+  - `CN-PRICE-DIFF` adjusts unit-price differences without inventory impact
+  - `CN-TAX-CORRECTION` adjusts tax only without revenue/inventory line impact
+  - `CN-CUSTOMER-SETTLEMENT` supports financial settlement lines and may leave linked invoice blank when the master-data rule allows it
+- sales-return credit-note lines must load from the linked invoice lines, cap returned quantity to sold minus previously posted/applied returns, and require a warehouse whenever the returned item is going back into stock
 - posting must create a journal entry and use Phase 1 posting logic so ledger rows and balances remain consistent
 - sales invoice, receipt, and credit-note accounting must continue to use the customer's linked receivable account, not `salesRepId` or employee payable/receivable accounts
 - sales invoices must derive due date from the supplied due date or the customer payment terms
 - sales document references must remain unique across quotations, sales orders, invoices, receipts, and credit notes
 - customer balance must increase on posted invoices and decrease on posted credit notes
+- inventory-bearing sales-return credit notes must also create `InventoryStockMovement` rows with movement type `SALES_RETURN`, increment item/warehouse balances, add cost layers, and book inventory/COGS reversal lines in the same posting flow
 - customer receipts created from Sales must still use the Phase 2 bank/cash posting behavior and remain allocatable to one or more invoices
 - sales-invoice posting must debit the customer's receivable account for the invoice grand total, credit one or more revenue accounts from the invoice lines for the net subtotal, and credit the mapped tax account for any applied tax amount
 - inventory-tracked sales-invoice lines must default warehouse selection from the item preferred warehouse when available, require a warehouse before save/post, validate warehouse stock at posting time, create one `InventoryStockMovement` issue row per posted line without duplicating by `sourceLineId`, and add matching COGS/inventory-relief journal lines inside the same database transaction
@@ -199,6 +213,7 @@ What else to check:
 - the Sales Invoice form may offer a guided `Post & Create Receipt` action that still posts the invoice first, then opens a separate prefilled customer-receipt flow; do not merge the receipt posting into the invoice journal entry
 - the Sales Invoice form should keep `Save as Draft`, `Post Invoice`, and `Post & Create Receipt` as distinct actions: draft save creates no journal entry, normal post creates only the invoice journal entry, and the guided action posts the invoice first before opening the separate receipt flow
 - the Sales receipt UI may collect optional invoice-allocation input inside the same customer-receipt form instead of a separate workspace, but it must still create/post the receipt first and then run allocation without changing posting invariants
+- new customer receipt references should default to a daily sequential format such as `RCPT-20260524-1`, `RCPT-20260524-2`, and `RCPT-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching receipt references
 - customer-receipt posting must create a separate journal entry that debits the selected bank/cash posting account and credits the customer's receivable account for the receipt amount; receipts must never create tax lines or merge directly into invoice revenue posting
 - receipt allocations must allow partial and multi-receipt behavior while preventing over-allocation
 - invoice outstanding/allocation status must stay consistent after postings and allocations
@@ -231,6 +246,16 @@ What else to check:
 
 - purchase document tax choices should come from active `Tax` master data (`GET /taxes/active`) rather than manual free-text or arbitrary tax values
 - purchase document lines should persist both `taxId` and the calculated `taxAmount` so historical documents remain readable if a tax is later deactivated
+- supplier debit-note type selection must come from active `SupplierDebitNoteType` master data (`GET /supplier-debit-note-types/active`) rather than a hardcoded frontend-only option list
+- `SupplierDebitNoteType` now controls whether a linked purchase invoice is required, whether inventory may be affected, whether tax adjustment is allowed, which default posting account is used, and which helper text the supplier debit-note editor should show
+- supplier debit notes must support distinct business types instead of treating every note as a generic supplier discount:
+  - `DN-PURCHASE-DISCOUNT` remains financial-only and keeps the purchase-discount style editor
+  - `DN-PURCHASE-RETURN` must stay separate from discounts because it reduces inventory, affects input VAT, and uses purchase-return accounting behavior
+  - `DN-PRICE-CORRECTION` adjusts purchase price differences without quantity movement
+  - `DN-TAX-CORRECTION` adjusts input VAT only without quantity or stock movement
+  - `DN-SUPPLIER-SETTLEMENT` supports supplier settlement lines and may leave linked purchase invoice blank when the master-data rule allows it
+- purchase-return debit-note lines must load from the linked purchase invoice lines, cap returned quantity to purchased minus previously posted/applied returns, and require a warehouse because returning stocked items reduces warehouse inventory
+- inventory-bearing supplier debit notes must create `InventoryStockMovement` rows with movement type `PURCHASE_RETURN`, decrement item and warehouse balances, and add inventory-value adjustment journal lines inside the same posting flow
 - keep the purchases module split by subdomain ownership such as suppliers, requests, orders, invoices, payments, debit notes, posting/accounting, and validation/control
 - route files must stay thin and compose the owning Phase 4 feature page
 - supplier creation should support either creating a new posting payable account automatically under `2110000 Accounts Payable / الذمم الدائنة` or linking an existing active posting Liability account from that same subtree

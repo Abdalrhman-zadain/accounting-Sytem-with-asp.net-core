@@ -158,9 +158,20 @@ type CreditNoteEditorState = {
   noteDate: string;
   currencyCode: string;
   customerId: string;
+  creditNoteTypeId: string;
   salesInvoiceId: string;
   description: string;
-  lines: SalesLineEditorState[];
+  lines: CreditNoteLineEditorState[];
+};
+
+type CreditNoteLineEditorState = SalesLineEditorState & {
+  salesInvoiceLineId?: string;
+  originalUnitPrice?: string;
+  correctedUnitPrice?: string;
+  originalTaxAmount?: string;
+  correctedTaxAmount?: string;
+  returnToStock?: boolean;
+  itemCondition?: string;
 };
 
 type ReceiptEditorState = {
@@ -227,6 +238,7 @@ const EMPTY_CREDIT_NOTE_EDITOR = (): CreditNoteEditorState => ({
   noteDate: new Date().toISOString().slice(0, 10),
   currencyCode: "JOD",
   customerId: "",
+  creditNoteTypeId: "",
   salesInvoiceId: "",
   description: "",
   lines: [createEmptyLine()],
@@ -1172,14 +1184,7 @@ export function SalesReceivablesPage() {
   });
 
   const mapCreditNoteLines = () =>
-    mapSalesLines(
-      creditNoteEditor.lines.map((line) => ({
-        ...line,
-        itemName: line.itemName || t("salesReceivables.creditNote.defaultDiscountLabel"),
-        quantity: line.quantity || "1",
-        discountAmount: line.discountAmount || "",
-      })),
-    );
+    mapCreditNoteEditorLines(creditNoteEditor.lines);
 
   const createCreditNoteMutation = useMutation({
     mutationFn: () =>
@@ -1189,6 +1194,7 @@ export function SalesReceivablesPage() {
           noteDate: creditNoteEditor.noteDate,
           currencyCode: creditNoteEditor.currencyCode || undefined,
           customerId: creditNoteEditor.customerId,
+          creditNoteTypeId: creditNoteEditor.creditNoteTypeId,
           salesInvoiceId: creditNoteEditor.salesInvoiceId || undefined,
           description: creditNoteEditor.description || undefined,
           lines: mapCreditNoteLines(),
@@ -1212,6 +1218,7 @@ export function SalesReceivablesPage() {
           noteDate: creditNoteEditor.noteDate,
           currencyCode: creditNoteEditor.currencyCode || undefined,
           customerId: creditNoteEditor.customerId,
+          creditNoteTypeId: creditNoteEditor.creditNoteTypeId,
           salesInvoiceId: creditNoteEditor.salesInvoiceId || undefined,
           description: creditNoteEditor.description || undefined,
           lines: mapCreditNoteLines(),
@@ -2596,6 +2603,7 @@ export function SalesReceivablesPage() {
                                         noteDate: row.noteDate.slice(0, 10),
                                         currencyCode: row.currencyCode,
                                         customerId: row.customer.id,
+                                        creditNoteTypeId: row.creditNoteType?.id ?? "",
                                         salesInvoiceId: row.linkedInvoice?.id ?? "",
                                         description: row.description ?? "",
                                         lines: row.lines.map(mapLineToEditor),
@@ -3111,6 +3119,7 @@ export function SalesReceivablesPage() {
         customers={activeCustomers}
         invoices={matchingCustomerInvoices}
         revenueAccounts={revenueAccountsQuery.data ?? []}
+        warehouses={inventoryWarehousesQuery.data ?? []}
         isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
         onChange={setCreditNoteEditor}
         onSubmit={() => (creditNoteEditor.id ? updateCreditNoteMutation.mutate() : createCreditNoteMutation.mutate())}
@@ -3632,8 +3641,38 @@ function mapSalesLines(lines: SalesLineEditorState[]): SalesLinePayload[] {
   });
 }
 
+function mapCreditNoteEditorLines(
+  lines: CreditNoteLineEditorState[],
+): SalesLinePayload[] {
+  return lines.map((line) => {
+    const resolvedLine = withCalculatedLineAmount(line);
+
+    return {
+      salesInvoiceLineId: line.salesInvoiceLineId || undefined,
+      itemId: line.itemId || undefined,
+      warehouseId: line.warehouseId || undefined,
+      itemName: line.itemName || undefined,
+      description: line.description || undefined,
+      quantity: resolvedLine.quantity ? Number(resolvedLine.quantity) : undefined,
+      unitPrice: resolvedLine.unitPrice ? Number(resolvedLine.unitPrice) : undefined,
+      discountAmount: resolvedLine.discountAmount ? Number(resolvedLine.discountAmount) : undefined,
+      taxId: resolvedLine.taxId || undefined,
+      taxAmount: resolvedLine.taxAmount ? Number(resolvedLine.taxAmount) : undefined,
+      originalUnitPrice: line.originalUnitPrice ? Number(line.originalUnitPrice) : undefined,
+      correctedUnitPrice: line.correctedUnitPrice ? Number(line.correctedUnitPrice) : undefined,
+      originalTaxAmount: line.originalTaxAmount ? Number(line.originalTaxAmount) : undefined,
+      correctedTaxAmount: line.correctedTaxAmount ? Number(line.correctedTaxAmount) : undefined,
+      returnToStock: Boolean(line.returnToStock),
+      itemCondition: line.itemCondition || undefined,
+      lineAmount: resolvedLine.lineAmount ? Number(resolvedLine.lineAmount) : undefined,
+      revenueAccountId: line.revenueAccountId || undefined,
+    };
+  });
+}
+
 function mapLineToEditor(line: {
   id: string;
+  salesInvoiceLineId?: string | null;
   itemId?: string | null;
   warehouseId?: string | null;
   itemName?: string | null;
@@ -3643,10 +3682,16 @@ function mapLineToEditor(line: {
   discountAmount: string;
   taxId?: string | null;
   taxAmount: string;
+  originalUnitPrice?: string | null;
+  correctedUnitPrice?: string | null;
+  originalTaxAmount?: string | null;
+  correctedTaxAmount?: string | null;
+  returnToStock?: boolean;
+  itemCondition?: string | null;
   lineAmount: string;
   revenueAccount: { id: string } | null;
-}): SalesLineEditorState {
-  return withCalculatedLineAmount({
+}): CreditNoteLineEditorState {
+  const base = withCalculatedLineAmount({
     key: line.id,
     itemId: line.itemId ?? "",
     warehouseId: line.warehouseId ?? "",
@@ -3661,6 +3706,16 @@ function mapLineToEditor(line: {
     lineAmount: line.lineAmount,
     revenueAccountId: line.revenueAccount?.id ?? "",
   });
+  return {
+    ...base,
+    salesInvoiceLineId: line.salesInvoiceLineId ?? "",
+    originalUnitPrice: line.originalUnitPrice ?? "",
+    correctedUnitPrice: line.correctedUnitPrice ?? "",
+    originalTaxAmount: line.originalTaxAmount ?? "",
+    correctedTaxAmount: line.correctedTaxAmount ?? "",
+    returnToStock: Boolean(line.returnToStock),
+    itemCondition: line.itemCondition ?? "",
+  };
 }
 
 function mapLineForConversion(line: {

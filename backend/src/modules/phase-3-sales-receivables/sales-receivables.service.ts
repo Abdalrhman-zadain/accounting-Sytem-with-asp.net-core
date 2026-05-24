@@ -7,7 +7,9 @@ import {
   AuditAction,
   BankCashTransactionKind,
   BankCashTransactionStatus,
+  CreditNoteLinkedInvoiceRequirement,
   CreditNoteStatus,
+  CreditNoteTypeEffect,
   InventoryStockMovementType,
   Prisma,
   QuotationStatus,
@@ -81,6 +83,33 @@ type ResolvedLine = {
 };
 
 export type ResolvedSalesLine = ResolvedLine;
+
+type ResolvedCreditNoteType = {
+  id: string;
+  code: string;
+  name: string;
+  effect: CreditNoteTypeEffect;
+  linkedInvoiceRequirement: CreditNoteLinkedInvoiceRequirement;
+  affectsInventory: boolean;
+  allowsTaxAdjustment: boolean;
+  defaultAccountId: string;
+  helperText: string | null;
+  isActive: boolean;
+};
+
+type ResolvedCreditNoteLine = ResolvedLine & {
+  salesInvoiceLineId: string | null;
+  originalUnitPrice: number | null;
+  correctedUnitPrice: number | null;
+  originalTaxAmount: number | null;
+  correctedTaxAmount: number | null;
+  returnToStock: boolean;
+  itemCondition: string | null;
+  inventoryAccountId: string | null;
+  cogsAccountId: string | null;
+  unitCost: number | null;
+  totalCost: number | null;
+};
 
 @Injectable()
 export class SalesReceivablesService {
@@ -183,6 +212,122 @@ export class SalesReceivablesService {
     return `CUS-${nextNumber.toString().padStart(6, "0")}`;
   }
 
+  private async generateSequentialSalesRepresentativeCode(tx?: any) {
+    const prisma = tx || this.prisma;
+    const reps = await prisma.salesRepresentative.findMany({
+      where: { code: { startsWith: "REP-" } },
+      select: { code: true },
+    });
+
+    let maxSequence = 0;
+    for (const rep of reps) {
+      const match = /^REP-(\d+)$/.exec(rep.code);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    return `REP-${maxSequence + 1}`;
+  }
+
+  private async generateSequentialQuotationReference(tx?: any) {
+    const prisma = tx || this.prisma;
+    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const quotations = await prisma.salesQuotation.findMany({
+      select: { reference: true },
+    });
+
+    let maxSequence = 0;
+    for (const quotation of quotations) {
+      const match = new RegExp(`^QUO-${compactDate}-(\\d+)$`).exec(quotation.reference);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    return `QUO-${compactDate}-${maxSequence + 1}`;
+  }
+
+  private async generateSequentialSalesOrderReference(tx?: any) {
+    const prisma = tx || this.prisma;
+    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const orders = await prisma.salesOrder.findMany({
+      select: { reference: true },
+    });
+
+    let maxSequence = 0;
+    for (const order of orders) {
+      const match = new RegExp(`^SO-${compactDate}-(\\d+)$`).exec(order.reference);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    return `SO-${compactDate}-${maxSequence + 1}`;
+  }
+
+  private async generateSequentialSalesInvoiceReference(tx?: any) {
+    const prisma = tx || this.prisma;
+    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const invoices = await prisma.salesInvoice.findMany({
+      select: { reference: true },
+    });
+
+    let maxSequence = 0;
+    for (const invoice of invoices) {
+      const match = new RegExp(`^INV-${compactDate}-(\\d+)$`).exec(invoice.reference);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    return `INV-${compactDate}-${maxSequence + 1}`;
+  }
+
+  private async generateSequentialCustomerReceiptReference(tx?: any) {
+    const prisma = tx || this.prisma;
+    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const receipts = await prisma.bankCashTransaction.findMany({
+      where: { kind: BankCashTransactionKind.RECEIPT },
+      select: { reference: true },
+    });
+
+    let maxSequence = 0;
+    for (const receipt of receipts) {
+      const match = new RegExp(`^RCPT-${compactDate}-(\\d+)$`).exec(receipt.reference);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    return `RCPT-${compactDate}-${maxSequence + 1}`;
+  }
+
   async updateCustomer(id: string, dto: UpdateCustomerDto) {
     const current = await this.getCustomerOrThrow(id);
     if (!current.isActive) {
@@ -268,10 +413,12 @@ export class SalesReceivablesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const employeeReceivableAccountId = await this.resolveSalesRepEmployeeReceivableAccount(dto, tx);
+        const code =
+          dto.code?.trim() || (await this.generateSequentialSalesRepresentativeCode(tx));
 
         return tx.salesRepresentative.create({
           data: {
-            code: dto.code?.trim() || this.generateReference("REP"),
+            code,
             name: dto.name.trim(),
             phone: dto.phone?.trim() || null,
             email: dto.email?.trim() || null,
@@ -357,7 +504,8 @@ export class SalesReceivablesService {
       requireRevenueAccount: false,
     });
     const totals = this.computeTotals(lines);
-    const reference = dto.reference?.trim() || this.generateReference("QUO");
+    const reference =
+      dto.reference?.trim() || (await this.generateSequentialQuotationReference());
 
     try {
       const created = await this.prisma.salesQuotation.create({
@@ -622,7 +770,8 @@ export class SalesReceivablesService {
       requireRevenueAccount: false,
     });
     const totals = this.computeTotals(lines);
-    const reference = dto.reference?.trim() || this.generateReference("SO");
+    const reference =
+      dto.reference?.trim() || (await this.generateSequentialSalesOrderReference());
 
     try {
       try {
@@ -952,7 +1101,8 @@ export class SalesReceivablesService {
     const dueDate = dto.dueDate
       ? new Date(dto.dueDate)
       : this.deriveDueDate(new Date(dto.invoiceDate), customer.paymentTerms);
-    const reference = dto.reference?.trim() || this.generateReference("INV");
+    const reference =
+      dto.reference?.trim() || (await this.generateSequentialSalesInvoiceReference());
 
     try {
       const created = await this.prisma.salesInvoice.create({
@@ -1348,12 +1498,18 @@ export class SalesReceivablesService {
 
   async createCreditNote(dto: CreateCreditNoteDto) {
     const customer = await this.ensureActiveCustomer(dto.customerId);
-    await this.ensureCreditNoteInvoice(dto.salesInvoiceId, customer.id);
+    const creditNoteType = await this.resolveCreditNoteType(dto.creditNoteTypeId);
+    await this.ensureCreditNoteInvoiceRequirement(
+      dto.salesInvoiceId,
+      customer.id,
+      creditNoteType,
+    );
 
-    const lines = await this.resolveAndValidateLines(dto.lines, {
-      requireRevenueAccount: true,
+    const { lines, totals } = await this.resolveCreditNoteLines({
+      dto,
+      creditNoteType,
+      customerId: customer.id,
     });
-    const totals = this.computeTotals(lines);
     const reference = dto.reference?.trim() || this.generateReference("CN");
 
     try {
@@ -1363,6 +1519,7 @@ export class SalesReceivablesService {
           noteDate: new Date(dto.noteDate),
           customerId: customer.id,
           salesInvoiceId: dto.salesInvoiceId ?? null,
+          creditNoteTypeId: creditNoteType.id,
           currencyCode:
             dto.currencyCode?.trim().toUpperCase() ||
             customer.receivableAccount.currencyCode,
@@ -1401,22 +1558,49 @@ export class SalesReceivablesService {
 
     const nextCustomerId = dto.customerId ?? note.customerId;
     await this.ensureActiveCustomer(nextCustomerId);
-    await this.ensureCreditNoteInvoice(
+    const nextCreditNoteType = await this.resolveCreditNoteType(
+      dto.creditNoteTypeId ?? note.creditNoteTypeId,
+    );
+    const nextSalesInvoiceId =
       dto.salesInvoiceId === undefined
         ? (note.salesInvoiceId ?? undefined)
-        : dto.salesInvoiceId || undefined,
+        : dto.salesInvoiceId || undefined;
+
+    await this.ensureCreditNoteInvoiceRequirement(
+      nextSalesInvoiceId,
       nextCustomerId,
+      nextCreditNoteType,
     );
 
-    const lines = dto.lines
-      ? await this.resolveAndValidateLines(dto.lines, {
-          requireRevenueAccount: true,
-        })
-      : null;
-    const totals = lines ? this.computeTotals(lines) : null;
+    const hasStructuralChange =
+      dto.lines !== undefined ||
+      dto.salesInvoiceId !== undefined ||
+      dto.customerId !== undefined ||
+      dto.creditNoteTypeId !== undefined;
+    const resolvedCreditNote =
+      hasStructuralChange
+        ? await this.resolveCreditNoteLines({
+            dto: {
+              reference: dto.reference ?? note.reference,
+              noteDate: dto.noteDate ?? note.noteDate.toISOString(),
+              customerId: nextCustomerId,
+              creditNoteTypeId: nextCreditNoteType.id,
+              salesInvoiceId: nextSalesInvoiceId,
+              currencyCode: dto.currencyCode ?? note.currencyCode,
+              description:
+                dto.description === undefined
+                  ? (note.description ?? undefined)
+                  : dto.description,
+              lines: dto.lines ?? note.lines.map((line: any) => this.mapCreditNoteLineToDto(line)),
+            },
+            creditNoteType: nextCreditNoteType,
+            customerId: nextCustomerId,
+            existingCreditNoteId: id,
+          })
+        : null;
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
-        if (lines) {
+        if (resolvedCreditNote) {
           await tx.creditNoteLine.deleteMany({ where: { creditNoteId: id } });
         }
         return tx.creditNote.update({
@@ -1425,6 +1609,7 @@ export class SalesReceivablesService {
             reference: dto.reference?.trim(),
             noteDate: dto.noteDate ? new Date(dto.noteDate) : undefined,
             customerId: nextCustomerId,
+            creditNoteTypeId: nextCreditNoteType.id,
             salesInvoiceId:
               dto.salesInvoiceId === undefined
                 ? undefined
@@ -1434,17 +1619,21 @@ export class SalesReceivablesService {
               dto.description === undefined
                 ? undefined
                 : dto.description.trim() || null,
-            subtotalAmount: totals
-              ? this.toAmount(totals.subtotalAmount)
+            subtotalAmount: resolvedCreditNote
+              ? this.toAmount(resolvedCreditNote.totals.subtotalAmount)
               : undefined,
-            discountAmount: totals
-              ? this.toAmount(totals.discountAmount)
+            discountAmount: resolvedCreditNote
+              ? this.toAmount(resolvedCreditNote.totals.discountAmount)
               : undefined,
-            taxAmount: totals ? this.toAmount(totals.taxAmount) : undefined,
-            totalAmount: totals ? this.toAmount(totals.totalAmount) : undefined,
-            lines: lines
+            taxAmount: resolvedCreditNote
+              ? this.toAmount(resolvedCreditNote.totals.taxAmount)
+              : undefined,
+            totalAmount: resolvedCreditNote
+              ? this.toAmount(resolvedCreditNote.totals.totalAmount)
+              : undefined,
+            lines: resolvedCreditNote
               ? {
-                  create: lines.map((line, index) =>
+                  create: resolvedCreditNote.lines.map((line, index) =>
                     this.buildCreditNoteLineCreateInput(line, index + 1),
                   ),
                 }
@@ -1469,7 +1658,19 @@ export class SalesReceivablesService {
       where: { id },
       include: {
         customer: { include: { receivableAccount: true } },
-        lines: { orderBy: { lineNumber: "asc" } },
+        creditNoteType: true,
+        lines: {
+          include: {
+            tax: {
+              select: {
+                id: true,
+                taxCode: true,
+                taxAccountId: true,
+              },
+            },
+          },
+          orderBy: { lineNumber: "asc" },
+        },
       },
     });
     if (!note) {
@@ -1501,42 +1702,25 @@ export class SalesReceivablesService {
     const description = note.description
       ? `${note.reference} - ${note.description}`
       : note.reference;
-    const taxAccountId =
-      Number(note.taxAmount) > 0 ? await this.getSalesTaxAccountId() : null;
-
+    const journalLines = await this.buildCreditNoteJournalLines(note, description);
     const journal = await this.journalEntriesService.create({
       entryDate: note.noteDate.toISOString(),
       description,
-      lines: [
-        ...note.lines.map((line) => ({
-          accountId: line.revenueAccountId,
-          description: line.description ?? description,
-          debitAmount: Number(line.lineSubtotalAmount),
-          creditAmount: 0,
-        })),
-        ...(taxAccountId
-          ? [
-              {
-                accountId: taxAccountId,
-                description: `${description} tax`,
-                debitAmount: Number(note.taxAmount),
-                creditAmount: 0,
-              },
-            ]
-          : []),
-        {
-          accountId: note.customer.receivableAccountId,
-          description,
-          debitAmount: 0,
-          creditAmount: Number(note.totalAmount),
-        },
-      ],
+      lines: journalLines,
     });
 
     const posted = await this.postingService.post(journal.id);
     const postedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
 
     await this.prisma.$transaction(async (tx) => {
+      if (note.creditNoteType.effect === CreditNoteTypeEffect.FINANCIAL_INVENTORY) {
+        await this.applyCreditNoteInventoryEffects(
+          tx,
+          note.id,
+          note.reference,
+          note.noteDate,
+        );
+      }
       await tx.creditNote.update({
         where: { id: note.id },
         data: {
@@ -1637,7 +1821,8 @@ export class SalesReceivablesService {
         throw new BadRequestException("Bank/Cash account is required to post the receipt.");
       }
 
-      const reference = dto.reference?.trim() || this.generateReference("RCPT");
+      const reference =
+        dto.reference?.trim() || (await this.generateSequentialCustomerReceiptReference(tx));
       const description = dto.settlementReference?.trim() || dto.description?.trim() || null;
       const amount = Number(dto.amount.toFixed(2));
 
@@ -2735,11 +2920,14 @@ export class SalesReceivablesService {
   }
 
   private buildCreditNoteLineCreateInput(
-    line: ResolvedLine,
+    line: ResolvedCreditNoteLine,
     lineNumber: number,
   ): Prisma.CreditNoteLineUncheckedCreateWithoutCreditNoteInput {
     return {
       lineNumber,
+      salesInvoiceLineId: line.salesInvoiceLineId,
+      itemId: line.itemId,
+      warehouseId: line.warehouseId,
       itemName: line.itemName,
       description: line.description,
       quantity: this.toQuantity(line.quantity),
@@ -2747,9 +2935,764 @@ export class SalesReceivablesService {
       discountAmount: this.toAmount(line.discountAmount),
       taxId: line.taxId,
       taxAmount: this.toAmount(line.taxAmount),
+      originalUnitPrice:
+        line.originalUnitPrice === null
+          ? null
+          : this.toAmount(line.originalUnitPrice),
+      correctedUnitPrice:
+        line.correctedUnitPrice === null
+          ? null
+          : this.toAmount(line.correctedUnitPrice),
+      originalTaxAmount:
+        line.originalTaxAmount === null
+          ? null
+          : this.toAmount(line.originalTaxAmount),
+      correctedTaxAmount:
+        line.correctedTaxAmount === null
+          ? null
+          : this.toAmount(line.correctedTaxAmount),
+      returnToStock: line.returnToStock,
+      itemCondition: line.itemCondition,
       lineSubtotalAmount: this.toAmount(line.lineSubtotalAmount),
       lineAmount: this.toAmount(line.lineTotalAmount),
       revenueAccountId: line.revenueAccountId!,
+      inventoryAccountId: line.inventoryAccountId,
+      cogsAccountId: line.cogsAccountId,
+      unitCost: line.unitCost === null ? null : this.toUnitCost(line.unitCost),
+      totalCost:
+        line.totalCost === null ? null : this.toAmount(line.totalCost),
+    };
+  }
+
+  private async resolveCreditNoteType(id: string): Promise<ResolvedCreditNoteType> {
+    const creditNoteType = await this.prisma.creditNoteType.findFirst({
+      where: { id, isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        effect: true,
+        linkedInvoiceRequirement: true,
+        affectsInventory: true,
+        allowsTaxAdjustment: true,
+        defaultAccountId: true,
+        helperText: true,
+        isActive: true,
+      },
+    });
+
+    if (!creditNoteType) {
+      throw new BadRequestException("Credit note type was not found or is inactive.");
+    }
+    return creditNoteType;
+  }
+
+  private async ensureCreditNoteInvoiceRequirement(
+    salesInvoiceId: string | undefined,
+    customerId: string,
+    creditNoteType: ResolvedCreditNoteType,
+  ) {
+    if (
+      creditNoteType.linkedInvoiceRequirement ===
+        CreditNoteLinkedInvoiceRequirement.REQUIRED &&
+      !salesInvoiceId
+    ) {
+      throw new BadRequestException(
+        "Linked invoice is required for the selected credit note type.",
+      );
+    }
+
+    if (salesInvoiceId) {
+      await this.ensureCreditNoteInvoice(salesInvoiceId, customerId);
+    }
+  }
+
+  private async resolveCreditNoteLines(options: {
+    dto: {
+      reference?: string;
+      noteDate?: string;
+      customerId?: string;
+      creditNoteTypeId?: string;
+      salesInvoiceId?: string;
+      currencyCode?: string;
+      description?: string;
+      lines: SalesLineDto[];
+    };
+    creditNoteType: ResolvedCreditNoteType;
+    customerId: string;
+    existingCreditNoteId?: string;
+  }) {
+    const { dto, creditNoteType, existingCreditNoteId } = options;
+    const inputLines = dto.lines ?? [];
+    if (!inputLines.length) {
+      throw new BadRequestException("At least one credit note line is required.");
+    }
+
+    if (creditNoteType.code === "CN-SALES-RETURN") {
+      const lines = await this.buildSalesReturnCreditNoteLines(
+        dto.salesInvoiceId,
+        inputLines,
+        creditNoteType,
+        existingCreditNoteId,
+      );
+      return { lines, totals: this.computeCreditNoteTotals(lines) };
+    }
+    if (creditNoteType.code === "CN-PRICE-DIFF") {
+      const lines = await this.buildPriceDifferenceCreditNoteLines(
+        dto.salesInvoiceId,
+        inputLines,
+        creditNoteType,
+      );
+      return { lines, totals: this.computeCreditNoteTotals(lines) };
+    }
+    if (creditNoteType.code === "CN-TAX-CORRECTION") {
+      const lines = await this.buildTaxCorrectionCreditNoteLines(
+        dto.salesInvoiceId,
+        inputLines,
+        creditNoteType,
+      );
+      return { lines, totals: this.computeCreditNoteTotals(lines) };
+    }
+    if (creditNoteType.code === "CN-CUSTOMER-SETTLEMENT") {
+      const lines = await this.buildCustomerSettlementCreditNoteLines(
+        inputLines,
+        creditNoteType,
+      );
+      return { lines, totals: this.computeCreditNoteTotals(lines) };
+    }
+
+    const lines = await this.buildDiscountCreditNoteLines(inputLines, creditNoteType);
+    return { lines, totals: this.computeCreditNoteTotals(lines) };
+  }
+
+  private async buildDiscountCreditNoteLines(
+    inputLines: SalesLineDto[],
+    creditNoteType: ResolvedCreditNoteType,
+  ): Promise<ResolvedCreditNoteLine[]> {
+    const resolved = await this.resolveAndValidateLines(inputLines, {
+      requireRevenueAccount: false,
+    });
+    return resolved.map((line) => ({
+      ...line,
+      salesInvoiceLineId: null,
+      originalUnitPrice: null,
+      correctedUnitPrice: null,
+      originalTaxAmount: null,
+      correctedTaxAmount: null,
+      returnToStock: false,
+      itemCondition: null,
+      inventoryAccountId: null,
+      cogsAccountId: null,
+      unitCost: null,
+      totalCost: null,
+      revenueAccountId: line.revenueAccountId ?? creditNoteType.defaultAccountId,
+    }));
+  }
+
+  private async buildCustomerSettlementCreditNoteLines(
+    inputLines: SalesLineDto[],
+    creditNoteType: ResolvedCreditNoteType,
+  ): Promise<ResolvedCreditNoteLine[]> {
+    const accountIds = Array.from(
+      new Set(
+        inputLines
+          .map((line) => line.revenueAccountId?.trim())
+          .filter(Boolean),
+      ),
+    ) as string[];
+    const accounts = accountIds.length
+      ? await this.prisma.account.findMany({
+          where: {
+            id: { in: accountIds },
+            isActive: true,
+            isPosting: true,
+          },
+          select: { id: true },
+        })
+      : [];
+    const validAccounts = new Set(accounts.map((account) => account.id));
+
+    return inputLines.map((line, index) => {
+      const amount = Number(line.lineAmount ?? line.unitPrice ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException(
+          `Settlement amount is required for line ${index + 1}.`,
+        );
+      }
+      const revenueAccountId =
+        line.revenueAccountId?.trim() || creditNoteType.defaultAccountId;
+      if (line.revenueAccountId?.trim() && !validAccounts.has(revenueAccountId)) {
+        throw new BadRequestException(
+          `Settlement account is invalid for line ${index + 1}.`,
+        );
+      }
+      return {
+        itemId: null,
+        warehouseId: null,
+        itemName: line.itemName?.trim() || "تسوية عميل",
+        description: line.description?.trim() || null,
+        revenueAccountId,
+        taxId: null,
+        quantity: 1,
+        unitPrice: amount,
+        discountAmount: 0,
+        taxAmount: 0,
+        lineSubtotalAmount: amount,
+        lineTotalAmount: amount,
+        salesInvoiceLineId: null,
+        originalUnitPrice: null,
+        correctedUnitPrice: null,
+        originalTaxAmount: null,
+        correctedTaxAmount: null,
+        returnToStock: false,
+        itemCondition: null,
+        inventoryAccountId: null,
+        cogsAccountId: null,
+        unitCost: null,
+        totalCost: null,
+      };
+    });
+  }
+
+  private async buildSalesReturnCreditNoteLines(
+    salesInvoiceId: string | undefined,
+    inputLines: SalesLineDto[],
+    creditNoteType: ResolvedCreditNoteType,
+    existingCreditNoteId?: string,
+  ): Promise<ResolvedCreditNoteLine[]> {
+    const invoice = await this.getCreditNoteSourceInvoiceOrThrow(salesInvoiceId);
+    const priorReturns = await this.prisma.creditNoteLine.findMany({
+      where: {
+        salesInvoiceLineId: { in: inputLines.map((line) => line.salesInvoiceLineId!).filter(Boolean) },
+        creditNote: {
+          id: existingCreditNoteId ? { not: existingCreditNoteId } : undefined,
+          status: { in: [CreditNoteStatus.POSTED, CreditNoteStatus.APPLIED] },
+        },
+      },
+      select: {
+        salesInvoiceLineId: true,
+        quantity: true,
+      },
+    });
+    const returnedByLine = new Map<string, number>();
+    for (const row of priorReturns) {
+      if (!row.salesInvoiceLineId) continue;
+      returnedByLine.set(
+        row.salesInvoiceLineId,
+        (returnedByLine.get(row.salesInvoiceLineId) ?? 0) + Number(row.quantity),
+      );
+    }
+
+    return Promise.all(
+      inputLines.map(async (line, index) => {
+        if (!line.salesInvoiceLineId) {
+          throw new BadRequestException(
+            `Original invoice line is required for sales return line ${index + 1}.`,
+          );
+        }
+        const invoiceLine = invoice.lines.find(
+          (candidate: any) => candidate.id === line.salesInvoiceLineId,
+        );
+        if (!invoiceLine) {
+          throw new BadRequestException(
+            `Invoice line ${line.salesInvoiceLineId} was not found on the linked invoice.`,
+          );
+        }
+        const returnQty = Number(line.quantity ?? 0);
+        if (!Number.isFinite(returnQty) || returnQty <= 0) {
+          throw new BadRequestException(
+            `Returned quantity must be greater than zero for line ${index + 1}.`,
+          );
+        }
+        const soldQty = Number(invoiceLine.quantity);
+        const previouslyReturnedQty = returnedByLine.get(invoiceLine.id) ?? 0;
+        const availableQty = Number((soldQty - previouslyReturnedQty).toFixed(4));
+        if (returnQty > availableQty) {
+          throw new BadRequestException(
+            `Returned quantity for line ${invoiceLine.lineNumber} exceeds the available return quantity.`,
+          );
+        }
+        const ratio = Number((returnQty / soldQty).toFixed(8));
+        const returnToStock = Boolean(line.returnToStock);
+        const warehouseId =
+          (line.warehouseId?.trim() || invoiceLine.warehouseId || null);
+        if (returnToStock && !warehouseId) {
+          throw new BadRequestException(
+            `Warehouse is required when returning line ${invoiceLine.lineNumber} to stock.`,
+          );
+        }
+        if (returnToStock && (!invoiceLine.itemId || !this.lineTracksInventory(invoiceLine.item))) {
+          throw new BadRequestException(
+            `Line ${invoiceLine.lineNumber} does not support inventory returns.`,
+          );
+        }
+        const movement =
+          returnToStock && invoiceLine.itemId && invoiceLine.warehouseId
+            ? await this.prisma.inventoryStockMovement.findFirst({
+                where: {
+                  transactionType: "SalesInvoice",
+                  transactionLineId: invoiceLine.id,
+                  movementType: InventoryStockMovementType.SALES_ISSUE,
+                },
+                select: { unitCost: true },
+              })
+            : null;
+        const unitCost = movement ? Number(movement.unitCost) : null;
+        const totalCost =
+          returnToStock && unitCost !== null
+            ? Number((unitCost * returnQty).toFixed(2))
+            : null;
+        const originalTax = Number((Number(invoiceLine.taxAmount) * ratio).toFixed(2));
+        const taxAmount = creditNoteType.allowsTaxAdjustment
+          ? Number((line.taxAmount ?? originalTax).toFixed(2))
+          : originalTax;
+        return {
+          itemId: invoiceLine.itemId,
+          warehouseId,
+          itemName: invoiceLine.itemName,
+          description: line.description?.trim() || invoiceLine.description || null,
+          revenueAccountId: creditNoteType.defaultAccountId,
+          taxId: invoiceLine.taxId,
+          quantity: returnQty,
+          unitPrice: Number(invoiceLine.unitPrice),
+          discountAmount: Number(
+            (Number(invoiceLine.discountAmount) * ratio).toFixed(2),
+          ),
+          taxAmount,
+          lineSubtotalAmount: Number(
+            (Number(invoiceLine.lineSubtotalAmount) * ratio).toFixed(2),
+          ),
+          lineTotalAmount: Number(
+            (Number(invoiceLine.lineSubtotalAmount) * ratio + taxAmount).toFixed(2),
+          ),
+          salesInvoiceLineId: invoiceLine.id,
+          originalUnitPrice: Number(invoiceLine.unitPrice),
+          correctedUnitPrice: null,
+          originalTaxAmount: originalTax,
+          correctedTaxAmount:
+            creditNoteType.allowsTaxAdjustment && line.taxAmount !== undefined
+              ? taxAmount
+              : null,
+          returnToStock,
+          itemCondition: line.itemCondition?.trim() || null,
+          inventoryAccountId:
+            returnToStock ? (invoiceLine.item?.inventoryAccountId ?? null) : null,
+          cogsAccountId:
+            returnToStock ? (invoiceLine.item?.cogsAccountId ?? null) : null,
+          unitCost,
+          totalCost,
+        };
+      }),
+    );
+  }
+
+  private async buildPriceDifferenceCreditNoteLines(
+    salesInvoiceId: string | undefined,
+    inputLines: SalesLineDto[],
+    creditNoteType: ResolvedCreditNoteType,
+  ): Promise<ResolvedCreditNoteLine[]> {
+    const invoice = await this.getCreditNoteSourceInvoiceOrThrow(salesInvoiceId);
+    return inputLines.map((line, index) => {
+      if (!line.salesInvoiceLineId) {
+        throw new BadRequestException(
+          `Original invoice line is required for price difference line ${index + 1}.`,
+        );
+      }
+      const invoiceLine = invoice.lines.find(
+        (candidate: any) => candidate.id === line.salesInvoiceLineId,
+      );
+      if (!invoiceLine) {
+        throw new BadRequestException(
+          `Invoice line ${line.salesInvoiceLineId} was not found on the linked invoice.`,
+        );
+      }
+      const originalUnitPrice = Number(invoiceLine.unitPrice);
+      const correctedUnitPrice = Number(line.correctedUnitPrice ?? line.unitPrice ?? 0);
+      if (!Number.isFinite(correctedUnitPrice) || correctedUnitPrice < 0) {
+        throw new BadRequestException(
+          `Correct price is required for line ${invoiceLine.lineNumber}.`,
+        );
+      }
+      if (correctedUnitPrice > originalUnitPrice) {
+        throw new BadRequestException(
+          `Corrected price cannot exceed the original price for line ${invoiceLine.lineNumber}.`,
+        );
+      }
+      const quantity = Number(invoiceLine.quantity);
+      const priceDifference = Number(
+        ((originalUnitPrice - correctedUnitPrice) * quantity).toFixed(2),
+      );
+      const originalTaxAmount = Number(invoiceLine.taxAmount);
+      const derivedTaxDifference = originalUnitPrice > 0
+        ? Number(
+            (
+              (priceDifference / Number(invoiceLine.lineSubtotalAmount || 1)) *
+              originalTaxAmount
+            ).toFixed(2),
+          )
+        : 0;
+      const taxAmount = creditNoteType.allowsTaxAdjustment
+        ? Number(
+            (
+              (line.originalTaxAmount ?? originalTaxAmount) -
+              (line.correctedTaxAmount ?? (originalTaxAmount - derivedTaxDifference))
+            ).toFixed(2),
+          )
+        : derivedTaxDifference;
+      return {
+        itemId: invoiceLine.itemId,
+        warehouseId: invoiceLine.warehouseId,
+        itemName: invoiceLine.itemName,
+        description: line.description?.trim() || invoiceLine.description || null,
+        revenueAccountId: creditNoteType.defaultAccountId,
+        taxId: invoiceLine.taxId,
+        quantity,
+        unitPrice: priceDifference,
+        discountAmount: 0,
+        taxAmount: Math.max(0, taxAmount),
+        lineSubtotalAmount: priceDifference,
+        lineTotalAmount: Number((priceDifference + Math.max(0, taxAmount)).toFixed(2)),
+        salesInvoiceLineId: invoiceLine.id,
+        originalUnitPrice,
+        correctedUnitPrice,
+        originalTaxAmount,
+        correctedTaxAmount:
+          line.correctedTaxAmount !== undefined
+            ? Number(line.correctedTaxAmount)
+            : Number((originalTaxAmount - Math.max(0, taxAmount)).toFixed(2)),
+        returnToStock: false,
+        itemCondition: null,
+        inventoryAccountId: null,
+        cogsAccountId: null,
+        unitCost: null,
+        totalCost: null,
+      };
+    });
+  }
+
+  private async buildTaxCorrectionCreditNoteLines(
+    salesInvoiceId: string | undefined,
+    inputLines: SalesLineDto[],
+    creditNoteType: ResolvedCreditNoteType,
+  ): Promise<ResolvedCreditNoteLine[]> {
+    const invoice = await this.getCreditNoteSourceInvoiceOrThrow(salesInvoiceId);
+    return inputLines.map((line, index) => {
+      if (!line.salesInvoiceLineId) {
+        throw new BadRequestException(
+          `Original invoice line is required for tax correction line ${index + 1}.`,
+        );
+      }
+      const invoiceLine = invoice.lines.find(
+        (candidate: any) => candidate.id === line.salesInvoiceLineId,
+      );
+      if (!invoiceLine) {
+        throw new BadRequestException(
+          `Invoice line ${line.salesInvoiceLineId} was not found on the linked invoice.`,
+        );
+      }
+      const originalTaxAmount = Number(line.originalTaxAmount ?? invoiceLine.taxAmount);
+      const correctedTaxAmount = Number(
+        line.correctedTaxAmount ?? line.taxAmount ?? 0,
+      );
+      if (!Number.isFinite(correctedTaxAmount) || correctedTaxAmount < 0) {
+        throw new BadRequestException(
+          `Corrected tax is required for line ${invoiceLine.lineNumber}.`,
+        );
+      }
+      if (correctedTaxAmount > originalTaxAmount) {
+        throw new BadRequestException(
+          `Corrected tax cannot exceed the original tax for line ${invoiceLine.lineNumber}.`,
+        );
+      }
+      const taxDifference = Number(
+        (originalTaxAmount - correctedTaxAmount).toFixed(2),
+      );
+      return {
+        itemId: invoiceLine.itemId,
+        warehouseId: invoiceLine.warehouseId,
+        itemName: invoiceLine.itemName,
+        description: line.description?.trim() || invoiceLine.description || null,
+        revenueAccountId: creditNoteType.defaultAccountId,
+        taxId: invoiceLine.taxId,
+        quantity: 1,
+        unitPrice: 0,
+        discountAmount: 0,
+        taxAmount: taxDifference,
+        lineSubtotalAmount: 0,
+        lineTotalAmount: taxDifference,
+        salesInvoiceLineId: invoiceLine.id,
+        originalUnitPrice: Number(invoiceLine.unitPrice),
+        correctedUnitPrice: Number(invoiceLine.unitPrice),
+        originalTaxAmount,
+        correctedTaxAmount,
+        returnToStock: false,
+        itemCondition: null,
+        inventoryAccountId: null,
+        cogsAccountId: null,
+        unitCost: null,
+        totalCost: null,
+      };
+    });
+  }
+
+  private computeCreditNoteTotals(lines: ResolvedCreditNoteLine[]) {
+    return lines.reduce(
+      (totals, line) => {
+        totals.subtotalAmount += line.lineSubtotalAmount;
+        totals.discountAmount += line.discountAmount;
+        totals.taxAmount += line.taxAmount;
+        totals.totalAmount += line.lineTotalAmount;
+        return totals;
+      },
+      {
+        subtotalAmount: 0,
+        discountAmount: 0,
+        taxAmount: 0,
+        totalAmount: 0,
+      },
+    );
+  }
+
+  private async buildCreditNoteJournalLines(
+    note: any,
+    description: string,
+  ): Promise<
+    Array<{
+      accountId: string;
+      description: string;
+      debitAmount: number;
+      creditAmount: number;
+    }>
+  > {
+    const journalLines: Array<{
+      accountId: string;
+      description: string;
+      debitAmount: number;
+      creditAmount: number;
+    }> = [];
+
+    for (const line of note.lines) {
+      const baseAmount =
+        note.creditNoteType.effect === CreditNoteTypeEffect.TAX_ONLY
+          ? Number(line.lineAmount)
+          : Number(line.lineSubtotalAmount);
+      if (baseAmount > 0) {
+        journalLines.push({
+          accountId: line.revenueAccountId,
+          description: line.description ?? description,
+          debitAmount: baseAmount,
+          creditAmount: 0,
+        });
+      }
+
+      if (Number(line.taxAmount) > 0) {
+        const taxAccountId = line.tax?.taxAccountId ?? (await this.getSalesTaxAccountId());
+        if (!taxAccountId) {
+          throw new BadRequestException(
+            `Tax account mapping is missing for credit note line ${line.lineNumber}.`,
+          );
+        }
+        journalLines.push({
+          accountId: taxAccountId,
+          description: `${description} tax`,
+          debitAmount: Number(line.taxAmount),
+          creditAmount: 0,
+        });
+      }
+
+      if (
+        line.returnToStock &&
+        line.inventoryAccountId &&
+        line.cogsAccountId &&
+        Number(line.totalCost ?? 0) > 0
+      ) {
+        journalLines.push({
+          accountId: line.inventoryAccountId,
+          description: `Inventory return ${note.reference}`,
+          debitAmount: Number(line.totalCost),
+          creditAmount: 0,
+        });
+        journalLines.push({
+          accountId: line.cogsAccountId,
+          description: `COGS reversal ${note.reference}`,
+          debitAmount: 0,
+          creditAmount: Number(line.totalCost),
+        });
+      }
+    }
+
+    journalLines.push({
+      accountId: note.customer.receivableAccountId,
+      description,
+      debitAmount: 0,
+      creditAmount: Number(note.totalAmount),
+    });
+
+    this.ensureBalancedJournal(journalLines);
+    return journalLines;
+  }
+
+  private async applyCreditNoteInventoryEffects(
+    tx: Prisma.TransactionClient,
+    creditNoteId: string,
+    reference: string,
+    noteDate: Date,
+  ) {
+    const lines = await tx.creditNoteLine.findMany({
+      where: { creditNoteId, returnToStock: true },
+      include: {
+        item: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            trackInventory: true,
+          },
+        },
+      },
+      orderBy: { lineNumber: 'asc' },
+    });
+
+    for (const line of lines) {
+      if (!line.itemId || !line.item?.trackInventory || !line.warehouseId) {
+        continue;
+      }
+
+      const existingMovement = await tx.inventoryStockMovement.findFirst({
+        where: {
+          transactionType: 'CreditNote',
+          transactionLineId: line.id,
+          movementType: InventoryStockMovementType.SALES_RETURN,
+        },
+        select: { id: true },
+      });
+      if (existingMovement) {
+        continue;
+      }
+
+      const quantity = new Prisma.Decimal(line.quantity);
+      const totalCost = new Prisma.Decimal(line.totalCost ?? 0);
+      const unitCost =
+        quantity.gt(0) && totalCost.gt(0)
+          ? totalCost.div(quantity)
+          : new Prisma.Decimal(line.unitCost ?? 0);
+
+      await tx.inventoryItem.update({
+        where: { id: line.itemId },
+        data: {
+          onHandQuantity: { increment: quantity },
+          valuationAmount: { increment: totalCost },
+        },
+      });
+
+      const warehouseBalance =
+        await this.inventoryPostingService.applyWarehouseBalance(tx, {
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          quantityDelta: quantity,
+          valueDelta: totalCost,
+        });
+
+      await this.inventoryPostingService.createMovement(tx, {
+        movementType: InventoryStockMovementType.SALES_RETURN,
+        transactionType: 'CreditNote',
+        transactionId: creditNoteId,
+        transactionLineId: line.id,
+        transactionReference: reference,
+        transactionDate: noteDate,
+        itemId: line.itemId,
+        warehouseId: line.warehouseId,
+        quantityIn: quantity,
+        quantityOut: new Prisma.Decimal(0),
+        unitCost,
+        valueIn: totalCost,
+        valueOut: new Prisma.Decimal(0),
+        balanceId: warehouseBalance.id,
+        runningQuantity: warehouseBalance.onHandQuantity,
+        runningValuation: warehouseBalance.valuationAmount,
+        description: line.description,
+      });
+
+      await this.inventoryPostingService.addCostLayer(tx, {
+        itemId: line.itemId,
+        warehouseId: line.warehouseId,
+        quantity,
+        unitCost,
+        movementType: InventoryStockMovementType.SALES_RETURN,
+        sourceType: 'CreditNote',
+        sourceId: creditNoteId,
+        sourceLineId: line.id,
+        sourceReference: reference,
+        sourceDate: noteDate,
+      });
+    }
+  }
+
+  private async getCreditNoteSourceInvoiceOrThrow(salesInvoiceId?: string) {
+    if (!salesInvoiceId) {
+      throw new BadRequestException(
+        "Linked invoice is required for the selected credit note type.",
+      );
+    }
+    const invoice = await this.prisma.salesInvoice.findUnique({
+      where: { id: salesInvoiceId },
+      include: {
+        lines: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                type: true,
+                trackInventory: true,
+                inventoryAccountId: true,
+                cogsAccountId: true,
+              },
+            },
+          },
+          orderBy: { lineNumber: "asc" },
+        },
+      },
+    });
+    if (!invoice) {
+      throw new BadRequestException("Linked invoice was not found.");
+    }
+    return invoice;
+  }
+
+  private mapCreditNoteLineToDto(line: any): SalesLineDto {
+    return {
+      salesInvoiceLineId: line.salesInvoiceLineId ?? undefined,
+      itemId: line.itemId ?? undefined,
+      warehouseId: line.warehouseId ?? undefined,
+      itemName: line.itemName ?? undefined,
+      quantity: Number(line.quantity),
+      unitPrice: Number(line.unitPrice),
+      discountAmount: Number(line.discountAmount),
+      taxId: line.taxId ?? undefined,
+      taxAmount: Number(line.taxAmount),
+      lineAmount: Number(line.lineAmount ?? line.lineTotalAmount),
+      description: line.description ?? undefined,
+      revenueAccountId: line.revenueAccountId ?? undefined,
+      originalUnitPrice:
+        line.originalUnitPrice === null || line.originalUnitPrice === undefined
+          ? undefined
+          : Number(line.originalUnitPrice),
+      correctedUnitPrice:
+        line.correctedUnitPrice === null || line.correctedUnitPrice === undefined
+          ? undefined
+          : Number(line.correctedUnitPrice),
+      originalTaxAmount:
+        line.originalTaxAmount === null || line.originalTaxAmount === undefined
+          ? undefined
+          : Number(line.originalTaxAmount),
+      correctedTaxAmount:
+        line.correctedTaxAmount === null || line.correctedTaxAmount === undefined
+          ? undefined
+          : Number(line.correctedTaxAmount),
+      returnToStock: Boolean(line.returnToStock),
+      itemCondition: line.itemCondition ?? undefined,
     };
   }
 
@@ -3432,9 +4375,54 @@ export class SalesReceivablesService {
           },
         },
       },
+      creditNoteType: {
+        include: {
+          defaultAccount: { select: this.accountSummarySelect() },
+        },
+      },
       salesInvoice: { select: { id: true, reference: true } },
       lines: {
-        include: { revenueAccount: { select: this.accountSummarySelect() } },
+        include: {
+          revenueAccount: { select: this.accountSummarySelect() },
+          inventoryAccount: { select: this.accountSummarySelect() },
+          cogsAccount: { select: this.accountSummarySelect() },
+          salesInvoiceLine: {
+            select: {
+              id: true,
+              lineNumber: true,
+              quantity: true,
+            },
+          },
+          item: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              description: true,
+              type: true,
+              isActive: true,
+              salesAccount: true,
+              trackInventory: true,
+              preferredWarehouseId: true,
+              preferredWarehouse: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          warehouse: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              isActive: true,
+            },
+          },
+        },
         orderBy: { lineNumber: "asc" },
       },
       journalEntry: { select: { id: true, reference: true } },
@@ -3652,6 +4640,20 @@ export class SalesReceivablesService {
       journalEntryId: row.journalEntryId,
       journalReference: row.journalEntry?.reference ?? null,
       linkedInvoice: row.salesInvoice ?? null,
+      creditNoteType: row.creditNoteType
+        ? {
+            id: row.creditNoteType.id,
+            code: row.creditNoteType.code,
+            name: row.creditNoteType.name,
+            effect: row.creditNoteType.effect,
+            linkedInvoiceRequirement: row.creditNoteType.linkedInvoiceRequirement,
+            affectsInventory: row.creditNoteType.affectsInventory,
+            allowsTaxAdjustment: row.creditNoteType.allowsTaxAdjustment,
+            helperText: row.creditNoteType.helperText,
+            isActive: row.creditNoteType.isActive,
+            defaultAccount: row.creditNoteType.defaultAccount,
+          }
+        : null,
       customer: {
         id: row.customer.id,
         code: row.customer.code,
@@ -3697,6 +4699,7 @@ export class SalesReceivablesService {
     return {
       id: line.id,
       lineNumber: line.lineNumber,
+      salesInvoiceLineId: line.salesInvoiceLineId ?? null,
       itemId: line.itemId ?? null,
       warehouseId: line.warehouseId ?? null,
       itemName: line.itemName,
@@ -3708,9 +4711,45 @@ export class SalesReceivablesService {
       discountAmount: line.discountAmount.toString(),
       taxId: line.taxId ?? null,
       taxAmount: line.taxAmount.toString(),
+      originalUnitPrice:
+        line.originalUnitPrice === null || line.originalUnitPrice === undefined
+          ? null
+          : line.originalUnitPrice.toString(),
+      correctedUnitPrice:
+        line.correctedUnitPrice === null || line.correctedUnitPrice === undefined
+          ? null
+          : line.correctedUnitPrice.toString(),
+      originalTaxAmount:
+        line.originalTaxAmount === null || line.originalTaxAmount === undefined
+          ? null
+          : line.originalTaxAmount.toString(),
+      correctedTaxAmount:
+        line.correctedTaxAmount === null || line.correctedTaxAmount === undefined
+          ? null
+          : line.correctedTaxAmount.toString(),
+      returnToStock: Boolean(line.returnToStock),
+      itemCondition: line.itemCondition ?? null,
       lineSubtotalAmount: line.lineSubtotalAmount.toString(),
       lineAmount: (line.lineAmount ?? line.lineTotalAmount).toString(),
       revenueAccount: line.revenueAccount ?? null,
+      inventoryAccount: line.inventoryAccount ?? null,
+      cogsAccount: line.cogsAccount ?? null,
+      unitCost:
+        line.unitCost === null || line.unitCost === undefined
+          ? null
+          : line.unitCost.toString(),
+      totalCost:
+        line.totalCost === null || line.totalCost === undefined
+          ? null
+          : line.totalCost.toString(),
+      salesInvoiceLine:
+        line.salesInvoiceLine
+          ? {
+              id: line.salesInvoiceLine.id,
+              lineNumber: line.salesInvoiceLine.lineNumber,
+              quantity: line.salesInvoiceLine.quantity.toString(),
+            }
+          : null,
     };
   }
 
@@ -4018,6 +5057,10 @@ export class SalesReceivablesService {
   }
 
   private toQuantity(value: number) {
+    return Number(value).toFixed(4);
+  }
+
+  private toUnitCost(value: number) {
     return Number(value).toFixed(4);
   }
 
