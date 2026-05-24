@@ -10,8 +10,8 @@ export function getApiBaseUrl() {
     if (window.location.hostname === "sabina.trusttechlimited.com") {
       return "/api";
     }
-    return `http://${window.location.hostname}:3003/api`;
+    return `http://${window.location.hostname}:3007/api`;
   }
 
-  return "http://localhost:3003/api";
+  return "http://localhost:3007/api";
 }

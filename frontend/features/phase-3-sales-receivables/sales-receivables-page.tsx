@@ -764,6 +764,36 @@ export function SalesReceivablesPage() {
     selectTab("invoices");
   };
 
+  const saveOrderDraft = async () => {
+    try {
+      const savedOrder = orderEditor.id
+        ? await updateOrderMutation.mutateAsync()
+        : await createOrderMutation.mutateAsync();
+
+      setSelectedOrderId(savedOrder.id);
+      setIsOrderEditorOpen(false);
+      setOrderEditor(EMPTY_ORDER_EDITOR());
+      return savedOrder;
+    } catch {
+      return null;
+    }
+  };
+
+  const confirmOrderFromEditor = async () => {
+    try {
+      const savedOrder = orderEditor.id
+        ? await updateOrderMutation.mutateAsync()
+        : await createOrderMutation.mutateAsync();
+      const confirmedOrder = await confirmOrderMutation.mutateAsync(savedOrder.id);
+
+      setSelectedOrderId(confirmedOrder.id);
+      setIsOrderEditorOpen(false);
+      setOrderEditor(EMPTY_ORDER_EDITOR());
+    } catch {
+      // Keep the editor open so the user can resolve any validation or workflow errors.
+    }
+  };
+
   const handleInvoiceCustomerChange = (value: string) => {
     const nextCustomer =
       activeCustomers.find((row) => row.id === value) ??
@@ -1058,8 +1088,6 @@ export function SalesReceivablesPage() {
     onSuccess: async (created) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedOrderId(created.id);
-      setIsOrderEditorOpen(false);
-      setOrderEditor(EMPTY_ORDER_EDITOR());
     },
   });
 
@@ -1083,7 +1111,6 @@ export function SalesReceivablesPage() {
     onSuccess: async (updated) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedOrderId(updated.id);
-      setIsOrderEditorOpen(false);
     },
   });
 
@@ -3105,10 +3132,16 @@ export function SalesReceivablesPage() {
         inventoryItems={inventoryItems}
         isInventoryItemsLoading={inventoryItemsQuery.isLoading}
         revenueAccounts={revenueAccountsQuery.data ?? []}
-        isSubmitting={createOrderMutation.isPending || updateOrderMutation.isPending}
+        isSavingDraft={createOrderMutation.isPending || updateOrderMutation.isPending}
+        isConfirming={confirmOrderMutation.isPending}
         onChange={setOrderEditor}
         onCustomerChange={handleOrderCustomerChange}
-        onSubmit={() => (orderEditor.id ? updateOrderMutation.mutate() : createOrderMutation.mutate())}
+        onSaveDraft={() => {
+          void saveOrderDraft();
+        }}
+        onConfirm={() => {
+          void confirmOrderFromEditor();
+        }}
       />
 
       <CreditNoteEditorModal

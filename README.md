@@ -92,13 +92,13 @@ npx prisma db push --skip-generate
 The backend runs at:
 
 ```text
-http://localhost:3003/api
+http://localhost:3007/api
 ```
 
 Swagger docs are available at:
 
 ```text
-http://localhost:3003/api/docs
+http://localhost:3007/api/docs
 ```
 
 Open a third terminal for the frontend:

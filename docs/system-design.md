@@ -87,7 +87,7 @@ The frontend separates routing from business UI:
 - larger frontend features may use feature-local `components/`, `types`, and `utils` files to keep orchestration separate from leaf UI
 - `frontend/components/ui` owns reusable UI primitives
 - `frontend/lib` owns API clients, config, and shared utilities
-- API base URL resolution lives in `frontend/lib/config/api.ts` and should prefer `NEXT_PUBLIC_API_BASE_URL`; the current fallback is same-origin `/api` on `sabina.trusttechlimited.com` and `http://localhost:3003/api` for local development
+- API base URL resolution lives in `frontend/lib/config/api.ts` and should prefer `NEXT_PUBLIC_API_BASE_URL`; the current fallback is same-origin `/api` on `sabina.trusttechlimited.com` and `http://localhost:3007/api` for local development
 - reusable print/PDF/Excel list output is owned by `frontend/lib/export-print.ts`, with the shared `ExportActions` control in `frontend/components/ui/export-actions.tsx`; feature pages prepare Arabic columns, filtered rows, filter summaries, and totals, then call the shared export engine
 
 Thin route files compose:

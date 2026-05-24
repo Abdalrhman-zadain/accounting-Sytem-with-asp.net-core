@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  LuCheck as Check,
   LuCalendarDays as CalendarDays,
   LuCirclePlus as CirclePlus,
   LuFileText as FileText,
@@ -51,11 +52,13 @@ type SalesOrderEditorModalProps = {
   inventoryItems: InventoryItem[];
   isInventoryItemsLoading: boolean;
   revenueAccounts: { id: string; code: string; name: string }[];
-  isSubmitting: boolean;
+  isSavingDraft: boolean;
+  isConfirming: boolean;
   onClose: () => void;
   onChange: (editor: SalesOrderEditorValue) => void;
   onCustomerChange: (value: string) => void;
-  onSubmit: () => void;
+  onSaveDraft: () => void;
+  onConfirm: () => void;
 };
 
 export function SalesOrderEditorModal({
@@ -67,11 +70,13 @@ export function SalesOrderEditorModal({
   inventoryItems,
   isInventoryItemsLoading,
   revenueAccounts,
-  isSubmitting,
+  isSavingDraft,
+  isConfirming,
   onClose,
   onChange,
   onCustomerChange,
-  onSubmit,
+  onSaveDraft,
+  onConfirm,
 }: SalesOrderEditorModalProps) {
   const { t, language } = useTranslation();
   const { token } = useAuth();
@@ -537,9 +542,13 @@ export function SalesOrderEditorModal({
             <Button variant="secondary" onClick={onClose} className="rounded-2xl px-6">
               {t("salesReceivables.action.cancel")}
             </Button>
-            <Button onClick={onSubmit} disabled={isSubmitting} className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700">
+            <Button variant="secondary" onClick={onSaveDraft} disabled={isSavingDraft || isConfirming} className="rounded-2xl px-6">
               <Save className="h-4 w-4" />
               {editor.id ? t("salesReceivables.action.saveChanges") : t("salesReceivables.action.saveDraft")}
+            </Button>
+            <Button onClick={onConfirm} disabled={isSavingDraft || isConfirming} className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700">
+              <Check className="h-4 w-4" />
+              تاكيد أمر البيع
             </Button>
           </div>
         </div>

@@ -189,6 +189,7 @@ What else to check:
 - converting an approved quotation or sales order into an invoice should prefill the invoice editor, let the user choose revenue accounts per line, and only call the convert API when the draft is saved
 - the quotation editor supports both `save draft` and immediate `approve quotation` from the same form; when approving a brand-new quotation, the UI should save first and then approve the created draft in the same flow
 - sales-order drafts must stay editable until confirmed, and confirmed orders must preserve quotation/invoice traceability
+- the sales-order editor now exposes an explicit confirm button (`تاكيد أمر البيع`) alongside draft save; confirming from the modal must save the draft first and then call the existing sales-order confirmation workflow
 - new sales invoice references should default to a daily sequential format such as `INV-20260524-1`, `INV-20260524-2`, and `INV-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching invoice references
 - invoice and credit-note drafts must stay editable, but posted documents must be locked
 - credit-note type selection must come from active `CreditNoteType` master data (`GET /credit-note-types/active`) rather than a hardcoded frontend-only option list
@@ -264,6 +265,7 @@ What else to check:
 - purchase-request list actions should stay inside the table `الإجراءات` column, while request review, approval, rejection, and conversion actions belong on the dedicated `/purchases/requests/[id]` details page
 - purchase-order list `عرض` actions may open the dedicated `/purchases/orders/[id]` details page so users can review summary, lines, and receipt history without overloading the workspace list
 - purchase-request references now follow the daily sequence format `PR-YYYYMMDD-N`; new logic must ignore legacy random codes when calculating the next daily number
+- purchase-request and purchase-order editor modals now expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
 - request conversion rules must keep source traceability into downstream purchase orders and draft purchase invoices, and only approved requests may be converted
 - request status history should retain both timestamp and acting user when workflow actions are recorded
 - posting must reuse Phase 1 journal-entry and posting services instead of writing ledger effects directly

@@ -51,6 +51,7 @@ import {
   getPurchaseOrders,
   getPurchaseRequestById,
   getPurchaseRequests,
+  issuePurchaseOrder,
   postPurchaseInvoice,
   postPurchaseReceipt,
   reverseDebitNote,
@@ -63,6 +64,7 @@ import {
   getSuppliers,
   postDebitNote,
   postSupplierPayment,
+  submitPurchaseRequest,
   updateDebitNote,
   updatePurchaseInvoice,
   updatePurchaseOrder,
@@ -682,9 +684,8 @@ export function PurchasesPage() {
         },
         token,
       ),
-    onSuccess: async (created) => {
+    onSuccess: async () => {
       await invalidatePurchases(queryClient);
-      closeRequestEditor();
     },
   });
 
@@ -699,9 +700,15 @@ export function PurchasesPage() {
         },
         token,
       ),
-    onSuccess: async (updated) => {
+    onSuccess: async () => {
       await invalidatePurchases(queryClient);
-      closeRequestEditor();
+    },
+  });
+
+  const submitPurchaseRequestMutation = useMutation({
+    mutationFn: (id: string) => submitPurchaseRequest(id, {}, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
     },
   });
 
@@ -717,9 +724,8 @@ export function PurchasesPage() {
         },
         token,
       ),
-    onSuccess: async (created) => {
+    onSuccess: async () => {
       await invalidatePurchases(queryClient);
-      closeOrderEditor();
     },
   });
 
@@ -736,9 +742,15 @@ export function PurchasesPage() {
         },
         token,
       ),
-    onSuccess: async (updated) => {
+    onSuccess: async () => {
       await invalidatePurchases(queryClient);
-      closeOrderEditor();
+    },
+  });
+
+  const issuePurchaseOrderMutation = useMutation({
+    mutationFn: (id: string) => issuePurchaseOrder(id, token),
+    onSuccess: async () => {
+      await invalidatePurchases(queryClient);
     },
   });
 
@@ -1135,8 +1147,10 @@ export function PurchasesPage() {
     nextField?.focus();
   }
   const requestSaveError = getMutationErrorMessage(createPurchaseRequestMutation.error ?? updatePurchaseRequestMutation.error);
+  const requestActionError = getMutationErrorMessage(submitPurchaseRequestMutation.error);
   const requestFormError = getPurchaseRequestFormError(requestEditor);
   const orderSaveError = getMutationErrorMessage(createPurchaseOrderMutation.error ?? updatePurchaseOrderMutation.error);
+  const orderActionError = getMutationErrorMessage(issuePurchaseOrderMutation.error);
   const orderFormError = getPurchaseOrderFormError(orderEditor, t);
   const receiptSaveError = getMutationErrorMessage(receivePurchaseOrderMutation.error);
   const receiptFormError = getPurchaseReceiptFormError(receiptEditor, t);
@@ -2680,6 +2694,12 @@ export function PurchasesPage() {
                       {requestSaveError}
                     </div>
                   ) : null}
+
+                  {requestActionError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                      {requestActionError}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -2689,12 +2709,31 @@ export function PurchasesPage() {
                     {t("purchases.action.cancel")}
                   </Button>
                   <Button
-                    onClick={() => (requestEditor.id ? updatePurchaseRequestMutation.mutate() : createPurchaseRequestMutation.mutate())}
-                    disabled={Boolean(requestFormError) || createPurchaseRequestMutation.isPending || updatePurchaseRequestMutation.isPending}
-                    className="rounded-2xl bg-green-600 px-6 hover:bg-green-700"
+                    variant="secondary"
+                    onClick={() => void savePurchaseRequestDraft()}
+                    disabled={
+                      Boolean(requestFormError) ||
+                      createPurchaseRequestMutation.isPending ||
+                      updatePurchaseRequestMutation.isPending ||
+                      submitPurchaseRequestMutation.isPending
+                    }
+                    className="rounded-2xl px-6"
                   >
                     <Save className="h-4 w-4" />
                     {requestEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button
+                    onClick={() => void confirmPurchaseRequest()}
+                    disabled={
+                      Boolean(requestFormError) ||
+                      createPurchaseRequestMutation.isPending ||
+                      updatePurchaseRequestMutation.isPending ||
+                      submitPurchaseRequestMutation.isPending
+                    }
+                    className="rounded-2xl bg-green-600 px-6 hover:bg-green-700"
+                  >
+                    <Check className="h-4 w-4" />
+                    تاكيد طلب شراء
                   </Button>
                 </div>
               </div>
@@ -2979,6 +3018,12 @@ export function PurchasesPage() {
                       {orderSaveError}
                     </div>
                   ) : null}
+
+                  {orderActionError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                      {orderActionError}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -2988,12 +3033,31 @@ export function PurchasesPage() {
                     {t("purchases.action.cancel")}
                   </Button>
                   <Button
-                    onClick={() => (orderEditor.id ? updatePurchaseOrderMutation.mutate() : createPurchaseOrderMutation.mutate())}
-                    disabled={Boolean(orderFormError) || createPurchaseOrderMutation.isPending || updatePurchaseOrderMutation.isPending}
-                    className="rounded-2xl bg-green-600 px-6 hover:bg-green-700"
+                    variant="secondary"
+                    onClick={() => void savePurchaseOrderDraft()}
+                    disabled={
+                      Boolean(orderFormError) ||
+                      createPurchaseOrderMutation.isPending ||
+                      updatePurchaseOrderMutation.isPending ||
+                      issuePurchaseOrderMutation.isPending
+                    }
+                    className="rounded-2xl px-6"
                   >
                     <Save className="h-4 w-4" />
                     {orderEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button
+                    onClick={() => void confirmPurchaseOrder()}
+                    disabled={
+                      Boolean(orderFormError) ||
+                      createPurchaseOrderMutation.isPending ||
+                      updatePurchaseOrderMutation.isPending ||
+                      issuePurchaseOrderMutation.isPending
+                    }
+                    className="rounded-2xl bg-green-600 px-6 hover:bg-green-700"
+                  >
+                    <Check className="h-4 w-4" />
+                    تاكيد امر الشراء
                   </Button>
                 </div>
               </div>
@@ -4345,6 +4409,7 @@ export function PurchasesPage() {
   function openNewPurchaseRequestEditor() {
     createPurchaseRequestMutation.reset();
     updatePurchaseRequestMutation.reset();
+    submitPurchaseRequestMutation.reset();
     setRequestEditor(EMPTY_REQUEST_EDITOR());
     setIsRequestEditorOpen(true);
   }
@@ -4352,6 +4417,7 @@ export function PurchasesPage() {
   function openEditPurchaseRequestEditor(request: PurchaseRequest) {
     createPurchaseRequestMutation.reset();
     updatePurchaseRequestMutation.reset();
+    submitPurchaseRequestMutation.reset();
     setRequestEditor({
       id: request.id,
       requestDate: request.requestDate.slice(0, 10),
@@ -4372,8 +4438,28 @@ export function PurchasesPage() {
   function closeRequestEditor() {
     createPurchaseRequestMutation.reset();
     updatePurchaseRequestMutation.reset();
+    submitPurchaseRequestMutation.reset();
     setRequestEditor(EMPTY_REQUEST_EDITOR());
     setIsRequestEditorOpen(false);
+  }
+
+  async function savePurchaseRequestDraft() {
+    if (requestEditor.id) {
+      await updatePurchaseRequestMutation.mutateAsync();
+    } else {
+      await createPurchaseRequestMutation.mutateAsync();
+    }
+
+    closeRequestEditor();
+  }
+
+  async function confirmPurchaseRequest() {
+    const request = requestEditor.id
+      ? await updatePurchaseRequestMutation.mutateAsync()
+      : await createPurchaseRequestMutation.mutateAsync();
+
+    await submitPurchaseRequestMutation.mutateAsync(request.id);
+    closeRequestEditor();
   }
 
   function addRequestLine() {
@@ -4421,6 +4507,7 @@ export function PurchasesPage() {
   function openNewPurchaseOrderEditor() {
     createPurchaseOrderMutation.reset();
     updatePurchaseOrderMutation.reset();
+    issuePurchaseOrderMutation.reset();
     const defaultSupplier = activeSuppliers[0];
     setOrderEditor({
       ...EMPTY_ORDER_EDITOR(),
@@ -4433,6 +4520,7 @@ export function PurchasesPage() {
   function openEditPurchaseOrderEditor(order: PurchaseOrder) {
     createPurchaseOrderMutation.reset();
     updatePurchaseOrderMutation.reset();
+    issuePurchaseOrderMutation.reset();
     setOrderEditor({
       id: order.id,
       orderDate: order.orderDate.slice(0, 10),
@@ -4458,8 +4546,28 @@ export function PurchasesPage() {
   function closeOrderEditor() {
     createPurchaseOrderMutation.reset();
     updatePurchaseOrderMutation.reset();
+    issuePurchaseOrderMutation.reset();
     setOrderEditor(EMPTY_ORDER_EDITOR());
     setIsOrderEditorOpen(false);
+  }
+
+  async function savePurchaseOrderDraft() {
+    if (orderEditor.id) {
+      await updatePurchaseOrderMutation.mutateAsync();
+    } else {
+      await createPurchaseOrderMutation.mutateAsync();
+    }
+
+    closeOrderEditor();
+  }
+
+  async function confirmPurchaseOrder() {
+    const order = orderEditor.id
+      ? await updatePurchaseOrderMutation.mutateAsync()
+      : await createPurchaseOrderMutation.mutateAsync();
+
+    await issuePurchaseOrderMutation.mutateAsync(order.id);
+    closeOrderEditor();
   }
 
   function openReceivePurchaseOrderEditor(order: PurchaseOrder) {
