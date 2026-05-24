@@ -85,7 +85,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn, formatCurrency, formatDate, cleanDisplayName } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { AccountOption, AccountTreeNode, DebitNote, DueDateCalculationMethod, InventoryItem, InventoryWarehouse, PaymentTerm, PurchaseInvoice, PurchaseOrder, PurchasePolicy, PurchaseRequest, Supplier, SupplierDebitNoteType, SupplierPayment, Tax } from "@/types/api";
-import { Button, Card, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, Modal, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { exportOrPrint, formatExportDate, formatExportMoney, type ExportMode } from "@/lib/export-print";
@@ -1752,96 +1752,90 @@ export function PurchasesPage() {
               <SummaryCard label={t("purchases.summary.totalOutstanding")} value={formatCurrency(totalOutstanding)} hint={t("purchases.summary.totalOutstandingHint")} />
             </div>
 
-            <Card className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label={t("purchases.filters.search")}>
-                  <Input value={supplierSearch} onChange={(event) => setSupplierSearch(event.target.value)} placeholder={t("purchases.filters.searchPlaceholder")} />
-                </Field>
-                <Field label={t("purchases.filters.status")}>
-                  <Select value={supplierStatusFilter} onChange={(event) => setSupplierStatusFilter(event.target.value as "true" | "false" | "")}>
+            <div className="space-y-4">
+              <Input
+                value={supplierSearch}
+                onChange={(event) => setSupplierSearch(event.target.value)}
+                placeholder="ابحث بالرمز أو اسم المورد..."
+                className="w-full text-base py-5 rounded-lg border-gray-300 shadow-sm"
+              />
+              <div className="flex items-center justify-between">
+                <div />
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={supplierStatusFilter}
+                    onChange={(event) => setSupplierStatusFilter(event.target.value as "true" | "false" | "")}
+                    className="w-48 bg-white border-gray-300 shadow-sm h-10 text-gray-700"
+                  >
                     <option value="">{t("purchases.filters.allStatuses")}</option>
                     <option value="true">{t("purchases.filters.activeOnly")}</option>
                     <option value="false">{t("purchases.filters.inactiveOnly")}</option>
                   </Select>
-                </Field>
-                <div className="flex items-end">
-                  <Button variant="secondary" onClick={() => { setSupplierSearch(""); setSupplierStatusFilter(""); }}>
-                    {t("purchases.action.clearFilters")}
-                  </Button>
+                  <Button variant="secondary" className="bg-white border-gray-300 hover:bg-gray-50 text-gray-700 shadow-sm h-10 px-5" onClick={() => handleSuppliersExport("excel")}>Excel</Button>
+                  <Button variant="secondary" className="bg-white border-gray-300 hover:bg-gray-50 text-gray-700 shadow-sm h-10 px-5" onClick={() => handleSuppliersExport("pdf")}>PDF</Button>
                 </div>
               </div>
-              <ExportActions
-                onAction={handleSuppliersExport}
-                permissions={exportPermissions}
-                disabled={suppliersQuery.isLoading}
-              />
 
-              <div className="overflow-x-auto rounded-2xl border border-gray-200">
-                <table className="min-w-[1180px] w-full text-sm">
-                  <thead className="bg-gray-50">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                <table className="min-w-[1000px] w-full text-sm">
+                  <thead className="bg-[#f6f5ee] border-b border-gray-200 text-gray-600">
                     <tr>
-                      <TableHead className="w-[190px]">{t("purchases.table.supplierCode")}</TableHead>
-                      <TableHead>{t("purchases.table.supplier")}</TableHead>
-                      <TableHead>{t("purchases.table.contact")}</TableHead>
-                      <TableHead className="text-center">{t("purchases.table.currency")}</TableHead>
-                      <TableHead>{t("purchases.table.payableAccount")}</TableHead>
-                      <TableHead className="text-end">{t("purchases.table.outstanding")}</TableHead>
-                      <TableHead className="text-center">{t("purchases.table.status")}</TableHead>
-                      <TableHead className="text-center">{t("purchases.table.actions")}</TableHead>
+                      <TableHead className="w-12 text-center border-s border-gray-200 first:border-s-0 py-3">
+                        <input type="checkbox" className="rounded border-gray-300" />
+                      </TableHead>
+                      <TableHead className="w-[140px] font-normal border-s border-gray-200 py-3">
+                        <div className="flex items-center justify-between">
+                          <span>{t("purchases.table.supplierCode")}</span>
+                          <span className="text-[10px] opacity-50">↕</span>
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-normal border-s border-gray-200 py-3">
+                        <div className="flex items-center justify-between">
+                          <span>{t("purchases.table.supplier")}</span>
+                          <span className="text-[10px] opacity-50">↕</span>
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-normal border-s border-gray-200 py-3 text-center">{t("purchases.table.contact")}</TableHead>
+                      <TableHead className="text-center font-normal border-s border-gray-200 py-3">{t("purchases.table.currency")}</TableHead>
+                      <TableHead className="font-normal border-s border-gray-200 py-3">
+                        <div className="flex items-center justify-between">
+                          <span>{t("purchases.table.outstanding")}</span>
+                          <span className="text-[10px] opacity-50">↕</span>
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-center font-normal border-s border-gray-200 py-3">{t("purchases.table.status")}</TableHead>
                     </tr>
                   </thead>
                   <tbody>
                     {suppliers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                        <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
                           {t("purchases.empty.suppliers")}
                         </td>
                       </tr>
                     ) : (
                       suppliers.map((row) => (
-                        <tr key={row.id} className={cn("border-t border-gray-100 transition-colors hover:bg-gray-50/60", selectedSupplierId === row.id && "bg-gray-50/70")}>
-                          <td dir="ltr" className="px-6 py-4 text-start align-top font-mono text-xs font-bold text-slate-700">
-                            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1">
-                              {row.code}
-                            </span>
+                        <tr key={row.id} className={cn("border-b border-gray-200 last:border-0 transition-colors even:bg-gray-50/50 hover:bg-gray-50", selectedSupplierId === row.id && "bg-gray-50")}>
+                          <td className="px-4 py-3 text-center align-middle border-s border-gray-200 first:border-s-0">
+                            <input type="checkbox" className="rounded border-gray-300" />
                           </td>
-                          <td className="px-6 py-4 align-top text-start">
-                            <div className="font-bold text-gray-900">{row.name}</div>
-                            <div className="text-xs text-gray-500">{row.paymentTerm ? (isArabic ? row.paymentTerm.nameAr || row.paymentTerm.name : row.paymentTerm.name) : t("purchases.empty.paymentTerms")}</div>
+                          <td dir="ltr" className="px-4 py-3 text-start align-middle font-mono text-[13px] text-gray-600 border-s border-gray-200">
+                            {row.code}
                           </td>
-                          <td className="px-6 py-4 align-top text-start">
-                            <div className="text-gray-700">{row.phone || row.contactInfo || t("purchases.empty.phone")}</div>
-                            <div className="text-xs text-gray-500">{row.email || t("purchases.empty.email")}</div>
-                            <div className="text-xs text-gray-500">{row.address || t("purchases.empty.address")}</div>
+                          <td className="px-4 py-3 align-middle text-start border-s border-gray-200">
+                            <div className="text-gray-900">{row.name}</div>
                           </td>
-                          <td className="px-6 py-4 text-center align-top font-semibold text-gray-800">{row.defaultCurrency}</td>
-                          <td className="px-6 py-4 align-top text-start">
-                            <div className="font-medium text-gray-900">{cleanDisplayName(row.payableAccount.name)}</div>
-                            <div className="mt-1">
-                              <span dir="ltr" className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-600">
-                                {row.payableAccount.code}
-                              </span>
-                            </div>
+                          <td className="px-4 py-3 align-middle text-center border-s border-gray-200">
+                            <div className="text-gray-900" dir="ltr">{row.phone || row.contactInfo || "---"}</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5">3 يود رقم هاتف</div>
                           </td>
-                          <td className="px-6 py-4 text-end align-top font-semibold tabular-nums text-gray-900">{formatCurrency(row.currentBalance)}</td>
-                          <td className="px-6 py-4 text-center align-top">
-                            <StatusPill label={row.isActive ? t("purchases.status.active") : t("purchases.status.inactive")} tone={row.isActive ? "positive" : "warning"} />
+                          <td className="px-4 py-3 text-center align-middle font-medium text-gray-900 border-s border-gray-200">{row.defaultCurrency}</td>
+                          <td className="px-4 py-3 text-start align-middle font-medium tabular-nums text-gray-900 border-s border-gray-200" dir="ltr">
+                            {formatCurrency(row.currentBalance)}
                           </td>
-                          <td className="px-6 py-4 align-top">
-                            <div className="flex flex-wrap justify-center gap-2">
-                              <Button variant="secondary" size="sm" onClick={() => router.push(`/purchases/suppliers/${row.id}`)}>
-                                {t("purchases.action.view")}
-                              </Button>
-                              {row.isActive ? (
-                                <>
-                                  <Button variant="secondary" size="sm" onClick={() => openEditSupplierEditor(row)}>
-                                    {t("purchases.action.edit")}
-                                  </Button>
-                                  <Button variant="danger" size="sm" onClick={() => deactivateSupplierMutation.mutate(row.id)} disabled={deactivateSupplierMutation.isPending}>
-                                    {t("purchases.action.deactivate")}
-                                  </Button>
-                                </>
-                              ) : null}
+                          <td className="px-4 py-3 text-center align-middle border-s border-gray-200">
+                            <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-100">
+                              {row.isActive ? "نشط" : "غير نشط"}
                             </div>
                           </td>
                         </tr>
@@ -1849,8 +1843,23 @@ export function PurchasesPage() {
                     )}
                   </tbody>
                 </table>
+                <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 bg-white">
+                  <div className="flex items-center gap-1.5" dir="ltr">
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center text-lg">&lsaquo;</Button>
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-900 font-medium flex items-center justify-center">1</Button>
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center">2</Button>
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center">3</Button>
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center">4</Button>
+                    <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center text-lg">&rsaquo;</Button>
+                  </div>
+                  <div className="text-[13px] text-gray-600 flex items-center gap-1">
+                    <span>عرض 1–10 من</span>
+                    <br />
+                    <span>40</span>
+                  </div>
+                </div>
               </div>
-            </Card>
+            </div>
 
           </>
         ) : workspace === "requests" ? (
@@ -2234,19 +2243,22 @@ export function PurchasesPage() {
                       <TableHead>{t("purchases.invoices.table.date")}</TableHead>
                       <TableHead>{t("purchases.invoices.table.total")}</TableHead>
                       <TableHead>{t("purchases.invoices.table.status")}</TableHead>
-                      <TableHead>{t("purchases.table.actions")}</TableHead>
                     </tr>
                   </thead>
                   <tbody>
                     {purchaseInvoices.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
+                        <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
                           {t("purchases.invoices.empty.list")}
                         </td>
                       </tr>
                     ) : (
                       purchaseInvoices.map((row) => (
-                        <tr key={row.id} className={cn("border-t border-gray-100", selectedPurchaseInvoiceId === row.id && "bg-gray-50/70")}>
+                        <tr 
+                          key={row.id} 
+                          onClick={() => setSelectedPurchaseInvoiceId(row.id)}
+                          className={cn("border-b border-gray-100 last:border-0 transition-colors hover:bg-gray-50 cursor-pointer", selectedPurchaseInvoiceId === row.id && "bg-gray-50")}
+                        >
                           <td className="px-6 py-4 align-top">
                             <div className="font-bold text-gray-900">{row.reference}</div>
                             <div className="text-xs text-gray-500">
@@ -2262,18 +2274,6 @@ export function PurchasesPage() {
                           <td className="px-6 py-4 align-top">
                             <StatusPill label={translatePurchaseInvoiceStatus(row.status, t)} tone={purchaseInvoiceStatusTone(row.status)} />
                           </td>
-                          <td className="px-6 py-4 align-top">
-                            <div className="flex flex-wrap gap-2">
-                              <Button variant="secondary" size="sm" onClick={() => setSelectedPurchaseInvoiceId(row.id)}>
-                                {t("purchases.action.view")}
-                              </Button>
-                              {row.canEdit ? (
-                                <Button variant="secondary" size="sm" onClick={() => openEditPurchaseInvoiceEditor(row)}>
-                                  {t("purchases.action.edit")}
-                                </Button>
-                              ) : null}
-                            </div>
-                          </td>
                         </tr>
                       ))
                     )}
@@ -2282,31 +2282,41 @@ export function PurchasesPage() {
               </div>
             </Card>
 
-            <Card className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-black uppercase tracking-[0.22em] text-gray-500">{t("purchases.invoices.section.details")}</div>
-                {selectedPurchaseInvoice?.canPost ? (
-                  <Button size="sm" disabled={activeInvoiceActionMutationPending} onClick={() => confirmAndRun(t("purchases.invoices.confirm.post"), () => postPurchaseInvoiceMutation.mutate(selectedPurchaseInvoice.id))}>
-                    {t("purchases.action.postInvoice")}
-                  </Button>
-                ) : null}
-                {selectedPurchaseInvoice?.canReverse ? (
-                  <Button variant="danger" size="sm" disabled={activeInvoiceActionMutationPending} onClick={() => confirmAndRun(t("purchases.invoices.confirm.reverse"), () => reversePurchaseInvoiceMutation.mutate(selectedPurchaseInvoice.id))}>
-                    {t("purchases.action.reverseInvoice")}
-                  </Button>
-                ) : null}
-              </div>
-              {invoiceActionError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {invoiceActionError}
-                </div>
-              ) : null}
-              {!selectedPurchaseInvoice ? (
-                <div className="rounded-2xl border border-dashed border-gray-300 px-6 py-8 text-sm text-gray-500">
-                  {t("purchases.invoices.empty.selectInvoice")}
-                </div>
-              ) : (
+            <Modal
+              isOpen={!!selectedPurchaseInvoice}
+              onClose={() => setSelectedPurchaseInvoiceId(null)}
+              title={t("purchases.invoices.section.details")}
+              size="5xl"
+            >
+              {selectedPurchaseInvoice ? (
                 <div className="space-y-6">
+                  <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
+                    {selectedPurchaseInvoice.canEdit ? (
+                      <Button variant="secondary" size="sm" disabled={activeInvoiceActionMutationPending} onClick={() => {
+                        setSelectedPurchaseInvoiceId(null);
+                        openEditPurchaseInvoiceEditor(selectedPurchaseInvoice);
+                      }}>
+                        {t("purchases.action.edit")}
+                      </Button>
+                    ) : null}
+                    {selectedPurchaseInvoice.canPost ? (
+                      <Button size="sm" disabled={activeInvoiceActionMutationPending} onClick={() => confirmAndRun(t("purchases.invoices.confirm.post"), () => postPurchaseInvoiceMutation.mutate(selectedPurchaseInvoice.id))}>
+                        {t("purchases.action.postInvoice")}
+                      </Button>
+                    ) : null}
+                    {selectedPurchaseInvoice.canReverse ? (
+                      <Button variant="danger" size="sm" disabled={activeInvoiceActionMutationPending} onClick={() => confirmAndRun(t("purchases.invoices.confirm.reverse"), () => reversePurchaseInvoiceMutation.mutate(selectedPurchaseInvoice.id))}>
+                        {t("purchases.action.reverseInvoice")}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {invoiceActionError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                      {invoiceActionError}
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-4">
                     <MiniMetric label={t("purchases.invoices.metric.date")} value={formatDate(selectedPurchaseInvoice.invoiceDate)} />
                     <MiniMetric label={t("purchases.invoices.metric.status")} value={translatePurchaseInvoiceStatus(selectedPurchaseInvoice.status, t)} />
@@ -2364,8 +2374,8 @@ export function PurchasesPage() {
                     </Card>
                   </div>
                 </div>
-              )}
-            </Card>
+              ) : null}
+            </Modal>
           </>
         ) : workspace === "payments" ? (
           <>

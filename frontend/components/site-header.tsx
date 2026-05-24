@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -180,6 +181,30 @@ export function SiteHeader({
   const { isAuthenticated, isHydrated, logout, user, token } = useAuth();
   const { t } = useTranslation();
   const { language, setLanguage } = useSettings();
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  const isItemExpanded = (href: string, isActive: boolean) => {
+    if (expandedItems[href] !== undefined) {
+      return expandedItems[href];
+    }
+    return isActive;
+  };
+
+  const toggleExpand = (href: string, isActive: boolean, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isCollapsed && onToggleCollapsed) {
+      onToggleCollapsed();
+      setExpandedItems((prev) => ({
+        ...prev,
+        [href]: true,
+      }));
+      return;
+    }
+    setExpandedItems((prev) => ({
+      ...prev,
+      [href]: prev[href] !== undefined ? !prev[href] : !isActive,
+    }));
+  };
 
   const isLoginPage = pathname === "/login" || pathname === "/register";
   const currentLocation = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
@@ -527,23 +552,47 @@ export function SiteHeader({
                   (item.labelKey === "nav.item.pos" && pathname.startsWith("/pos"));
                 return (
                   <div key={item.href}>
-                    <Link
-                      href={item.href}
-                      title={!isCollapsed ? undefined : (t(item.labelKey) as string)}
-                      className={cn(
-                        "group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
-                        isCollapsed && "justify-center",
-                        isActive
-                          ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
-                          : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
-                      )}
-                    >
-                      <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
-                      <span className={cn("flex-1 truncate", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
-                      {isActive && !isCollapsed && <ChevronRight className="h-4 w-4 text-gray-400 ltr:rotate-0 rtl:rotate-180" />}
-                    </Link>
+                    {item.children && item.children.length > 0 ? (
+                      <button
+                        onClick={(e) => toggleExpand(item.href, isActive, e)}
+                        title={!isCollapsed ? undefined : (t(item.labelKey) as string)}
+                        className={cn(
+                          "w-full group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
+                          isCollapsed && "justify-center",
+                          isActive
+                            ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
+                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                        )}
+                      >
+                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
+                        <span className={cn("flex-1 truncate text-left rtl:text-right", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        {!isCollapsed && (
+                          <ChevronRight 
+                            className={cn(
+                              "h-4 w-4 text-gray-400 transition-transform", 
+                              isItemExpanded(item.href, isActive) ? "rotate-90" : "ltr:rotate-0 rtl:rotate-180"
+                            )} 
+                          />
+                        )}
+                      </button>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        title={!isCollapsed ? undefined : (t(item.labelKey) as string)}
+                        className={cn(
+                          "group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
+                          isCollapsed && "justify-center",
+                          isActive
+                            ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
+                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                        )}
+                      >
+                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
+                        <span className={cn("flex-1 truncate text-left rtl:text-right", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                      </Link>
+                    )}
 
-                    {item.children && item.children.length > 0 && isActive && !isCollapsed && (
+                    {item.children && item.children.length > 0 && isItemExpanded(item.href, isActive) && !isCollapsed && (
                       <div className="mt-2 space-y-1 pe-3 ps-9">
                         {item.children.map((child) => {
                           const childPath = child.href.split("?")[0];

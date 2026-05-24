@@ -71,7 +71,7 @@ import type {
   Tax,
   TaxTreatment,
 } from "@/types/api";
-import { Button, Card, PageShell, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, Modal, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { exportOrPrint, formatExportDate, formatExportMoney, type ExportMode } from "@/lib/export-print";
@@ -1952,7 +1952,7 @@ export function SalesReceivablesPage() {
             </div>
           </Card>
 
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-6 grid-cols-1">
             <Card className="overflow-hidden p-0">
               <div className="border-b border-gray-200 px-6 py-4">
                 <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.quotations")}</div>
@@ -2008,15 +2008,18 @@ export function SalesReceivablesPage() {
                 </table>
               </div>
             </Card>
+          </div>
 
-            <Card className="space-y-5">
-              <div>
-                <div className="text-lg font-bold text-gray-900">{selectedQuotation?.reference ?? t("salesReceivables.section.quotationDetails")}</div>
-                <div className="text-sm text-gray-500">{selectedQuotation ? `${selectedQuotation.customer.code} · ${selectedQuotation.customer.name}` : t("salesReceivables.section.quotationDetailsEmpty")}</div>
-              </div>
-              {selectedQuotation ? (
-                <>
-                  <div className="grid gap-3 md:grid-cols-2">
+          <Modal
+            isOpen={!!selectedQuotation}
+            onClose={() => setSelectedQuotationId(null)}
+            title={selectedQuotation?.reference ?? t("salesReceivables.section.quotationDetails")}
+            size="3xl"
+          >
+            {selectedQuotation ? (
+              <div className="space-y-5">
+                <div className="text-sm text-gray-500">{selectedQuotation.customer.code} · {selectedQuotation.customer.name}</div>
+                <div className="grid gap-3 md:grid-cols-2">
                     <MiniMetric label={t("salesReceivables.field.total")} value={formatCurrency(selectedQuotation.totalAmount)} />
                     <MiniMetric label={t("salesReceivables.field.status")} value={selectedQuotation.status} />
                     <MiniMetric label={t("salesReceivables.field.validUntil")} value={formatDate(selectedQuotation.validityDate)} />
@@ -2037,10 +2040,9 @@ export function SalesReceivablesPage() {
                       </div>
                     ))}
                   </div>
-                </>
-              ) : <div className="text-sm text-gray-500">{t("salesReceivables.section.quotationDetailsEmpty")}</div>}
-            </Card>
-          </div>
+              </div>
+            ) : null}
+          </Modal>
         </div>
       ) : null}
 
@@ -2068,7 +2070,7 @@ export function SalesReceivablesPage() {
               </Button>
             </div>
           </Card>
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-6 grid-cols-1">
             <Card className="overflow-hidden p-0">
               <div className="border-b border-gray-200 px-6 py-4">
                 <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.orders")}</div>
@@ -2120,14 +2122,18 @@ export function SalesReceivablesPage() {
                 </table>
               </div>
             </Card>
-            <Card className="space-y-5">
-              <div>
-                <div className="text-lg font-bold text-gray-900">{selectedOrder?.reference ?? t("salesReceivables.section.orderDetails")}</div>
-                <div className="text-sm text-gray-500">{selectedOrder ? `${selectedOrder.customer.code} · ${selectedOrder.customer.name}` : t("salesReceivables.section.orderDetailsEmpty")}</div>
-              </div>
-              {selectedOrder ? (
-                <>
-                  <div className="grid gap-3 md:grid-cols-2">
+          </div>
+
+          <Modal
+            isOpen={!!selectedOrder}
+            onClose={() => setSelectedOrderId(null)}
+            title={selectedOrder?.reference ?? t("salesReceivables.section.orderDetails")}
+            size="3xl"
+          >
+            {selectedOrder ? (
+              <div className="space-y-5">
+                <div className="text-sm text-gray-500">{selectedOrder.customer.code} · {selectedOrder.customer.name}</div>
+                <div className="grid gap-3 md:grid-cols-2">
                     <MiniMetric label={t("salesReceivables.field.total")} value={formatCurrency(selectedOrder.totalAmount)} />
                     <MiniMetric label={t("salesReceivables.field.status")} value={selectedOrder.status} />
                     <MiniMetric label={t("salesReceivables.field.quotation")} value={selectedOrder.sourceQuotation?.reference ?? t("salesReceivables.empty.manual")} />
@@ -2144,10 +2150,9 @@ export function SalesReceivablesPage() {
                       </div>
                     ))}
                   </div>
-                </>
-              ) : <div className="text-sm text-gray-500">{t("salesReceivables.section.orderDetailsEmpty")}</div>}
-            </Card>
-          </div>
+              </div>
+            ) : null}
+          </Modal>
         </div>
       ) : null}
 
@@ -2264,8 +2269,8 @@ export function SalesReceivablesPage() {
                 />
               </Card>
 
-              <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-                <Card className="overflow-hidden p-0">
+              <div className="grid gap-6 grid-cols-1">
+            <Card className="overflow-hidden p-0">
                   <div className="border-b border-gray-200 px-6 py-4">
                     <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.salesInvoices")}</div>
                     <div className="text-xs text-gray-500">{t("salesReceivables.section.salesInvoicesDescription")}</div>
@@ -2390,15 +2395,18 @@ export function SalesReceivablesPage() {
                     </table>
                   </div>
                 </Card>
+          </div>
 
-                <Card className="space-y-5">
-                  <div>
-                    <div className="text-lg font-bold text-gray-900">{selectedInvoice?.reference ?? t("salesReceivables.section.invoiceDetails")}</div>
-                    <div className="text-sm text-gray-500">{selectedInvoice ? `${selectedInvoice.customer.code} · ${selectedInvoice.customer.name}` : t("salesReceivables.section.invoiceDetailsEmpty")}</div>
-                  </div>
-                  {selectedInvoice ? (
-                    <>
-                      {selectedInvoice.journalReference ? (
+          <Modal
+            isOpen={!!selectedInvoice}
+            onClose={() => setSelectedInvoiceId(null)}
+            title={selectedInvoice?.reference ?? t("salesReceivables.section.invoiceDetails")}
+            size="3xl"
+          >
+            {selectedInvoice ? (
+              <div className="space-y-5">
+                <div className="text-sm text-gray-500">{selectedInvoice.customer.code} · {selectedInvoice.customer.name}</div>
+                {selectedInvoice.journalReference ? (
                         <div className="flex justify-end">
                           <button
                             type="button"
@@ -2438,12 +2446,9 @@ export function SalesReceivablesPage() {
                       </div>
                     ))}
                   </div>
-                </>
-              ) : (
-                <div className="text-sm text-gray-500">{t("salesReceivables.section.invoiceDetailsEmpty")}</div>
-              )}
-            </Card>
-          </div>
+              </div>
+            ) : null}
+          </Modal>
         </>
       )}
         </div>
@@ -2465,7 +2470,7 @@ export function SalesReceivablesPage() {
               </Button>
             </div>
           </Card>
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-6 grid-cols-1">
             <Card className="overflow-hidden p-0">
               <div className="border-b border-gray-200 px-6 py-4">
                 <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.receipts")}</div>
@@ -2502,14 +2507,18 @@ export function SalesReceivablesPage() {
                 </table>
               </div>
             </Card>
-            <Card className="space-y-5">
-              <div>
-                <div className="text-lg font-bold text-gray-900">{selectedReceipt?.reference ?? t("salesReceivables.section.receiptDetails")}</div>
-                <div className="text-sm text-gray-500">{selectedReceipt?.customer ? `${selectedReceipt.customer.code} · ${selectedReceipt.customer.name}` : t("salesReceivables.section.receiptDetailsEmpty")}</div>
-              </div>
-              {selectedReceipt ? (
-                <>
-                  {selectedReceipt.journalReference ? (
+          </div>
+
+          <Modal
+            isOpen={!!selectedReceipt}
+            onClose={() => setSelectedReceiptId(null)}
+            title={selectedReceipt?.reference ?? t("salesReceivables.section.receiptDetails")}
+            size="3xl"
+          >
+            {selectedReceipt ? (
+              <div className="space-y-5">
+                <div className="text-sm text-gray-500">{selectedReceipt.customer ? `${selectedReceipt.customer.code} · ${selectedReceipt.customer.name}` : t("salesReceivables.empty.unlinked")}</div>
+                {selectedReceipt.journalReference ? (
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -2526,10 +2535,9 @@ export function SalesReceivablesPage() {
                     <MiniMetric label={t("salesReceivables.field.unapplied")} value={formatCurrency(selectedReceipt.unappliedAmount)} />
                     <MiniMetric label={t("salesReceivables.field.bankCash")} value={selectedReceipt.bankCashAccount?.name ?? t("salesReceivables.empty.notSet")} />
                   </div>
-                </>
-              ) : <div className="text-sm text-gray-500">{t("salesReceivables.section.receiptDetailsEmpty")}</div>}
-            </Card>
-          </div>
+              </div>
+            ) : null}
+          </Modal>
         </div>
       ) : null}
 
@@ -2571,7 +2579,7 @@ export function SalesReceivablesPage() {
             </div>
           </Card>
 
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-6 grid-cols-1">
             <Card className="overflow-hidden p-0">
               <div className="border-b border-gray-200 px-6 py-4">
                 <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.creditNotes")}</div>
@@ -2670,15 +2678,18 @@ export function SalesReceivablesPage() {
                 </table>
               </div>
             </Card>
+          </div>
 
-            <Card className="space-y-5">
-              <div>
-                <div className="text-lg font-bold text-gray-900">{selectedCreditNote?.reference ?? t("salesReceivables.section.creditNoteDetails")}</div>
-                <div className="text-sm text-gray-500">{selectedCreditNote ? `${selectedCreditNote.customer.code} · ${selectedCreditNote.customer.name}` : t("salesReceivables.section.creditNoteDetailsEmpty")}</div>
-              </div>
-              {selectedCreditNote ? (
-                <>
-                  {selectedCreditNote.journalReference ? (
+          <Modal
+            isOpen={!!selectedCreditNote}
+            onClose={() => setSelectedCreditNoteId(null)}
+            title={selectedCreditNote?.reference ?? t("salesReceivables.section.creditNoteDetails")}
+            size="3xl"
+          >
+            {selectedCreditNote ? (
+              <div className="space-y-5">
+                <div className="text-sm text-gray-500">{selectedCreditNote.customer.code} · {selectedCreditNote.customer.name}</div>
+                {selectedCreditNote.journalReference ? (
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -2717,12 +2728,9 @@ export function SalesReceivablesPage() {
                       </div>
                     ))}
                   </div>
-                </>
-              ) : (
-                <div className="text-sm text-gray-500">{t("salesReceivables.section.creditNoteDetailsEmpty")}</div>
-              )}
-            </Card>
-          </div>
+              </div>
+            ) : null}
+          </Modal>
         </div>
       ) : null}
 

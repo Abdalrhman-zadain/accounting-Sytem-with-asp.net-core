@@ -43,6 +43,12 @@ import { SectionHeading, StatusPill, Card, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
 import { PaymentTermsTab } from "./payment-terms-tab";
+import { SetupProgressCard } from "./components/setup-progress-card";
+import { MasterDataCard } from "./components/master-data-card";
+import { MasterDataTableToolbar } from "./components/master-data-table-toolbar";
+import { HelperPanels } from "./components/helper-panels";
+import { EmptyState } from "./components/empty-state";
+import { LuDownload as Download, LuUpload as Upload } from "react-icons/lu";
 
 const SEGMENT_ICONS = [Building2, BookMarked, Users2, MapPin, FolderKanban, Wallet];
 const SEGMENT_COLORS = [
@@ -535,15 +541,75 @@ export function MasterDataPage() {
         supplierDebitNoteTypeEditor?.defaultAccountId
     );
 
-    return (
-        <div className="space-y-8 animate-in fade-in duration-200 motion-reduce:animate-none">
-            <SectionHeading
-                title={t("master.title")}
-                description={t("master.description")}
-            />
+    const getActiveCategoryTitle = () => {
+        if (!active) return "";
+        if (active.kind === "segment") return active.def?.name || "";
+        if (active.kind === "account-subtypes") return t("master.tab.accountSubtypes");
+        if (active.kind === "journal-entry-types") return t("master.tab.journalEntryTypes");
+        if (active.kind === "payment-method-types") return t("master.tab.paymentMethodTypes");
+        if (active.kind === "payment-terms") return t("master.tab.paymentTerms");
+        if (active.kind === "taxes") return t("master.tab.taxes");
+        if (active.kind === "credit-note-types") return "أنواع إشعار الدائن";
+        if (active.kind === "supplier-debit-note-types") return "أنواع إشعار مدين للمورد";
+        return "";
+    };
 
-            {/* Tabs */}
-            <div className="flex gap-2 flex-wrap">
+    const getActiveCategoryAddButtonLabel = () => {
+        if (!active) return "إضافة";
+        if (active.kind === "segment" && active.def?.name === "الشركات") return "إضافة شركة";
+        if (active.kind === "segment" && active.def?.name === "الفروع") return "إضافة فرع";
+        if (active.kind === "segment" && active.def?.name === "الأقسام") return "إضافة قسم";
+        if (active.kind === "segment" && active.def?.name === "المشاريع") return "إضافة مشروع";
+        if (active.kind === "segment" && active.def?.name === "الحسابات الطبيعية") return "إضافة حساب طبيعي";
+        if (active.kind === "account-subtypes") return "إضافة تصنيف حساب";
+        if (active.kind === "journal-entry-types") return "إضافة نوع قيد يومية";
+        if (active.kind === "payment-method-types") return "إضافة نوع حساب دفع";
+        if (active.kind === "payment-terms") return "إضافة شرط دفع";
+        if (active.kind === "taxes") return "إضافة ضريبة";
+        if (active.kind === "credit-note-types") return "إضافة نوع إشعار دائن";
+        if (active.kind === "supplier-debit-note-types") return "إضافة نوع إشعار مدين للمورد";
+        return `إضافة ${getActiveCategoryTitle()}`;
+    };
+
+    const handleAddClick = () => {
+        if (!active) return;
+        if (active.kind === "segment") setShowAddSegmentValue(true);
+        if (active.kind === "account-subtypes") setShowAddSubtype(true);
+        if (active.kind === "journal-entry-types") setShowAddType(true);
+        if (active.kind === "payment-method-types") setShowAddPaymentMethodType(true);
+        if (active.kind === "taxes") openTaxEditor();
+        if (active.kind === "credit-note-types") openCreditNoteTypeEditor();
+        if (active.kind === "supplier-debit-note-types") openSupplierDebitNoteTypeEditor();
+    };
+
+    return (
+        <div className="space-y-6 pb-20 animate-in fade-in duration-200 motion-reduce:animate-none bg-gray-50/50 min-h-screen">
+            {/* Page Header */}
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                    <h1 className="text-2xl font-black text-gray-900">تهيئة البيانات الأساسية</h1>
+                    <p className="mt-1 text-sm text-gray-500 max-w-2xl">
+                        تعريف وإدارة الهيكل المحاسبي للنظام: الشركات، الفروع، الأقسام، المشاريع، الحسابات، الضرائب، شروط الدفع وأنواع قيود اليومية.
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Button variant="secondary" className="hidden sm:flex bg-white">
+                        <Upload className="ml-2 h-4 w-4" /> استيراد
+                    </Button>
+                    <Button variant="secondary" className="hidden sm:flex bg-white">
+                        <Download className="ml-2 h-4 w-4" /> تصدير
+                    </Button>
+                    <Button onClick={handleAddClick} className="bg-green-600 hover:bg-green-700 text-white border-transparent">
+                        <Plus className="ml-2 h-4 w-4" /> {getActiveCategoryAddButtonLabel()}
+                    </Button>
+                </div>
+            </div>
+
+            {/* Progress Card */}
+            <SetupProgressCard />
+
+            {/* Summary Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {TABS.map((tab, i) => {
                     const isSubtypeTab = tab.kind === "account-subtypes";
                     const isTypeTab = tab.kind === "journal-entry-types";
@@ -554,23 +620,33 @@ export function MasterDataPage() {
                     const isSupplierDebitNoteTypeTab = tab.kind === "supplier-debit-note-types";
                     const def = tab.def as SegmentDefinition | null;
                     const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isTaxTab ? Percent : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? LuBadgePercent : (SEGMENT_ICONS[i] ?? Building2);
-                    const color =
-                        isSubtypeTab
-                            ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
-                            : isTypeTab
-                                ? "text-indigo-400 bg-indigo-400/10 border-indigo-400/20"
-                                : isPaymentMethodTypeTab
-                                    ? "text-cyan-400 bg-cyan-400/10 border-cyan-400/20"
-                                    : isPaymentTermsTab
-                                        ? "text-purple-400 bg-purple-400/10 border-purple-400/20"
-                                        : isTaxTab
-                                            ? "text-green-400 bg-green-400/10 border-green-400/20"
-                                            : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab
-                                                ? "text-amber-400 bg-amber-400/10 border-amber-400/20"
-                                            : (SEGMENT_COLORS[i] ?? SEGMENT_COLORS[0]);
+                    
+                    let title = def?.name ?? "";
+                    let count = def?.values?.length ?? 0;
+                    
+                    if (isSubtypeTab) { title = t("master.tab.accountSubtypes"); count = accountSubtypes.length; }
+                    if (isTypeTab) { title = t("master.tab.journalEntryTypes"); count = journalEntryTypes.length; }
+                    if (isPaymentMethodTypeTab) { title = t("master.tab.paymentMethodTypes"); count = paymentMethodTypes.length; }
+                    if (isPaymentTermsTab) { title = t("master.tab.paymentTerms"); count = paymentTerms.length; }
+                    if (isTaxTab) { title = t("master.tab.taxes"); count = taxes.length; }
+                    if (isCreditNoteTypeTab) { title = "أنواع إشعار الدائن"; count = creditNoteTypes.length; }
+                    if (isSupplierDebitNoteTypeTab) { title = "أنواع إشعار مدين للمورد"; count = supplierDebitNoteTypes.length; }
+
+                    const iconColorClass = activeTab === i ? "text-green-600" : (isSubtypeTab ? "text-emerald-500" : isTypeTab ? "text-indigo-500" : isPaymentMethodTypeTab ? "text-cyan-500" : isPaymentTermsTab ? "text-purple-500" : isTaxTab ? "text-green-500" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "text-amber-500" : "text-gray-500");
+                    const iconBgClass = activeTab === i ? "bg-green-100" : (isSubtypeTab ? "bg-emerald-50" : isTypeTab ? "bg-indigo-50" : isPaymentMethodTypeTab ? "bg-cyan-50" : isPaymentTermsTab ? "bg-purple-50" : isTaxTab ? "bg-green-50" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "bg-amber-50" : "bg-gray-100");
+
+                    const key = isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isTaxTab ? "taxes" : isCreditNoteTypeTab ? "credit-note-types" : isSupplierDebitNoteTypeTab ? "supplier-debit-note-types" : def!.id;
+
                     return (
-                        <button
-                            key={isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isTaxTab ? "taxes" : isCreditNoteTypeTab ? "credit-note-types" : isSupplierDebitNoteTypeTab ? "supplier-debit-note-types" : def!.id}
+                        <MasterDataCard
+                            key={key}
+                            title={title}
+                            count={count}
+                            icon={Icon}
+                            isActive={activeTab === i}
+                            needsReview={count === 0}
+                            iconColorClass={iconColorClass}
+                            iconBgClass={iconBgClass}
                             onClick={() => {
                                 setActiveTab(i);
                                 setShowAddSegmentValue(false);
@@ -587,40 +663,13 @@ export function MasterDataPage() {
                                 setSupplierDebitNoteTypeEditor(null);
                                 setTaxSetupView("taxes");
                             }}
-                            className={cn(
-                                "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold border transition-all",
-                                activeTab === i ? color : "text-gray-500 bg-gray-100 border-gray-200 hover:bg-gray-100 hover:text-gray-900"
-                            )}
-                        >
-                            <Icon className="h-4 w-4" />
-                            {isSubtypeTab ? t("master.tab.accountSubtypes") : isTypeTab ? t("master.tab.journalEntryTypes") : isPaymentMethodTypeTab ? t("master.tab.paymentMethodTypes") : isPaymentTermsTab ? t("master.tab.paymentTerms") : isTaxTab ? t("master.tab.taxes") : isCreditNoteTypeTab ? "أنواع إشعار الدائن" : isSupplierDebitNoteTypeTab ? "أنواع إشعار مدين للمورد" : def!.name}
-                            <span className={cn(
-                                "ml-1 rounded-full px-2 py-0.5 text-[10px] font-black",
-                                activeTab === i ? "bg-gray-100" : "bg-gray-100"
-                            )}>
-                                {isSubtypeTab
-                                    ? accountSubtypes.filter((s) => s.isActive).length
-                                    : isTypeTab
-                                        ? journalEntryTypes.filter((t) => t.isActive).length
-                                        : isPaymentMethodTypeTab
-                                            ? paymentMethodTypes.filter((t) => t.isActive).length
-                                            : isPaymentTermsTab
-                                                ? paymentTerms.filter((t) => t.isActive).length
-                                                : isTaxTab
-                                                    ? taxes.filter((tax) => tax.isActive).length
-                                                    : isCreditNoteTypeTab
-                                                        ? creditNoteTypes.filter((type) => type.isActive).length
-                                                        : isSupplierDebitNoteTypeTab
-                                                            ? supplierDebitNoteTypes.filter((type) => type.isActive).length
-                                                    : def!.values.filter(v => v.isActive).length}
-                            </span>
-                        </button>
+                        />
                     );
                 })}
             </div>
 
             {activeDef && (
-                <Card className="p-0 border border-gray-200 bg-panel/40  overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
@@ -629,10 +678,9 @@ export function MasterDataPage() {
                                 {activeDef.description || t("master.segmentValues.manage", { name: activeDef.name })}
                             </p>
                         </div>
-                        <Button onClick={() => setShowAddSegmentValue(true)} disabled={showAddSegmentValue}>
-                            <Plus className="h-4 w-4 mr-2" /> {t("master.segmentValues.add", { name: activeDef.name })}
-                        </Button>
                     </div>
+                    
+                    <MasterDataTableToolbar searchPlaceholder="بحث بالاسم أو الكود..." />
 
                     {/* Add Row */}
                     {showAddSegmentValue && (
@@ -676,7 +724,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {activeDef.values.length === 0 ? (
-                                <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.segmentValues.empty")}</td></tr>
+                                <tr><td colSpan={4} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : activeDef.values.map((val: SegmentValue) => (
                                 <tr key={val.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -727,7 +775,7 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "account-subtypes" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">{t("master.section.accountSubtypes.title")}</h2>
@@ -735,10 +783,9 @@ export function MasterDataPage() {
                                 {t("master.section.accountSubtypes.description")}
                             </p>
                         </div>
-                        <Button onClick={() => setShowAddSubtype(true)} disabled={showAddSubtype}>
-                            <Plus className="h-4 w-4 mr-2" /> {t("master.section.accountSubtypes.add")}
-                        </Button>
                     </div>
+
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
 
                     {showAddSubtype && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-emerald-500/5">
@@ -778,7 +825,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {accountSubtypes.length === 0 ? (
-                                <tr><td colSpan={3} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.accountSubtypes.empty")}</td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : accountSubtypes.map((row: AccountSubtype) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -837,7 +884,7 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "journal-entry-types" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">{t("master.section.journalEntryTypes.title")}</h2>
@@ -845,10 +892,9 @@ export function MasterDataPage() {
                                 {t("master.section.journalEntryTypes.description")}
                             </p>
                         </div>
-                        <Button onClick={() => setShowAddType(true)} disabled={showAddType}>
-                            <Plus className="h-4 w-4 mr-2" /> {t("master.section.journalEntryTypes.add")}
-                        </Button>
                     </div>
+
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
 
                     {showAddType && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-indigo-500/5">
@@ -888,7 +934,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {journalEntryTypes.length === 0 ? (
-                                <tr><td colSpan={3} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.journalEntryTypes.empty")}</td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : journalEntryTypes.map((row: JournalEntryType) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -947,7 +993,7 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "payment-method-types" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">{t("master.section.paymentMethodTypes.title")}</h2>
@@ -955,10 +1001,9 @@ export function MasterDataPage() {
                                 {t("master.section.paymentMethodTypes.description")}
                             </p>
                         </div>
-                        <Button onClick={() => setShowAddPaymentMethodType(true)} disabled={showAddPaymentMethodType}>
-                            <Plus className="h-4 w-4 mr-2" /> {t("master.section.paymentMethodTypes.add")}
-                        </Button>
                     </div>
+
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
 
                     {showAddPaymentMethodType && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-cyan-500/5">
@@ -998,7 +1043,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {paymentMethodTypes.length === 0 ? (
-                                <tr><td colSpan={3} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.paymentMethodTypes.empty")}</td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : paymentMethodTypes.map((row: PaymentMethodType) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -1059,7 +1104,7 @@ export function MasterDataPage() {
             {active?.kind === "payment-terms" && <PaymentTermsTab />}
 
             {active?.kind === "credit-note-types" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">أنواع إشعار الدائن</h2>
@@ -1067,10 +1112,10 @@ export function MasterDataPage() {
                                 إدارة أنواع إشعار الدائن المستخدمة في نماذج الخصومات والمرتجعات والتسويات.
                             </p>
                         </div>
-                        <Button onClick={() => openCreditNoteTypeEditor()}>
-                            <Plus className="mr-2 h-4 w-4" /> إضافة نوع
-                        </Button>
                     </div>
+                    
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="border-b border-gray-200 bg-gray-50">
@@ -1089,8 +1134,8 @@ export function MasterDataPage() {
                             <tbody className="divide-y divide-white/5">
                                 {creditNoteTypes.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-600">
-                                            لا توجد أنواع إشعار دائن بعد.
+                                        <td colSpan={9} className="p-0">
+                                            <EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
                                         </td>
                                     </tr>
                                 ) : creditNoteTypes.map((row) => (
@@ -1125,7 +1170,7 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "supplier-debit-note-types" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">أنواع إشعار مدين للمورد</h2>
@@ -1133,10 +1178,10 @@ export function MasterDataPage() {
                                 إدارة أنواع إشعار مدين المورد المستخدمة في إشعارات الخصم ومرتجعات الشراء وتسويات الموردين.
                             </p>
                         </div>
-                        <Button onClick={() => openSupplierDebitNoteTypeEditor()}>
-                            <Plus className="mr-2 h-4 w-4" /> إضافة نوع
-                        </Button>
                     </div>
+                    
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="border-b border-gray-200 bg-gray-50">
@@ -1155,8 +1200,8 @@ export function MasterDataPage() {
                             <tbody className="divide-y divide-white/5">
                                 {supplierDebitNoteTypes.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-600">
-                                            لا توجد أنواع إشعار مدين للمورد بعد.
+                                        <td colSpan={9} className="p-0">
+                                            <EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
                                         </td>
                                     </tr>
                                 ) : supplierDebitNoteTypes.map((row) => (
@@ -1191,15 +1236,12 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "taxes" && (
-                <Card className="p-0 border border-gray-200 bg-panel/40 overflow-hidden">
+                <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
                             <h2 className="text-base font-bold text-gray-900">{t("master.section.taxes.title")}</h2>
                             <p className="text-xs text-gray-500 mt-0.5">{t("master.section.taxes.description")}</p>
                         </div>
-                        <Button onClick={() => (taxSetupView === "taxes" ? openTaxEditor() : openTaxTreatmentEditor())}>
-                            <Plus className="h-4 w-4 mr-2" /> {taxSetupView === "taxes" ? t("master.section.taxes.add") : t("master.section.taxTreatments.add")}
-                        </Button>
                     </div>
 
                     <div className="flex flex-wrap gap-2 border-b border-gray-200 px-6 py-4">
@@ -1248,6 +1290,8 @@ export function MasterDataPage() {
                         </div>
                     )}
 
+                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             {taxSetupView === "taxes" ? (
@@ -1265,7 +1309,7 @@ export function MasterDataPage() {
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {taxes.length === 0 ? (
-                                            <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.taxes.empty")}</td></tr>
+                                            <tr><td colSpan={7} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={t("master.section.taxes.add")} onAction={() => openTaxEditor()} /></td></tr>
                                         ) : taxes.map((tax) => (
                                             <tr key={tax.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-green-600">{tax.taxCode}</span></td>
@@ -1314,7 +1358,7 @@ export function MasterDataPage() {
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {taxTreatments.length === 0 ? (
-                                            <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-600">{t("master.taxTreatments.empty")}</td></tr>
+                                            <tr><td colSpan={6} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={t("master.section.taxTreatments.add")} onAction={() => openTaxTreatmentEditor()} /></td></tr>
                                         ) : taxTreatments.map((treatment) => (
                                             <tr key={treatment.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-green-600">{treatment.code}</span></td>
@@ -1730,6 +1774,8 @@ export function MasterDataPage() {
                     </div>
                 </div>
             )}
+
+            <HelperPanels />
         </div>
     );
 }
