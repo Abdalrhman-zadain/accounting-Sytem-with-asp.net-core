@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { LuPlus as Plus, LuPencil as Pencil, LuX as X, LuCheck as Check, LuBuilding2 as Building2, LuMapPin as MapPin, LuUsers as Users2, LuBookMarked as BookMarked, LuFolderKanban as FolderKanban, LuWallet as Wallet, LuPercent as Percent, LuTrash2 as Trash2, LuCreditCard, LuBadgePercent } from "react-icons/lu";
+import { LuPlus as Plus, LuPencil as Pencil, LuX as X, LuCheck as Check, LuBuilding2 as Building2, LuMapPin as MapPin, LuUsers as Users2, LuBookMarked as BookMarked, LuFolderKanban as FolderKanban, LuWallet as Wallet, LuPercent as Percent, LuTrash2 as Trash2, LuCreditCard, LuBadgePercent, LuCoins } from "react-icons/lu";
 import {
     createTax,
     createAccountSubtype,
@@ -17,6 +17,7 @@ import {
     deactivatePaymentMethodType,
     deactivateSegmentValue,
     getAccountSubtypes,
+    getCurrencies,
     getCreditNoteTypes,
     getAccountOptions,
     getJournalEntryTypes,
@@ -38,11 +39,12 @@ import {
     deleteTax,
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import { AccountOption, AccountSubtype, CreditNoteLinkedInvoiceRequirement, CreditNoteType, CreditNoteTypeEffect, JournalEntryType, PaymentMethodType, SegmentDefinition, SegmentValue, SupplierDebitNoteType, Tax, TaxTreatment, TaxType } from "@/types/api";
+import { AccountOption, AccountSubtype, CreditNoteLinkedInvoiceRequirement, CreditNoteType, CreditNoteTypeEffect, JournalEntryType, PaymentMethodType, Currency, SegmentDefinition, SegmentValue, SupplierDebitNoteType, Tax, TaxTreatment, TaxType } from "@/types/api";
 import { SectionHeading, StatusPill, Card, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
 import { PaymentTermsTab } from "./payment-terms-tab";
+import { CurrenciesTab } from "./currencies-tab";
 import { SetupProgressCard } from "./components/setup-progress-card";
 import { MasterDataCard } from "./components/master-data-card";
 import { MasterDataTableToolbar } from "./components/master-data-table-toolbar";
@@ -200,6 +202,11 @@ export function MasterDataPage() {
     const { data: accountSubtypes = [], isLoading: isLoadingSubtypes } = useQuery({
         queryKey: ["account-subtypes", token],
         queryFn: () => getAccountSubtypes(token),
+    });
+
+    const { data: currencies = [], isLoading: isLoadingCurrencies } = useQuery({
+        queryKey: ["currencies", token],
+        queryFn: () => getCurrencies(token),
     });
 
     const { data: journalEntryTypes = [], isLoading: isLoadingTypes } = useQuery({
@@ -433,6 +440,7 @@ export function MasterDataPage() {
         { kind: "journal-entry-types" as const, def: null },
         { kind: "payment-method-types" as const, def: null },
         { kind: "payment-terms" as const, def: null },
+        { kind: "currencies" as const, def: null },
         { kind: "taxes" as const, def: null },
         { kind: "credit-note-types" as const, def: null },
         { kind: "supplier-debit-note-types" as const, def: null },
@@ -548,6 +556,7 @@ export function MasterDataPage() {
         if (active.kind === "journal-entry-types") return t("master.tab.journalEntryTypes");
         if (active.kind === "payment-method-types") return t("master.tab.paymentMethodTypes");
         if (active.kind === "payment-terms") return t("master.tab.paymentTerms");
+        if (active.kind === "currencies") return t("master.tab.currencies");
         if (active.kind === "taxes") return t("master.tab.taxes");
         if (active.kind === "credit-note-types") return "أنواع إشعار الدائن";
         if (active.kind === "supplier-debit-note-types") return "أنواع إشعار مدين للمورد";
@@ -565,6 +574,7 @@ export function MasterDataPage() {
         if (active.kind === "journal-entry-types") return "إضافة نوع قيد يومية";
         if (active.kind === "payment-method-types") return "إضافة نوع حساب دفع";
         if (active.kind === "payment-terms") return "إضافة شرط دفع";
+        if (active.kind === "currencies") return "إضافة عملة";
         if (active.kind === "taxes") return "إضافة ضريبة";
         if (active.kind === "credit-note-types") return "إضافة نوع إشعار دائن";
         if (active.kind === "supplier-debit-note-types") return "إضافة نوع إشعار مدين للمورد";
@@ -615,11 +625,12 @@ export function MasterDataPage() {
                     const isTypeTab = tab.kind === "journal-entry-types";
                     const isPaymentMethodTypeTab = tab.kind === "payment-method-types";
                     const isPaymentTermsTab = tab.kind === "payment-terms";
+                    const isCurrenciesTab = tab.kind === "currencies";
                     const isTaxTab = tab.kind === "taxes";
                     const isCreditNoteTypeTab = tab.kind === "credit-note-types";
                     const isSupplierDebitNoteTypeTab = tab.kind === "supplier-debit-note-types";
                     const def = tab.def as SegmentDefinition | null;
-                    const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isTaxTab ? Percent : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? LuBadgePercent : (SEGMENT_ICONS[i] ?? Building2);
+                    const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isCurrenciesTab ? LuCoins : isTaxTab ? Percent : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? LuBadgePercent : (SEGMENT_ICONS[i] ?? Building2);
                     
                     let title = def?.name ?? "";
                     let count = def?.values?.length ?? 0;
@@ -628,14 +639,15 @@ export function MasterDataPage() {
                     if (isTypeTab) { title = t("master.tab.journalEntryTypes"); count = journalEntryTypes.length; }
                     if (isPaymentMethodTypeTab) { title = t("master.tab.paymentMethodTypes"); count = paymentMethodTypes.length; }
                     if (isPaymentTermsTab) { title = t("master.tab.paymentTerms"); count = paymentTerms.length; }
+                    if (isCurrenciesTab) { title = t("master.tab.currencies"); count = currencies.length; }
                     if (isTaxTab) { title = t("master.tab.taxes"); count = taxes.length; }
                     if (isCreditNoteTypeTab) { title = "أنواع إشعار الدائن"; count = creditNoteTypes.length; }
                     if (isSupplierDebitNoteTypeTab) { title = "أنواع إشعار مدين للمورد"; count = supplierDebitNoteTypes.length; }
 
-                    const iconColorClass = activeTab === i ? "text-green-600" : (isSubtypeTab ? "text-emerald-500" : isTypeTab ? "text-indigo-500" : isPaymentMethodTypeTab ? "text-cyan-500" : isPaymentTermsTab ? "text-purple-500" : isTaxTab ? "text-green-500" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "text-amber-500" : "text-gray-500");
-                    const iconBgClass = activeTab === i ? "bg-green-100" : (isSubtypeTab ? "bg-emerald-50" : isTypeTab ? "bg-indigo-50" : isPaymentMethodTypeTab ? "bg-cyan-50" : isPaymentTermsTab ? "bg-purple-50" : isTaxTab ? "bg-green-50" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "bg-amber-50" : "bg-gray-100");
+                    const iconColorClass = activeTab === i ? "text-green-600" : (isSubtypeTab ? "text-emerald-500" : isTypeTab ? "text-indigo-500" : isPaymentMethodTypeTab ? "text-cyan-500" : isPaymentTermsTab ? "text-purple-500" : isCurrenciesTab ? "text-blue-500" : isTaxTab ? "text-green-500" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "text-amber-500" : "text-gray-500");
+                    const iconBgClass = activeTab === i ? "bg-green-100" : (isSubtypeTab ? "bg-emerald-50" : isTypeTab ? "bg-indigo-50" : isPaymentMethodTypeTab ? "bg-cyan-50" : isPaymentTermsTab ? "bg-purple-50" : isCurrenciesTab ? "bg-blue-50" : isTaxTab ? "bg-green-50" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "bg-amber-50" : "bg-gray-100");
 
-                    const key = isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isTaxTab ? "taxes" : isCreditNoteTypeTab ? "credit-note-types" : isSupplierDebitNoteTypeTab ? "supplier-debit-note-types" : def!.id;
+                    const key = isSubtypeTab ? "account-subtypes" : isTypeTab ? "journal-entry-types" : isPaymentMethodTypeTab ? "payment-method-types" : isPaymentTermsTab ? "payment-terms" : isCurrenciesTab ? "currencies" : isTaxTab ? "taxes" : isCreditNoteTypeTab ? "credit-note-types" : isSupplierDebitNoteTypeTab ? "supplier-debit-note-types" : def!.id;
 
                     return (
                         <MasterDataCard
@@ -1102,6 +1114,8 @@ export function MasterDataPage() {
             )}
 
             {active?.kind === "payment-terms" && <PaymentTermsTab />}
+
+            {active?.kind === "currencies" && <CurrenciesTab />}
 
             {active?.kind === "credit-note-types" && (
                 <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">

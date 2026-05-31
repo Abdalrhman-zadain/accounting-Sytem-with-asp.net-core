@@ -74,11 +74,11 @@ type CreditNoteEditorModalProps = {
   onSubmitAndPost: () => void;
 };
 
-function createEmptyCreditNoteLine(defaultLabel: string, typeCode?: string): CreditNoteLineEditorState {
+function createEmptyCreditNoteLine(defaultLabel: string, typeCode?: string, settlementLabel?: string): CreditNoteLineEditorState {
   return {
     ...createEmptyLine(),
     itemName:
-      typeCode === "CN-CUSTOMER-SETTLEMENT" ? "تسوية عميل" : defaultLabel,
+      typeCode === "CN-CUSTOMER-SETTLEMENT" ? (settlementLabel ?? defaultLabel) : defaultLabel,
     quantity: "1",
     discountAmount: "",
     originalUnitPrice: "",
@@ -91,10 +91,10 @@ function createEmptyCreditNoteLine(defaultLabel: string, typeCode?: string): Cre
   };
 }
 
-function getReceivableAccountName(invoice?: SalesInvoice) {
+function getReceivableAccountName(invoice?: SalesInvoice): string | null {
   return invoice?.customer.receivableAccount
     ? `${invoice.customer.receivableAccount.code} - ${invoice.customer.receivableAccount.name}`
-    : "حساب العميل / الذمم المدينة";
+    : null;
 }
 
 function formatAmount(value: number) {
@@ -264,6 +264,7 @@ export function CreditNoteEditorModal({
   const exceedsOutstanding =
     availableCredit !== null && totals.totalAmount > availableCredit + 0.001;
   const defaultDiscountLabel = t("salesReceivables.creditNote.defaultDiscountLabel");
+  const settlementLabel = t("salesReceivables.creditNote.settlementLabel");
   const invoiceLineOptions = selectedInvoice?.lines ?? [];
 
   const updateEditorLines = (lines: CreditNoteLineEditorState[]) => {
@@ -301,7 +302,7 @@ export function CreditNoteEditorModal({
   const addLine = () => {
     updateEditorLines([
       ...editor.lines,
-      createEmptyCreditNoteLine(defaultDiscountLabel, typeCode),
+      createEmptyCreditNoteLine(defaultDiscountLabel, typeCode, settlementLabel),
     ]);
   };
 
@@ -397,24 +398,25 @@ export function CreditNoteEditorModal({
                     onChange={(event) => {
                       const nextType =
                         creditNoteTypes.find((type) => type.id === event.target.value) ?? null;
-                      onChange({
-                        ...editor,
-                        creditNoteTypeId: event.target.value,
-                        salesInvoiceId:
-                          nextType?.linkedInvoiceRequirement === "OPTIONAL"
-                            ? editor.salesInvoiceId
-                            : "",
-                        lines: [
-                          createEmptyCreditNoteLine(
-                            defaultDiscountLabel,
-                            nextType?.code,
-                          ),
-                        ],
-                      });
+onChange({
+                          ...editor,
+                          creditNoteTypeId: event.target.value,
+                          salesInvoiceId:
+                            nextType?.linkedInvoiceRequirement === "OPTIONAL"
+                              ? editor.salesInvoiceId
+                              : "",
+                          lines: [
+                            createEmptyCreditNoteLine(
+                              defaultDiscountLabel,
+                              nextType?.code,
+                              settlementLabel,
+                            ),
+                          ],
+                        });
                     }}
                     className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
                   >
-                    <option value="">اختر نوع إشعار الدائن</option>
+                    <option value="">{t("salesReceivables.creditNote.selectTypePlaceholder")}</option>
                     {creditNoteTypes.map((type) => (
                       <option key={type.id} value={type.id}>
                         {type.name}
@@ -448,7 +450,7 @@ export function CreditNoteEditorModal({
                         salesInvoiceId: event.target.value,
                         currencyCode: invoice?.currencyCode ?? editor.currencyCode,
                         lines: [
-                          createEmptyCreditNoteLine(defaultDiscountLabel, typeCode),
+                          createEmptyCreditNoteLine(defaultDiscountLabel, typeCode, settlementLabel),
                         ],
                       });
                     }}
@@ -457,7 +459,7 @@ export function CreditNoteEditorModal({
                     <option value="">
                       {selectedType?.linkedInvoiceRequirement === "OPTIONAL"
                         ? t("salesReceivables.empty.noLinkedInvoice")
-                        : "اختر فاتورة مبيعات مرتبطة"}
+                        : t("salesReceivables.creditNote.selectLinkedInvoice")}
                     </option>
                     {invoices.map((row) => (
                       <option key={row.id} value={row.id}>
@@ -510,7 +512,7 @@ export function CreditNoteEditorModal({
 
             <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
               <div className={cn("mb-5 text-lg text-slate-950", isArabic ? "arabic-ui-heading text-right" : "font-black")}>
-                تفاصيل الإشعار
+                {t("salesReceivables.creditNote.section.lines")}
               </div>
 
               <div className="space-y-3">
@@ -535,7 +537,7 @@ export function CreditNoteEditorModal({
 
                       {typeCode === "CN-SALES-RETURN" && (
                         <div className="grid gap-4 lg:grid-cols-5">
-                          <Field label="سطر الفاتورة">
+                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
                             <Select
                               value={line.salesInvoiceLineId || ""}
                               onChange={(event) =>
@@ -546,7 +548,7 @@ export function CreditNoteEditorModal({
                               }
                               className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
                             >
-                              <option value="">اختر سطر الفاتورة</option>
+                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
                               {invoiceLineOptions.map((invoiceLine) => (
                                 <option key={invoiceLine.id} value={invoiceLine.id}>
                                   {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
@@ -554,7 +556,7 @@ export function CreditNoteEditorModal({
                               ))}
                             </Select>
                           </Field>
-                          <Field label="الكمية المرتجعة">
+                          <Field label={t("salesReceivables.creditNote.returnedQuantity")}>
                             <Input
                               type="number"
                               min="0"
@@ -569,7 +571,7 @@ export function CreditNoteEditorModal({
                               className="h-12 border-slate-200 bg-white text-center"
                             />
                           </Field>
-                          <Field label="إرجاع للمخزون">
+                          <Field label={t("salesReceivables.creditNote.returnToStock")}>
                             <Select
                               value={line.returnToStock ? "true" : "false"}
                               onChange={(event) =>
@@ -580,11 +582,11 @@ export function CreditNoteEditorModal({
                               }
                               className="h-12 border-slate-200 bg-white"
                             >
-                              <option value="true">نعم</option>
-                              <option value="false">لا</option>
+<option value="true">{t("inventory.boolean.yes")}</option>
+                               <option value="false">{t("inventory.boolean.no")}</option>
                             </Select>
                           </Field>
-                          <Field label="المستودع">
+                          <Field label={t("salesReceivables.creditNote.warehouse")}>
                             <Select
                               value={line.warehouseId || ""}
                               onChange={(event) =>
@@ -595,7 +597,7 @@ export function CreditNoteEditorModal({
                               }
                               className="h-12 border-slate-200 bg-white"
                             >
-                              <option value="">اختر المستودع</option>
+                              <option value="">{t("salesReceivables.creditNote.selectWarehouse")}</option>
                               {warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
                                   {warehouse.code} - {warehouse.name}
@@ -603,7 +605,7 @@ export function CreditNoteEditorModal({
                               ))}
                             </Select>
                           </Field>
-                          <Field label="حالة الصنف">
+                          <Field label={t("salesReceivables.creditNote.itemCondition")}>
                             <Input
                               value={line.itemCondition || ""}
                               onChange={(event) =>
@@ -620,7 +622,7 @@ export function CreditNoteEditorModal({
 
                       {typeCode === "CN-PRICE-DIFF" && (
                         <div className="grid gap-4 lg:grid-cols-4">
-                          <Field label="سطر الفاتورة">
+                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
                             <Select
                               value={line.salesInvoiceLineId || ""}
                               onChange={(event) =>
@@ -631,7 +633,7 @@ export function CreditNoteEditorModal({
                               }
                               className="h-12 border-slate-200 bg-white"
                             >
-                              <option value="">اختر سطر الفاتورة</option>
+                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
                               {invoiceLineOptions.map((invoiceLine) => (
                                 <option key={invoiceLine.id} value={invoiceLine.id}>
                                   {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
@@ -639,10 +641,10 @@ export function CreditNoteEditorModal({
                               ))}
                             </Select>
                           </Field>
-                          <Field label="السعر الأصلي">
+                          <Field label={t("salesReceivables.creditNote.originalPrice")}>
                             <CurrencyInput currencyCode={currencyCode} value={line.originalUnitPrice || ""} readOnly isArabic={isArabic} />
                           </Field>
-                          <Field label="السعر المصحح">
+                          <Field label={t("salesReceivables.creditNote.correctedPrice")}>
                             <CurrencyInput
                               currencyCode={currencyCode}
                               value={line.correctedUnitPrice || ""}
@@ -655,7 +657,7 @@ export function CreditNoteEditorModal({
                               isArabic={isArabic}
                             />
                           </Field>
-                          <Field label="الضريبة المصححة">
+                          <Field label={t("salesReceivables.creditNote.correctedTax")}>
                             <CurrencyInput
                               currencyCode={currencyCode}
                               value={line.correctedTaxAmount || ""}
@@ -673,7 +675,7 @@ export function CreditNoteEditorModal({
 
                       {typeCode === "CN-TAX-CORRECTION" && (
                         <div className="grid gap-4 lg:grid-cols-4">
-                          <Field label="سطر الفاتورة">
+                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
                             <Select
                               value={line.salesInvoiceLineId || ""}
                               onChange={(event) =>
@@ -684,7 +686,7 @@ export function CreditNoteEditorModal({
                               }
                               className="h-12 border-slate-200 bg-white"
                             >
-                              <option value="">اختر سطر الفاتورة</option>
+                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
                               {invoiceLineOptions.map((invoiceLine) => (
                                 <option key={invoiceLine.id} value={invoiceLine.id}>
                                   {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
@@ -692,10 +694,10 @@ export function CreditNoteEditorModal({
                               ))}
                             </Select>
                           </Field>
-                          <Field label="الضريبة الأصلية">
+                          <Field label={t("salesReceivables.creditNote.originalTax")}>
                             <CurrencyInput currencyCode={currencyCode} value={line.originalTaxAmount || ""} readOnly isArabic={isArabic} />
                           </Field>
-                          <Field label="الضريبة المصححة">
+                          <Field label={t("salesReceivables.creditNote.correctedTax")}>
                             <CurrencyInput
                               currencyCode={currencyCode}
                               value={line.correctedTaxAmount || ""}
@@ -716,7 +718,7 @@ export function CreditNoteEditorModal({
 
                       {(typeCode === "CN-CUSTOMER-SETTLEMENT" || !typeCode || typeCode === "CN-DISCOUNT") && (
                         <div className="grid gap-4 lg:grid-cols-5">
-                          <Field label={typeCode === "CN-CUSTOMER-SETTLEMENT" ? "بيان التسوية" : t("salesReceivables.creditNote.discountType")}>
+                          <Field label={typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.settlementReason") : t("salesReceivables.creditNote.discountType")}>
                             <Input
                               value={line.itemName || defaultDiscountLabel}
                               onChange={(event) =>
@@ -817,7 +819,7 @@ export function CreditNoteEditorModal({
 
                       {sourceLine ? (
                         <div className="mt-3 text-xs font-medium text-slate-500">
-                          السطر المختار: {sourceLine.lineNumber} - {sourceLine.itemName || sourceLine.description || "Line"}
+                          {t("salesReceivables.creditNote.selectedLine")}: {sourceLine.lineNumber} - {sourceLine.itemName || sourceLine.description || "Line"}
                         </div>
                       ) : null}
                     </div>
@@ -865,7 +867,7 @@ export function CreditNoteEditorModal({
                     <PostingRow
                       label={t("salesReceivables.creditNote.journalCredit", {
                         account: selectedCustomer
-                          ? getReceivableAccountName(selectedInvoice)
+                          ? getReceivableAccountName(selectedInvoice) ?? t("salesReceivables.field.receivableAccount")
                           : t("salesReceivables.field.receivableAccount"),
                       })}
                       value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
@@ -882,7 +884,7 @@ export function CreditNoteEditorModal({
                   className="inline-flex min-w-[260px] items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-500 bg-white px-5 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
                 >
                   <CirclePlus className="h-4 w-4" />
-                  {typeCode === "CN-CUSTOMER-SETTLEMENT" ? "إضافة بند تسوية" : "إضافة سطر"}
+                  {typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.addSettlementLine") : t("salesReceivables.creditNote.addDiscountLine")}
                 </button>
               </div>
             </section>

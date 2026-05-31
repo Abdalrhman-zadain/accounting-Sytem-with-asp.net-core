@@ -673,6 +673,21 @@ model PaymentMethodType {
   @@index([isActive])
 }
 
+model Currency {
+  id           String   @id @default(cuid())
+  code         String   @unique // e.g. JOD, USD, EUR
+  name         String?  // e.g. Jordanian Dinar
+  nameAr       String?  // e.g. دينار أردني
+  symbol       String?  // e.g. JD, $
+  decimalPlaces Int     @default(3)
+  isActive     Boolean  @default(true)
+  isBase       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive])
+}
+
 model Tax {
   id                   String                @id @default(cuid())
   taxCode              String                @unique

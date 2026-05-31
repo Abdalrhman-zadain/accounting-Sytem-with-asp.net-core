@@ -1536,6 +1536,57 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     ],
   });
 
+  // Currency seed data
+  await prisma.currency.createMany({
+    data: [
+      {
+        code: 'JOD',
+        name: 'Jordanian Dinar',
+        nameAr: 'دينار أردني',
+        symbol: 'JD',
+        decimalPlaces: 3,
+        isBase: true,
+        isActive: true,
+      },
+      {
+        code: 'USD',
+        name: 'US Dollar',
+        nameAr: 'دولار أمريكي',
+        symbol: '$',
+        decimalPlaces: 2,
+        isBase: false,
+        isActive: true,
+      },
+      {
+        code: 'EUR',
+        name: 'Euro',
+        nameAr: 'يورو',
+        symbol: '€',
+        decimalPlaces: 2,
+        isBase: false,
+        isActive: true,
+      },
+      {
+        code: 'SAR',
+        name: 'Saudi Riyal',
+        nameAr: 'ريال سعودي',
+        symbol: 'ر.س',
+        decimalPlaces: 2,
+        isBase: false,
+        isActive: true,
+      },
+      {
+        code: 'AED',
+        name: 'UAE Dirham',
+        nameAr: 'درهم إماراتي',
+        symbol: 'د.إ',
+        decimalPlaces: 2,
+        isBase: false,
+        isActive: true,
+      },
+    ],
+  });
+
   const cashRegister = await prisma.bankCashAccount.create({
     data: {
       type: 'Cash',

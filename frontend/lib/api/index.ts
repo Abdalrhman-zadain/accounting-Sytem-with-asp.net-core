@@ -70,6 +70,7 @@ import {
   CreateInventoryWarehousePayload,
   CreateAccountPayload,
   CreateAccountSubtypePayload,
+  CreateCurrencyPayload,
   CreateCreditNoteTypePayload,
   CreateCreditNotePayload,
   CreateCustomerPayload,
@@ -127,6 +128,7 @@ import {
   LoginPayload,
   LoginResponse,
   PaymentMethodType,
+  Currency,
   PayrollComponent,
   PayrollEmployee,
   PayrollGroup,
@@ -210,6 +212,7 @@ import {
   SalesDocumentsQuery,
   UpdateAccountPayload,
   UpdateAccountSubtypePayload,
+  UpdateCurrencyPayload,
   UpdateInventoryItemPayload,
   UpdateInventoryItemCategoryPayload,
   UpdateInventoryGoodsIssuePayload,
@@ -3168,6 +3171,42 @@ export async function deactivateAccountSubtype(
 ) {
   return apiRequest<AccountSubtype>(`/account-subtypes/${id}`, {
     method: "DELETE",
+    token,
+  });
+}
+
+// ─── Currencies ───────────────────────────────────────────────────────────────
+
+export async function getCurrencies(token?: string | null) {
+  return apiRequest<Currency[]>("/currencies", { token });
+}
+
+export async function createCurrency(
+  payload: CreateCurrencyPayload,
+  token?: string | null,
+) {
+  return apiRequest<Currency>("/currencies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateCurrency(
+  id: string,
+  payload: UpdateCurrencyPayload,
+  token?: string | null,
+) {
+  return apiRequest<Currency>(`/currencies/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function deactivateCurrency(id: string, token?: string | null) {
+  return apiRequest<Currency>(`/currencies/${id}/deactivate`, {
+    method: "PATCH",
     token,
   });
 }

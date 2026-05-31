@@ -159,6 +159,31 @@ export type PaymentMethodType = {
   updatedAt: string;
 };
 
+export type Currency = {
+  id: string;
+  code: string;
+  name?: string | null;
+  nameAr?: string | null;
+  symbol?: string | null;
+  decimalPlaces: number;
+  isActive: boolean;
+  isBase: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateCurrencyPayload = {
+  code: string;
+  name?: string;
+  nameAr?: string;
+  symbol?: string;
+  decimalPlaces?: number;
+  isActive?: boolean;
+  isBase?: boolean;
+};
+
+export type UpdateCurrencyPayload = Partial<CreateCurrencyPayload>;
+
 export type TaxType =
   | "SALES"
   | "PURCHASE"

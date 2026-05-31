@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../../../common/prisma/prisma.module';
 import { AccountSubtypesController } from './account-subtypes.controller';
 import { AccountSubtypesService } from './account-subtypes.service';
+import { CurrenciesController } from './currencies.controller';
+import { CurrenciesService } from './currencies.service';
 import { CreditNoteTypesController } from './credit-note-types.controller';
 import { CreditNoteTypesService } from './credit-note-types.service';
 import { JournalEntryTypesController } from './journal-entry-types.controller';
@@ -19,8 +21,8 @@ import { TaxesService } from './taxes.service';
 
 @Module({
     imports: [PrismaModule],
-    controllers: [SegmentsController, AccountSubtypesController, JournalEntryTypesController, PaymentMethodTypesController, TaxesController, TaxTreatmentsController, CreditNoteTypesController, SupplierDebitNoteTypesController],
-    providers: [SegmentsService, AccountSubtypesService, JournalEntryTypesService, PaymentMethodTypesService, TaxesService, TaxTreatmentsService, CreditNoteTypesService, SupplierDebitNoteTypesService],
-    exports: [SegmentsService, AccountSubtypesService, JournalEntryTypesService, PaymentMethodTypesService, TaxesService, TaxTreatmentsService, CreditNoteTypesService, SupplierDebitNoteTypesService],
+    controllers: [SegmentsController, AccountSubtypesController, CurrenciesController, JournalEntryTypesController, PaymentMethodTypesController, TaxesController, TaxTreatmentsController, CreditNoteTypesController, SupplierDebitNoteTypesController],
+    providers: [SegmentsService, AccountSubtypesService, CurrenciesService, JournalEntryTypesService, PaymentMethodTypesService, TaxesService, TaxTreatmentsService, CreditNoteTypesService, SupplierDebitNoteTypesService],
+    exports: [SegmentsService, AccountSubtypesService, CurrenciesService, JournalEntryTypesService, PaymentMethodTypesService, TaxesService, TaxTreatmentsService, CreditNoteTypesService, SupplierDebitNoteTypesService],
 })
 export class MasterDataModule { }

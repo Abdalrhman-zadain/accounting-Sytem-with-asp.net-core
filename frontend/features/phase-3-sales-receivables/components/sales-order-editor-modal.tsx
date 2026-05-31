@@ -16,11 +16,11 @@ import {
 
 import { Button } from "@/components/ui";
 import { CurrencyAmountInput, Field, Input, Select, Textarea } from "@/components/ui/forms";
-import { getActiveTaxes } from "@/lib/api";
+import { getActiveTaxes, getCurrencies } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn, formatCurrency, formatItemServiceLabel } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { Customer, InventoryItem, SalesQuotation } from "@/types/api";
+import type { Customer, InventoryItem, SalesQuotation, Currency } from "@/types/api";
 import {
   applyItemToSalesLine,
   calculateQuotationTotals,
@@ -82,6 +82,7 @@ export function SalesOrderEditorModal({
   const { t, language } = useTranslation();
   const { token } = useAuth();
   const { data: taxes = [] } = useQuery({ queryKey: ["taxes", "active", token], queryFn: () => getActiveTaxes(token) });
+  const { data: currencies = [] } = useQuery({ queryKey: ["currencies", token], queryFn: () => getCurrencies(token) });
   const isArabic = language === "ar";
   const isInline = presentation === "inline";
   const totals = useMemo(() => calculateQuotationTotals(editor.lines), [editor.lines]);
@@ -243,13 +244,20 @@ export function SalesOrderEditorModal({
                     }
                     className={controlClassName}
                   >
-                    <option value="JOD">JOD — دينار أردني</option>
-                    <option value="USD">USD — Dollar</option>
-                    <option value="EUR">EUR — Euro</option>
-                    <option value="GBP">GBP — Pound</option>
-                    <option value="SAR">SAR — ريال سعودي</option>
-                    <option value="AED">AED — درهم إماراتي</option>
-                    <option value="EGP">EGP — جنيه مصري</option>
+                    {currencies.length === 0 ? (
+                      <>
+                        <option value="JOD">JOD — دينار أردني</option>
+                        <option value="USD">USD — Dollar</option>
+                      </>
+                    ) : (
+                      currencies
+                        .filter((c) => c.isActive)
+                        .map((curr) => (
+                          <option key={curr.id} value={curr.code}>
+                            {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                          </option>
+                        ))
+                    )}
                   </Select>
                 </Field>
               </div>

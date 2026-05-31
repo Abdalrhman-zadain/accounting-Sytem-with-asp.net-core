@@ -244,6 +244,9 @@ export const queryKeys = {
   accountSubtypes(token: string | null) {
     return ["account-subtypes", token] as const;
   },
+  currencies(token: string | null) {
+    return ["currencies", token] as const;
+  },
   paymentMethodTypes(token: string | null) {
     return ["payment-method-types", token] as const;
   },
