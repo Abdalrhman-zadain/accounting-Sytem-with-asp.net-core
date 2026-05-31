@@ -100,7 +100,9 @@ export class PurchaseReceiptsService {
 
   async create(dto: CreatePurchaseReceiptDto) {
     const order = await this.getEligiblePurchaseOrder(dto.purchaseOrderId);
-    const reference = dto.reference?.trim() || this.generateReference('PRC');
+    const receiptDate = new Date(dto.receiptDate);
+    const reference =
+      dto.reference?.trim() || (await this.generateDailyReference(receiptDate));
     const lines = this.resolveLines(dto.lines, order.lines);
     const totalQuantity = lines.reduce((sum, line) => sum + line.quantityReceived, 0);
 
@@ -108,7 +110,7 @@ export class PurchaseReceiptsService {
       const created = await this.prisma.purchaseReceipt.create({
         data: {
           reference,
-          receiptDate: new Date(dto.receiptDate),
+          receiptDate,
           purchaseOrderId: order.id,
           supplierId: order.supplierId,
           description: dto.description?.trim() || null,
@@ -465,10 +467,34 @@ export class PurchaseReceiptsService {
     return Number(value).toFixed(4);
   }
 
-  private generateReference(prefix: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-    return `${prefix}-${compactDate}-${suffix}`;
+  private async generateDailyReference(receiptDate: Date) {
+    const compactDate = receiptDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `PRC-${compactDate}-`;
+    const rows = await this.prisma.purchaseReceipt.findMany({
+      where: {
+        reference: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        reference: true,
+      },
+    });
+
+    let maxSequence = 0;
+    for (const row of rows) {
+      const match = row.reference.match(new RegExp(`^PRC-${compactDate}-(\\d+)$`));
+      if (!match) {
+        continue;
+      }
+
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > maxSequence) {
+        maxSequence = parsed;
+      }
+    }
+
+    return `PRC-${compactDate}-${maxSequence + 1}`;
   }
 
   private isUniqueConflict(error: unknown, field: string) {

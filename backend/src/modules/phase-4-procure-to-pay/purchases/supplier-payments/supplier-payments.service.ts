@@ -130,7 +130,9 @@ export class SupplierPaymentsService {
   async create(dto: CreateSupplierPaymentDto) {
     const supplier = await this.suppliersService.ensureActiveSupplier(dto.supplierId);
     await this.ensureBankCashAccount(dto.bankCashAccountId, supplier.payableAccountId);
-    const reference = dto.reference?.trim() || this.generateReference('SPAY');
+    const paymentDate = new Date(dto.paymentDate);
+    const reference =
+      dto.reference?.trim() || (await this.generateDailyReference(paymentDate));
     const allocations = await this.resolveAllocations(dto.allocations ?? [], supplier.id);
     const allocatedAmount = allocations.reduce((sum, item) => sum + item.amount, 0);
     const unappliedAmount = Number((dto.amount - allocatedAmount).toFixed(2));
@@ -144,7 +146,7 @@ export class SupplierPaymentsService {
         const payment = await tx.supplierPayment.create({
           data: {
             reference,
-            paymentDate: new Date(dto.paymentDate),
+            paymentDate,
             supplierId: supplier.id,
             amount: this.toAmount(dto.amount),
             allocatedAmount: this.toAmount(allocatedAmount),
@@ -671,10 +673,34 @@ export class SupplierPaymentsService {
     return Number(value).toFixed(2);
   }
 
-  private generateReference(prefix: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-    return `${prefix}-${compactDate}-${suffix}`;
+  private async generateDailyReference(paymentDate: Date) {
+    const compactDate = paymentDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `SPAY-${compactDate}-`;
+    const rows = await this.prisma.supplierPayment.findMany({
+      where: {
+        reference: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        reference: true,
+      },
+    });
+
+    let maxSequence = 0;
+    for (const row of rows) {
+      const match = row.reference.match(new RegExp(`^SPAY-${compactDate}-(\\d+)$`));
+      if (!match) {
+        continue;
+      }
+
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > maxSequence) {
+        maxSequence = parsed;
+      }
+    }
+
+    return `SPAY-${compactDate}-${maxSequence + 1}`;
   }
 
   private isUniqueConflict(error: unknown, field: string) {
