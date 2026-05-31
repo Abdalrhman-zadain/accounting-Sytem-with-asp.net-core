@@ -271,6 +271,7 @@ What else to check:
 - purchase-request status-history writes must tolerate stale or missing authenticated user IDs by storing a null audit user reference instead of failing the request transaction on the `PurchaseRequestStatusHistory.userId` foreign key
 - approved purchase requests in the main `/purchases?tab=requests` list now expose direct action-column buttons for `convert to draft purchase order` and `convert to draft purchase invoice`, and the same list also owns the submit/approve/reject/close workflow buttons instead of duplicating them inside the request details screen
 - request conversion rules must keep source traceability into downstream purchase orders and draft purchase invoices, and only approved requests may be converted
+- once an approved purchase request is used to create a draft purchase order or a draft purchase invoice, the source request should move to `CLOSED` so it no longer remains operationally open in the requests list
 - request status history should retain both timestamp and acting user when workflow actions are recorded
 - posting must reuse Phase 1 journal-entry and posting services instead of writing ledger effects directly
 - supplier payments that affect bank/cash must integrate with the existing Phase 2 bank/cash module rather than duplicating payment posting behavior

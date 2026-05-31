@@ -144,6 +144,10 @@ export class PurchaseOrdersService {
         include: this.purchaseOrderInclude(),
       });
 
+      if (dto.sourcePurchaseRequestId) {
+        await this.closeSourcePurchaseRequest(dto.sourcePurchaseRequestId, created.reference);
+      }
+
       return this.mapPurchaseOrder(created);
     } catch (error) {
       if (this.isUniqueConflict(error, 'reference')) {
@@ -395,6 +399,33 @@ export class PurchaseOrdersService {
       throw new BadRequestException('Linked purchase request must be approved before use in a purchase order.');
     }
     return request;
+  }
+
+  private async closeSourcePurchaseRequest(requestId: string, orderReference: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const request = await tx.purchaseRequest.findUnique({
+        where: { id: requestId },
+        select: { status: true },
+      });
+
+      if (!request || request.status === PurchaseRequestStatus.CLOSED) {
+        return;
+      }
+
+      await tx.purchaseRequest.update({
+        where: { id: requestId },
+        data: { status: PurchaseRequestStatus.CLOSED },
+      });
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "PurchaseRequestStatusHistory"
+            ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
+          VALUES
+            (${crypto.randomUUID()}, ${requestId}, ${PurchaseRequestStatus.CLOSED}::"PurchaseRequestStatus", ${`Converted to draft purchase order ${orderReference}; purchase request closed.`}, NOW(), NOW(), NULL)
+        `,
+      );
+    });
   }
 
   private mapPurchaseOrder(row: PurchaseOrderWithRelations) {

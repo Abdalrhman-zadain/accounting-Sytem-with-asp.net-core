@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { AuditAction, InventoryStockMovementType, Prisma, PurchaseInvoiceStatus, PurchaseOrderStatus } from '../../../../generated/prisma';
+import { AuditAction, InventoryStockMovementType, Prisma, PurchaseInvoiceStatus, PurchaseOrderStatus, PurchaseRequestStatus } from '../../../../generated/prisma';
 
 import { PrismaService } from '../../../../common/prisma/prisma.service';
 import { AuditService } from '../../../phase-1-accounting-foundation/accounting-core/audit/audit.service';
@@ -198,7 +198,7 @@ export class PurchaseInvoicesService {
       await this.ensurePurchaseOrderSource(dto.sourcePurchaseOrderId, supplier.id);
     }
     if (dto.sourcePurchaseRequestId) {
-      await this.ensurePurchaseRequestSource(dto.sourcePurchaseRequestId);
+      await this.ensurePurchaseRequestSource(dto.sourcePurchaseRequestId, [PurchaseRequestStatus.APPROVED]);
     }
 
     try {
@@ -226,6 +226,7 @@ export class PurchaseInvoicesService {
 
       if (dto.sourcePurchaseRequestId) {
         await this.setInvoiceSourcePurchaseRequest(created.id, dto.sourcePurchaseRequestId);
+        await this.closeSourcePurchaseRequest(dto.sourcePurchaseRequestId, created.reference);
       }
 
       await this.auditService.log({
@@ -263,7 +264,11 @@ export class PurchaseInvoicesService {
       await this.ensurePurchaseOrderSource(nextSourcePurchaseOrderId, supplier.id);
     }
     if (nextSourcePurchaseRequestId) {
-      await this.ensurePurchaseRequestSource(nextSourcePurchaseRequestId);
+      const allowedRequestStatuses =
+        currentSourcePurchaseRequestId && currentSourcePurchaseRequestId === nextSourcePurchaseRequestId
+          ? [PurchaseRequestStatus.APPROVED, PurchaseRequestStatus.CLOSED]
+          : [PurchaseRequestStatus.APPROVED];
+      await this.ensurePurchaseRequestSource(nextSourcePurchaseRequestId, allowedRequestStatuses);
     }
 
     const lines = dto.lines ? await this.resolveLines(dto.lines) : null;
@@ -304,6 +309,12 @@ export class PurchaseInvoicesService {
 
       if (dto.sourcePurchaseRequestId !== undefined) {
         await this.setInvoiceSourcePurchaseRequest(id, dto.sourcePurchaseRequestId || null);
+        if (
+          dto.sourcePurchaseRequestId &&
+          dto.sourcePurchaseRequestId !== currentSourcePurchaseRequestId
+        ) {
+          await this.closeSourcePurchaseRequest(dto.sourcePurchaseRequestId, updated.reference);
+        }
       }
 
       await this.auditService.log({
@@ -870,7 +881,10 @@ export class PurchaseInvoicesService {
     return order;
   }
 
-  private async ensurePurchaseRequestSource(id: string) {
+  private async ensurePurchaseRequestSource(
+    id: string,
+    allowedStatuses: PurchaseRequestStatus[] = [PurchaseRequestStatus.APPROVED],
+  ) {
     const request = await this.prisma.purchaseRequest.findUnique({
       where: { id },
       select: {
@@ -882,11 +896,40 @@ export class PurchaseInvoicesService {
     if (!request) {
       throw new BadRequestException('Linked purchase request was not found.');
     }
-    if (request.status !== 'APPROVED') {
-      throw new BadRequestException('Linked purchase request must be approved before use in a purchase invoice.');
+    if (!allowedStatuses.includes(request.status as PurchaseRequestStatus)) {
+      throw new BadRequestException(
+        `Linked purchase request must be in one of these statuses before use in a purchase invoice: ${allowedStatuses.join(', ')}.`,
+      );
     }
 
     return request;
+  }
+
+  private async closeSourcePurchaseRequest(requestId: string, invoiceReference: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const request = await tx.purchaseRequest.findUnique({
+        where: { id: requestId },
+        select: { status: true },
+      });
+
+      if (!request || request.status === PurchaseRequestStatus.CLOSED) {
+        return;
+      }
+
+      await tx.purchaseRequest.update({
+        where: { id: requestId },
+        data: { status: PurchaseRequestStatus.CLOSED },
+      });
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "PurchaseRequestStatusHistory"
+            ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
+          VALUES
+            (${crypto.randomUUID()}, ${requestId}, ${PurchaseRequestStatus.CLOSED}::"PurchaseRequestStatus", ${`Converted to draft purchase invoice ${invoiceReference}; purchase request closed.`}, NOW(), NOW(), NULL)
+        `,
+      );
+    });
   }
 
   private async getInvoiceSourcePurchaseRequestId(invoiceId: string) {

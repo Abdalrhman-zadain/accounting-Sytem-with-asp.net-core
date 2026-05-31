@@ -291,12 +291,17 @@ export class PurchaseRequestsService {
           },
         });
 
+        await tx.purchaseRequest.update({
+          where: { id: request.id },
+          data: { status: PurchaseRequestStatus.CLOSED },
+        });
+
         await tx.$executeRaw(
           Prisma.sql`
             INSERT INTO "PurchaseRequestStatusHistory"
               ("id", "purchaseRequestId", "status", "note", "changedAt", "createdAt", "userId")
             VALUES
-              (${crypto.randomUUID()}, ${request.id}, ${request.status}::"PurchaseRequestStatus", ${`Converted to purchase order ${order.reference}.`}, NOW(), NOW(), ${auditUserId})
+              (${crypto.randomUUID()}, ${request.id}, ${PurchaseRequestStatus.CLOSED}::"PurchaseRequestStatus", ${`Converted to draft purchase order ${order.reference}; purchase request closed.`}, NOW(), NOW(), ${auditUserId})
           `,
         );
 
