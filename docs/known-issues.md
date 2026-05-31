@@ -98,7 +98,7 @@ Current limitation:
 - supplier and purchase-invoice list print/PDF/Excel output is available through the shared frontend export engine, while formal purchase document templates remain a separate future refinement.
 - purchase orders now support draft/issue/receipt/cancel/close lifecycle management and now store operational purchase-receipt records, but they still do not create inventory or accounting journal entries from receipt posting.
 - purchase invoices, supplier payments, and debit notes now provide explicit reverse-document workflows that create reversal journal entries and mark the source documents as `REVERSED`.
-- purchase debit-note posting now supports master-data-driven supplier debit note types for purchase discount, purchase return, price correction, tax correction, and supplier settlement flows; active-type setup must exist in `SupplierDebitNoteType` for the purchase debit-note editor to function as intended.
+- purchase debit-note posting now supports master-data-driven supplier debit note types for purchase discount, purchase return, price correction, tax correction, and supplier settlement flows; the foundation seed now creates a default active baseline, but custom environments still need equivalent `SupplierDebitNoteType` master data.
 - purchase invoice posting no longer requires a dedicated purchase tax/VAT account; line tax amounts are posted with the line debit accounts instead of a separate tax line. Purchase document entry can now store `taxId`, but posting has not yet been fully refactored to use each tax record's mapped account.
 - purchase transaction audit history now includes reversed purchase invoices, supplier payments, and debit notes, but purchase receipts still do not yet have their own reversal flow.
 

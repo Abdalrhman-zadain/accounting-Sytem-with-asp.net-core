@@ -30,6 +30,7 @@ import {
   getAccountOptions,
   getAccountsTree,
   getAgingReport,
+  getActiveCreditNoteTypes,
   getActiveTaxTreatments,
   getBankCashAccounts,
   getBankCashTransactions,
@@ -39,6 +40,7 @@ import {
   getCustomers,
   getInventoryItems,
   getInventoryWarehouses,
+  getJournalEntries,
   getSalesRepresentatives,
   getSalesOrders,
   getSalesQuotations,
@@ -60,6 +62,7 @@ import type {
   AccountTreeNode,
   Customer,
   CustomerReceipt,
+  CreditNoteType,
   InventoryItem,
   InventoryWarehouse,
   SalesRepresentative,
@@ -311,6 +314,8 @@ export function SalesReceivablesPage() {
   const [selectedCreditNoteId, setSelectedCreditNoteId] = useState<string | null>(null);
   const [isCreditNoteEditorOpen, setIsCreditNoteEditorOpen] = useState(false);
   const [creditNoteEditor, setCreditNoteEditor] = useState<CreditNoteEditorState>(EMPTY_CREDIT_NOTE_EDITOR);
+  const [creditNoteEditorClientError, setCreditNoteEditorClientError] = useState<string | null>(null);
+  const [inlineJournalReference, setInlineJournalReference] = useState<string | null>(null);
 
   const [receiptSearch, setReceiptSearch] = useState("");
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
@@ -485,9 +490,27 @@ export function SalesReceivablesPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const activeCreditNoteTypesQuery = useQuery({
+    queryKey: ["credit-note-types", "active", token],
+    queryFn: () => getActiveCreditNoteTypes(token),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const agingQuery = useQuery({
     queryKey: queryKeys.salesAging(token, agingDate),
     queryFn: () => getAgingReport(agingDate, token),
+  });
+
+  const inlineJournalQuery = useQuery({
+    queryKey: ["journal-entries", "inline-preview", inlineJournalReference, token],
+    queryFn: async () => {
+      const entries = await getJournalEntries(
+        { reference: inlineJournalReference ?? undefined, includeLines: true },
+        token,
+      );
+      return entries[0] ?? null;
+    },
+    enabled: Boolean(inlineJournalReference),
   });
 
   const createCustomerMutation = useMutation({
@@ -1233,6 +1256,7 @@ export function SalesReceivablesPage() {
     onSuccess: async (created) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedCreditNoteId(created.id);
+      setCreditNoteEditorClientError(null);
       setIsCreditNoteEditorOpen(false);
       setCreditNoteEditor(EMPTY_CREDIT_NOTE_EDITOR());
     },
@@ -1257,6 +1281,7 @@ export function SalesReceivablesPage() {
     onSuccess: async (updated) => {
       await invalidateSalesReceivables(queryClient);
       setSelectedCreditNoteId(updated.id);
+      setCreditNoteEditorClientError(null);
       setIsCreditNoteEditorOpen(false);
     },
   });
@@ -1348,6 +1373,7 @@ export function SalesReceivablesPage() {
   const salesReps = salesRepsQuery.data ?? [];
   const activeSalesReps = activeSalesRepsQuery.data ?? [];
   const activeTaxTreatments = activeTaxTreatmentsQuery.data ?? [];
+  const activeCreditNoteTypes = activeCreditNoteTypesQuery.data ?? [];
   const receivableAccounts = useMemo(() => {
     const tree = receivableAccountsTreeQuery.data ?? [];
     const customerReceivablesRoot = findAccountTreeNode(
@@ -1493,17 +1519,23 @@ export function SalesReceivablesPage() {
     });
   };
 
-  const openJournalEntry = (journalReference?: string | null) => {
+  const toggleInlineJournalEntry = (journalReference?: string | null) => {
     if (!journalReference) {
       return;
     }
-
-    window.location.assign(`/journal-entries?reference=${encodeURIComponent(journalReference)}`);
+    setInlineJournalReference((current) =>
+      current === journalReference ? null : journalReference,
+    );
   };
 
   const matchingCustomerInvoices = useMemo(
     () => postedInvoices.filter((invoice) => invoice.customer.id === creditNoteEditor.customerId),
     [creditNoteEditor.customerId, postedInvoices],
+  );
+
+  const selectedCreditNoteType = useMemo(
+    () => activeCreditNoteTypes.find((type) => type.id === creditNoteEditor.creditNoteTypeId) ?? null,
+    [activeCreditNoteTypes, creditNoteEditor.creditNoteTypeId],
   );
 
   const matchingCustomerQuotations = useMemo(
@@ -1598,6 +1630,16 @@ export function SalesReceivablesPage() {
   };
 
   const saveAndPostCreditNote = async () => {
+    const validationError = validateCreditNoteEditorState(
+      creditNoteEditor,
+      selectedCreditNoteType,
+      t,
+    );
+    if (validationError) {
+      setCreditNoteEditorClientError(validationError);
+      return;
+    }
+    setCreditNoteEditorClientError(null);
     const saved = creditNoteEditor.id
       ? await updateCreditNoteMutation.mutateAsync()
       : await createCreditNoteMutation.mutateAsync();
@@ -1605,6 +1647,24 @@ export function SalesReceivablesPage() {
     await postCreditNoteMutation.mutateAsync(saved.id);
     setIsCreditNoteEditorOpen(false);
     setCreditNoteEditor(EMPTY_CREDIT_NOTE_EDITOR());
+  };
+
+  const saveCreditNoteFromEditor = () => {
+    const validationError = validateCreditNoteEditorState(
+      creditNoteEditor,
+      selectedCreditNoteType,
+      t,
+    );
+    if (validationError) {
+      setCreditNoteEditorClientError(validationError);
+      return;
+    }
+    setCreditNoteEditorClientError(null);
+    if (creditNoteEditor.id) {
+      updateCreditNoteMutation.mutate();
+      return;
+    }
+    createCreditNoteMutation.mutate();
   };
 
   const activeTabBreadcrumbLabel = SALES_TAB_BREADCRUMB_LABELS[activeTab];
@@ -2434,7 +2494,10 @@ export function SalesReceivablesPage() {
 
           <Modal
             isOpen={!!selectedInvoice}
-            onClose={() => setSelectedInvoiceId(null)}
+            onClose={() => {
+              setSelectedInvoiceId(null);
+              setInlineJournalReference(null);
+            }}
             title={selectedInvoice?.reference ?? t("salesReceivables.section.invoiceDetails")}
             size="3xl"
           >
@@ -2446,11 +2509,22 @@ export function SalesReceivablesPage() {
                           <button
                             type="button"
                             className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                        onClick={() => openJournalEntry(selectedInvoice.journalReference)}
+                        onClick={() => toggleInlineJournalEntry(selectedInvoice.journalReference)}
                       >
                         {t("salesReceivables.action.viewJournal")}
                       </button>
                     </div>
+                  ) : null}
+                  {selectedInvoice.journalReference === inlineJournalReference ? (
+                    <InlineJournalEntryCard
+                      journalEntry={inlineJournalQuery.data ?? null}
+                      isLoading={inlineJournalQuery.isLoading}
+                      errorMessage={
+                        inlineJournalQuery.error instanceof Error
+                          ? inlineJournalQuery.error.message
+                          : null
+                      }
+                    />
                   ) : null}
                   <div className="grid gap-3 md:grid-cols-2">
                     <MiniMetric label={t("salesReceivables.metric.invoiceTotal")} value={formatCurrency(selectedInvoice.totalAmount)} />
@@ -2546,7 +2620,10 @@ export function SalesReceivablesPage() {
 
           <Modal
             isOpen={!!selectedReceipt}
-            onClose={() => setSelectedReceiptId(null)}
+            onClose={() => {
+              setSelectedReceiptId(null);
+              setInlineJournalReference(null);
+            }}
             title={selectedReceipt?.reference ?? t("salesReceivables.section.receiptDetails")}
             size="3xl"
           >
@@ -2558,11 +2635,22 @@ export function SalesReceivablesPage() {
                       <button
                         type="button"
                         className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                        onClick={() => openJournalEntry(selectedReceipt.journalReference)}
+                        onClick={() => toggleInlineJournalEntry(selectedReceipt.journalReference)}
                       >
                         {t("salesReceivables.action.viewJournal")}
                       </button>
                     </div>
+                  ) : null}
+                  {selectedReceipt.journalReference === inlineJournalReference ? (
+                    <InlineJournalEntryCard
+                      journalEntry={inlineJournalQuery.data ?? null}
+                      isLoading={inlineJournalQuery.isLoading}
+                      errorMessage={
+                        inlineJournalQuery.error instanceof Error
+                          ? inlineJournalQuery.error.message
+                          : null
+                      }
+                    />
                   ) : null}
                   <div className="grid gap-3 md:grid-cols-2">
                     <MiniMetric label={t("salesReceivables.field.amount")} value={formatCurrency(selectedReceipt.amount)} />
@@ -2605,7 +2693,11 @@ export function SalesReceivablesPage() {
                 ))}
               </Select>
               <Button className="gap-2" onClick={() => {
-                setCreditNoteEditor(EMPTY_CREDIT_NOTE_EDITOR());
+                setCreditNoteEditor({
+                  ...EMPTY_CREDIT_NOTE_EDITOR(),
+                  creditNoteTypeId: activeCreditNoteTypes[0]?.id ?? "",
+                });
+                setCreditNoteEditorClientError(null);
                 setIsCreditNoteEditorOpen(true);
               }}>
                 <CirclePlus className="h-4 w-4 shrink-0" />
@@ -2678,6 +2770,7 @@ export function SalesReceivablesPage() {
                                         description: row.description ?? "",
                                         lines: row.lines.map(mapLineToEditor),
                                       });
+                                      setCreditNoteEditorClientError(null);
                                       setIsCreditNoteEditorOpen(true);
                                     }}
                                   >
@@ -2717,7 +2810,10 @@ export function SalesReceivablesPage() {
 
           <Modal
             isOpen={!!selectedCreditNote}
-            onClose={() => setSelectedCreditNoteId(null)}
+            onClose={() => {
+              setSelectedCreditNoteId(null);
+              setInlineJournalReference(null);
+            }}
             title={selectedCreditNote?.reference ?? t("salesReceivables.section.creditNoteDetails")}
             size="3xl"
           >
@@ -2729,11 +2825,22 @@ export function SalesReceivablesPage() {
                       <button
                         type="button"
                         className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                        onClick={() => openJournalEntry(selectedCreditNote.journalReference)}
+                        onClick={() => toggleInlineJournalEntry(selectedCreditNote.journalReference)}
                       >
                         {t("salesReceivables.action.viewJournal")}
                       </button>
                     </div>
+                  ) : null}
+                  {selectedCreditNote.journalReference === inlineJournalReference ? (
+                    <InlineJournalEntryCard
+                      journalEntry={inlineJournalQuery.data ?? null}
+                      isLoading={inlineJournalQuery.isLoading}
+                      errorMessage={
+                        inlineJournalQuery.error instanceof Error
+                          ? inlineJournalQuery.error.message
+                          : null
+                      }
+                    />
                   ) : null}
                   <div className="grid gap-3 md:grid-cols-2">
                     <MiniMetric label={t("salesReceivables.field.creditNoteTotal")} value={formatCurrency(selectedCreditNote.totalAmount)} />
@@ -3167,16 +3274,21 @@ export function SalesReceivablesPage() {
 
       <CreditNoteEditorModal
         isOpen={isCreditNoteEditorOpen}
-        onClose={() => setIsCreditNoteEditorOpen(false)}
+        onClose={() => {
+          setCreditNoteEditorClientError(null);
+          setIsCreditNoteEditorOpen(false);
+        }}
         title={creditNoteEditor.id ? t("salesReceivables.dialog.editCreditNoteDraft") : t("salesReceivables.dialog.newCreditNote")}
         editor={creditNoteEditor}
         customers={activeCustomers}
         invoices={matchingCustomerInvoices}
+        creditNoteTypes={activeCreditNoteTypes}
         revenueAccounts={revenueAccountsQuery.data ?? []}
         warehouses={inventoryWarehousesQuery.data ?? []}
+        validationError={creditNoteEditorClientError ?? errorMessage}
         isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
         onChange={setCreditNoteEditor}
-        onSubmit={() => (creditNoteEditor.id ? updateCreditNoteMutation.mutate() : createCreditNoteMutation.mutate())}
+        onSubmit={saveCreditNoteFromEditor}
         onSubmitAndPost={saveAndPostCreditNote}
       />
 
@@ -3665,6 +3777,92 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function InlineJournalEntryCard({
+  journalEntry,
+  isLoading,
+  errorMessage,
+}: {
+  journalEntry: Awaited<ReturnType<typeof getJournalEntries>>[number] | null;
+  isLoading: boolean;
+  errorMessage: string | null;
+}) {
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+        جاري تحميل القيد المحاسبي...
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
+        {errorMessage}
+      </div>
+    );
+  }
+
+  if (!journalEntry) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+        لم يتم العثور على القيد المحاسبي المرتبط.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">
+            القيد المحاسبي
+          </div>
+          <div className="mt-1 font-mono text-sm font-bold text-gray-900">
+            {journalEntry.reference}
+          </div>
+          {journalEntry.description ? (
+            <div className="mt-1 text-sm text-gray-600">{journalEntry.description}</div>
+          ) : null}
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-gray-500">{formatDate(journalEntry.entryDate)}</div>
+          <div className="mt-1">
+            <StatusPill
+              label={journalEntry.status}
+              tone={journalEntry.status === "POSTED" ? "positive" : "warning"}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {journalEntry.lines.map((line) => (
+          <div key={line.id} className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-bold text-gray-900">
+                  {line.accountCode || "—"} {line.accountName ? `· ${line.accountName}` : ""}
+                </div>
+                {line.description ? (
+                  <div className="mt-1 text-xs text-gray-500">{line.description}</div>
+                ) : null}
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-mono font-bold text-emerald-700">
+                  مدين: {formatCurrency(line.debitAmount)}
+                </div>
+                <div className="mt-1 font-mono font-bold text-rose-700">
+                  دائن: {formatCurrency(line.creditAmount)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TableHead({
   children,
   className,
@@ -3707,18 +3905,18 @@ function mapCreditNoteEditorLines(
       warehouseId: line.warehouseId || undefined,
       itemName: line.itemName || undefined,
       description: line.description || undefined,
-      quantity: resolvedLine.quantity ? Number(resolvedLine.quantity) : undefined,
-      unitPrice: resolvedLine.unitPrice ? Number(resolvedLine.unitPrice) : undefined,
-      discountAmount: resolvedLine.discountAmount ? Number(resolvedLine.discountAmount) : undefined,
+      quantity: resolvedLine.quantity !== "" ? Number(resolvedLine.quantity) : undefined,
+      unitPrice: resolvedLine.unitPrice !== "" ? Number(resolvedLine.unitPrice) : undefined,
+      discountAmount: resolvedLine.discountAmount !== "" ? Number(resolvedLine.discountAmount) : undefined,
       taxId: resolvedLine.taxId || undefined,
-      taxAmount: resolvedLine.taxAmount ? Number(resolvedLine.taxAmount) : undefined,
-      originalUnitPrice: line.originalUnitPrice ? Number(line.originalUnitPrice) : undefined,
-      correctedUnitPrice: line.correctedUnitPrice ? Number(line.correctedUnitPrice) : undefined,
-      originalTaxAmount: line.originalTaxAmount ? Number(line.originalTaxAmount) : undefined,
-      correctedTaxAmount: line.correctedTaxAmount ? Number(line.correctedTaxAmount) : undefined,
+      taxAmount: resolvedLine.taxAmount !== "" ? Number(resolvedLine.taxAmount) : undefined,
+      originalUnitPrice: line.originalUnitPrice !== undefined && line.originalUnitPrice !== "" ? Number(line.originalUnitPrice) : undefined,
+      correctedUnitPrice: line.correctedUnitPrice !== undefined && line.correctedUnitPrice !== "" ? Number(line.correctedUnitPrice) : undefined,
+      originalTaxAmount: line.originalTaxAmount !== undefined && line.originalTaxAmount !== "" ? Number(line.originalTaxAmount) : undefined,
+      correctedTaxAmount: line.correctedTaxAmount !== undefined && line.correctedTaxAmount !== "" ? Number(line.correctedTaxAmount) : undefined,
       returnToStock: Boolean(line.returnToStock),
       itemCondition: line.itemCondition || undefined,
-      lineAmount: resolvedLine.lineAmount ? Number(resolvedLine.lineAmount) : undefined,
+      lineAmount: resolvedLine.lineAmount !== "" ? Number(resolvedLine.lineAmount) : undefined,
       revenueAccountId: line.revenueAccountId || undefined,
     };
   });
@@ -3900,6 +4098,72 @@ function validateQuotationEditorState(
   }
 
   for (const [index, line] of editor.lines.entries()) {
+    const lineAmount = Number(line.lineAmount || 0);
+    if (!Number.isFinite(lineAmount) || lineAmount < 0.01) {
+      return t("salesReceivables.validation.lineAmountPositive", { index: index + 1 });
+    }
+  }
+
+  return null;
+}
+
+function validateCreditNoteEditorState(
+  editor: CreditNoteEditorState,
+  selectedType: CreditNoteType | null,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (!editor.customerId) {
+    return t("salesReceivables.validation.customerRequired");
+  }
+  if (!editor.creditNoteTypeId) {
+    return "يجب اختيار نوع إشعار الدائن.";
+  }
+  if (!editor.lines.length) {
+    return t("salesReceivables.validation.lineRequired");
+  }
+  if (selectedType?.linkedInvoiceRequirement === "REQUIRED" && !editor.salesInvoiceId) {
+    return "يجب اختيار فاتورة مبيعات مرتبطة لهذا النوع.";
+  }
+
+  for (const [index, line] of editor.lines.entries()) {
+    const typeCode = selectedType?.code ?? "";
+    if (typeCode === "CN-SALES-RETURN") {
+      if (!line.salesInvoiceLineId) {
+        return `يجب اختيار سطر من الفاتورة للسطر ${index + 1}.`;
+      }
+      if (!line.quantity || Number(line.quantity) <= 0) {
+        return `يجب أن تكون كمية المرتجع أكبر من صفر في السطر ${index + 1}.`;
+      }
+      if (line.returnToStock && !line.warehouseId) {
+        return `يجب اختيار المستودع عند إعادة الصنف للمخزون في السطر ${index + 1}.`;
+      }
+      continue;
+    }
+    if (typeCode === "CN-PRICE-DIFF") {
+      if (!line.salesInvoiceLineId) {
+        return `يجب اختيار سطر من الفاتورة للسطر ${index + 1}.`;
+      }
+      if (line.correctedUnitPrice === undefined || line.correctedUnitPrice === "") {
+        return `يجب إدخال السعر المصحح في السطر ${index + 1}.`;
+      }
+      if (Number(line.correctedUnitPrice) < 0) {
+        return `السعر المصحح غير صالح في السطر ${index + 1}.`;
+      }
+      continue;
+    }
+    if (typeCode === "CN-TAX-CORRECTION") {
+      if (!line.salesInvoiceLineId) {
+        return `يجب اختيار سطر من الفاتورة للسطر ${index + 1}.`;
+      }
+      if (line.correctedTaxAmount === undefined || line.correctedTaxAmount === "") {
+        return `يجب إدخال الضريبة المصححة في السطر ${index + 1}.`;
+      }
+      if (Number(line.correctedTaxAmount) < 0) {
+        return `الضريبة المصححة غير صالحة في السطر ${index + 1}.`;
+      }
+      continue;
+    }
+
     const lineAmount = Number(line.lineAmount || 0);
     if (!Number.isFinite(lineAmount) || lineAmount < 0.01) {
       return t("salesReceivables.validation.lineAmountPositive", { index: index + 1 });

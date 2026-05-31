@@ -365,6 +365,14 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     isPosting: false,
     parentAccountId: currentAssets.id,
   });
+  const taxRecoverables = await createAccount({
+    code: '1140000',
+    name: 'Tax Recoverables',
+    nameAr: 'ضرائب قابلة للاسترداد',
+    type: 'ASSET',
+    isPosting: false,
+    parentAccountId: currentAssets.id,
+  });
   const nonCurrentAssets = await createAccount({
     code: '1200000',
     name: 'Non-current Assets',
@@ -452,6 +460,33 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     type: 'EXPENSE',
     isPosting: false,
     parentAccountId: expenses.id,
+  });
+  const salesRevenue = await createAccount({
+    code: '4110001',
+    name: 'Sales Revenue',
+    nameAr: 'ايرادات المبيعات',
+    type: 'REVENUE',
+    isPosting: true,
+    subtype: 'Revenue',
+    parentAccountId: sales.id,
+  });
+  const rentExpense = await createAccount({
+    code: '5110001',
+    name: 'Rent Expense',
+    nameAr: 'مصروف الايجار',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
+  const salariesExpense = await createAccount({
+    code: '5120001',
+    name: 'Salaries Expense',
+    nameAr: 'مصروف الرواتب',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
   });
 
   const mainCash = await createAccount({
@@ -740,6 +775,15 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     subtype: 'Payable',
     parentAccountId: salesTaxByRate.id,
   });
+  const inputVatRecoverable = await createAccount({
+    code: '1141001',
+    name: 'Input VAT Recoverable',
+    nameAr: 'ضريبة مدخلات قابلة للاسترداد',
+    type: 'ASSET',
+    isPosting: true,
+    subtype: 'Receivable',
+    parentAccountId: taxRecoverables.id,
+  });
 
   await createAccount({
     code: '2121002',
@@ -862,6 +906,138 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     prisma.tax.findUniqueOrThrow({ where: { taxCode: 'VAT0' } }),
     prisma.tax.findUniqueOrThrow({ where: { taxCode: 'EXEMPT' } }),
   ]);
+
+  const creditNoteTypeSeeds = [
+    {
+      code: 'CN-DISCOUNT',
+      name: 'خصم ما بعد البيع',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: salesRevenue.id,
+      helperText:
+        'خصم مالي بعد البيع مرتبط بفاتورة المبيعات مع إمكانية تعديل الضريبة عند الحاجة.',
+    },
+    {
+      code: 'CN-SALES-RETURN',
+      name: 'مرتجع مبيعات',
+      effect: 'FINANCIAL_INVENTORY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: true,
+      allowsTaxAdjustment: true,
+      defaultAccountId: salesRevenue.id,
+      helperText:
+        'يرتبط بسطر فاتورة أصلي ويمكنه إعادة الصنف إلى المخزون وعكس الضريبة.',
+    },
+    {
+      code: 'CN-PRICE-DIFF',
+      name: 'تصحيح فرق سعر',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: salesRevenue.id,
+      helperText:
+        'يستخدم لتخفيض سعر البيع بعد الإصدار دون حركة مخزنية.',
+    },
+    {
+      code: 'CN-TAX-CORRECTION',
+      name: 'تصحيح ضريبة مبيعات',
+      effect: 'TAX_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: salesTaxPayable.id,
+      helperText:
+        'يستخدم لتصحيح الضريبة فقط دون تغيير الإيراد أو الكمية.',
+    },
+    {
+      code: 'CN-CUSTOMER-SETTLEMENT',
+      name: 'تسوية عميل',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'OPTIONAL' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: false,
+      defaultAccountId: customers.id,
+      helperText:
+        'تسوية مالية مع العميل ويمكن استخدامها دون ربطها بفاتورة محددة.',
+    },
+  ];
+
+  for (const type of creditNoteTypeSeeds) {
+    await prisma.creditNoteType.upsert({
+      where: { code: type.code },
+      update: type,
+      create: type,
+    });
+  }
+
+  const supplierDebitNoteTypeSeeds = [
+    {
+      code: 'DN-PURCHASE-DISCOUNT',
+      name: 'خصم مشتريات',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: suppliers.id,
+      helperText:
+        'خصم مالي على فاتورة مشتريات مرتبطة مع إمكانية تعديل ضريبة المدخلات.',
+    },
+    {
+      code: 'DN-PURCHASE-RETURN',
+      name: 'مرتجع مشتريات',
+      effect: 'FINANCIAL_INVENTORY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: true,
+      allowsTaxAdjustment: true,
+      defaultAccountId: suppliers.id,
+      helperText:
+        'مرتجع شراء من فاتورة أصلية مع تخفيض المخزون وعكس ضريبة المدخلات.',
+    },
+    {
+      code: 'DN-PRICE-CORRECTION',
+      name: 'تصحيح فرق سعر مشتريات',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: suppliers.id,
+      helperText:
+        'يستخدم لتخفيض تكلفة الشراء بعد التسجيل دون حركة كمية.',
+    },
+    {
+      code: 'DN-TAX-CORRECTION',
+      name: 'تصحيح ضريبة مشتريات',
+      effect: 'TAX_ONLY' as const,
+      linkedInvoiceRequirement: 'REQUIRED' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: true,
+      defaultAccountId: inputVatRecoverable.id,
+      helperText:
+        'يستخدم لتصحيح ضريبة المدخلات فقط دون تعديل الكمية أو القيمة الأساسية.',
+    },
+    {
+      code: 'DN-SUPPLIER-SETTLEMENT',
+      name: 'تسوية مورد',
+      effect: 'FINANCIAL_ONLY' as const,
+      linkedInvoiceRequirement: 'OPTIONAL' as const,
+      affectsInventory: false,
+      allowsTaxAdjustment: false,
+      defaultAccountId: suppliers.id,
+      helperText:
+        'تسوية مالية مع المورد ويمكن استخدامها دون ربطها بفاتورة شراء محددة.',
+    },
+  ];
+
+  for (const type of supplierDebitNoteTypeSeeds) {
+    await prisma.supplierDebitNoteType.upsert({
+      where: { code: type.code },
+      update: type,
+      create: type,
+    });
+  }
 
   await prisma.taxTreatment.createMany({
     data: [
@@ -1305,34 +1481,6 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     subtype: 'Equity',
     parentAccountId: reserves.id,
   });
-  const salesRevenue = await createAccount({
-    code: '4110001',
-    name: 'Sales Revenue',
-    nameAr: 'ايرادات المبيعات',
-    type: 'REVENUE',
-    isPosting: true,
-    subtype: 'Revenue',
-    parentAccountId: sales.id,
-  });
-  const rentExpense = await createAccount({
-    code: '5110001',
-    name: 'Rent Expense',
-    nameAr: 'مصروف الايجار',
-    type: 'EXPENSE',
-    isPosting: true,
-    subtype: 'Expense',
-    parentAccountId: operatingExpenses.id,
-  });
-  const salariesExpense = await createAccount({
-    code: '5120001',
-    name: 'Salaries Expense',
-    nameAr: 'مصروف الرواتب',
-    type: 'EXPENSE',
-    isPosting: true,
-    subtype: 'Expense',
-    parentAccountId: operatingExpenses.id,
-  });
-
   // Payment Terms seed data
   await prisma.paymentTerm.createMany({
     data: [

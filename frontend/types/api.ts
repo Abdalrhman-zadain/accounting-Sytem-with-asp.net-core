@@ -2520,6 +2520,8 @@ export type SupplierPayment = {
     postedAt?: string | null;
   } | null;
   allocations: SupplierPaymentAllocation[];
+  journalEntryId?: string | null;
+  journalReference?: string | null;
   postedAt?: string | null;
   createdAt: string;
   updatedAt: string;

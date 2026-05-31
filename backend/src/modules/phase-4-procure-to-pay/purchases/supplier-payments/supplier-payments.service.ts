@@ -56,6 +56,12 @@ type SupplierPaymentWithRelations = Prisma.SupplierPaymentGetPayload<{
         status: true;
         transactionDate: true;
         postedAt: true;
+        journalEntryId: true;
+        journalEntry: {
+          select: {
+            reference: true;
+          };
+        };
       };
     };
     allocations: {
@@ -557,6 +563,12 @@ export class SupplierPaymentsService {
           status: true,
           transactionDate: true,
           postedAt: true,
+          journalEntryId: true,
+          journalEntry: {
+            select: {
+              reference: true,
+            },
+          },
         },
       },
       allocations: {
@@ -622,6 +634,8 @@ export class SupplierPaymentsService {
           outstandingAmount: allocation.purchaseInvoice.outstandingAmount.toString(),
         },
       })),
+      journalEntryId: row.bankCashTransaction?.journalEntryId ?? null,
+      journalReference: row.bankCashTransaction?.journalEntry?.reference ?? null,
       postedAt: row.postedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

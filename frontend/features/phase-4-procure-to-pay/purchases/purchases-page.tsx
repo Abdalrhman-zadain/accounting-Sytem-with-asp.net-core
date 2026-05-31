@@ -48,6 +48,7 @@ import {
   getActiveTaxes,
   getInventoryItems,
   getInventoryWarehouses,
+  getJournalEntries,
   getPurchasePolicy,
   getPurchaseInvoiceById,
   getPurchaseInvoices,
@@ -379,6 +380,7 @@ export function PurchasesPage() {
     "" | "DRAFT" | "POSTED" | "PARTIALLY_PAID" | "FULLY_PAID" | "CANCELLED" | "REVERSED"
   >("");
   const [selectedPurchaseInvoiceId, setSelectedPurchaseInvoiceId] = useState<string | null>(null);
+  const [inlineJournalReference, setInlineJournalReference] = useState<string | null>(null);
   const [isInvoiceEditorOpen, setIsInvoiceEditorOpen] = useState(false);
   const [invoiceEditor, setInvoiceEditor] = useState<PurchaseInvoiceEditorState>(EMPTY_INVOICE_EDITOR);
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
@@ -621,6 +623,18 @@ export function PurchasesPage() {
     queryKey: queryKeys.debitNoteById(token, selectedDebitNoteId),
     queryFn: () => getDebitNoteById(selectedDebitNoteId!, token),
     enabled: Boolean(selectedDebitNoteId),
+  });
+
+  const inlineJournalQuery = useQuery({
+    queryKey: ["journal-entries", "inline-preview", inlineJournalReference, token],
+    queryFn: async () => {
+      const entries = await getJournalEntries(
+        { reference: inlineJournalReference ?? undefined, includeLines: true },
+        token,
+      );
+      return entries[0] ?? null;
+    },
+    enabled: Boolean(inlineJournalReference),
   });
 
   const createSupplierMutation = useMutation({
@@ -1088,6 +1102,15 @@ export function PurchasesPage() {
     debitNoteDetailQuery.data ??
     debitNotes.find((row) => row.id === selectedDebitNoteId) ??
     null;
+
+  const toggleInlineJournalEntry = (journalReference?: string | null) => {
+    if (!journalReference) {
+      return;
+    }
+    setInlineJournalReference((current) =>
+      current === journalReference ? null : journalReference,
+    );
+  };
   const exportPermissions = { canPrint: true, canExportPdf: true, canExportExcel: true };
 
   const handleSuppliersExport = (mode: ExportMode) => {
@@ -2284,7 +2307,10 @@ export function PurchasesPage() {
 
             <Modal
               isOpen={!!selectedPurchaseInvoice}
-              onClose={() => setSelectedPurchaseInvoiceId(null)}
+              onClose={() => {
+                setSelectedPurchaseInvoiceId(null);
+                setInlineJournalReference(null);
+              }}
               title={t("purchases.invoices.section.details")}
               size="5xl"
             >
@@ -2314,6 +2340,27 @@ export function PurchasesPage() {
                   {invoiceActionError ? (
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                       {invoiceActionError}
+                    </div>
+                  ) : null}
+
+                  {selectedPurchaseInvoice.journalReference ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-start">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleInlineJournalEntry(selectedPurchaseInvoice.journalReference)}
+                        >
+                          عرض القيد المحاسبي
+                        </Button>
+                      </div>
+                      {selectedPurchaseInvoice.journalReference === inlineJournalReference ? (
+                        <InlineJournalEntryCard
+                          journalEntry={inlineJournalQuery.data ?? null}
+                          isLoading={inlineJournalQuery.isLoading}
+                          errorMessage={inlineJournalQuery.error instanceof Error ? inlineJournalQuery.error.message : null}
+                        />
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -2461,11 +2508,18 @@ export function PurchasesPage() {
               </div>
             </Card>
 
-            <Card className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-black uppercase tracking-[0.22em] text-gray-500">{t("purchases.payments.section.details")}</div>
-                {selectedSupplierPayment ? (
-                  <div className="flex flex-wrap gap-2">
+            <Modal
+              isOpen={!!selectedSupplierPayment}
+              onClose={() => {
+                setSelectedSupplierPaymentId(null);
+                setInlineJournalReference(null);
+              }}
+              title={t("purchases.payments.section.details")}
+              size="5xl"
+            >
+              {selectedSupplierPayment ? (
+                <div className="space-y-6">
+                  <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
                     {selectedSupplierPayment.canPost ? (
                       <Button size="sm" disabled={activePaymentActionMutationPending} onClick={() => confirmAndRun(t("purchases.payments.confirm.post"), () => postSupplierPaymentMutation.mutate(selectedSupplierPayment.id))}>
                         {t("purchases.action.postPayment")}
@@ -2482,21 +2536,34 @@ export function PurchasesPage() {
                       </Button>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
 
-              {paymentActionError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {paymentActionError}
-                </div>
-              ) : null}
+                  {paymentActionError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                      {paymentActionError}
+                    </div>
+                  ) : null}
 
-              {!selectedSupplierPayment ? (
-                <div className="rounded-2xl border border-dashed border-gray-300 px-6 py-8 text-sm text-gray-500">
-                  {t("purchases.payments.empty.selectPayment")}
-                </div>
-              ) : (
-                <div className="space-y-6">
+                  {selectedSupplierPayment.journalReference ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-start">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleInlineJournalEntry(selectedSupplierPayment.journalReference)}
+                        >
+                          عرض القيد المحاسبي
+                        </Button>
+                      </div>
+                      {selectedSupplierPayment.journalReference === inlineJournalReference ? (
+                        <InlineJournalEntryCard
+                          journalEntry={inlineJournalQuery.data ?? null}
+                          isLoading={inlineJournalQuery.isLoading}
+                          errorMessage={inlineJournalQuery.error instanceof Error ? inlineJournalQuery.error.message : null}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-4">
                     <MiniMetric label={t("purchases.payments.metric.date")} value={formatDate(selectedSupplierPayment.paymentDate)} />
                     <MiniMetric label={t("purchases.payments.metric.status")} value={translateSupplierPaymentStatus(selectedSupplierPayment.status, t)} />
@@ -2514,7 +2581,7 @@ export function PurchasesPage() {
                         </div>
                         <div className="rounded-2xl border border-gray-200 px-4 py-4">
                           <div>{t("purchases.payments.field.description")}: {selectedSupplierPayment.description || t("purchases.requests.empty.noDescription")}</div>
-                            <div className="mt-2">{t("purchases.payments.field.bankCash")}: {selectedSupplierPayment.bankCashAccount.account.code} · {cleanDisplayName(selectedSupplierPayment.bankCashAccount.account.name)}</div>
+                          <div className="mt-2">{t("purchases.payments.field.bankCash")}: {selectedSupplierPayment.bankCashAccount.account.code} · {cleanDisplayName(selectedSupplierPayment.bankCashAccount.account.name)}</div>
                         </div>
                         <div className="grid gap-3 md:grid-cols-3">
                           <MiniMetric label={t("purchases.payments.metric.amount")} value={formatCurrency(selectedSupplierPayment.amount)} />
@@ -2551,8 +2618,8 @@ export function PurchasesPage() {
                     </Card>
                   </div>
                 </div>
-              )}
-            </Card>
+              ) : null}
+            </Modal>
           </>
         ) : (
           <>
@@ -2675,6 +2742,27 @@ export function PurchasesPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {selectedDebitNote.journalReference ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-start">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleInlineJournalEntry(selectedDebitNote.journalReference)}
+                        >
+                          عرض القيد المحاسبي
+                        </Button>
+                      </div>
+                      {selectedDebitNote.journalReference === inlineJournalReference ? (
+                        <InlineJournalEntryCard
+                          journalEntry={inlineJournalQuery.data ?? null}
+                          isLoading={inlineJournalQuery.isLoading}
+                          errorMessage={inlineJournalQuery.error instanceof Error ? inlineJournalQuery.error.message : null}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4 md:grid-cols-4">
                     <MiniMetric label={t("purchases.debitNotes.metric.date")} value={formatDate(selectedDebitNote.noteDate)} />
                     <MiniMetric label={t("purchases.debitNotes.metric.status")} value={translateDebitNoteStatus(selectedDebitNote.status, t)} />
@@ -5551,6 +5639,92 @@ function MetricCard({ label, value, highlight }: { label: string; value: string;
   );
 }
 
+function InlineJournalEntryCard({
+  journalEntry,
+  isLoading,
+  errorMessage,
+}: {
+  journalEntry: Awaited<ReturnType<typeof getJournalEntries>>[number] | null;
+  isLoading: boolean;
+  errorMessage: string | null;
+}) {
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+        جاري تحميل القيد المحاسبي...
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
+        {errorMessage}
+      </div>
+    );
+  }
+
+  if (!journalEntry) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+        لم يتم العثور على القيد المحاسبي المرتبط.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">
+            القيد المحاسبي
+          </div>
+          <div className="mt-1 font-mono text-sm font-bold text-gray-900">
+            {journalEntry.reference}
+          </div>
+          {journalEntry.description ? (
+            <div className="mt-1 text-sm text-gray-600">{journalEntry.description}</div>
+          ) : null}
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-gray-500">{formatDate(journalEntry.entryDate)}</div>
+          <div className="mt-1">
+            <StatusPill
+              label={journalEntry.status}
+              tone={journalEntry.status === "POSTED" ? "positive" : "warning"}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {journalEntry.lines.map((line) => (
+          <div key={line.id} className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-bold text-gray-900">
+                  {line.accountCode || "—"} {line.accountName ? `· ${line.accountName}` : ""}
+                </div>
+                {line.description ? (
+                  <div className="mt-1 text-xs text-gray-500">{line.description}</div>
+                ) : null}
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-mono font-bold text-emerald-700">
+                  مدين: {formatCurrency(line.debitAmount)}
+                </div>
+                <div className="mt-1 font-mono font-bold text-rose-700">
+                  دائن: {formatCurrency(line.creditAmount)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TableHead({ children, className }: { children: ReactNode; className?: string }) {
   return <th className={cn("px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600", className)}>{children}</th>;
 }
@@ -5871,12 +6045,12 @@ function getDebitNoteFormError(
       }
     } else if (typeCode === "DN-PRICE-CORRECTION") {
       if (!line.purchaseInvoiceLineId) return "يجب اختيار سطر من فاتورة الشراء.";
-      if (!line.correctedUnitPrice || Number(line.correctedUnitPrice) < 0) {
+      if (line.correctedUnitPrice === "" || Number(line.correctedUnitPrice) < 0) {
         return "يجب إدخال السعر الصحيح لكل سطر تصحيح سعر.";
       }
     } else if (typeCode === "DN-TAX-CORRECTION") {
       if (!line.purchaseInvoiceLineId) return "يجب اختيار سطر من فاتورة الشراء.";
-      if (!line.correctedTaxAmount || Number(line.correctedTaxAmount) < 0) {
+      if (line.correctedTaxAmount === "" || Number(line.correctedTaxAmount) < 0) {
         return "يجب إدخال الضريبة الصحيحة لكل سطر تصحيح ضريبة.";
       }
     } else {
@@ -6114,10 +6288,10 @@ function mapDebitNoteEditorLines(lines: DebitNoteLineEditorState[]) {
     discountAccountId: line.discountAccountId || undefined,
     taxId: line.taxId || undefined,
     taxAmount: Number(line.taxAmount),
-    originalUnitPrice: line.originalUnitPrice ? Number(line.originalUnitPrice) : undefined,
-    correctedUnitPrice: line.correctedUnitPrice ? Number(line.correctedUnitPrice) : undefined,
-    originalTaxAmount: line.originalTaxAmount ? Number(line.originalTaxAmount) : undefined,
-    correctedTaxAmount: line.correctedTaxAmount ? Number(line.correctedTaxAmount) : undefined,
+    originalUnitPrice: line.originalUnitPrice !== "" ? Number(line.originalUnitPrice) : undefined,
+    correctedUnitPrice: line.correctedUnitPrice !== "" ? Number(line.correctedUnitPrice) : undefined,
+    originalTaxAmount: line.originalTaxAmount !== "" ? Number(line.originalTaxAmount) : undefined,
+    correctedTaxAmount: line.correctedTaxAmount !== "" ? Number(line.correctedTaxAmount) : undefined,
     returnToStock: line.returnToStock,
     itemCondition: line.itemCondition || undefined,
     description: line.description || undefined,

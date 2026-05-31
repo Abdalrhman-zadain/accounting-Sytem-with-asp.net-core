@@ -195,6 +195,7 @@ What else to check:
 - invoice and credit-note drafts must stay editable, but posted documents must be locked
 - credit-note type selection must come from active `CreditNoteType` master data (`GET /credit-note-types/active`) rather than a hardcoded frontend-only option list
 - `CreditNoteType` now controls whether a linked invoice is required, whether inventory can be affected, whether tax adjustment is allowed, which default posting account is used, and which helper text the credit-note editor should show
+- the foundation seed should provide a working default `CreditNoteType` baseline (`CN-DISCOUNT`, `CN-SALES-RETURN`, `CN-PRICE-DIFF`, `CN-TAX-CORRECTION`, and `CN-CUSTOMER-SETTLEMENT`) so fresh environments can open the credit-note editor without manual setup
 - sales credit notes must support distinct business types instead of treating every note as a post-sale discount:
   - `CN-DISCOUNT` remains financial-only and keeps the discount-style line editor
   - `CN-SALES-RETURN` must stay separate from discounts because it may restock inventory, reverse COGS, and use sales-return accounts
@@ -251,6 +252,8 @@ What else to check:
 - purchase document lines should persist both `taxId` and the calculated `taxAmount` so historical documents remain readable if a tax is later deactivated
 - supplier debit-note type selection must come from active `SupplierDebitNoteType` master data (`GET /supplier-debit-note-types/active`) rather than a hardcoded frontend-only option list
 - `SupplierDebitNoteType` now controls whether a linked purchase invoice is required, whether inventory may be affected, whether tax adjustment is allowed, which default posting account is used, and which helper text the supplier debit-note editor should show
+- the foundation seed should provide a working default `SupplierDebitNoteType` baseline (`DN-PURCHASE-DISCOUNT`, `DN-PURCHASE-RETURN`, `DN-PRICE-CORRECTION`, `DN-TAX-CORRECTION`, and `DN-SUPPLIER-SETTLEMENT`) plus an input-VAT asset account for tax-only supplier debit-note flows
+- purchase-invoice, supplier-payment, and debit-note detail views should expose `عرض القيد المحاسبي` inline in the same open modal/panel instead of forcing navigation away from the current purchase workflow
 - supplier debit notes must support distinct business types instead of treating every note as a generic supplier discount:
   - `DN-PURCHASE-DISCOUNT` remains financial-only and keeps the purchase-discount style editor
   - `DN-PURCHASE-RETURN` must stay separate from discounts because it reduces inventory, affects input VAT, and uses purchase-return accounting behavior
@@ -270,6 +273,7 @@ What else to check:
 - purchase-request and purchase-order editor modals now expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
 - purchase-request request dates and requested-delivery dates must now be realistic business dates (year `2000` or later), and a requested delivery date must not be earlier than the request date
 - purchase-request status-history writes must tolerate stale or missing authenticated user IDs by storing a null audit user reference instead of failing the request transaction on the `PurchaseRequestStatusHistory.userId` foreign key
+- shared audit-log writes must also tolerate stale or reseeded authenticated user IDs by retrying with a null `AuditLog.userId` instead of surfacing a false `Internal server error` after the business transaction already succeeded
 - approved purchase requests in the main `/purchases?tab=requests` list now expose direct action-column buttons for `convert to draft purchase order` and `convert to draft purchase invoice`, and the same list also owns the submit/approve/reject/close workflow buttons instead of duplicating them inside the request details screen
 - request conversion rules must keep source traceability into downstream purchase orders and draft purchase invoices, and only approved requests may be converted
 - once an approved purchase request is used to create a draft purchase order or a draft purchase invoice, the source request should move to `CLOSED` so it no longer remains operationally open in the requests list

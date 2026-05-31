@@ -21,9 +21,13 @@ import { getActiveTaxes } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { Customer, SalesInvoice } from "@/types/api";
+import type {
+  CreditNoteType,
+  Customer,
+  InventoryWarehouse,
+  SalesInvoice,
+} from "@/types/api";
 import {
-  calculateQuotationTotals,
   createEmptyLine,
   type SalesLineEditorState,
   withCalculatedLineAmount,
@@ -31,15 +35,26 @@ import {
 
 type RevenueAccountOption = { id: string; code: string; name: string };
 
+type CreditNoteLineEditorState = SalesLineEditorState & {
+  salesInvoiceLineId?: string;
+  originalUnitPrice?: string;
+  correctedUnitPrice?: string;
+  originalTaxAmount?: string;
+  correctedTaxAmount?: string;
+  returnToStock?: boolean;
+  itemCondition?: string;
+};
+
 type CreditNoteEditorValue = {
   id?: string;
   reference: string;
   noteDate: string;
   currencyCode: string;
   customerId: string;
+  creditNoteTypeId: string;
   salesInvoiceId: string;
   description: string;
-  lines: SalesLineEditorState[];
+  lines: CreditNoteLineEditorState[];
 };
 
 type CreditNoteEditorModalProps = {
@@ -48,7 +63,9 @@ type CreditNoteEditorModalProps = {
   editor: CreditNoteEditorValue;
   customers: Customer[];
   invoices: SalesInvoice[];
+  creditNoteTypes: CreditNoteType[];
   revenueAccounts: RevenueAccountOption[];
+  warehouses: InventoryWarehouse[];
   validationError?: string | null;
   isSubmitting: boolean;
   onClose: () => void;
@@ -57,12 +74,20 @@ type CreditNoteEditorModalProps = {
   onSubmitAndPost: () => void;
 };
 
-function createEmptyDiscountLine(defaultLabel: string) {
+function createEmptyCreditNoteLine(defaultLabel: string, typeCode?: string): CreditNoteLineEditorState {
   return {
     ...createEmptyLine(),
-    itemName: defaultLabel,
+    itemName:
+      typeCode === "CN-CUSTOMER-SETTLEMENT" ? "تسوية عميل" : defaultLabel,
     quantity: "1",
     discountAmount: "",
+    originalUnitPrice: "",
+    correctedUnitPrice: "",
+    originalTaxAmount: "",
+    correctedTaxAmount: "",
+    returnToStock: typeCode === "CN-SALES-RETURN",
+    itemCondition: "",
+    salesInvoiceLineId: "",
   };
 }
 
@@ -72,13 +97,147 @@ function getReceivableAccountName(invoice?: SalesInvoice) {
     : "حساب العميل / الذمم المدينة";
 }
 
+function formatAmount(value: number) {
+  return value.toFixed(3);
+}
+
+function recalculateCreditNoteLine(
+  line: CreditNoteLineEditorState,
+  typeCode: string,
+  sourceLine?: SalesInvoice["lines"][number],
+) {
+  if (!sourceLine) {
+    return withCalculatedLineAmount(line);
+  }
+
+  if (typeCode === "CN-SALES-RETURN") {
+    const soldQty = Number(sourceLine.quantity || 0) || 1;
+    const quantity = Number(line.quantity || 0) || 0;
+    const ratio = soldQty > 0 ? quantity / soldQty : 0;
+    const unitPrice = Number(sourceLine.unitPrice || 0);
+    const taxAmount = Number((Number(sourceLine.taxAmount || 0) * ratio).toFixed(3));
+    return {
+      ...withCalculatedLineAmount({
+      ...line,
+      itemId: sourceLine.itemId ?? "",
+      warehouseId: line.warehouseId || sourceLine.warehouseId || "",
+      itemName: sourceLine.itemName ?? line.itemName,
+      description: line.description || sourceLine.description || "",
+      taxId: sourceLine.taxId ?? "",
+      unitPrice: formatAmount(unitPrice),
+      discountAmount: "0.000",
+      taxAmount: formatAmount(taxAmount),
+      }),
+      originalUnitPrice: formatAmount(unitPrice),
+      originalTaxAmount: formatAmount(taxAmount),
+    };
+  }
+
+  if (typeCode === "CN-PRICE-DIFF") {
+    const quantity = Number(sourceLine.quantity || 0);
+    const originalUnitPrice = Number(sourceLine.unitPrice || 0);
+    const correctedUnitPrice = Number(
+      line.correctedUnitPrice === undefined || line.correctedUnitPrice === ""
+        ? originalUnitPrice
+        : line.correctedUnitPrice,
+    );
+    const originalTaxAmount = Number(sourceLine.taxAmount || 0);
+    const correctedTaxAmount = Number(
+      line.correctedTaxAmount === undefined || line.correctedTaxAmount === ""
+        ? originalTaxAmount
+        : line.correctedTaxAmount,
+    );
+    const subtotal = Math.max(0, (originalUnitPrice - correctedUnitPrice) * quantity);
+    const taxAmount = Math.max(0, originalTaxAmount - correctedTaxAmount);
+    return {
+      ...withCalculatedLineAmount({
+        ...line,
+        itemId: sourceLine.itemId ?? "",
+        warehouseId: sourceLine.warehouseId ?? "",
+        itemName: sourceLine.itemName ?? line.itemName,
+        description: line.description || sourceLine.description || "",
+        taxId: sourceLine.taxId ?? "",
+        quantity: "1",
+        unitPrice: formatAmount(subtotal),
+        discountAmount: "0.000",
+        taxAmount: formatAmount(taxAmount),
+      }),
+      originalUnitPrice: formatAmount(originalUnitPrice),
+      originalTaxAmount: formatAmount(originalTaxAmount),
+      correctedUnitPrice: line.correctedUnitPrice ?? formatAmount(originalUnitPrice),
+      correctedTaxAmount: line.correctedTaxAmount ?? formatAmount(originalTaxAmount),
+    };
+  }
+
+  if (typeCode === "CN-TAX-CORRECTION") {
+    const originalTaxAmount = Number(sourceLine.taxAmount || 0);
+    const correctedTaxAmount = Number(
+      line.correctedTaxAmount === undefined || line.correctedTaxAmount === ""
+        ? originalTaxAmount
+        : line.correctedTaxAmount,
+    );
+    const taxDifference = Math.max(0, originalTaxAmount - correctedTaxAmount);
+    return {
+      ...withCalculatedLineAmount({
+        ...line,
+        itemId: sourceLine.itemId ?? "",
+        warehouseId: sourceLine.warehouseId ?? "",
+        itemName: sourceLine.itemName ?? line.itemName,
+        description: line.description || sourceLine.description || "",
+        taxId: sourceLine.taxId ?? "",
+        quantity: "1",
+        unitPrice: "0.000",
+        discountAmount: "0.000",
+        taxAmount: formatAmount(taxDifference),
+      }),
+      originalUnitPrice: formatAmount(Number(sourceLine.unitPrice || 0)),
+      correctedUnitPrice: formatAmount(Number(sourceLine.unitPrice || 0)),
+      originalTaxAmount: formatAmount(originalTaxAmount),
+      correctedTaxAmount:
+        line.correctedTaxAmount ?? formatAmount(originalTaxAmount),
+    };
+  }
+
+  if (typeCode === "CN-CUSTOMER-SETTLEMENT") {
+    const amount = Number(line.unitPrice || line.lineAmount || 0);
+    return withCalculatedLineAmount({
+      ...line,
+      quantity: "1",
+      unitPrice: formatAmount(amount),
+      discountAmount: "0.000",
+      taxId: "",
+      taxAmount: "0.000",
+    });
+  }
+
+  return withCalculatedLineAmount(line);
+}
+
+function calculateEditorTotals(lines: CreditNoteLineEditorState[]) {
+  return lines.reduce(
+    (totals, line) => {
+      const totalAmount = Number(line.lineAmount || 0);
+      const taxAmount = Number(line.taxAmount || 0);
+      const subtotalAmount = Math.max(0, totalAmount - taxAmount);
+      return {
+        subtotalAmount: Number((totals.subtotalAmount + subtotalAmount).toFixed(3)),
+        taxAmount: Number((totals.taxAmount + taxAmount).toFixed(3)),
+        totalAmount: Number((totals.totalAmount + totalAmount).toFixed(3)),
+      };
+    },
+    { subtotalAmount: 0, taxAmount: 0, totalAmount: 0 },
+  );
+}
+
 export function CreditNoteEditorModal({
   isOpen,
   title,
   editor,
   customers,
   invoices,
+  creditNoteTypes,
   revenueAccounts,
+  warehouses,
   validationError,
   isSubmitting,
   onClose,
@@ -88,45 +247,62 @@ export function CreditNoteEditorModal({
 }: CreditNoteEditorModalProps) {
   const { t, language } = useTranslation();
   const { token } = useAuth();
-  const { data: taxes = [] } = useQuery({ queryKey: ["taxes", "active", token], queryFn: () => getActiveTaxes(token) });
+  const { data: taxes = [] } = useQuery({
+    queryKey: ["taxes", "active", token],
+    queryFn: () => getActiveTaxes(token),
+  });
   const isArabic = language === "ar";
-  const totals = useMemo(() => calculateQuotationTotals(editor.lines), [editor.lines]);
+  const selectedType =
+    creditNoteTypes.find((type) => type.id === editor.creditNoteTypeId) ?? null;
+  const typeCode = selectedType?.code ?? "";
   const selectedInvoice = invoices.find((invoice) => invoice.id === editor.salesInvoiceId);
-  const selectedCustomer = customers.find((customer) => customer.id === editor.customerId) ?? selectedInvoice?.customer;
+  const selectedCustomer =
+    customers.find((customer) => customer.id === editor.customerId) ?? selectedInvoice?.customer;
   const currencyCode = editor.currencyCode || selectedInvoice?.currencyCode || "JOD";
+  const totals = useMemo(() => calculateEditorTotals(editor.lines), [editor.lines]);
   const availableCredit = selectedInvoice ? Number(selectedInvoice.outstandingAmount) : null;
   const exceedsOutstanding =
     availableCredit !== null && totals.totalAmount > availableCredit + 0.001;
   const defaultDiscountLabel = t("salesReceivables.creditNote.defaultDiscountLabel");
+  const invoiceLineOptions = selectedInvoice?.lines ?? [];
+
+  const updateEditorLines = (lines: CreditNoteLineEditorState[]) => {
+    onChange({
+      ...editor,
+      lines,
+    });
+  };
 
   const updateLine = (
     lineKey: string,
-    updater: (line: SalesLineEditorState) => SalesLineEditorState,
+    updater: (line: CreditNoteLineEditorState) => CreditNoteLineEditorState,
   ) => {
-    onChange({
-      ...editor,
-      lines: editor.lines.map((line) =>
-        line.key === lineKey ? withCalculatedLineAmount(updater(line)) : line,
-      ),
-    });
+    updateEditorLines(
+      editor.lines.map((line) => {
+        if (line.key !== lineKey) {
+          return line;
+        }
+        const next = updater(line);
+        const sourceLine = invoiceLineOptions.find(
+          (candidate) => candidate.id === next.salesInvoiceLineId,
+        );
+        return recalculateCreditNoteLine(next, typeCode, sourceLine);
+      }),
+    );
   };
 
   const removeLine = (lineKey: string) => {
     if (editor.lines.length === 1) {
       return;
     }
-
-    onChange({
-      ...editor,
-      lines: editor.lines.filter((line) => line.key !== lineKey),
-    });
+    updateEditorLines(editor.lines.filter((line) => line.key !== lineKey));
   };
 
   const addLine = () => {
-    onChange({
-      ...editor,
-      lines: [...editor.lines, createEmptyDiscountLine(defaultDiscountLabel)],
-    });
+    updateEditorLines([
+      ...editor.lines,
+      createEmptyCreditNoteLine(defaultDiscountLabel, typeCode),
+    ]);
   };
 
   if (!isOpen) {
@@ -199,6 +375,7 @@ export function CreditNoteEditorModal({
                           ...editor,
                           customerId: event.target.value,
                           salesInvoiceId: "",
+                          lines: [createEmptyCreditNoteLine(defaultDiscountLabel, typeCode)],
                         })
                       }
                       className={cn("h-12 border-slate-200 bg-white", isArabic ? "pe-12 ps-12 text-right" : "ps-12")}
@@ -214,6 +391,38 @@ export function CreditNoteEditorModal({
                   </div>
                 </Field>
 
+                <Field label={t("salesReceivables.creditNote.type")} required labelAlign={isArabic ? "end" : "start"}>
+                  <Select
+                    value={editor.creditNoteTypeId}
+                    onChange={(event) => {
+                      const nextType =
+                        creditNoteTypes.find((type) => type.id === event.target.value) ?? null;
+                      onChange({
+                        ...editor,
+                        creditNoteTypeId: event.target.value,
+                        salesInvoiceId:
+                          nextType?.linkedInvoiceRequirement === "OPTIONAL"
+                            ? editor.salesInvoiceId
+                            : "",
+                        lines: [
+                          createEmptyCreditNoteLine(
+                            defaultDiscountLabel,
+                            nextType?.code,
+                          ),
+                        ],
+                      });
+                    }}
+                    className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                  >
+                    <option value="">اختر نوع إشعار الدائن</option>
+                    {creditNoteTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
                 <Field label={t("salesReceivables.field.currency")} required labelAlign={isArabic ? "end" : "start"}>
                   <Input
                     value={currencyCode}
@@ -222,8 +431,14 @@ export function CreditNoteEditorModal({
                     className={cn("h-12 border-slate-200 bg-white uppercase", isArabic && "text-right")}
                   />
                 </Field>
+              </div>
 
-                <Field label={t("salesReceivables.field.linkedInvoice")} required labelAlign={isArabic ? "end" : "start"}>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+                <Field
+                  label={t("salesReceivables.field.linkedInvoice")}
+                  required={selectedType?.linkedInvoiceRequirement === "REQUIRED"}
+                  labelAlign={isArabic ? "end" : "start"}
+                >
                   <Select
                     value={editor.salesInvoiceId}
                     onChange={(event) => {
@@ -232,11 +447,18 @@ export function CreditNoteEditorModal({
                         ...editor,
                         salesInvoiceId: event.target.value,
                         currencyCode: invoice?.currencyCode ?? editor.currencyCode,
+                        lines: [
+                          createEmptyCreditNoteLine(defaultDiscountLabel, typeCode),
+                        ],
                       });
                     }}
                     className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
                   >
-                    <option value="">{t("salesReceivables.empty.noLinkedInvoice")}</option>
+                    <option value="">
+                      {selectedType?.linkedInvoiceRequirement === "OPTIONAL"
+                        ? t("salesReceivables.empty.noLinkedInvoice")
+                        : "اختر فاتورة مبيعات مرتبطة"}
+                    </option>
                     {invoices.map((row) => (
                       <option key={row.id} value={row.id}>
                         {row.reference}
@@ -257,126 +479,350 @@ export function CreditNoteEditorModal({
                     </span>
                   ) : null}
                 </Field>
-              </div>
 
-              <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_1fr]">
                 <Field label={t("salesReceivables.creditNote.reason")} required labelAlign={isArabic ? "end" : "start"}>
                   <Textarea
                     rows={3}
                     value={editor.description}
                     onChange={(event) => onChange({ ...editor, description: event.target.value })}
-                    placeholder={t("salesReceivables.creditNote.reasonPlaceholder", {
+                    placeholder={selectedType?.helperText || t("salesReceivables.creditNote.reasonPlaceholder", {
                       invoice: selectedInvoice?.reference ?? "INV-2026-0154",
                     })}
                     className={cn("min-h-[86px] resize-none border-slate-200 bg-white", isArabic && "text-right")}
                   />
                 </Field>
+              </div>
 
-                <div>
-                  <div className={cn("mb-2 text-sm font-semibold text-slate-900", isArabic && "text-right")}>
-                    {t("salesReceivables.creditNote.type")}
+              <div className="mt-4 flex min-h-[86px] items-center justify-between gap-4 rounded-xl border border-emerald-400 bg-emerald-50/40 px-5 py-4">
+                <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
+                  <div className="text-base font-bold text-slate-950">
+                    {selectedType?.name || t("salesReceivables.creditNote.postSaleDiscount")}
                   </div>
-                  <div className="flex min-h-[86px] items-center justify-between gap-4 rounded-xl border border-emerald-400 bg-emerald-50/40 px-5 py-4">
-                    <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
-                      <div className="text-base font-bold text-slate-950">{t("salesReceivables.creditNote.postSaleDiscount")}</div>
-                      <div className="text-sm font-medium text-slate-500">{t("salesReceivables.creditNote.postSaleDiscountHint")}</div>
-                    </div>
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                      <Tag className="h-5 w-5" />
-                    </div>
+                  <div className="text-sm font-medium text-slate-500">
+                    {selectedType?.helperText || t("salesReceivables.creditNote.postSaleDiscountHint")}
                   </div>
+                </div>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <Tag className="h-5 w-5" />
                 </div>
               </div>
             </section>
 
             <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
               <div className={cn("mb-5 text-lg text-slate-950", isArabic ? "arabic-ui-heading text-right" : "font-black")}>
-                {t("salesReceivables.creditNote.discountDetails")}
+                تفاصيل الإشعار
               </div>
 
               <div className="space-y-3">
-                <div className="hidden grid-cols-[74px_1.8fr_1.35fr_1.05fr_1.05fr_1.15fr_54px] gap-4 px-1 text-sm font-bold text-slate-900 xl:grid">
-                  <div className="text-center">#</div>
-                  <div className={cn(isArabic && "text-right")}>{t("salesReceivables.creditNote.discountType")}</div>
-                  <div className={cn(isArabic && "text-right")}>{t("salesReceivables.field.revenueAccount")}</div>
-                  <div className={cn(isArabic && "text-right")}>{t("salesReceivables.creditNote.amountBeforeTax")}</div>
-                  <div className={cn(isArabic && "text-right")}>{t("salesReceivables.field.taxAmount")}</div>
-                  <div className={cn(isArabic && "text-right")}>{t("salesReceivables.metric.total")}</div>
-                  <div />
-                </div>
+                {editor.lines.map((line, index) => {
+                  const sourceLine = invoiceLineOptions.find(
+                    (candidate) => candidate.id === line.salesInvoiceLineId,
+                  );
+                  return (
+                    <div key={line.key} className="rounded-xl border border-slate-100 bg-slate-50/45 p-4">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="text-sm font-bold text-slate-900">#{index + 1}</div>
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.key)}
+                          disabled={editor.lines.length === 1}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                        >
+                          <span className="sr-only">{t("salesReceivables.action.remove")}</span>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
 
-                {editor.lines.map((line, index) => (
-                  <div key={line.key} className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50/45 p-3 xl:grid-cols-[74px_1.8fr_1.35fr_1.05fr_1.05fr_1.15fr_54px] xl:gap-4 xl:bg-transparent xl:p-0">
-                    <Input
-                      value={`${index + 1}`}
-                      readOnly
-                      className="h-12 border-slate-200 bg-white text-center font-bold"
-                      aria-label={t("salesReceivables.line.label", { index: index + 1 })}
-                    />
-                    <Input
-                      value={line.itemName || defaultDiscountLabel}
-                      onChange={(event) => updateLine(line.key, (current) => ({ ...current, itemName: event.target.value }))}
-                      className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                    />
-                    <Select
-                      value={line.revenueAccountId}
-                      onChange={(event) =>
-                        updateLine(line.key, (current) => ({
-                          ...current,
-                          revenueAccountId: event.target.value,
-                        }))
-                      }
-                      className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                    >
-                      <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
-                      {revenueAccounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.code} - {account.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <CurrencyInput
-                      currencyCode={currencyCode}
-                      value={line.unitPrice}
-                      onChange={(value) => updateLine(line.key, (current) => ({ ...current, quantity: "1", unitPrice: value, discountAmount: "" }))}
-                      isArabic={isArabic}
-                    />
-                    <Select
-                      value={line.taxId}
-                      onChange={(event) => {
-                        const selectedTax = taxes.find((tax) => tax.id === event.target.value);
-                        updateLine(line.key, (current) => ({
-                          ...current,
-                          taxId: selectedTax?.id ?? "",
-                          taxRate: selectedTax ? String(selectedTax.rate) : "",
-                          taxAmount: selectedTax ? current.taxAmount : "",
-                        }));
-                      }}
-                      className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                    >
-                      <option value="">{t("salesReceivables.field.taxAmount")}</option>
-                      {taxes.map((tax) => (
-                        <option key={tax.id} value={tax.id}>{tax.taxName} {Number(tax.rate).toFixed(2)}%</option>
-                      ))}
-                    </Select>
-                    <CurrencyInput
-                      currencyCode={currencyCode}
-                      value={line.lineAmount}
-                      readOnly
-                      isArabic={isArabic}
-                      className="font-bold text-slate-950"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeLine(line.key)}
-                      disabled={editor.lines.length === 1}
-                      className="inline-flex h-12 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                    >
-                      <span className="sr-only">{t("salesReceivables.action.remove")}</span>
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                ))}
+                      {typeCode === "CN-SALES-RETURN" && (
+                        <div className="grid gap-4 lg:grid-cols-5">
+                          <Field label="سطر الفاتورة">
+                            <Select
+                              value={line.salesInvoiceLineId || ""}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  salesInvoiceLineId: event.target.value,
+                                }))
+                              }
+                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                            >
+                              <option value="">اختر سطر الفاتورة</option>
+                              {invoiceLineOptions.map((invoiceLine) => (
+                                <option key={invoiceLine.id} value={invoiceLine.id}>
+                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="الكمية المرتجعة">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              value={line.quantity}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  quantity: event.target.value,
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white text-center"
+                            />
+                          </Field>
+                          <Field label="إرجاع للمخزون">
+                            <Select
+                              value={line.returnToStock ? "true" : "false"}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  returnToStock: event.target.value === "true",
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white"
+                            >
+                              <option value="true">نعم</option>
+                              <option value="false">لا</option>
+                            </Select>
+                          </Field>
+                          <Field label="المستودع">
+                            <Select
+                              value={line.warehouseId || ""}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  warehouseId: event.target.value,
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white"
+                            >
+                              <option value="">اختر المستودع</option>
+                              {warehouses.map((warehouse) => (
+                                <option key={warehouse.id} value={warehouse.id}>
+                                  {warehouse.code} - {warehouse.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="حالة الصنف">
+                            <Input
+                              value={line.itemCondition || ""}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  itemCondition: event.target.value,
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white"
+                            />
+                          </Field>
+                        </div>
+                      )}
+
+                      {typeCode === "CN-PRICE-DIFF" && (
+                        <div className="grid gap-4 lg:grid-cols-4">
+                          <Field label="سطر الفاتورة">
+                            <Select
+                              value={line.salesInvoiceLineId || ""}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  salesInvoiceLineId: event.target.value,
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white"
+                            >
+                              <option value="">اختر سطر الفاتورة</option>
+                              {invoiceLineOptions.map((invoiceLine) => (
+                                <option key={invoiceLine.id} value={invoiceLine.id}>
+                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="السعر الأصلي">
+                            <CurrencyInput currencyCode={currencyCode} value={line.originalUnitPrice || ""} readOnly isArabic={isArabic} />
+                          </Field>
+                          <Field label="السعر المصحح">
+                            <CurrencyInput
+                              currencyCode={currencyCode}
+                              value={line.correctedUnitPrice || ""}
+                              onChange={(value) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  correctedUnitPrice: value,
+                                }))
+                              }
+                              isArabic={isArabic}
+                            />
+                          </Field>
+                          <Field label="الضريبة المصححة">
+                            <CurrencyInput
+                              currencyCode={currencyCode}
+                              value={line.correctedTaxAmount || ""}
+                              onChange={(value) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  correctedTaxAmount: value,
+                                }))
+                              }
+                              isArabic={isArabic}
+                            />
+                          </Field>
+                        </div>
+                      )}
+
+                      {typeCode === "CN-TAX-CORRECTION" && (
+                        <div className="grid gap-4 lg:grid-cols-4">
+                          <Field label="سطر الفاتورة">
+                            <Select
+                              value={line.salesInvoiceLineId || ""}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  salesInvoiceLineId: event.target.value,
+                                }))
+                              }
+                              className="h-12 border-slate-200 bg-white"
+                            >
+                              <option value="">اختر سطر الفاتورة</option>
+                              {invoiceLineOptions.map((invoiceLine) => (
+                                <option key={invoiceLine.id} value={invoiceLine.id}>
+                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="الضريبة الأصلية">
+                            <CurrencyInput currencyCode={currencyCode} value={line.originalTaxAmount || ""} readOnly isArabic={isArabic} />
+                          </Field>
+                          <Field label="الضريبة المصححة">
+                            <CurrencyInput
+                              currencyCode={currencyCode}
+                              value={line.correctedTaxAmount || ""}
+                              onChange={(value) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  correctedTaxAmount: value,
+                                }))
+                              }
+                              isArabic={isArabic}
+                            />
+                          </Field>
+                          <Field label={t("salesReceivables.metric.total")}>
+                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
+                          </Field>
+                        </div>
+                      )}
+
+                      {(typeCode === "CN-CUSTOMER-SETTLEMENT" || !typeCode || typeCode === "CN-DISCOUNT") && (
+                        <div className="grid gap-4 lg:grid-cols-5">
+                          <Field label={typeCode === "CN-CUSTOMER-SETTLEMENT" ? "بيان التسوية" : t("salesReceivables.creditNote.discountType")}>
+                            <Input
+                              value={line.itemName || defaultDiscountLabel}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  itemName: event.target.value,
+                                }))
+                              }
+                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                            />
+                          </Field>
+                          <Field label={t("salesReceivables.field.revenueAccount")}>
+                            <Select
+                              value={line.revenueAccountId}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  revenueAccountId: event.target.value,
+                                }))
+                              }
+                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                            >
+                              <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
+                              {revenueAccounts.map((account) => (
+                                <option key={account.id} value={account.id}>
+                                  {account.code} - {account.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label={t("salesReceivables.creditNote.amountBeforeTax")}>
+                            <CurrencyInput
+                              currencyCode={currencyCode}
+                              value={line.unitPrice}
+                              onChange={(value) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  quantity: "1",
+                                  unitPrice: value,
+                                  discountAmount: "",
+                                }))
+                              }
+                              isArabic={isArabic}
+                            />
+                          </Field>
+                          <Field label={t("salesReceivables.field.taxAmount")}>
+                            <Select
+                              value={line.taxId}
+                              onChange={(event) => {
+                                const selectedTax = taxes.find((tax) => tax.id === event.target.value);
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  taxId: selectedTax?.id ?? "",
+                                  taxRate: selectedTax ? String(selectedTax.rate) : "",
+                                  taxAmount:
+                                    selectedTax && Number(current.unitPrice || 0) > 0
+                                      ? formatAmount(
+                                          Number(current.unitPrice || 0) *
+                                            (Number(selectedTax.rate) / 100),
+                                        )
+                                      : "0.000",
+                                }));
+                              }}
+                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
+                            >
+                              <option value="">{t("salesReceivables.field.taxAmount")}</option>
+                              {taxes.map((tax) => (
+                                <option key={tax.id} value={tax.id}>
+                                  {tax.taxName} {Number(tax.rate).toFixed(2)}%
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label={t("salesReceivables.metric.total")}>
+                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
+                          </Field>
+                        </div>
+                      )}
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_180px]">
+                        <Field label={t("salesReceivables.field.description")}>
+                          <Textarea
+                            rows={2}
+                            value={line.description || ""}
+                            onChange={(event) =>
+                              updateLine(line.key, (current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            className={cn("min-h-[72px] resize-none border-slate-200 bg-white", isArabic && "text-right")}
+                          />
+                        </Field>
+                        <Field label={t("salesReceivables.metric.total")}>
+                          <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
+                        </Field>
+                      </div>
+
+                      {sourceLine ? (
+                        <div className="mt-3 text-xs font-medium text-slate-500">
+                          السطر المختار: {sourceLine.lineNumber} - {sourceLine.itemName || sourceLine.description || "Line"}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.35fr]">
@@ -406,14 +852,21 @@ export function CreditNoteEditorModal({
                     <div className="font-bold text-slate-950">{t("salesReceivables.creditNote.journalAtApproval")}</div>
                     <PostingRow
                       label={t("salesReceivables.creditNote.journalDebit", {
-                        account: revenueAccounts.find((account) => account.id === editor.lines[0]?.revenueAccountId)?.name ?? t("salesReceivables.field.revenueAccount"),
+                        account:
+                          revenueAccounts.find(
+                            (account) => account.id === editor.lines[0]?.revenueAccountId,
+                          )?.name ??
+                          selectedType?.defaultAccount?.name ??
+                          t("salesReceivables.field.revenueAccount"),
                       })}
                       value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
                       isArabic={isArabic}
                     />
                     <PostingRow
                       label={t("salesReceivables.creditNote.journalCredit", {
-                        account: selectedCustomer ? getReceivableAccountName(selectedInvoice) : t("salesReceivables.field.receivableAccount"),
+                        account: selectedCustomer
+                          ? getReceivableAccountName(selectedInvoice)
+                          : t("salesReceivables.field.receivableAccount"),
                       })}
                       value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
                       isArabic={isArabic}
@@ -429,7 +882,7 @@ export function CreditNoteEditorModal({
                   className="inline-flex min-w-[260px] items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-500 bg-white px-5 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
                 >
                   <CirclePlus className="h-4 w-4" />
-                  {t("salesReceivables.creditNote.addDiscountLine")}
+                  {typeCode === "CN-CUSTOMER-SETTLEMENT" ? "إضافة بند تسوية" : "إضافة سطر"}
                 </button>
               </div>
             </section>
