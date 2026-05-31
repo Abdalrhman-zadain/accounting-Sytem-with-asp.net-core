@@ -205,6 +205,7 @@ Current limitation:
 - cashier catalog favorites persist through `GET`/`PUT /pos/favorites/items` (requires the Prisma migration that adds `PosUserFavoriteItem` and related enum values when the database is upgraded).
 - register layout is partially split into `pos-product-card.tsx`, `pos-session-bar.tsx`, and `pos-register-layout.tsx` while state and mutations remain in `pos-page.tsx`.
 - the **Offers** category chip still uses a lightweight text/metadata heuristic (not a dedicated promotion price table); treat it as UX-only until item master exposes promotional fields.
+- the restaurant POS addendum in `docs/pos/Restaurant_POS_Requirements_Bilingual_MD_Style.md` is a requirements/planning reference only; table management, kitchen display/KOT workflows, recipe-driven restaurant deduction timing, delivery-company settlement channels, and restaurant-specific order-type correction controls are not yet implemented in the current POS codebase.
 
 What this means for future edits:
 

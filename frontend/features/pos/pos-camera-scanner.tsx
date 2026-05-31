@@ -22,7 +22,9 @@ export function PosCameraScanner({ isOpen, onClose, onScan }: PosCameraScannerPr
 
   useEffect(() => {
     if (!isOpen) {
-      Quagga.stop();
+      try {
+        Quagga.stop();
+      } catch (e) {}
       return;
     }
 
@@ -31,43 +33,83 @@ export function PosCameraScanner({ isOpen, onClose, onScan }: PosCameraScannerPr
     setError(null);
     lastScannedTime.current = 0;
 
-    Quagga.init(
-      {
-        inputStream: {
-          type: "LiveStream",
-          target: scannerRef.current,
-          constraints: {
-            facingMode: "environment", // Prioritize back camera
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+    // Guard against environments where mediaDevices/getUserMedia is undefined (e.g. insecure HTTP context)
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== "function"
+    ) {
+      setError(
+        getLocalizedText(
+          "Camera access is not supported by your browser or requires a secure HTTPS connection. / الوصول للكاميرا غير مدعوم في متصفحك أو يتطلب اتصالاً آمناً (HTTPS).",
+          language
+        )
+      );
+      return;
+    }
+
+    try {
+      Quagga.init(
+        {
+          inputStream: {
+            type: "LiveStream",
+            target: scannerRef.current,
+            constraints: {
+              facingMode: "environment", // Prioritize back camera
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           },
+          locator: {
+            patchSize: "medium",
+            halfSample: true,
+          },
+          numOfWorkers: navigator.hardwareConcurrency || 2,
+          decoder: {
+            readers: [
+              "ean_reader", // Standard 13 digit EAN
+              "ean_8_reader", // 8 digit EAN
+              "code_128_reader", // Code 128
+              "upc_reader", // Standard UPC
+              "upc_e_reader", // UPC E
+            ],
+            multiple: false,
+          },
+          locate: true,
         },
-        locator: {
-          patchSize: "medium",
-          halfSample: true,
-        },
-        numOfWorkers: navigator.hardwareConcurrency || 2,
-        decoder: {
-          readers: [
-            "ean_reader", // Standard 13 digit EAN
-            "ean_8_reader", // 8 digit EAN
-            "code_128_reader", // Code 128
-            "upc_reader", // Standard UPC
-            "upc_e_reader", // UPC E
-          ],
-          multiple: false,
-        },
-        locate: true,
-      },
-      (err) => {
-        if (err) {
-          console.error("Quagga initialization failed", err);
-          setError(getLocalizedText("Camera access denied or unavailable. / تعذر الوصول للكاميرا.", language));
-          return;
+        (err) => {
+          if (err) {
+            console.error("Quagga initialization failed", err);
+            setError(
+              getLocalizedText(
+                "Camera access denied or unavailable. / تعذر الوصول للكاميرا.",
+                language
+              )
+            );
+            return;
+          }
+          try {
+            Quagga.start();
+          } catch (startErr) {
+            console.error("Quagga start failed", startErr);
+            setError(
+              getLocalizedText(
+                "Failed to start camera stream. / فشل تشغيل بث الكاميرا.",
+                language
+              )
+            );
+          }
         }
-        Quagga.start();
-      }
-    );
+      );
+    } catch (initErr) {
+      console.error("Quagga init threw an error", initErr);
+      setError(
+        getLocalizedText(
+          "Camera initialization failed. / فشل تهيئة الكاميرا.",
+          language
+        )
+      );
+    }
 
     const handleDetected = (result: any) => {
       if (result && result.codeResult && result.codeResult.code) {
@@ -77,7 +119,9 @@ export function PosCameraScanner({ isOpen, onClose, onScan }: PosCameraScannerPr
           lastScannedTime.current = now;
           const code = result.codeResult.code;
           // Stop Quagga so we don't keep firing events while modal closes
-          Quagga.stop();
+          try {
+            Quagga.stop();
+          } catch (e) {}
           onScan(code);
         }
       }
@@ -86,8 +130,10 @@ export function PosCameraScanner({ isOpen, onClose, onScan }: PosCameraScannerPr
     Quagga.onDetected(handleDetected);
 
     return () => {
-      Quagga.offDetected(handleDetected);
-      Quagga.stop();
+      try {
+        Quagga.offDetected(handleDetected);
+        Quagga.stop();
+      } catch (e) {}
     };
   }, [isOpen, onScan, language]);
 
@@ -95,7 +141,9 @@ export function PosCameraScanner({ isOpen, onClose, onScan }: PosCameraScannerPr
     <Modal
       isOpen={isOpen}
       onClose={() => {
-        Quagga.stop();
+        try {
+          Quagga.stop();
+        } catch (e) {}
         onClose();
       }}
       title={getLocalizedText("Scan Barcode / مسح الباركود", language)}

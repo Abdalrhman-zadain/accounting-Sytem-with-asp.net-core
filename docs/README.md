@@ -29,6 +29,7 @@ Additional phase requirements baselines:
 - [Phase 8 Reporting Requirements](./phase-8-reporting-requirements.md)
 - [Phase 9 Tax & Compliance Requirements](./phase-9-tax-compliance-requirements.md)
 - [POS Roles & Permissions Requirements](./pos/Phase_POS_Roles_and_Permissions_Requirements.md)
+- [Restaurant POS Requirements Addendum](./pos/Restaurant_POS_Requirements_Bilingual_MD_Style.md)
 
 ## Scope
 
@@ -47,6 +48,7 @@ These docs describe the currently implemented accounting modules.
 - `phase-7-fixed-assets-management/fixed-assets` is implemented for fixed-asset category setup, asset register maintenance/editing, acquisition draft/post/reverse, depreciation run draft/post/reverse with schedule/history visibility, disposal draft/post/reverse, transfer draft/post/reverse, audit-history capture, summary inquiry, and bilingual ERP workspace coverage.
 - `phase-8-reporting-control/reporting` is implemented for a bilingual reporting workspace covering summary inquiry, trial balance, balance sheet, profit and loss, cash movement, general ledger, audit inquiry, saved report definitions, point-in-time snapshots, export/print output generation, and reporting activity logging using posted accounting data.
 - a POS module now exists at `/pos` with backend-backed session open/close, draft/hold/resume/void sale capture, barcode/code add, item search, cart editing, discounts, payment capture, complete sale, enriched receipt preview/print, controlled receipt reprint, inventory issue on completion, draft journal creation for accountant review, per-sale and session-level pending-review approval actions, accounting rejection/reversal, cashier-side POS return/refund capture, detailed tax/payment/cashier/branch/item/inventory reporting, session reporting using `SalesInvoice.invoiceType = POS`, `PosSession`, `PosPayment`, `PosReturn`, `PosReturnLine`, and `PosReturnPayment`, plus route/menu/API gating between cashier-only operational screens and accountant review/reporting screens.
+- `docs/pos/Restaurant_POS_Requirements_Bilingual_MD_Style.md` is now included as a planning/reference addendum for the later Restaurant POS phase covering tables, kitchen, delivery-company settlement, cashier session submission, and controlled correction workflows. These restaurant-specific capabilities are not yet implemented unless code/docs elsewhere explicitly say so.
 - other later ERP phases are **not implemented yet** and should not be described as existing behavior
 
 ## POS Roles & Permissions Status

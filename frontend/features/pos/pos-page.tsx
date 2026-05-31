@@ -1388,30 +1388,29 @@ export function PosPage() {
     "JOD";
 
   const cartMetrics = useMemo(() => {
-    const subtotalBeforeDiscount = cartLines.reduce(
-      (sum, line) => sum + getLineBase(line),
-      0,
+    const subtotalBeforeDiscount = Number(
+      cartLines.reduce((sum, line) => sum + getLineBase(line), 0).toFixed(2)
     );
-    const lineDiscountTotal = cartLines.reduce(
-      (sum, line) => sum + getLineDiscountAmount(line),
-      0,
+    const lineDiscountTotal = Number(
+      cartLines.reduce((sum, line) => sum + getLineDiscountAmount(line), 0).toFixed(2)
     );
-    const taxableBase = cartLines.reduce(
-      (sum, line) => sum + getLineNetBeforeInvoiceDiscount(line),
-      0,
+    const taxableBase = Number(
+      cartLines.reduce((sum, line) => sum + getLineNetBeforeInvoiceDiscount(line), 0).toFixed(2)
     );
-    const invoiceDiscount = getInvoiceDiscountAmount(
-      invoiceDiscountType,
-      invoiceDiscountValue,
-      taxPolicy === "AFTER_TAX"
-        ? taxableBase +
-        cartLines.reduce(
-          (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
-          0,
-        )
-        : taxableBase,
+    const invoiceDiscount = Number(
+      getInvoiceDiscountAmount(
+        invoiceDiscountType,
+        invoiceDiscountValue,
+        taxPolicy === "AFTER_TAX"
+          ? taxableBase +
+          cartLines.reduce(
+            (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
+            0,
+          )
+          : taxableBase,
+      ).toFixed(2)
     );
-    const tax = cartLines.reduce((sum, line) => {
+    const taxRaw = cartLines.reduce((sum, line) => {
       const lineBase = getLineNetBeforeInvoiceDiscount(line);
       if (taxPolicy === "AFTER_TAX") {
         return sum + getLineTaxAmount(line, 0, taxPolicy);
@@ -1420,23 +1419,27 @@ export function PosPage() {
       const invoiceShare = invoiceDiscount * (lineBase / taxableBase);
       return sum + getLineTaxAmount(line, invoiceShare, taxPolicy);
     }, 0);
-    const total =
+    const tax = Number(taxRaw.toFixed(2));
+    const totalRaw =
       taxPolicy === "AFTER_TAX"
         ? Math.max(taxableBase + tax - invoiceDiscount, 0)
         : Math.max(taxableBase - invoiceDiscount, 0) + tax;
-    const tendered = paymentEntriesResolved.reduce(
-      (sum, entry) => sum + entry.amountValue,
-      0,
+    const total = Number(totalRaw.toFixed(2));
+    const tendered = Number(
+      paymentEntriesResolved.reduce(
+        (sum, entry) => sum + entry.amountValue,
+        0,
+      ).toFixed(2)
     );
-    const paid = Math.min(tendered, total);
-    const change = Math.max(tendered - total, 0);
-    const amountDue = Math.max(total - tendered, 0);
+    const paid = Number(Math.min(tendered, total).toFixed(2));
+    const change = Math.max(Number((tendered - total).toFixed(2)), 0);
+    const amountDue = Math.max(Number((total - tendered).toFixed(2)), 0);
 
     return {
       subtotalBeforeDiscount,
       lineDiscountTotal,
       invoiceDiscount,
-      discountTotal: lineDiscountTotal + invoiceDiscount,
+      discountTotal: Number((lineDiscountTotal + invoiceDiscount).toFixed(2)),
       taxableBase,
       tax,
       total,
