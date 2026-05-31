@@ -301,7 +301,9 @@ export function SalesReceivablesPage() {
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [invoiceEditorClientError, setInvoiceEditorClientError] = useState<string | null>(null);
   const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState>(EMPTY_INVOICE_EDITOR);
+  const isInlineOrderWorkspace = activeTab === "orders" && isOrderEditorOpen;
   const isInlineInvoiceWorkspace = activeTab === "invoices" && isInvoiceEditorOpen;
+  const isInlineDocumentWorkspace = isInlineOrderWorkspace || isInlineInvoiceWorkspace;
 
   const [creditNoteSearch, setCreditNoteSearch] = useState("");
   const [creditNoteStatusFilter, setCreditNoteStatusFilter] = useState<"DRAFT" | "POSTED" | "">("");
@@ -1608,14 +1610,20 @@ export function SalesReceivablesPage() {
   const activeTabBreadcrumbLabel = SALES_TAB_BREADCRUMB_LABELS[activeTab];
 
   return (
-    <PageShell className={cn(isInlineInvoiceWorkspace ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
-      <div className={cn(isInlineInvoiceWorkspace ? "space-y-4" : "space-y-8")}>
+    <PageShell className={cn(isInlineDocumentWorkspace ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
+      <div className={cn(isInlineDocumentWorkspace ? "space-y-4" : "space-y-8")}>
         <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
           <span className="text-gray-700">المبيعات</span>
           <span className="mx-2 text-gray-300">/</span>
-          <span className={cn(activeTab === "invoices" && !isInlineInvoiceWorkspace ? "text-teal-700" : "text-gray-700")}>
+          <span className={cn((activeTab === "invoices" && !isInlineInvoiceWorkspace) || (activeTab === "orders" && !isInlineOrderWorkspace) ? "text-teal-700" : "text-gray-700")}>
             {activeTabBreadcrumbLabel}
           </span>
+          {isInlineOrderWorkspace ? (
+            <>
+              <span className="mx-2 text-gray-300">/</span>
+              <span className="text-teal-700">أمر بيع</span>
+            </>
+          ) : null}
           {isInlineInvoiceWorkspace ? (
             <>
               <span className="mx-2 text-gray-300">/</span>
@@ -2048,81 +2056,108 @@ export function SalesReceivablesPage() {
 
       {activeTab === "orders" ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <SummaryCard label={t("salesReceivables.summary.orders")} value={salesOrders.length} hint={t("salesReceivables.hint.currentFilteredList")} />
-            <SummaryCard label={t("salesReceivables.summary.confirmed")} value={salesOrders.filter((row) => row.status === "CONFIRMED").length} hint={t("salesReceivables.hint.readyToInvoice")} />
-            <SummaryCard label={t("salesReceivables.summary.orderValue")} value={formatCurrency(salesOrders.reduce((sum, row) => sum + Number(row.totalAmount), 0))} hint={t("salesReceivables.hint.totalOrderAmount")} />
-          </div>
-          <Card className="p-5">
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.5fr_auto]">
-              <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder={t("salesReceivables.filters.searchOrders")} />
-              <Select value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
-                <option value="">{t("salesReceivables.filters.allStatuses")}</option>
-                <option value="DRAFT">{t("salesReceivables.status.draft")}</option>
-                <option value="CONFIRMED">{t("salesReceivables.status.confirmed")}</option>
-                <option value="PARTIALLY_INVOICED">{t("salesReceivables.status.partiallyInvoiced")}</option>
-                <option value="FULLY_INVOICED">{t("salesReceivables.status.fullyInvoiced")}</option>
-                <option value="CANCELLED">{t("salesReceivables.status.cancelled")}</option>
-              </Select>
-              <Button className="gap-2" onClick={() => { setOrderEditor(EMPTY_ORDER_EDITOR()); setIsOrderEditorOpen(true); }}>
-                <CirclePlus className="h-4 w-4 shrink-0" />
-                {t("salesReceivables.action.newOrder")}
-              </Button>
-            </div>
-          </Card>
-          <div className="grid gap-6 grid-cols-1">
-            <Card className="overflow-hidden p-0">
-              <div className="border-b border-gray-200 px-6 py-4">
-                <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.orders")}</div>
-                <div className="text-xs text-gray-500">{t("salesReceivables.section.ordersDescription")}</div>
+          {isOrderEditorOpen ? (
+            <SalesOrderEditorModal
+              presentation="inline"
+              isOpen={isOrderEditorOpen}
+              onClose={() => setIsOrderEditorOpen(false)}
+              title={orderEditor.id ? t("salesReceivables.dialog.editOrderDraft") : t("salesReceivables.dialog.newOrder")}
+              editor={orderEditor}
+              customers={activeCustomers}
+              quotations={matchingCustomerQuotations}
+              inventoryItems={inventoryItems}
+              isInventoryItemsLoading={inventoryItemsQuery.isLoading}
+              revenueAccounts={revenueAccountsQuery.data ?? []}
+              isSavingDraft={createOrderMutation.isPending || updateOrderMutation.isPending}
+              isConfirming={confirmOrderMutation.isPending}
+              onChange={setOrderEditor}
+              onCustomerChange={handleOrderCustomerChange}
+              onSaveDraft={() => {
+                void saveOrderDraft();
+              }}
+              onConfirm={() => {
+                void confirmOrderFromEditor();
+              }}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <SummaryCard label={t("salesReceivables.summary.orders")} value={salesOrders.length} hint={t("salesReceivables.hint.currentFilteredList")} />
+                <SummaryCard label={t("salesReceivables.summary.confirmed")} value={salesOrders.filter((row) => row.status === "CONFIRMED").length} hint={t("salesReceivables.hint.readyToInvoice")} />
+                <SummaryCard label={t("salesReceivables.summary.orderValue")} value={formatCurrency(salesOrders.reduce((sum, row) => sum + Number(row.totalAmount), 0))} hint={t("salesReceivables.hint.totalOrderAmount")} />
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <TableHead>{t("salesReceivables.field.reference")}</TableHead>
-                      <TableHead>{t("salesReceivables.field.customer")}</TableHead>
-                      <TableHead>{t("salesReceivables.field.orderDate")}</TableHead>
-                      <TableHead>{t("salesReceivables.field.quotation")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
-                      <TableHead className="text-center">{t("salesReceivables.field.status")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {salesOrders.length === 0 ? (
-                      <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">{t("salesReceivables.empty.orders")}</td></tr>
-                    ) : salesOrders.map((row) => (
-                      <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedOrder?.id === row.id && "bg-gray-50")}>
-                        <td className="px-6 py-4"><button type="button" className="text-left font-bold text-gray-900" onClick={() => setSelectedOrderId(row.id)}>{row.reference}</button></td>
-                        <td className="px-6 py-4"><div className="font-semibold text-gray-900">{row.customer.name}</div><div className="text-xs text-gray-500">{row.customer.code}</div></td>
-                        <td className="px-6 py-4">{formatDate(row.orderDate)}</td>
-                        <td className="px-6 py-4 text-gray-700">{row.sourceQuotation?.reference ?? t("salesReceivables.empty.manual")}</td>
-                        <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">{formatCurrency(row.totalAmount)}</td>
-                        <td className="px-6 py-4 text-center"><StatusPill label={row.status} tone={row.status === "CONFIRMED" || row.status === "FULLY_INVOICED" ? "positive" : row.status === "DRAFT" ? "warning" : "neutral"} /></td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-end gap-2">
-                            {row.status === "DRAFT" ? (
-                              <>
-                                <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" onClick={() => {
-                                  setOrderEditor({ id: row.id, reference: row.reference, orderDate: row.orderDate.slice(0, 10), promisedDate: row.promisedDate?.slice(0, 10) ?? "", currencyCode: row.currencyCode, customerId: row.customer.id, sourceQuotationId: row.sourceQuotation?.id ?? "", shippingDetails: row.shippingDetails ?? "", description: row.description ?? "", lines: row.lines.map(mapLineToEditor) });
-                                  setIsOrderEditorOpen(true);
-                                }}>{t("salesReceivables.action.edit")}</button>
-                                <button type="button" className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100" onClick={() => confirmOrderMutation.mutate(row.id)}>{t("salesReceivables.action.confirm")}</button>
-                                <button type="button" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100" onClick={() => cancelOrderMutation.mutate(row.id)}>{t("salesReceivables.action.cancelDocument")}</button>
-                              </>
-                            ) : row.status === "CONFIRMED" || row.status === "PARTIALLY_INVOICED" ? (
-                              <button type="button" className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100" onClick={() => openInvoiceEditorFromOrder(row.id)}>{t("salesReceivables.action.toInvoice")}</button>
-                            ) : <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" onClick={() => setSelectedOrderId(row.id)}>{t("salesReceivables.action.view")}</button>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <Card className="p-5">
+                <div className="grid gap-4 lg:grid-cols-[1.2fr_0.5fr_auto]">
+                  <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder={t("salesReceivables.filters.searchOrders")} />
+                  <Select value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
+                    <option value="">{t("salesReceivables.filters.allStatuses")}</option>
+                    <option value="DRAFT">{t("salesReceivables.status.draft")}</option>
+                    <option value="CONFIRMED">{t("salesReceivables.status.confirmed")}</option>
+                    <option value="PARTIALLY_INVOICED">{t("salesReceivables.status.partiallyInvoiced")}</option>
+                    <option value="FULLY_INVOICED">{t("salesReceivables.status.fullyInvoiced")}</option>
+                    <option value="CANCELLED">{t("salesReceivables.status.cancelled")}</option>
+                  </Select>
+                  <Button className="gap-2" onClick={() => { setOrderEditor(EMPTY_ORDER_EDITOR()); setIsOrderEditorOpen(true); }}>
+                    <CirclePlus className="h-4 w-4 shrink-0" />
+                    {t("salesReceivables.action.newOrder")}
+                  </Button>
+                </div>
+              </Card>
+              <div className="grid gap-6 grid-cols-1">
+                <Card className="overflow-hidden p-0">
+                  <div className="border-b border-gray-200 px-6 py-4">
+                    <div className="text-sm font-bold text-gray-900">{t("salesReceivables.section.orders")}</div>
+                    <div className="text-xs text-gray-500">{t("salesReceivables.section.ordersDescription")}</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <TableHead>{t("salesReceivables.field.reference")}</TableHead>
+                          <TableHead>{t("salesReceivables.field.customer")}</TableHead>
+                          <TableHead>{t("salesReceivables.field.orderDate")}</TableHead>
+                          <TableHead>{t("salesReceivables.field.quotation")}</TableHead>
+                          <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
+                          <TableHead className="text-center">{t("salesReceivables.field.status")}</TableHead>
+                          <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesOrders.length === 0 ? (
+                          <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">{t("salesReceivables.empty.orders")}</td></tr>
+                        ) : salesOrders.map((row) => (
+                          <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedOrder?.id === row.id && "bg-gray-50")}>
+                            <td className="px-6 py-4"><button type="button" className="text-left font-bold text-gray-900" onClick={() => setSelectedOrderId(row.id)}>{row.reference}</button></td>
+                            <td className="px-6 py-4"><div className="font-semibold text-gray-900">{row.customer.name}</div><div className="text-xs text-gray-500">{row.customer.code}</div></td>
+                            <td className="px-6 py-4">{formatDate(row.orderDate)}</td>
+                            <td className="px-6 py-4 text-gray-700">{row.sourceQuotation?.reference ?? t("salesReceivables.empty.manual")}</td>
+                            <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">{formatCurrency(row.totalAmount)}</td>
+                            <td className="px-6 py-4 text-center"><StatusPill label={row.status} tone={row.status === "CONFIRMED" || row.status === "FULLY_INVOICED" ? "positive" : row.status === "DRAFT" ? "warning" : "neutral"} /></td>
+                            <td className="px-6 py-4">
+                              <div className="flex justify-end gap-2">
+                                {row.status === "DRAFT" ? (
+                                  <>
+                                    <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" onClick={() => {
+                                      setOrderEditor({ id: row.id, reference: row.reference, orderDate: row.orderDate.slice(0, 10), promisedDate: row.promisedDate?.slice(0, 10) ?? "", currencyCode: row.currencyCode, customerId: row.customer.id, sourceQuotationId: row.sourceQuotation?.id ?? "", shippingDetails: row.shippingDetails ?? "", description: row.description ?? "", lines: row.lines.map(mapLineToEditor) });
+                                      setIsOrderEditorOpen(true);
+                                    }}>{t("salesReceivables.action.edit")}</button>
+                                    <button type="button" className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100" onClick={() => confirmOrderMutation.mutate(row.id)}>{t("salesReceivables.action.confirm")}</button>
+                                    <button type="button" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100" onClick={() => cancelOrderMutation.mutate(row.id)}>{t("salesReceivables.action.cancelDocument")}</button>
+                                  </>
+                                ) : row.status === "CONFIRMED" || row.status === "PARTIALLY_INVOICED" ? (
+                                  <button type="button" className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100" onClick={() => openInvoiceEditorFromOrder(row.id)}>{t("salesReceivables.action.toInvoice")}</button>
+                                ) : <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" onClick={() => setSelectedOrderId(row.id)}>{t("salesReceivables.action.view")}</button>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
               </div>
-            </Card>
-          </div>
+            </>
+          )}
 
           <Modal
             isOpen={!!selectedOrder}
@@ -3127,28 +3162,6 @@ export function SalesReceivablesPage() {
         }}
         onApprove={() => {
           void approveQuotationFromEditor();
-        }}
-      />
-
-      <SalesOrderEditorModal
-        isOpen={isOrderEditorOpen}
-        onClose={() => setIsOrderEditorOpen(false)}
-        title={orderEditor.id ? t("salesReceivables.dialog.editOrderDraft") : t("salesReceivables.dialog.newOrder")}
-        editor={orderEditor}
-        customers={activeCustomers}
-        quotations={matchingCustomerQuotations}
-        inventoryItems={inventoryItems}
-        isInventoryItemsLoading={inventoryItemsQuery.isLoading}
-        revenueAccounts={revenueAccountsQuery.data ?? []}
-        isSavingDraft={createOrderMutation.isPending || updateOrderMutation.isPending}
-        isConfirming={confirmOrderMutation.isPending}
-        onChange={setOrderEditor}
-        onCustomerChange={handleOrderCustomerChange}
-        onSaveDraft={() => {
-          void saveOrderDraft();
-        }}
-        onConfirm={() => {
-          void confirmOrderFromEditor();
         }}
       />
 
