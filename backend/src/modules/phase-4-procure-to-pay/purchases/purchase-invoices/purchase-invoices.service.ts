@@ -187,7 +187,9 @@ export class PurchaseInvoicesService {
   async create(dto: CreatePurchaseInvoiceDto) {
     const supplier = await this.suppliersService.ensureActiveSupplier(dto.supplierId);
     const currencyCode = dto.currencyCode?.trim().toUpperCase() || supplier.defaultCurrency;
-    const reference = dto.reference?.trim() || this.generateReference('PINV');
+    const invoiceDate = new Date(dto.invoiceDate);
+    const reference =
+      dto.reference?.trim() || (await this.generateDailyReference(invoiceDate));
     const lines = await this.resolveLines(dto.lines);
     const totals = this.computeTotals(lines);
     if (totals.totalAmount <= 0) {
@@ -205,7 +207,7 @@ export class PurchaseInvoicesService {
       const created = await this.prisma.purchaseInvoice.create({
         data: {
           reference,
-          invoiceDate: new Date(dto.invoiceDate),
+          invoiceDate,
           supplierId: supplier.id,
           currencyCode,
           description: dto.description?.trim() || null,
@@ -1078,10 +1080,34 @@ export class PurchaseInvoicesService {
     return Number(value).toFixed(4);
   }
 
-  private generateReference(prefix: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-    return `${prefix}-${compactDate}-${suffix}`;
+  private async generateDailyReference(invoiceDate: Date) {
+    const compactDate = invoiceDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `PINV-${compactDate}-`;
+    const rows = await this.prisma.purchaseInvoice.findMany({
+      where: {
+        reference: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        reference: true,
+      },
+    });
+
+    let maxSequence = 0;
+    for (const row of rows) {
+      const match = row.reference.match(new RegExp(`^PINV-${compactDate}-(\\d+)$`));
+      if (!match) {
+        continue;
+      }
+
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > maxSequence) {
+        maxSequence = parsed;
+      }
+    }
+
+    return `PINV-${compactDate}-${maxSequence + 1}`;
   }
 
   private isUniqueConflict(error: unknown, field: string) {

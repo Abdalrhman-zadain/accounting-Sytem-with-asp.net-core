@@ -92,7 +92,7 @@ export function Button({
   ...props
 }: {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "outline";
   size?: "sm" | "md" | "lg";
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const variants = {
@@ -100,6 +100,7 @@ export function Button({
     secondary: "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm",
     danger: "bg-red-50 text-red-700 hover:bg-red-100 shadow-sm",
     ghost: "bg-transparent text-gray-600 hover:bg-gray-100",
+    outline: "bg-transparent text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm",
   };
 
   const sizes = {

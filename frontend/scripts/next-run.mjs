@@ -24,7 +24,19 @@ function resetNextArtifacts(targetDir) {
 const env = {
   ...process.env,
   NEXT_DIST_DIR: mode === 'dev' ? '.next-dev' : '.next',
+  ...(mode === 'dev'
+    ? {
+        WATCHPACK_POLLING: process.env.WATCHPACK_POLLING ?? 'true',
+        CHOKIDAR_USEPOLLING: process.env.CHOKIDAR_USEPOLLING ?? 'true',
+      }
+    : {}),
 };
+
+const nextArgs = [mode];
+
+if (mode === 'dev') {
+  nextArgs.push('--webpack');
+}
 
 if (mode === 'dev') {
   resetNextArtifacts(devNextDir);
@@ -34,7 +46,7 @@ if (mode === 'build') {
   resetNextArtifacts(buildNextDir);
 }
 
-const child = spawn(process.execPath, [nextCli, mode], {
+const child = spawn(process.execPath, [nextCli, ...nextArgs], {
   cwd: frontendRoot,
   env,
   stdio: 'inherit',

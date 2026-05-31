@@ -254,7 +254,9 @@ export class PurchaseRequestsService {
 
     const supplier = await this.suppliersService.ensureActiveSupplier(dto.supplierId);
     const currencyCode = dto.currencyCode?.trim().toUpperCase() || supplier.defaultCurrency;
-    const reference = dto.reference?.trim() || this.generateReference('PO');
+    const orderDate = new Date(dto.orderDate);
+    const reference =
+      dto.reference?.trim() || (await this.generateDailyOrderReference(orderDate));
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -262,7 +264,7 @@ export class PurchaseRequestsService {
         const order = await tx.purchaseOrder.create({
           data: {
             reference,
-            orderDate: new Date(dto.orderDate),
+            orderDate,
             supplierId: supplier.id,
             currencyCode,
             description: dto.description?.trim() || request.description || null,
@@ -641,12 +643,6 @@ export class PurchaseRequestsService {
     return Number(value).toFixed(4);
   }
 
-  private generateReference(prefix: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-    return `${prefix}-${compactDate}-${suffix}`;
-  }
-
   private async generateDailyReference(requestDate: Date) {
     const compactDate = requestDate.toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `PR-${compactDate}-`;
@@ -675,6 +671,36 @@ export class PurchaseRequestsService {
     }
 
     return `PR-${compactDate}-${maxSequence + 1}`;
+  }
+
+  private async generateDailyOrderReference(orderDate: Date) {
+    const compactDate = orderDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `PO-${compactDate}-`;
+    const rows = await this.prisma.purchaseOrder.findMany({
+      where: {
+        reference: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        reference: true,
+      },
+    });
+
+    let maxSequence = 0;
+    for (const row of rows) {
+      const match = row.reference.match(new RegExp(`^PO-${compactDate}-(\\d+)$`));
+      if (!match) {
+        continue;
+      }
+
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > maxSequence) {
+        maxSequence = parsed;
+      }
+    }
+
+    return `PO-${compactDate}-${maxSequence + 1}`;
   }
 
   private parseBusinessDate(value: string, label: string) {

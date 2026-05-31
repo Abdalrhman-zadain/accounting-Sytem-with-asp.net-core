@@ -28,6 +28,19 @@ What this means for future edits:
 - if the failure recurs, document the specific triggers or environment details here.
 - if frontend script changes bypass `next-run.mjs`, re-verify that stale `.next` artifacts are not the cause before assuming dev/build failures come from application code
 
+## Frontend Dev Watchers On Linux
+
+Current limitation:
+
+- some Linux environments hit `OS file watch limit reached` / `ENOSPC` errors when Next.js development mode runs with native file watching, especially when Turbopack tries to watch large dependency trees under `node_modules`.
+- the frontend `npm run dev` launcher now routes through `frontend/scripts/next-run.mjs`, forces `next dev --webpack`, and enables polling-friendly watcher env vars (`WATCHPACK_POLLING=true`, `CHOKIDAR_USEPOLLING=true`) by default so local development does not depend on the host inotify watcher ceiling.
+- polling is more resilient for local development, but it can use more CPU than native watchers on large projects.
+
+What this means for future edits:
+
+- keep frontend dev-start documentation aligned with the launcher behavior if the watcher strategy changes again.
+- if `npm run dev` is changed to go back to Turbopack or native watching, document the required Linux `fs.inotify.max_user_watches` guidance here so watch-limit startup failures are not mistaken for missing files or broken imports.
+
 ## Documentation Warning
 
 If code and docs drift:

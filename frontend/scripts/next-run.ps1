@@ -30,7 +30,13 @@ switch ($Mode) {
   "dev" {
     Reset-NextArtifacts $devNextDir
     $env:NEXT_DIST_DIR = ".next-dev"
-    & node $nextCli dev
+    if (-not $env:WATCHPACK_POLLING) {
+      $env:WATCHPACK_POLLING = "true"
+    }
+    if (-not $env:CHOKIDAR_USEPOLLING) {
+      $env:CHOKIDAR_USEPOLLING = "true"
+    }
+    & node $nextCli dev --webpack
   }
   "build" {
     Reset-NextArtifacts $buildNextDir

@@ -3295,7 +3295,12 @@ export function SalesReceivablesPage() {
         warehouses={inventoryWarehousesQuery.data ?? []}
         validationError={creditNoteEditorClientError ?? errorMessage}
         isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
-        onChange={setCreditNoteEditor}
+        onChange={(editor) =>
+          setCreditNoteEditor((current) => ({
+            ...current,
+            ...editor,
+          }))
+        }
         onSubmit={saveCreditNoteFromEditor}
         onSubmitAndPost={saveAndPostCreditNote}
       />
