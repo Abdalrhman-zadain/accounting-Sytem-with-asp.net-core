@@ -65,7 +65,7 @@ export function BankCashAccountsTable({
                   <button className="text-left" onClick={() => onSelect(row.id)}>
                     <div className="font-bold text-gray-900 arabic-auto">{localizeName(row.name)}</div>
                     <div className="font-mono text-xs text-teal-500 arabic-auto">
-                      {row.account.code} - {row.account.name}
+                      {row.account.code} - {localizeName(row.account.name, row.account.nameAr)}
                     </div>
                   </button>
                 </td>

@@ -4339,10 +4339,11 @@ function EditorActions({
 }
 
 function AccountLine({ label, account }: { label: string; account?: InventoryItem["inventoryAccount"] }) {
+  const { language } = useTranslation();
   return (
     <div>
       <span className="font-semibold text-gray-900">{label}:</span>{" "}
-      {account ? `${account.code} · ${account.name}` : "—"}
+      {account ? `${account.code} · ${language === "ar" ? account.nameAr || account.name : account.name}` : "—"}
     </div>
   );
 }

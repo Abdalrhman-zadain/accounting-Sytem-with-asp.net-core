@@ -17,7 +17,7 @@ export function SetupProgressCard() {
                     </p>
                 </div>
                 <div className="pt-1">
-                    <Button variant="outline" size="sm" className="whitespace-nowrap">
+                    <Button variant="secondary" size="sm" className="whitespace-nowrap">
                         <LuChartColumn className="ml-2 h-4 w-4" />
                         عرض التفاصيل
                     </Button>

@@ -29,7 +29,7 @@ import {
   withCalculatedLineAmount,
 } from "./quotation-editor-modal";
 
-type RevenueAccountOption = { id: string; code: string; name: string };
+type RevenueAccountOption = { id: string; code: string; name: string; nameAr?: string | null };
 
 type SalesDocumentEditorModalProps = {
   isOpen: boolean;
@@ -472,7 +472,7 @@ export function SalesDocumentEditorModal({
                                       <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
                                       {revenueAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>
-                                          {account.code} · {account.name}
+                                          {account.code} · {isArabic ? account.nameAr || account.name : account.name}
                                         </option>
                                       ))}
                                     </Select>

@@ -253,13 +253,14 @@ What else to check:
 - supplier debit-note type selection must come from active `SupplierDebitNoteType` master data (`GET /supplier-debit-note-types/active`) rather than a hardcoded frontend-only option list
 - `SupplierDebitNoteType` now controls whether a linked purchase invoice is required, whether inventory may be affected, whether tax adjustment is allowed, which default posting account is used, and which helper text the supplier debit-note editor should show
 - the foundation seed should provide a working default `SupplierDebitNoteType` baseline (`DN-PURCHASE-DISCOUNT`, `DN-PURCHASE-RETURN`, `DN-PRICE-CORRECTION`, `DN-TAX-CORRECTION`, and `DN-SUPPLIER-SETTLEMENT`) plus an input-VAT asset account for tax-only supplier debit-note flows
-- purchase-invoice, supplier-payment, and debit-note detail views should expose `عرض القيد المحاسبي` inline in the same open modal/panel instead of forcing navigation away from the current purchase workflow
+- purchase-invoice, supplier-payment, and debit-note detail views should open in the same modal-style workflow and expose `عرض القيد المحاسبي` inline inside that modal instead of forcing navigation away from the current purchase workflow
 - supplier debit notes must support distinct business types instead of treating every note as a generic supplier discount:
   - `DN-PURCHASE-DISCOUNT` remains financial-only and keeps the purchase-discount style editor
   - `DN-PURCHASE-RETURN` must stay separate from discounts because it reduces inventory, affects input VAT, and uses purchase-return accounting behavior
   - `DN-PRICE-CORRECTION` adjusts purchase price differences without quantity movement
   - `DN-TAX-CORRECTION` adjusts input VAT only without quantity or stock movement
   - `DN-SUPPLIER-SETTLEMENT` supports supplier settlement lines and may leave linked purchase invoice blank when the master-data rule allows it
+- supplier debit-note posting must validate balance on the full assembled journal, including the supplier payable debit plus the offset lines, rather than treating the offset-only lines as a standalone balanced entry
 - purchase-return debit-note lines must load from the linked purchase invoice lines, cap returned quantity to purchased minus previously posted/applied returns, and require a warehouse because returning stocked items reduces warehouse inventory
 - inventory-bearing supplier debit notes must create `InventoryStockMovement` rows with movement type `PURCHASE_RETURN`, decrement item and warehouse balances, and add inventory-value adjustment journal lines inside the same posting flow
 - keep the purchases module split by subdomain ownership such as suppliers, requests, orders, invoices, payments, debit notes, posting/accounting, and validation/control

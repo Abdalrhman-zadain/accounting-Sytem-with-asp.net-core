@@ -422,6 +422,7 @@ export type InventoryItem = {
     id: string;
     code: string;
     name: string;
+    nameAr?: string | null;
     type: AccountType;
     currencyCode: string;
     isActive: boolean;
@@ -431,6 +432,7 @@ export type InventoryItem = {
     id: string;
     code: string;
     name: string;
+    nameAr?: string | null;
     type: AccountType;
     currencyCode: string;
     isActive: boolean;
@@ -440,6 +442,7 @@ export type InventoryItem = {
     id: string;
     code: string;
     name: string;
+    nameAr?: string | null;
     type: AccountType;
     currencyCode: string;
     isActive: boolean;
@@ -449,6 +452,7 @@ export type InventoryItem = {
     id: string;
     code: string;
     name: string;
+    nameAr?: string | null;
     type: AccountType;
     currencyCode: string;
     isActive: boolean;
@@ -2009,6 +2013,7 @@ export type Customer = {
     id: string;
     code: string;
     name: string;
+    nameAr?: string | null;
     type: AccountType;
     currencyCode: string;
     isActive: boolean;

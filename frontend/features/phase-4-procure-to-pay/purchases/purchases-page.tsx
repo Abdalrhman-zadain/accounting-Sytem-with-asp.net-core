@@ -40,6 +40,7 @@ import {
   deactivateSupplier,
   getAccountsTree,
   getActivePaymentTerms,
+  getCurrencies,
   getBankCashAccounts,
   getAccountOptions,
   getActiveSupplierDebitNoteTypes,
@@ -85,7 +86,7 @@ import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn, formatCurrency, formatDate, cleanDisplayName } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { AccountOption, AccountTreeNode, DebitNote, DueDateCalculationMethod, InventoryItem, InventoryWarehouse, PaymentTerm, PurchaseInvoice, PurchaseOrder, PurchasePolicy, PurchaseRequest, Supplier, SupplierDebitNoteType, SupplierPayment, Tax } from "@/types/api";
+import type { AccountOption, AccountTreeNode, DebitNote, DueDateCalculationMethod, InventoryItem, InventoryWarehouse, PaymentTerm, PurchaseInvoice, PurchaseOrder, PurchasePolicy, PurchaseRequest, Supplier, SupplierDebitNoteType, SupplierPayment, Tax, Currency } from "@/types/api";
 import { Button, Card, Modal, PageShell, SectionHeading, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
@@ -500,6 +501,13 @@ export function PurchasesPage() {
     staleTime: 5 * 60 * 1000,
   });
   const activePaymentTerms = paymentTermsQuery.data ?? [];
+
+  const currenciesQuery = useQuery({
+    queryKey: ["currencies", token],
+    queryFn: () => getCurrencies(token),
+    staleTime: 5 * 60 * 1000,
+  });
+  const currencies = currenciesQuery.data ?? [];
   const payableAccounts = useMemo(() => {
     const tree = payableAccountsTreeQuery.data ?? [];
     const accountsPayableRoot = findAccountTreeNode(
@@ -1270,10 +1278,10 @@ export function PurchasesPage() {
   const requestSaveError = getMutationErrorMessage(createPurchaseRequestMutation.error ?? updatePurchaseRequestMutation.error);
   const requestActionError = getMutationErrorMessage(
     submitPurchaseRequestMutation.error ??
-      approvePurchaseRequestMutation.error ??
-      rejectPurchaseRequestMutation.error ??
-      closePurchaseRequestMutation.error ??
-      convertPurchaseRequestToOrderMutation.error,
+    approvePurchaseRequestMutation.error ??
+    rejectPurchaseRequestMutation.error ??
+    closePurchaseRequestMutation.error ??
+    convertPurchaseRequestToOrderMutation.error,
   );
   const requestConversionError = getPurchaseRequestConversionError(requestConversionEditor, t);
   const requestFormError = getPurchaseRequestFormError(requestEditor);
@@ -1286,10 +1294,10 @@ export function PurchasesPage() {
   const orderSaveError = getMutationErrorMessage(createPurchaseOrderMutation.error ?? updatePurchaseOrderMutation.error);
   const orderActionError = getMutationErrorMessage(
     issuePurchaseOrderMutation.error ??
-      markPurchaseOrderPartiallyReceivedMutation.error ??
-      markPurchaseOrderFullyReceivedMutation.error ??
-      cancelPurchaseOrderMutation.error ??
-      closePurchaseOrderMutation.error,
+    markPurchaseOrderPartiallyReceivedMutation.error ??
+    markPurchaseOrderFullyReceivedMutation.error ??
+    cancelPurchaseOrderMutation.error ??
+    closePurchaseOrderMutation.error,
   );
   const activeOrderActionMutationPending =
     issuePurchaseOrderMutation.isPending ||
@@ -1318,8 +1326,8 @@ export function PurchasesPage() {
       selectedType: selectedSupplierDebitNoteType,
       availableInvoiceBalance: debitNoteEditor.purchaseInvoiceId
         ? Number(
-            purchaseInvoices.find((invoice) => invoice.id === debitNoteEditor.purchaseInvoiceId)?.outstandingAmount ?? 0,
-          )
+          purchaseInvoices.find((invoice) => invoice.id === debitNoteEditor.purchaseInvoiceId)?.outstandingAmount ?? 0,
+        )
         : null,
     },
     t,
@@ -1626,144 +1634,154 @@ export function PurchasesPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-          <div onKeyDownCapture={handleSupplierFormEnter} className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("purchases.field.name")} required>
-                <Input value={supplierEditor.name} placeholder={t("purchases.placeholder.name")} onChange={(event) => setSupplierEditor((current) => ({ ...current, name: event.target.value }))} />
-              </Field>
-              <Field label={t("purchases.field.defaultCurrency")} required>
-                <Select value={supplierEditor.defaultCurrency} onChange={(event) => setSupplierEditor((current) => ({ ...current, defaultCurrency: event.target.value.toUpperCase() }))}>
-                  <option value="JOD">{t("purchases.currency.jod")}</option>
-                </Select>
-              </Field>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("purchases.field.paymentTerms")}>
-                <div className="flex gap-2">
-                  <Select value={supplierEditor.paymentTermId} onChange={(event) => setSupplierEditor((current) => ({ ...current, paymentTermId: event.target.value }))}>
-                    <option value="">{t("purchases.placeholder.paymentTerms")}</option>
-                    {activePaymentTerms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {isArabic ? term.nameAr || term.name : term.name}
-                      </option>
-                    ))}
-                    <option value="__add_new__" disabled>
-                      ─ {t("purchases.addNewPaymentTerm")} ─
-                    </option>
+            <div onKeyDownCapture={handleSupplierFormEnter} className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label={t("purchases.field.name")} required>
+                  <Input value={supplierEditor.name} placeholder={t("purchases.placeholder.name")} onChange={(event) => setSupplierEditor((current) => ({ ...current, name: event.target.value }))} />
+                </Field>
+                <Field label={t("purchases.field.defaultCurrency")} required>
+                  <Select value={supplierEditor.defaultCurrency} onChange={(event) => setSupplierEditor((current) => ({ ...current, defaultCurrency: event.target.value.toUpperCase() }))}>
+                    {currencies.length === 0 ? (
+                      <option value="JOD">{t("purchases.currency.jod")}</option>
+                    ) : (
+                      currencies
+                        .filter((c) => c.isActive)
+                        .map((curr) => (
+                          <option key={curr.id} value={curr.code}>
+                            {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                          </option>
+                        ))
+                    )}
                   </Select>
-                  <button
-                    onClick={() => setIsPaymentTermCreatorOpen(true)}
-                    className="px-3 py-2 rounded-lg bg-green-500/10 text-green-600 hover:bg-green-500/20 text-sm font-medium transition-colors"
-                    title={t("purchases.addNewPaymentTerm")}
-                  >
-                    <CirclePlus className="h-4 w-4" />
-                  </button>
-                </div>
-              </Field>
-              <Field label={t("purchases.field.phone")}>
-                <Input dir="ltr" value={supplierEditor.phone} placeholder="07XXXXXXXX" onChange={(event) => setSupplierEditor((current) => ({ ...current, phone: event.target.value }))} />
-              </Field>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("purchases.field.email")}>
-                <Input dir="ltr" type="email" value={supplierEditor.email} placeholder={t("purchases.placeholder.email")} onChange={(event) => setSupplierEditor((current) => ({ ...current, email: event.target.value }))} />
-              </Field>
-            </div>
-
-            <div className="space-y-3">
-              {!supplierEditor.id ? (
-                <Field label={t("purchases.field.payableAccount")} required>
-                  <div className="mb-2 text-sm font-semibold text-gray-900">
-                    طريقة ربط حساب الدائن <span className="text-base leading-none text-red-500">*</span>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                </Field>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label={t("purchases.field.paymentTerms")}>
+                  <div className="flex gap-2">
+                    <Select value={supplierEditor.paymentTermId} onChange={(event) => setSupplierEditor((current) => ({ ...current, paymentTermId: event.target.value }))}>
+                      <option value="">{t("purchases.placeholder.paymentTerms")}</option>
+                      {activePaymentTerms.map((term) => (
+                        <option key={term.id} value={term.id}>
+                          {isArabic ? term.nameAr || term.name : term.name}
+                        </option>
+                      ))}
+                      <option value="__add_new__" disabled>
+                        ─ {t("purchases.addNewPaymentTerm")} ─
+                      </option>
+                    </Select>
                     <button
-                      type="button"
-                      className={cn(
-                        "rounded-xl border px-4 py-3 text-sm font-bold transition-colors",
-                        supplierEditor.payableAccountLinkMode === "AUTO"
-                          ? "border-teal-500 bg-teal-50 text-teal-800"
-                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                      )}
-                      onClick={() =>
-                        setSupplierEditor((current) => ({
-                          ...current,
-                          payableAccountLinkMode: "AUTO",
-                          payableAccountId: "",
-                        }))
-                      }
+                      onClick={() => setIsPaymentTermCreatorOpen(true)}
+                      className="px-3 py-2 rounded-lg bg-green-500/10 text-green-600 hover:bg-green-500/20 text-sm font-medium transition-colors"
+                      title={t("purchases.addNewPaymentTerm")}
                     >
-                      إنشاء حساب تلقائي
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "rounded-xl border px-4 py-3 text-sm font-bold transition-colors",
-                        supplierEditor.payableAccountLinkMode === "EXISTING"
-                          ? "border-teal-500 bg-teal-50 text-teal-800"
-                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                      )}
-                      onClick={() =>
-                        setSupplierEditor((current) => ({
-                          ...current,
-                          payableAccountLinkMode: "EXISTING",
-                        }))
-                      }
-                    >
-                      اختيار حساب موجود
+                      <CirclePlus className="h-4 w-4" />
                     </button>
                   </div>
                 </Field>
-              ) : null}
+                <Field label={t("purchases.field.phone")}>
+                  <Input dir="ltr" value={supplierEditor.phone} placeholder="07XXXXXXXX" onChange={(event) => setSupplierEditor((current) => ({ ...current, phone: event.target.value }))} />
+                </Field>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label={t("purchases.field.email")}>
+                  <Input dir="ltr" type="email" value={supplierEditor.email} placeholder={t("purchases.placeholder.email")} onChange={(event) => setSupplierEditor((current) => ({ ...current, email: event.target.value }))} />
+                </Field>
+              </div>
 
-              {!supplierEditor.id && supplierEditor.payableAccountLinkMode === "AUTO" ? (
-                <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
-                  سيتم إنشاء حساب دائن جديد باسم المورد تحت حساب الذمم الدائنة.
+              <div className="space-y-3">
+                {!supplierEditor.id ? (
+                  <Field label={t("purchases.field.payableAccount")} required>
+                    <div className="mb-2 text-sm font-semibold text-gray-900">
+                      طريقة ربط حساب الدائن <span className="text-base leading-none text-red-500">*</span>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        className={cn(
+                          "rounded-xl border px-4 py-3 text-sm font-bold transition-colors",
+                          supplierEditor.payableAccountLinkMode === "AUTO"
+                            ? "border-teal-500 bg-teal-50 text-teal-800"
+                            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                        )}
+                        onClick={() =>
+                          setSupplierEditor((current) => ({
+                            ...current,
+                            payableAccountLinkMode: "AUTO",
+                            payableAccountId: "",
+                          }))
+                        }
+                      >
+                        إنشاء حساب تلقائي
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "rounded-xl border px-4 py-3 text-sm font-bold transition-colors",
+                          supplierEditor.payableAccountLinkMode === "EXISTING"
+                            ? "border-teal-500 bg-teal-50 text-teal-800"
+                            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                        )}
+                        onClick={() =>
+                          setSupplierEditor((current) => ({
+                            ...current,
+                            payableAccountLinkMode: "EXISTING",
+                          }))
+                        }
+                      >
+                        اختيار حساب موجود
+                      </button>
+                    </div>
+                  </Field>
+                ) : null}
+
+                {!supplierEditor.id && supplierEditor.payableAccountLinkMode === "AUTO" ? (
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
+                    سيتم إنشاء حساب دائن جديد باسم المورد تحت حساب الذمم الدائنة.
+                  </div>
+                ) : null}
+
+                {supplierEditor.id || supplierEditor.payableAccountLinkMode === "EXISTING" ? (
+                  <Field label={t("purchases.field.payableAccount")} required hint={t("purchases.field.payableAccountHint")}>
+                    <Select
+                      value={supplierEditor.payableAccountId}
+                      onChange={(event) => setSupplierEditor((current) => ({ ...current, payableAccountId: event.target.value }))}
+                    >
+                      <option value="">{t("purchases.empty.selectPayableAccount")}</option>
+                      {payableAccounts.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.code} · {row.nameAr || row.name} ({row.currencyCode})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                ) : null}
+              </div>
+
+              <Field label={t("purchases.field.address")}>
+                <Input value={supplierEditor.address} placeholder={t("purchases.placeholder.address")} onChange={(event) => setSupplierEditor((current) => ({ ...current, address: event.target.value }))} />
+              </Field>
+
+              {supplierFormError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {supplierFormError}
                 </div>
               ) : null}
 
-              {supplierEditor.id || supplierEditor.payableAccountLinkMode === "EXISTING" ? (
-                <Field label={t("purchases.field.payableAccount")} required hint={t("purchases.field.payableAccountHint")}>
-                  <Select
-                    value={supplierEditor.payableAccountId}
-                    onChange={(event) => setSupplierEditor((current) => ({ ...current, payableAccountId: event.target.value }))}
-                  >
-                    <option value="">{t("purchases.empty.selectPayableAccount")}</option>
-                    {payableAccounts.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.code} · {row.nameAr || row.name} ({row.currencyCode})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+              {supplierSaveError ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {supplierSaveError}
+                </div>
               ) : null}
-            </div>
 
-            <Field label={t("purchases.field.address")}>
-              <Input value={supplierEditor.address} placeholder={t("purchases.placeholder.address")} onChange={(event) => setSupplierEditor((current) => ({ ...current, address: event.target.value }))} />
-            </Field>
-
-            {supplierFormError ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {supplierFormError}
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" onClick={closeSupplierEditor}>
+                  {t("purchases.action.cancel")}
+                </Button>
+                <Button onClick={() => (supplierEditor.id ? updateSupplierMutation.mutate() : createSupplierMutation.mutate())} disabled={Boolean(supplierFormError) || createSupplierMutation.isPending || updateSupplierMutation.isPending}>
+                  {supplierEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveSupplier")}
+                </Button>
               </div>
-            ) : null}
-
-            {supplierSaveError ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {supplierSaveError}
-              </div>
-            ) : null}
-
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary" onClick={closeSupplierEditor}>
-                {t("purchases.action.cancel")}
-              </Button>
-              <Button onClick={() => (supplierEditor.id ? updateSupplierMutation.mutate() : createSupplierMutation.mutate())} disabled={Boolean(supplierFormError) || createSupplierMutation.isPending || updateSupplierMutation.isPending}>
-                {supplierEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveSupplier")}
-              </Button>
             </div>
-          </div>
           </Card>
         )}
 
@@ -2277,8 +2295,8 @@ export function PurchasesPage() {
                       </tr>
                     ) : (
                       purchaseInvoices.map((row) => (
-                        <tr 
-                          key={row.id} 
+                        <tr
+                          key={row.id}
                           onClick={() => setSelectedPurchaseInvoiceId(row.id)}
                           className={cn("border-b border-gray-100 last:border-0 transition-colors hover:bg-gray-50 cursor-pointer", selectedPurchaseInvoiceId === row.id && "bg-gray-50")}
                         >
@@ -2678,7 +2696,7 @@ export function PurchasesPage() {
                             <div className="text-xs text-gray-500">{row.purchaseInvoice?.reference || t("purchases.debitNotes.empty.standalone")}</div>
                           </td>
                           <td className="px-6 py-4 align-top">
-                            <div className="font-bold text-gray-900">{row.supplier.code} Â· {row.supplier.name}</div>
+                            <div className="font-bold text-gray-900">{row.supplier.code} · {row.supplier.name}</div>
                             <div className="text-xs text-gray-500">{row.lines.length} {t("purchases.debitNotes.metric.lines").toLowerCase()}</div>
                           </td>
                           <td className="px-6 py-4 align-top">{formatDate(row.noteDate)}</td>
@@ -2696,6 +2714,21 @@ export function PurchasesPage() {
                                   {t("purchases.action.edit")}
                                 </Button>
                               ) : null}
+                              {row.canPost ? (
+                                <Button size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.post"), () => postDebitNoteMutation.mutate(row.id))}>
+                                  {t("purchases.action.postDebitNote")}
+                                </Button>
+                              ) : null}
+                              {row.canCancel ? (
+                                <Button variant="danger" size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.cancel"), () => cancelDebitNoteMutation.mutate(row.id))}>
+                                  {t("purchases.action.cancelDebitNote")}
+                                </Button>
+                              ) : null}
+                              {row.canReverse ? (
+                                <Button variant="danger" size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.reverse"), () => reverseDebitNoteMutation.mutate(row.id))}>
+                                  {t("purchases.action.reverseDebitNote")}
+                                </Button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -2706,42 +2739,23 @@ export function PurchasesPage() {
               </div>
             </Card>
 
-            <Card className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-black uppercase tracking-[0.22em] text-gray-500">{t("purchases.debitNotes.section.details")}</div>
-                {selectedDebitNote ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedDebitNote.canPost ? (
-                      <Button size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.post"), () => postDebitNoteMutation.mutate(selectedDebitNote.id))}>
-                        {t("purchases.action.postDebitNote")}
-                      </Button>
-                    ) : null}
-                    {selectedDebitNote.canCancel ? (
-                      <Button variant="danger" size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.cancel"), () => cancelDebitNoteMutation.mutate(selectedDebitNote.id))}>
-                        {t("purchases.action.cancelDebitNote")}
-                      </Button>
-                    ) : null}
-                    {selectedDebitNote.canReverse ? (
-                      <Button variant="danger" size="sm" disabled={activeDebitNoteActionMutationPending} onClick={() => confirmAndRun(t("purchases.debitNotes.confirm.reverse"), () => reverseDebitNoteMutation.mutate(selectedDebitNote.id))}>
-                        {t("purchases.action.reverseDebitNote")}
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-
-              {debitNoteActionError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {debitNoteActionError}
-                </div>
-              ) : null}
-
-              {!selectedDebitNote ? (
-                <div className="rounded-2xl border border-dashed border-gray-300 px-6 py-8 text-sm text-gray-500">
-                  {t("purchases.debitNotes.empty.selectDebitNote")}
-                </div>
-              ) : (
+            <Modal
+              isOpen={!!selectedDebitNote}
+              onClose={() => {
+                setSelectedDebitNoteId(null);
+                setInlineJournalReference(null);
+              }}
+              title={t("purchases.debitNotes.section.details")}
+              size="5xl"
+            >
+              {selectedDebitNote ? (
                 <div className="space-y-6">
+                  {debitNoteActionError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                      {debitNoteActionError}
+                    </div>
+                  ) : null}
+
                   {selectedDebitNote.journalReference ? (
                     <div className="space-y-3">
                       <div className="flex justify-start">
@@ -2775,7 +2789,7 @@ export function PurchasesPage() {
                       <div className="text-sm font-black uppercase tracking-[0.18em] text-gray-500">{t("purchases.debitNotes.section.summary")}</div>
                       <div className="space-y-3 text-sm text-gray-700">
                         <div className="rounded-2xl border border-gray-200 px-4 py-4">
-                          <div className="font-bold text-gray-900">{selectedDebitNote.supplier.code} Â· {selectedDebitNote.supplier.name}</div>
+                          <div className="font-bold text-gray-900">{selectedDebitNote.supplier.code} · {selectedDebitNote.supplier.name}</div>
                           <div className="mt-1 text-xs text-gray-500">{selectedDebitNote.currencyCode}</div>
                         </div>
                         <div className="rounded-2xl border border-gray-200 px-4 py-4">
@@ -2811,8 +2825,8 @@ export function PurchasesPage() {
                     </Card>
                   </div>
                 </div>
-              )}
-            </Card>
+              ) : null}
+            </Modal>
           </>
         )}
 
@@ -2910,7 +2924,7 @@ export function PurchasesPage() {
                 <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
                 {activeSuppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
-                    {supplier.code} · {supplier.name}
+                    {supplier.code} · {cleanDisplayName(supplier.name)}
                   </option>
                 ))}
               </Select>
@@ -2925,13 +2939,24 @@ export function PurchasesPage() {
                 />
               </Field>
               <Field label={t("purchases.requests.field.currency")}>
-                <Input
+                <Select
                   value={requestConversionEditor.currencyCode}
-                  maxLength={8}
                   onChange={(event) =>
                     setRequestConversionEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))
                   }
-                />
+                >
+                  {currencies.length === 0 ? (
+                    <option value="JOD">{t("purchases.currency.jod")}</option>
+                  ) : (
+                    currencies
+                      .filter((c) => c.isActive)
+                      .map((curr) => (
+                        <option key={curr.id} value={curr.code}>
+                          {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                        </option>
+                      ))
+                  )}
+                </Select>
               </Field>
             </div>
 
@@ -3104,7 +3129,7 @@ export function PurchasesPage() {
                                   </option>
                                   {inventoryItems.map((item) => (
                                     <option key={item.id} value={item.id}>
-                                      {item.code} · {item.name}
+                                      {item.code} · {cleanDisplayName(item.name)}
                                     </option>
                                   ))}
                                 </Select>
@@ -3291,7 +3316,7 @@ export function PurchasesPage() {
                             <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
                             {activeSuppliers.map((supplier) => (
                               <option key={supplier.id} value={supplier.id}>
-                                {supplier.code} · {supplier.name}
+                                {supplier.code} · {cleanDisplayName(supplier.name)}
                               </option>
                             ))}
                           </Select>
@@ -3300,12 +3325,23 @@ export function PurchasesPage() {
                       </Field>
 
                       <Field label={t("purchases.orders.field.currency")} required labelClassName={isArabic ? "arabic-ui" : undefined} labelAlign={isArabic ? "end" : "start"}>
-                        <Input
+                        <Select
                           value={orderEditor.currencyCode}
-                          maxLength={8}
                           onChange={(event) => setOrderEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
-                          className={cn("border-slate-200 bg-slate-50/70 uppercase", isArabic && "arabic-ui text-right")}
-                        />
+                          className={cn("border-slate-200 bg-slate-50/70", isArabic && "arabic-ui text-right")}
+                        >
+                          {currencies.length === 0 ? (
+                            <option value="JOD">JOD — دينار أردني</option>
+                          ) : (
+                            currencies
+                              .filter((c) => c.isActive)
+                              .map((curr) => (
+                                <option key={curr.id} value={curr.code}>
+                                  {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                                </option>
+                              ))
+                          )}
+                        </Select>
                       </Field>
                     </div>
 
@@ -3390,7 +3426,7 @@ export function PurchasesPage() {
                                     </option>
                                     {inventoryItems.map((item) => (
                                       <option key={item.id} value={item.id}>
-                                        {item.code} · {item.name}
+                                        {item.code} · {cleanDisplayName(item.name)}
                                       </option>
                                     ))}
                                   </Select>
@@ -3678,7 +3714,7 @@ export function PurchasesPage() {
                             <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
                             {activeSuppliers.map((supplier) => (
                               <option key={supplier.id} value={supplier.id}>
-                                {supplier.code} · {supplier.name}
+                                {supplier.code} · {cleanDisplayName(supplier.name)}
                               </option>
                             ))}
                           </Select>
@@ -3687,12 +3723,23 @@ export function PurchasesPage() {
                       </Field>
 
                       <Field label={t("purchases.invoices.field.currency")} required labelClassName={isArabic ? "arabic-ui" : undefined}>
-                        <Input
+                        <Select
                           value={invoiceEditor.currencyCode}
-                          maxLength={8}
                           onChange={(event) => setInvoiceEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
-                          className={cn("border-slate-200 bg-slate-50/70 uppercase", isArabic && "arabic-ui text-right")}
-                        />
+                          className={cn("border-slate-200 bg-slate-50/70", isArabic && "arabic-ui text-right")}
+                        >
+                          {currencies.length === 0 ? (
+                            <option value="JOD">JOD — دينار أردني</option>
+                          ) : (
+                            currencies
+                              .filter((c) => c.isActive)
+                              .map((curr) => (
+                                <option key={curr.id} value={curr.code}>
+                                  {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                                </option>
+                              ))
+                          )}
+                        </Select>
                       </Field>
 
                       <Field label={t("purchases.invoices.field.sourceOrder")} labelClassName={isArabic ? "arabic-ui" : undefined}>
@@ -3835,7 +3882,7 @@ export function PurchasesPage() {
                                     </option>
                                     {inventoryItems.map((item) => (
                                       <option key={item.id} value={item.id}>
-                                        {item.code} · {item.name}
+                                        {item.code} · {cleanDisplayName(item.name)}
                                       </option>
                                     ))}
                                   </Select>
@@ -3858,7 +3905,7 @@ export function PurchasesPage() {
                                     </option>
                                     {activeInventoryWarehouses.map((warehouse) => (
                                       <option key={warehouse.id} value={warehouse.id}>
-                                        {warehouse.code} · {warehouse.name}
+                                        {warehouse.code} · {cleanDisplayName(warehouse.name)}
                                       </option>
                                     ))}
                                   </Select>
@@ -3871,7 +3918,7 @@ export function PurchasesPage() {
                                     <option value="">{t("purchases.invoices.empty.selectAccount")}</option>
                                     {purchaseInvoiceDebitAccounts.map((account) => (
                                       <option key={account.id} value={account.id}>
-                                        {account.code} · {account.name?.replace(/^أ:\s*/, "") || account.name} ({account.currencyCode})
+                                        {account.code} · {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)?.replace(/^أ:\s*/, "")} ({account.currencyCode})
                                       </option>
                                     ))}
                                   </Select>
@@ -4117,7 +4164,7 @@ export function PurchasesPage() {
                             <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
                             {activeSuppliers.map((supplier) => (
                               <option key={supplier.id} value={supplier.id}>
-                                {supplier.code} · {supplier.name}
+                                {supplier.code} · {cleanDisplayName(supplier.name)}
                               </option>
                             ))}
                           </Select>
@@ -4423,7 +4470,7 @@ export function PurchasesPage() {
                             <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
                             {activeSuppliers.map((supplier) => (
                               <option key={supplier.id} value={supplier.id}>
-                                {supplier.code} - {supplier.name}
+                                {supplier.code} - {cleanDisplayName(supplier.name)}
                               </option>
                             ))}
                           </Select>
@@ -4432,12 +4479,23 @@ export function PurchasesPage() {
                       </Field>
 
                       <Field label={t("purchases.debitNotes.field.currency")} labelAlign={isArabic ? "end" : "start"}>
-                        <Input
+                        <Select
                           value={debitNoteCurrency}
-                          maxLength={8}
                           onChange={(event) => setDebitNoteEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
                           className={cn("h-12 border-slate-200 bg-white font-bold uppercase", isArabic && "text-right")}
-                        />
+                        >
+                          {currencies.length === 0 ? (
+                            <option value="JOD">JOD — دينار أردني</option>
+                          ) : (
+                            currencies
+                              .filter((c) => c.isActive)
+                              .map((curr) => (
+                                <option key={curr.id} value={curr.code}>
+                                  {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                                </option>
+                              ))
+                          )}
+                        </Select>
                       </Field>
                     </div>
 
@@ -4575,10 +4633,10 @@ export function PurchasesPage() {
                     <div className="overflow-x-auto">
                       <div className={cn(
                         debitNoteTypeCode === "DN-PURCHASE-RETURN" ? "min-w-[1420px]" :
-                        debitNoteTypeCode === "DN-PRICE-CORRECTION" ? "min-w-[1160px]" :
-                        debitNoteTypeCode === "DN-TAX-CORRECTION" ? "min-w-[980px]" :
-                        debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? "min-w-[980px]" :
-                        "min-w-[980px]"
+                          debitNoteTypeCode === "DN-PRICE-CORRECTION" ? "min-w-[1160px]" :
+                            debitNoteTypeCode === "DN-TAX-CORRECTION" ? "min-w-[980px]" :
+                              debitNoteTypeCode === "DN-SUPPLIER-SETTLEMENT" ? "min-w-[980px]" :
+                                "min-w-[980px]"
                       )}>
                         <div className={cn(
                           "mb-3 gap-3 px-1 text-sm font-bold text-slate-900",
@@ -4659,7 +4717,7 @@ export function PurchasesPage() {
                                     <Select value={line.warehouseId} onChange={(event) => updateDebitNoteLine(line.key, "warehouseId", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}>
                                       <option value="">اختر المستودع</option>
                                       {activeInventoryWarehouses.map((warehouse) => (
-                                        <option key={warehouse.id} value={warehouse.id}>{warehouse.code} - {warehouse.name}</option>
+                                        <option key={warehouse.id} value={warehouse.id}>{warehouse.code} - {cleanDisplayName(warehouse.name)}</option>
                                       ))}
                                     </Select>
                                     <Input value={line.reason} onChange={(event) => updateDebitNoteLine(line.key, "reason", event.target.value)} className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")} />
@@ -4993,12 +5051,12 @@ export function PurchasesPage() {
       lines: current.lines.map((line) =>
         line.key === key
           ? {
-              ...line,
-              itemId: item?.id ?? "",
-              itemName: item?.name ?? "",
-              description: line.description.trim() || !item ? line.description : item.description ?? item.name,
-              quantity: line.quantity && Number(line.quantity) > 0 ? line.quantity : "1",
-            }
+            ...line,
+            itemId: item?.id ?? "",
+            itemName: item?.name ?? "",
+            description: line.description.trim() || !item ? line.description : item.description ?? item.name,
+            quantity: line.quantity && Number(line.quantity) > 0 ? line.quantity : "1",
+          }
           : line,
       ),
     }));
@@ -5416,10 +5474,10 @@ export function PurchasesPage() {
       description: payment.description ?? "",
       allocations: payment.allocations.length
         ? payment.allocations.map((allocation) => ({
-            key: allocation.id,
-            purchaseInvoiceId: allocation.purchaseInvoice.id,
-            amount: allocation.amount,
-          }))
+          key: allocation.id,
+          purchaseInvoiceId: allocation.purchaseInvoice.id,
+          amount: allocation.amount,
+        }))
         : [createEmptyPaymentAllocation()],
     });
     setIsPaymentEditorOpen(true);
@@ -5505,27 +5563,27 @@ export function PurchasesPage() {
       description: note.description ?? "",
       lines: note.lines.length
         ? note.lines.map((line) => ({
-            key: line.id,
-            purchaseInvoiceLineId: line.purchaseInvoiceLineId ?? "",
-            itemId: line.itemId ?? "",
-            warehouseId: line.warehouseId ?? "",
-            itemName: line.itemName ?? "",
-            description: line.description ?? "",
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
-            amount: line.amount,
-            discountAccountId: line.discountAccountId ?? "",
-            taxId: line.taxId ?? "",
-            taxRate: "",
-            taxAmount: line.taxAmount,
-            originalUnitPrice: line.originalUnitPrice ?? "",
-            correctedUnitPrice: line.correctedUnitPrice ?? "",
-            originalTaxAmount: line.originalTaxAmount ?? "",
-            correctedTaxAmount: line.correctedTaxAmount ?? "",
-            returnToStock: Boolean(line.returnToStock),
-            itemCondition: line.itemCondition ?? "",
-            reason: line.reason,
-          }))
+          key: line.id,
+          purchaseInvoiceLineId: line.purchaseInvoiceLineId ?? "",
+          itemId: line.itemId ?? "",
+          warehouseId: line.warehouseId ?? "",
+          itemName: line.itemName ?? "",
+          description: line.description ?? "",
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          amount: line.amount,
+          discountAccountId: line.discountAccountId ?? "",
+          taxId: line.taxId ?? "",
+          taxRate: "",
+          taxAmount: line.taxAmount,
+          originalUnitPrice: line.originalUnitPrice ?? "",
+          correctedUnitPrice: line.correctedUnitPrice ?? "",
+          originalTaxAmount: line.originalTaxAmount ?? "",
+          correctedTaxAmount: line.correctedTaxAmount ?? "",
+          returnToStock: Boolean(line.returnToStock),
+          itemCondition: line.itemCondition ?? "",
+          reason: line.reason,
+        }))
         : [createEmptyDebitNoteLine(note.supplierDebitNoteType?.code)],
     });
     setIsDebitNoteEditorOpen(true);

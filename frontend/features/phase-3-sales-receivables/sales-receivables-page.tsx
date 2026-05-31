@@ -30,6 +30,7 @@ import {
   getAccountOptions,
   getAccountsTree,
   getAgingReport,
+  getCurrencies,
   getActiveCreditNoteTypes,
   getActiveTaxTreatments,
   getBankCashAccounts,
@@ -73,6 +74,7 @@ import type {
   SalesLinePayload,
   Tax,
   TaxTreatment,
+  Currency,
 } from "@/types/api";
 import { Button, Card, Modal, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
@@ -493,6 +495,12 @@ export function SalesReceivablesPage() {
   const activeCreditNoteTypesQuery = useQuery({
     queryKey: ["credit-note-types", "active", token],
     queryFn: () => getActiveCreditNoteTypes(token),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: currencies = [] } = useQuery({
+    queryKey: ["currencies", token],
+    queryFn: () => getCurrencies(token),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -3331,7 +3339,25 @@ export function SalesReceivablesPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t("salesReceivables.field.currency")}>
-              <Input value={creditNoteEditor.currencyCode} onChange={(event) => setCreditNoteEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))} maxLength={3} />
+              <Select
+                value={creditNoteEditor.currencyCode}
+                onChange={(event) => setCreditNoteEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
+              >
+                {currencies.length === 0 ? (
+                  <>
+                    <option value="JOD">JOD — دينار أردني</option>
+                    <option value="USD">USD — Dollar</option>
+                  </>
+                ) : (
+                  currencies
+                    .filter((c) => c.isActive)
+                    .map((curr) => (
+                      <option key={curr.id} value={curr.code}>
+                        {curr.code} — {curr.nameAr || curr.name}
+                      </option>
+                    ))
+                )}
+              </Select>
             </Field>
             <Field label={t("salesReceivables.field.customer")}>
                 <Select
@@ -3533,6 +3559,7 @@ function SalesDocumentEditor({
   description,
   lines,
   customers,
+  currencies,
   revenueAccounts,
   submitLabel,
   isSubmitting,
@@ -3556,7 +3583,8 @@ function SalesDocumentEditor({
   description: string;
   lines: SalesLineEditorState[];
   customers: Customer[];
-  revenueAccounts: Array<{ id: string; code: string; name: string }>;
+  currencies: Currency[];
+  revenueAccounts: Array<{ id: string; code: string; name: string; nameAr?: string | null }>;
   submitLabel: string;
   isSubmitting: boolean;
   onReferenceChange: (value: string) => void;
@@ -3583,7 +3611,26 @@ function SalesDocumentEditor({
 
       <div className="grid gap-4 md:grid-cols-2">
         <Field label={t("salesReceivables.field.currency")}>
-          <Input value={currencyCode} onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())} maxLength={3} />
+          <Select
+            value={currencyCode}
+            onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())}
+            className={cn("border-slate-200 bg-slate-50/70", t("language.toggle.aria") === "تبديل اللغة" && "arabic-ui text-right")}
+          >
+            {currencies.length === 0 ? (
+              <>
+                <option value="JOD">JOD — دينار أردني</option>
+                <option value="USD">USD — Dollar</option>
+              </>
+            ) : (
+              currencies
+                .filter((c) => c.isActive)
+                .map((curr) => (
+                  <option key={curr.id} value={curr.code}>
+                    {curr.code} — {t("language.toggle.aria") === "تبديل اللغة" ? curr.nameAr || curr.name : curr.name || curr.code}
+                  </option>
+                ))
+            )}
+          </Select>
         </Field>
         {secondaryDateLabel && onSecondaryDateChange ? (
           <Field label={secondaryDateLabel}>
@@ -3629,10 +3676,10 @@ function DocumentLinesEditor({
   onChange,
 }: {
   lines: SalesLineEditorState[];
-  revenueAccounts: Array<{ id: string; code: string; name: string }>;
+  revenueAccounts: Array<{ id: string; code: string; name: string; nameAr?: string | null }>;
   onChange: (lines: SalesLineEditorState[]) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const updateLine = (
     lineKey: string,
     updater: (line: SalesLineEditorState) => SalesLineEditorState,
@@ -3689,7 +3736,7 @@ function DocumentLinesEditor({
                   <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
                   {revenueAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.code} · {account.name}
+                      {account.code} · {language === "ar" ? account.nameAr || account.name : account.name}
                     </option>
                   ))}
                 </Select>

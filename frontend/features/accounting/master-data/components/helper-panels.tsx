@@ -65,7 +65,7 @@ export function HelperPanels() {
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
                             <p className="text-sm font-medium text-gray-900">إضافة المزيد من الحسابات الطبيعية</p>
                         </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                        <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
                             مراجعة
                         </Button>
                     </div>
@@ -74,7 +74,7 @@ export function HelperPanels() {
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
                             <p className="text-sm font-medium text-gray-900">تكوين أنواع الضرائب</p>
                         </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                        <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
                             مراجعة
                         </Button>
                     </div>
@@ -83,7 +83,7 @@ export function HelperPanels() {
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
                             <p className="text-sm font-medium text-gray-900">إعداد المزيد من شروط الدفع</p>
                         </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                        <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
                             مراجعة
                         </Button>
                     </div>

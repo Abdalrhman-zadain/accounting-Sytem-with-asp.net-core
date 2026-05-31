@@ -35,7 +35,7 @@ export function BankCashAccountDetails({
               {selectedDetails ? localizeName(selectedDetails.name) : t("bankCash.title")}
             </div>
             <div className="text-xs text-gray-500 arabic-muted">
-              {selectedDetails ? `${selectedDetails.account.code} - ${selectedDetails.account.name}` : t("bankCash.summary.linkedAccount")}
+              {selectedDetails ? `${selectedDetails.account.code} - ${localizeName(selectedDetails.account.name, selectedDetails.account.nameAr)}` : t("bankCash.summary.linkedAccount")}
             </div>
           </div>
         </div>

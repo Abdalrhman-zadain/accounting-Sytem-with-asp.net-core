@@ -51,6 +51,7 @@ export function buildReportingFilterFacets(
   t: TranslationFn,
   accounts: AccountOption[],
   journalEntryTypes: JournalEntryType[],
+  language?: string,
 ): ReportingFilterFacet[] {
   const facets: ReportingFilterFacet[] = [];
 
@@ -98,10 +99,11 @@ export function buildReportingFilterFacets(
   }
   if (filters.accountId) {
     const account = accounts.find((item) => item.id === filters.accountId);
+    const accountName = account ? (language === "ar" ? account.nameAr || account.name : account.name) : filters.accountId;
     facets.push({
       id: "accountId",
       label: t("reporting.filter.generalLedgerAccount"),
-      value: account ? `${account.code} - ${account.name}` : filters.accountId,
+      value: account ? `${account.code} - ${accountName}` : filters.accountId,
     });
   }
   if (filters.includeZeroBalance) {

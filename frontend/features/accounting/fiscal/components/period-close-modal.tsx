@@ -94,7 +94,7 @@ export function PeriodCloseModal({
                         {isPending ? "جاري الإغلاق..." : "تأكيد الإغلاق"}
                     </Button>
                     <Button
-                        variant="outline"
+                        variant="secondary"
                         onClick={onClose}
                         disabled={isPending}
                         className="flex-1 bg-white hover:bg-gray-50 h-11"

@@ -17,7 +17,7 @@ import {
 
 import { Button } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
-import { getActiveTaxes } from "@/lib/api";
+import { getActiveTaxes, getCurrencies } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -26,6 +26,7 @@ import type {
   Customer,
   InventoryWarehouse,
   SalesInvoice,
+  Currency,
 } from "@/types/api";
 import {
   createEmptyLine,
@@ -33,7 +34,7 @@ import {
   withCalculatedLineAmount,
 } from "./quotation-editor-modal";
 
-type RevenueAccountOption = { id: string; code: string; name: string };
+type RevenueAccountOption = { id: string; code: string; name: string; nameAr?: string | null };
 
 type CreditNoteLineEditorState = SalesLineEditorState & {
   salesInvoiceLineId?: string;
@@ -91,10 +92,11 @@ function createEmptyCreditNoteLine(defaultLabel: string, typeCode?: string, sett
   };
 }
 
-function getReceivableAccountName(invoice?: SalesInvoice): string | null {
-  return invoice?.customer.receivableAccount
-    ? `${invoice.customer.receivableAccount.code} - ${invoice.customer.receivableAccount.name}`
-    : null;
+function getReceivableAccountName(invoice?: SalesInvoice, isArabic?: boolean): string | null {
+  const acc = invoice?.customer.receivableAccount;
+  if (!acc) return null;
+  const name = isArabic ? acc.nameAr || acc.name : acc.name;
+  return `${acc.code} - ${name}`;
 }
 
 function formatAmount(value: number) {
@@ -250,6 +252,10 @@ export function CreditNoteEditorModal({
   const { data: taxes = [] } = useQuery({
     queryKey: ["taxes", "active", token],
     queryFn: () => getActiveTaxes(token),
+  });
+  const { data: currencies = [] } = useQuery({
+    queryKey: ["currencies", token],
+    queryFn: () => getCurrencies(token),
   });
   const isArabic = language === "ar";
   const selectedType =
@@ -426,12 +432,26 @@ onChange({
                 </Field>
 
                 <Field label={t("salesReceivables.field.currency")} required labelAlign={isArabic ? "end" : "start"}>
-                  <Input
+                  <Select
                     value={currencyCode}
                     onChange={(event) => onChange({ ...editor, currencyCode: event.target.value.toUpperCase() })}
-                    maxLength={3}
                     className={cn("h-12 border-slate-200 bg-white uppercase", isArabic && "text-right")}
-                  />
+                  >
+                    {currencies.length === 0 ? (
+                      <>
+                        <option value="JOD">JOD — دينار أردني</option>
+                        <option value="USD">USD — Dollar</option>
+                      </>
+                    ) : (
+                      currencies
+                        .filter((c) => c.isActive)
+                        .map((curr) => (
+                          <option key={curr.id} value={curr.code}>
+                            {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                          </option>
+                        ))
+                    )}
+                  </Select>
                 </Field>
               </div>
 
@@ -744,7 +764,7 @@ onChange({
                               <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
                               {revenueAccounts.map((account) => (
                                 <option key={account.id} value={account.id}>
-                                  {account.code} - {account.name}
+                                  {account.code} - {isArabic ? account.nameAr || account.name : account.name}
                                 </option>
                               ))}
                             </Select>
@@ -854,12 +874,11 @@ onChange({
                     <div className="font-bold text-slate-950">{t("salesReceivables.creditNote.journalAtApproval")}</div>
                     <PostingRow
                       label={t("salesReceivables.creditNote.journalDebit", {
-                        account:
-                          revenueAccounts.find(
-                            (account) => account.id === editor.lines[0]?.revenueAccountId,
-                          )?.name ??
-                          selectedType?.defaultAccount?.name ??
-                          t("salesReceivables.field.revenueAccount"),
+                        account: (() => {
+                          const acc = revenueAccounts.find((account) => account.id === editor.lines[0]?.revenueAccountId) || selectedType?.defaultAccount;
+                          if (!acc) return t("salesReceivables.field.revenueAccount");
+                          return isArabic ? acc.nameAr || acc.name : acc.name;
+                        })()
                       })}
                       value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
                       isArabic={isArabic}
@@ -867,7 +886,7 @@ onChange({
                     <PostingRow
                       label={t("salesReceivables.creditNote.journalCredit", {
                         account: selectedCustomer
-                          ? getReceivableAccountName(selectedInvoice) ?? t("salesReceivables.field.receivableAccount")
+                          ? getReceivableAccountName(selectedInvoice, isArabic) ?? t("salesReceivables.field.receivableAccount")
                           : t("salesReceivables.field.receivableAccount"),
                       })}
                       value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}

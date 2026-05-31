@@ -416,18 +416,20 @@ export class DebitNotesService {
     const description = note.description
       ? `${note.reference} - ${note.description}`
       : note.reference;
+    const journalLines = [
+      {
+        accountId: this.resolveSupplierPayableAccountId(note),
+        description,
+        debitAmount: Number(note.totalAmount),
+        creditAmount: 0,
+      },
+      ...(await this.buildOffsetJournalLines(note, description)),
+    ];
+    this.ensureBalancedJournal(journalLines);
     const journal = await this.journalEntriesService.create({
       entryDate: note.noteDate.toISOString(),
       description,
-      lines: [
-        {
-          accountId: this.resolveSupplierPayableAccountId(note),
-          description,
-          debitAmount: Number(note.totalAmount),
-          creditAmount: 0,
-        },
-        ...(await this.buildOffsetJournalLines(note, description)),
-      ],
+      lines: journalLines,
     });
     const posted = await this.postingService.post(journal.id);
     const postedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
@@ -1324,7 +1326,6 @@ export class DebitNotesService {
       })),
     );
 
-    this.ensureBalancedJournal(lines);
     return lines;
   }
 

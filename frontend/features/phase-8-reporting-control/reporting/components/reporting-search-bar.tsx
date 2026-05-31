@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LuChevronDown, LuFilter, LuStar, LuX } from "react-icons/lu";
 
 import { formatDate } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n";
 import type { AccountOption, AccountType, JournalEntryType, ReportingDefinition } from "@/types/api";
 import type { TranslationFn } from "../reporting-types";
 import {
@@ -59,9 +60,11 @@ export function ReportingSearchBar({
   const [editingFacet, setEditingFacet] = useState<ReportingFilterId | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
+  const { language } = useTranslation();
+
   const activeFacets = useMemo(
-    () => buildReportingFilterFacets(filters, t, accounts, journalEntryTypes),
-    [accounts, filters, journalEntryTypes, t],
+    () => buildReportingFilterFacets(filters, t, accounts, journalEntryTypes, language),
+    [accounts, filters, journalEntryTypes, t, language],
   );
 
   useEffect(() => {
@@ -334,6 +337,7 @@ function FilterMenu({
   onStartDateEdit: (id: ReportingFilterId) => void;
   onClose: () => void;
 }) {
+  const { language } = useTranslation();
   return (
     <div className="max-h-[420px] overflow-y-auto p-1">
       <FilterSection label={t("reporting.filter.section.period")}>
@@ -444,7 +448,7 @@ function FilterMenu({
             onToggle={() => onToggleSubmenu("accountId")}
             options={accounts.map((account) => ({
               value: account.id,
-              label: `${account.code} - ${account.name}`,
+              label: `${account.code} - ${language === "ar" ? account.nameAr || account.name : account.name}`,
             }))}
             onSelect={(value) => onPatch({ accountId: value })}
           />
