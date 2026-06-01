@@ -1117,6 +1117,78 @@ export class PosService {
     };
   }
 
+  async rejectSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
+    const session = await this.prisma.posSession.findUnique({
+      where: { id },
+      select: { id: true, sessionNumber: true },
+    });
+    if (!session) {
+      throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const sales = await tx.salesInvoice.findMany({
+        where: {
+          invoiceType: SalesInvoiceType.POS,
+          posSessionId: id,
+          posOperationalStatus: PosOperationalStatus.COMPLETED,
+          posAccountingStatus: {
+            in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.UNPOSTED],
+          },
+        },
+        select: {
+          id: true,
+          reference: true,
+        },
+      });
+
+      if (!sales.length) {
+        throw new BadRequestException(
+          "No POS sales in this session are awaiting accounting review.",
+        );
+      }
+
+      for (const sale of sales) {
+        await tx.salesInvoice.update({
+          where: { id: sale.id },
+          data: {
+            posAccountingStatus: PosAccountingStatus.REJECTED,
+            posReviewedAt: new Date(),
+            posReviewedByUserId: user?.userId ?? null,
+            posReviewNotes: dto.notes?.trim() || null,
+          },
+        });
+      }
+
+      return tx.salesInvoice.findMany({
+        where: {
+          id: { in: sales.map((sale) => sale.id) },
+        },
+        include: this.posSaleInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "PosSession",
+      entityId: session.id,
+      action: AuditAction.UPDATE,
+      details: {
+        sessionNumber: session.sessionNumber,
+        rejectedSalesCount: result.length,
+        notes: dto.notes?.trim() || null,
+      },
+    });
+
+    return {
+      sessionId: session.id,
+      sessionNumber: session.sessionNumber,
+      rejectedCount: result.length,
+      sales: result.map((row) => this.mapPosSale(row)),
+    };
+  }
+
   async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const sale = await this.prisma.salesInvoice.findUnique({
@@ -1774,17 +1846,13 @@ export class PosService {
             invoiceType: SalesInvoiceType.POS,
             posOperationalStatus: PosOperationalStatus.COMPLETED,
           },
-          include: {
-            posPayments: true,
-          },
+          include: this.posSaleInclude(),
         },
         posReturns: {
           where: {
             status: { not: PosReturnStatus.REVERSED },
           },
-          include: {
-            payments: true,
-          },
+          include: this.posReturnInclude(),
         },
       },
     });
@@ -1858,6 +1926,8 @@ export class PosService {
       returnCount: completedReturns.length,
       openedAt: session.openedAt.toISOString(),
       closedAt: session.closedAt?.toISOString() ?? null,
+      sales: completedSales.map((s) => this.mapPosSale(s)),
+      returns: completedReturns.map((r) => this.mapPosReturn(r)),
     };
   }
 
@@ -2830,6 +2900,43 @@ export class PosService {
         },
       },
       cashierUser: { select: { id: true, email: true, name: true } },
+      salesInvoices: {
+        where: {
+          invoiceType: SalesInvoiceType.POS,
+          posOperationalStatus: PosOperationalStatus.COMPLETED,
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          discountAmount: true,
+          taxAmount: true,
+          posAccountingStatus: true,
+          posPayments: {
+            select: {
+              amount: true,
+              paymentMethod: true,
+              deliveryCompanyId: true,
+            },
+          },
+        },
+      },
+      posReturns: {
+        where: {
+          status: { not: PosReturnStatus.REVERSED },
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          discountAmount: true,
+          taxAmount: true,
+          payments: {
+            select: {
+              amount: true,
+              refundMethod: true,
+            },
+          },
+        },
+      },
     } satisfies Prisma.PosSessionInclude;
   }
 
@@ -2963,6 +3070,73 @@ export class PosService {
   }
 
   private mapSession(row: any) {
+    const sales = row.salesInvoices ?? [];
+    const returns = row.posReturns ?? [];
+
+    const invoiceCount = sales.length;
+    
+    // Net totals = sales - returns
+    const salesTotal = sales.reduce((sum: number, s: any) => sum + Number(s.totalAmount), 0);
+    const returnsTotal = returns.reduce((sum: number, r: any) => sum + Number(r.totalAmount), 0);
+    const totalSales = (salesTotal - returnsTotal).toFixed(2);
+
+    const salesTax = sales.reduce((sum: number, s: any) => sum + Number(s.taxAmount), 0);
+    const returnsTax = returns.reduce((sum: number, r: any) => sum + Number(r.taxAmount), 0);
+    const taxAmount = (salesTax - returnsTax).toFixed(2);
+
+    const salesDiscount = sales.reduce((sum: number, s: any) => sum + Number(s.discountAmount), 0);
+    const returnsDiscount = returns.reduce((sum: number, r: any) => sum + Number(r.discountAmount), 0);
+    const discountAmount = (salesDiscount - returnsDiscount).toFixed(2);
+
+    // Cash and Card payments
+    let cashSalesVal = 0;
+    let cardSalesVal = 0;
+    let deliveryCompanySalesVal = 0;
+
+    for (const sale of sales) {
+      for (const p of (sale.posPayments ?? [])) {
+        const amt = Number(p.amount);
+        if (p.paymentMethod === "CASH") {
+          cashSalesVal += amt;
+        } else if (["CARD", "CLIQ", "WALLET"].includes(p.paymentMethod)) {
+          cardSalesVal += amt;
+        }
+        if (p.deliveryCompanyId) {
+          deliveryCompanySalesVal += amt;
+        }
+      }
+    }
+
+    for (const ret of returns) {
+      for (const p of (ret.payments ?? [])) {
+        const amt = Number(p.amount);
+        if (p.refundMethod === "CASH") {
+          cashSalesVal -= amt;
+        } else if (["CARD", "CLIQ", "WALLET"].includes(p.refundMethod)) {
+          cardSalesVal -= amt;
+        }
+      }
+    }
+
+    const cashSales = cashSalesVal.toFixed(2);
+    const cardSales = cardSalesVal.toFixed(2);
+    const deliveryCompanySales = deliveryCompanySalesVal.toFixed(2);
+
+    let accountingStatus: "OPEN" | "CLOSED" | "PENDING_REVIEW" | "REJECTED" | "POSTED" = "OPEN";
+    if (row.status === "CLOSED") {
+      if (sales.length === 0) {
+        accountingStatus = "CLOSED";
+      } else if (sales.some((s: any) => s.posAccountingStatus === "PENDING_REVIEW")) {
+        accountingStatus = "PENDING_REVIEW";
+      } else if (sales.some((s: any) => s.posAccountingStatus === "REJECTED")) {
+        accountingStatus = "REJECTED";
+      } else if (sales.every((s: any) => s.posAccountingStatus === "POSTED")) {
+        accountingStatus = "POSTED";
+      } else {
+        accountingStatus = "CLOSED";
+      }
+    }
+
     return {
       id: row.id,
       sessionNumber: row.sessionNumber,
@@ -2979,6 +3153,14 @@ export class PosService {
       warehouse: row.warehouse,
       cashAccount: row.cashAccount,
       cashierUser: row.cashierUser ?? null,
+      invoiceCount,
+      totalSales,
+      cashSales,
+      cardSales,
+      deliveryCompanySales,
+      taxAmount,
+      discountAmount,
+      accountingStatus,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

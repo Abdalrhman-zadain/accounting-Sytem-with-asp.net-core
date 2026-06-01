@@ -777,3 +777,19 @@ What else to check:
 Checks to run:
 
 - frontend typecheck (`npx tsc --noEmit` in `frontend/`)
+
+## Accountant POS Review and Session Rejection
+
+Where to edit:
+
+- backend service: `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts` (session aggregation, pre-computed metrics, bulk rejection transaction)
+- backend controller: `backend/src/modules/phase-3-sales-receivables/pos/pos.controller.ts` (session reject POST endpoint)
+- frontend types & client: `frontend/types/api.ts`, `frontend/lib/api/index.ts`
+- frontend review workspace: `frontend/features/pos/pos-review-workspace.tsx` (dashboard filters, summary metrics cards, table-centric sessions view, and SidePanel details drawer)
+
+What else to check:
+
+- session rejection transitions all pending sales in the session to `REJECTED` state within a safe database transaction.
+- summary cards (Total Sales, Cash Sales, Card Sales, Delivery Sales, Tax, Discounts, Cash Difference) dynamically compute based on current filters.
+- side-drawer details allow drilling down into specific invoices, cash difference analysis, inventory impact, and draft journal previews.
+

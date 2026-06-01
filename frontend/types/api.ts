@@ -3588,6 +3588,14 @@ export type PosSession = {
     email: string;
     name?: string | null;
   } | null;
+  invoiceCount?: number;
+  totalSales?: string;
+  cashSales?: string;
+  cardSales?: string;
+  deliveryCompanySales?: string;
+  taxAmount?: string;
+  discountAmount?: string;
+  accountingStatus?: "OPEN" | "CLOSED" | "PENDING_REVIEW" | "REJECTED" | "POSTED";
   createdAt: string;
   updatedAt: string;
 };
@@ -3838,6 +3846,8 @@ export type PosSessionReport = {
   returnCount: number;
   openedAt: string;
   closedAt?: string | null;
+  sales: PosSale[];
+  returns: PosReturn[];
 };
 
 export type CorrectPosOrderTypePayload = {

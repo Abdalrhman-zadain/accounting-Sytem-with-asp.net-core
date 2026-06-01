@@ -2576,6 +2576,21 @@ export async function approvePosSessionAccounting(
   );
 }
 
+export async function rejectPosSessionAccounting(
+  id: string,
+  payload: { notes?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<any>(
+    `/pos/sessions/${id}/accounting-reject`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    },
+  );
+}
+
 export async function rejectPosAccounting(
   id: string,
   payload: { notes?: string } = {},

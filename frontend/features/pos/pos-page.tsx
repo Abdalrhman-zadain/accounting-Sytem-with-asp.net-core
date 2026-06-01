@@ -56,6 +56,7 @@ import { Field, Input } from "@/components/ui/forms";
 import {
   approvePosAccounting,
   approvePosSessionAccounting,
+  rejectPosSessionAccounting,
   approvePosReturnAccounting,
   closePosSession,
   completePosSale,
@@ -1155,6 +1156,23 @@ export function PosPage() {
       pushMessage(
         t("pos.review.alert.sessionApproved", {
           count: response.approvedCount,
+          sessionNumber: response.sessionNumber,
+        }),
+      );
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const rejectSessionReviewMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      rejectPosSessionAccounting(sessionId, {}, token),
+    onSuccess: async (response) => {
+      await refreshPosData();
+      pushMessage(
+        t("pos.review.alert.sessionRejected", {
+          count: response.rejectedCount,
           sessionNumber: response.sessionNumber,
         }),
       );
@@ -4031,6 +4049,10 @@ export function PosPage() {
   const renderReviewWorkspace = () => {
     return (
       <PosReviewWorkspace
+        sessions={posSessionsQuery.data ?? []}
+        onRejectSessionReview={(sessionId) =>
+          rejectSessionReviewMutation.mutate(sessionId)
+        }
         correctionDeliveryCompanyId={correctionDeliveryCompanyId}
         correctionDeliveryFee={correctionDeliveryFee}
         correctionDriverId={correctionDriverId}

@@ -1555,6 +1555,7 @@ Object.assign(enTranslations, {
   "pos.review.alert.rejected": "POS sale moved to rejected review status.",
   "pos.review.alert.reversed": "POS accounting reversal has been created.",
   "pos.review.alert.sessionApproved": "Posted {count} POS sale(s) for session {sessionNumber}.",
+  "pos.review.alert.sessionRejected": "Rejected {count} POS sale(s) for session {sessionNumber}.",
 
   "pos.returns.description": "Capture cashier-side POS returns and then route them through accounting approval or reversal.",
   "pos.returns.createTitle": "Create POS return",

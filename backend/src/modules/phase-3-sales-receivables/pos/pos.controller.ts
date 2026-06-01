@@ -168,6 +168,15 @@ export class PosController {
     return this.service.approveSessionAccounting(id, dto, req.user);
   }
 
+  @Post("sessions/:id/accounting-reject")
+  rejectSessionAccounting(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: PosReviewDecisionDto,
+  ) {
+    return this.service.rejectSessionAccounting(id, dto, req.user);
+  }
+
   @Post("sales/:id/accounting-reject")
   rejectAccounting(
     @Req() req: Request & { user?: any },

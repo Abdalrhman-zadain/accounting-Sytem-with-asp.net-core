@@ -2834,6 +2834,7 @@ Object.assign(arTranslations, {
   "pos.review.alert.rejected": "تم نقل عملية البيع إلى حالة المراجعة المرفوضة.",
   "pos.review.alert.reversed": "تم إنشاء عكس القيد المحاسبي لعملية البيع.",
   "pos.review.alert.sessionApproved": "تم ترحيل {count} عملية بيع للوردية {sessionNumber}.",
+  "pos.review.alert.sessionRejected": "تم رفض {count} عملية بيع للوردية {sessionNumber}.",
 
   "pos.returns.description": "تسجيل مرتجعات POS من طرف الكاشير ثم توجيهها عبر اعتماد المحاسبة أو عكسها.",
   "pos.returns.createTitle": "إنشاء مرتجع POS",
