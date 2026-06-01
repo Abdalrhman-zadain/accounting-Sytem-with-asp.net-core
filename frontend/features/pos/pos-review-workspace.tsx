@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/forms";
 import { DetailTile } from "@/features/pos/pos-detail-cards";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+import { useTranslation } from "@/lib/i18n";
 import type {
   DeliveryCompany,
   DeliveryDriver,
@@ -138,6 +139,8 @@ export function PosReviewWorkspace({
 }: PosReviewWorkspaceProps) {
   // Local filter states
   const { user } = useAuth();
+  const { language } = useTranslation();
+  const isArabic = language === "ar";
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [diffDecision, setDiffDecision] = useState("ACCEPT");
   const [diffReason, setDiffReason] = useState("");
@@ -896,7 +899,7 @@ export function PosReviewWorkspace({
                             className="grid grid-cols-[1fr_120px_120px] text-gray-700"
                           >
                             <span className="font-semibold">
-                              {line.accountCode} · {line.accountName}
+                              {line.accountCode} · {isArabic ? line.accountNameAr || line.accountName : line.accountName}
                             </span>
                             <span className="text-left font-bold text-emerald-700">{line.debitAmount !== "0.00" ? line.debitAmount : "—"}</span>
                             <span className="text-left font-bold text-rose-700">{line.creditAmount !== "0.00" ? line.creditAmount : "—"}</span>
