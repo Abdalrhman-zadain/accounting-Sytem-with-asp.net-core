@@ -1140,7 +1140,7 @@ export function PosPage() {
     mutationFn: (saleId: string) => approvePosAccounting(saleId, {}, token),
     onSuccess: async () => {
       await refreshPosData();
-      pushMessage("POS sale approved and posted.");
+      pushMessage(t("pos.review.alert.approved"));
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1153,7 +1153,10 @@ export function PosPage() {
     onSuccess: async (response) => {
       await refreshPosData();
       pushMessage(
-        `Posted ${response.approvedCount} POS sale${response.approvedCount === 1 ? "" : "s"} for session ${response.sessionNumber}.`,
+        t("pos.review.alert.sessionApproved", {
+          count: response.approvedCount,
+          sessionNumber: response.sessionNumber,
+        }),
       );
     },
     onError: (error) => {
@@ -1165,7 +1168,7 @@ export function PosPage() {
     mutationFn: (saleId: string) => rejectPosAccounting(saleId, {}, token),
     onSuccess: async () => {
       await refreshPosData();
-      pushMessage("POS sale moved to rejected review status.");
+      pushMessage(t("pos.review.alert.rejected"));
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1181,7 +1184,7 @@ export function PosPage() {
       ),
     onSuccess: async () => {
       await refreshPosData();
-      pushMessage("POS accounting reversal has been created.");
+      pushMessage(t("pos.review.alert.reversed"));
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));

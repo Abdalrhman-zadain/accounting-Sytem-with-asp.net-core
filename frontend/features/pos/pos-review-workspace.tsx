@@ -137,7 +137,7 @@ export function PosReviewWorkspace({
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-5">
             <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5c7463]">
-              Submitted sessions
+              {t("pos.review.submittedSessions")}
             </div>
             <div className="mt-4 space-y-3">
               {reviewSessionGroups.map((group) => (
@@ -154,7 +154,7 @@ export function PosReviewWorkspace({
                 >
                   <div className="font-bold text-[#233329]">{group.sessionNumber}</div>
                   <div className="mt-1 text-xs text-[#66756d]">
-                    {group.sales.length} sale(s) pending · {group.warehouseName}
+                    {t("pos.review.pendingSalesCount", { count: group.sales.length })} · {group.warehouseName}
                   </div>
                 </button>
               ))}
@@ -167,13 +167,13 @@ export function PosReviewWorkspace({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5c7463]">
-                      Session review
+                      {t("pos.review.sessionReview")}
                     </div>
                     <div className="mt-1 text-xl font-black text-[#233329]">
                       {selectedReviewGroup.sessionNumber}
                     </div>
                     <div className="mt-1 text-sm text-[#66756d]">
-                      {selectedReviewGroup.sales.length} sale(s) pending accounting review
+                      {t("pos.review.pendingSalesCount", { count: selectedReviewGroup.sales.length })}
                     </div>
                   </div>
                   {selectedReviewGroup.sessionId ? (
@@ -182,17 +182,17 @@ export function PosReviewWorkspace({
                       onClick={() => onApproveSessionReview(selectedReviewGroup.sessionId!)}
                       className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
                     >
-                      Approve session
+                      {t("pos.review.approveSession")}
                     </button>
                   ) : null}
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
                   {([
-                    ["overview", "Overview"],
-                    ["cash", "Cash Count"],
-                    ["inventory", "Inventory Impact"],
-                    ["journal", "Journal Entry Preview"],
+                    ["overview", t("pos.review.tabOverview")],
+                    ["cash", t("pos.review.tabCash")],
+                    ["inventory", t("pos.review.tabInventory")],
+                    ["journal", t("pos.review.tabJournal")],
                   ] as const).map(([id, label]) => (
                     <button
                       key={id}
@@ -214,20 +214,25 @@ export function PosReviewWorkspace({
               {reviewTab === "cash" && report ? (
                 <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <DetailTile label="Opening cash" value={report.openingCash} />
-                    <DetailTile label="Cash sales" value={report.cashSales} />
-                    <DetailTile label="Cash refunds" value={report.cashRefunds} />
-                    <DetailTile label="Expected cash" value={report.expectedCash} />
-                    <DetailTile label="Actual cash counted" value={report.actualCash ?? "—"} />
-                    <DetailTile label="Cash difference" value={report.difference ?? "—"} />
+                    <DetailTile label={t("pos.review.openingCash")} value={report.openingCash} />
+                    <DetailTile label={t("pos.review.cashSales")} value={report.cashSales} />
+                    <DetailTile label={t("pos.review.cashRefunds")} value={report.cashRefunds} />
+                    <DetailTile label={t("pos.review.expectedCash")} value={report.expectedCash} />
+                    <DetailTile label={t("pos.review.actualCash")} value={report.actualCash ?? "—"} />
+                    <DetailTile label={t("pos.review.cashDifference")} value={report.difference ?? "—"} />
                   </div>
                 </Card>
               ) : null}
 
               {reviewTab === "inventory" ? (
                 <DetailedTableCard
-                  title="Inventory impact"
-                  headers={["Sale", "Item", "Quantity", "Warehouse"]}
+                  title={t("pos.review.inventoryImpact")}
+                  headers={[
+                    t("pos.review.headerSale"),
+                    t("pos.review.headerItem"),
+                    t("pos.review.headerQuantity"),
+                    t("pos.review.headerWarehouse"),
+                  ]}
                   rows={inventoryRows.map((row) => [
                     row.saleReference,
                     row.itemName,
@@ -239,11 +244,11 @@ export function PosReviewWorkspace({
 
               {reviewTab === "journal" ? (
                 <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-                  <div className="text-lg font-black text-[#233329]">Journal Entry Preview</div>
+                  <div className="text-lg font-black text-[#233329]">{t("pos.review.tabJournal")}</div>
                   <div className="mt-4 space-y-5">
                     {journalEntries.length === 0 ? (
                       <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-4 text-sm text-[#64736b]">
-                        No draft journal entries linked to the selected session.
+                        {t("pos.review.noJournals")}
                       </div>
                     ) : (
                       journalEntries.map((entry) => (
@@ -285,16 +290,16 @@ export function PosReviewWorkspace({
                         <div>
                           <div className="text-lg font-black text-[#233329]">{sale.reference}</div>
                           <div className="mt-1 text-sm text-[#68776f]">
-                            {sale.orderType ?? "—"} · {sale.totalAmount} {sale.currencyCode}
+                            {sale.orderType ? t(`pos.orderType.${sale.orderType}`) : "—"} · {sale.totalAmount} {sale.currencyCode}
                           </div>
                           <div className="mt-1 text-sm text-[#68776f]">
                             {sale.table?.tableNumber
-                              ? `Table ${sale.table.tableNumber}`
-                              : "No table"}{" "}
+                              ? t("pos.review.tableLabel", { table: sale.table.tableNumber })
+                              : t("pos.review.noTable")}{" "}
                             ·{" "}
                             {sale.deliveryCompany?.name ??
                               sale.driver?.name ??
-                              "Direct / Counter"}
+                              t("pos.review.directCounter")}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -303,14 +308,14 @@ export function PosReviewWorkspace({
                             onClick={() => onReprintReceipt(sale.id)}
                             className="rounded-full border border-[#d6e0d8] px-4 py-2 text-xs font-bold text-[#46644b]"
                           >
-                            Receipt
+                            {t("pos.review.receipt")}
                           </button>
                           <button
                             type="button"
                             onClick={() => onOpenCorrectionModal(sale)}
                             className="rounded-full border border-[#d6e0d8] px-4 py-2 text-xs font-bold text-[#46644b]"
                           >
-                            Correct order type
+                            {t("pos.review.correctOrderType")}
                           </button>
                           {sale.orderType === "DELIVERY" ? (
                             <>
@@ -321,7 +326,7 @@ export function PosReviewWorkspace({
                                 }
                                 className="rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b]"
                               >
-                                <option value="">Driver</option>
+                                <option value="">{t("pos.review.driver")}</option>
                                 {deliveryDrivers.map((driver) => (
                                   <option key={driver.id} value={driver.id}>
                                     {driver.name}
@@ -338,12 +343,12 @@ export function PosReviewWorkspace({
                                 }
                                 className="rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b]"
                               >
-                                <option value="PENDING">Pending</option>
-                                <option value="PREPARING">Preparing</option>
-                                <option value="READY_FOR_DELIVERY">Ready</option>
-                                <option value="OUT_FOR_DELIVERY">Out</option>
-                                <option value="DELIVERED">Delivered</option>
-                                <option value="CANCELLED">Cancelled</option>
+                                <option value="PENDING">{t("pos.review.statusPending")}</option>
+                                <option value="PREPARING">{t("pos.review.statusPreparing")}</option>
+                                <option value="READY_FOR_DELIVERY">{t("pos.review.statusReady")}</option>
+                                <option value="OUT_FOR_DELIVERY">{t("pos.review.statusOut")}</option>
+                                <option value="DELIVERED">{t("pos.review.statusDelivered")}</option>
+                                <option value="CANCELLED">{t("pos.review.statusCancelled")}</option>
                               </select>
                             </>
                           ) : null}
@@ -380,7 +385,7 @@ export function PosReviewWorkspace({
                         <DetailTile label={t("pos.review.discount")} value={sale.discountAmount} />
                         <DetailTile label={t("pos.review.tax")} value={sale.taxAmount} />
                         <DetailTile
-                          label="Delivery / Service"
+                          label={t("pos.review.deliveryService")}
                           value={`${sale.deliveryFeeAmount ?? "0.00"} / ${sale.serviceChargeAmount ?? "0.00"}`}
                         />
                       </div>
@@ -439,7 +444,7 @@ export function PosReviewWorkspace({
       <Modal
         isOpen={isCorrectOrderTypeOpen}
         onClose={onCloseCorrectionModal}
-        title="Correct Order Type / تصحيح نوع الطلب"
+        title={t("pos.review.correctOrderTypeModal")}
       >
         <div className="space-y-4">
           <select
@@ -449,10 +454,10 @@ export function PosReviewWorkspace({
             }
             className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
           >
-            <option value="DINE_IN">Dine-In</option>
-            <option value="TAKEAWAY">Takeaway</option>
-            <option value="DELIVERY">Delivery</option>
-            <option value="PICKUP">Pickup</option>
+            <option value="DINE_IN">{t("pos.orderType.DINE_IN")}</option>
+            <option value="TAKEAWAY">{t("pos.orderType.TAKEAWAY")}</option>
+            <option value="DELIVERY">{t("pos.orderType.DELIVERY")}</option>
+            <option value="PICKUP">{t("pos.orderType.PICKUP")}</option>
           </select>
           {correctionOrderType === "DINE_IN" ? (
             <select
@@ -460,7 +465,7 @@ export function PosReviewWorkspace({
               onChange={(event) => onCorrectionTableIdChange(event.target.value)}
               className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
             >
-              <option value="">Select table</option>
+              <option value="">{t("pos.review.selectTable")}</option>
               {restaurantTables.map((table) => (
                 <option key={table.id} value={table.id}>
                   {table.tableNumber}
@@ -475,7 +480,7 @@ export function PosReviewWorkspace({
                 onChange={(event) => onCorrectionDeliveryCompanyIdChange(event.target.value)}
                 className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
               >
-                <option value="">Select delivery company</option>
+                <option value="">{t("pos.review.selectDeliveryCompany")}</option>
                 {deliveryCompanies.map((company) => (
                   <option key={company.id} value={company.id}>
                     {company.name}
@@ -487,7 +492,7 @@ export function PosReviewWorkspace({
                 onChange={(event) => onCorrectionDriverIdChange(event.target.value)}
                 className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
               >
-                <option value="">Select driver</option>
+                <option value="">{t("pos.review.selectDriver")}</option>
                 {deliveryDrivers.map((driver) => (
                   <option key={driver.id} value={driver.id}>
                     {driver.name}
@@ -502,7 +507,7 @@ export function PosReviewWorkspace({
             step="0.01"
             value={correctionServiceCharge}
             onChange={(event) => onCorrectionServiceChargeChange(event.target.value)}
-            placeholder="Service charge"
+            placeholder={t("pos.review.serviceCharge")}
             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
           />
           <Input
@@ -511,13 +516,13 @@ export function PosReviewWorkspace({
             step="0.01"
             value={correctionDeliveryFee}
             onChange={(event) => onCorrectionDeliveryFeeChange(event.target.value)}
-            placeholder="Delivery fee"
+            placeholder={t("pos.review.deliveryFee")}
             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
           />
           <Input
             value={correctionReason}
             onChange={(event) => onCorrectionReasonChange(event.target.value)}
-            placeholder="Reason / سبب التصحيح"
+            placeholder={t("pos.review.correctionReason")}
             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
           />
           <button
@@ -526,7 +531,7 @@ export function PosReviewWorkspace({
             onClick={onSaveCorrection}
             className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
           >
-            Save correction / حفظ التصحيح
+            {t("pos.review.saveCorrection")}
           </button>
         </div>
       </Modal>

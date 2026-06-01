@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n";
 
 export function DetailedTableCard({
   title,
@@ -12,6 +13,8 @@ export function DetailedTableCard({
   headers: string[];
   rows: Array<Array<string | number>>;
 }) {
+  const { t } = useTranslation();
+
   return (
     <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
       <div className="text-lg font-black text-[#233329]">{title}</div>
@@ -42,7 +45,7 @@ export function DetailedTableCard({
         </div>
       ) : (
         <div className="mt-4 rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-4 text-sm text-[#64736b]">
-          No report rows available.
+          {t("pos.reports.noRows")}
         </div>
       )}
     </Card>
