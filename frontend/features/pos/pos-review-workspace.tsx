@@ -387,7 +387,7 @@ export function PosReviewWorkspace({
           <button
             type="button"
             onClick={() => setSelectedSession(null)}
-            className="flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition"
+            className="flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition shadow-sm"
           >
             <LuChevronRight size={14} className="ml-1" />
             <span>العودة إلى قائمة الورديات</span>
@@ -440,7 +440,7 @@ export function PosReviewWorkspace({
                     onApproveSessionReview(selectedSession.id);
                     setSelectedSession(null);
                   }}
-                  className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition"
+                  className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md"
                 >
                   {getTranslation("pos.review.approveSession", "اعتماد وترحيل الوردية")}
                 </button>
@@ -461,55 +461,56 @@ export function PosReviewWorkspace({
           </div>
         </Card>
 
-        {/* Metadata summary info */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100 text-xs font-semibold text-gray-600">
-          <div>
-            <span className="block text-[10px] text-gray-400 uppercase">الكاشير</span>
-            <span className="text-gray-900 font-bold">
+        {/* Metadata summary cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <span className="block text-xs font-semibold text-gray-500 mb-1">الكاشير</span>
+            <span className="text-lg font-bold text-[#233329]">
               {selectedSession.cashierUser?.name || selectedSession.cashierUser?.email || "—"}
             </span>
-          </div>
-          <div>
-            <span className="block text-[10px] text-gray-400 uppercase">الفرع / المستودع</span>
-            <span className="text-gray-900 font-bold">
-              {selectedSession.branchName || "—"} / {selectedSession.warehouse?.name || "—"}
+          </Card>
+          <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <span className="block text-xs font-semibold text-gray-500 mb-1">الفرع</span>
+            <span className="text-lg font-bold text-[#233329]">
+              {selectedSession.branchName || "—"}
             </span>
-          </div>
-          <div>
-            <span className="block text-[10px] text-gray-400 uppercase">وقت الفتح / الإغلاق</span>
-            <span className="text-gray-900 font-bold">
-              {formatDate(selectedSession.openedAt)}
-            </span>
-          </div>
-          <div>
-            <span className="block text-[10px] text-gray-400 uppercase">المستودع</span>
-            <span className="text-gray-900 font-bold">
+          </Card>
+          <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <span className="block text-xs font-semibold text-gray-500 mb-1">المستودع</span>
+            <span className="text-lg font-bold text-[#233329]">
               {selectedSession.warehouse?.name || "—"}
             </span>
-          </div>
+          </Card>
+          <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <span className="block text-xs font-semibold text-gray-500 mb-1">وقت الفتح / الإغلاق</span>
+            <span className="text-lg font-bold text-[#233329]">
+              {formatDate(selectedSession.openedAt)}
+            </span>
+          </Card>
         </div>
 
         {/* Tab selection */}
         <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
-          {([
-            ["overview", getTranslation("pos.review.tabOverview", "نظرة عامة")],
-            ["invoices", "الفواتير"],
-            ["cash", getTranslation("pos.review.tabCash", "جرد الكاش")],
-            ["inventory", getTranslation("pos.review.tabInventory", "أثر المخزون")],
-            ["journal", getTranslation("pos.review.tabJournal", "معاينة القيد")],
-          ] as const).map(([id, label]) => (
+          {[
+            { id: "overview" as const, label: getTranslation("pos.review.tabOverview", "نظرة عامة"), icon: LuEye },
+            { id: "invoices" as const, label: "الفواتير", icon: LuFileText },
+            { id: "cash" as const, label: getTranslation("pos.review.tabCash", "جرد الكاش"), icon: LuDollarSign },
+            { id: "inventory" as const, label: getTranslation("pos.review.tabInventory", "أثر المخزون"), icon: LuBuilding },
+            { id: "journal" as const, label: getTranslation("pos.review.tabJournal", "معاينة القيد"), icon: LuRefreshCw },
+          ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setActiveTab(id)}
               className={cn(
-                "rounded-full px-4 py-2 text-xs font-bold transition",
+                "flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-all duration-200",
                 activeTab === id
-                  ? "bg-[#46644b] text-white"
-                  : "border border-[#d6e1d9] bg-[#f7faf8] text-[#46644b] hover:bg-[#eff4f0]",
+                  ? "bg-[#46644b] text-white shadow-md shadow-[#46644b]/10 scale-105"
+                  : "border border-[#d6e1d9] bg-white text-[#46644b] hover:bg-[#eff4f0]",
               )}
             >
-              {label}
+              <Icon size={14} />
+              <span>{label}</span>
             </button>
           ))}
         </div>
@@ -519,31 +520,42 @@ export function PosReviewWorkspace({
           {activeTab === "overview" && (
             <div className="space-y-6">
               {/* Detailed metrics tiles */}
-              <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-                <DetailTile
-                  label={getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}
-                  value={selectedSession.openingCash}
-                />
-                <DetailTile
-                  label={getTranslation("pos.review.expectedCash", "الكاش المتوقع")}
-                  value={selectedSession.expectedCash}
-                />
-                <DetailTile
-                  label={getTranslation("pos.review.actualCash", "الكاش الفعلي")}
-                  value={selectedSession.actualCash || "—"}
-                />
-                <DetailTile
-                  label={getTranslation("pos.review.cashDifference", "فارق الكاش")}
-                  value={selectedSession.difference || "—"}
-                />
-                <DetailTile
-                  label={getTranslation("pos.sessions.totalSales", "صافي المبيعات")}
-                  value={selectedSession.totalSales || "0.00"}
-                />
-                <DetailTile
-                  label={getTranslation("pos.sessions.invoices", "عدد الفواتير")}
-                  value={String(selectedSession.invoiceCount ?? 0)}
-                />
+              <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
+                  <span className="text-lg font-bold text-[#233329]">{selectedSession.openingCash}</span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
+                  <span className="text-lg font-bold text-[#233329]">{selectedSession.expectedCash}</span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.actualCash", "الكاش الفعلي")}</span>
+                  <span className="text-lg font-bold text-[#233329]">{selectedSession.actualCash || "—"}</span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
+                  <span
+                    className={cn(
+                      "text-lg font-bold",
+                      Number(selectedSession.difference) < 0
+                        ? "text-red-600"
+                        : Number(selectedSession.difference) > 0
+                        ? "text-emerald-600"
+                        : "text-[#233329]",
+                    )}
+                  >
+                    {selectedSession.difference || "—"}
+                  </span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.totalSales", "صافي المبيعات")}</span>
+                  <span className="text-lg font-bold text-[#233329]">{selectedSession.totalSales || "0.00"}</span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.invoices", "عدد الفواتير")}</span>
+                  <span className="text-lg font-bold text-[#233329]">{selectedSession.invoiceCount ?? 0}</span>
+                </Card>
               </div>
 
               {/* Note / Notes if present */}
@@ -558,7 +570,7 @@ export function PosReviewWorkspace({
 
           {activeTab === "invoices" && (
             <div className="space-y-4">
-              <div className="text-sm font-bold text-[#233329]">قائمة الفواتير المكتملة والمرتجع للوردية</div>
+              <div className="text-sm font-bold text-[#233329] mb-2">قائمة الفواتير المكتملة والمرتجع للوردية</div>
 
               {invoiceList.length === 0 ? (
                 <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
@@ -568,15 +580,15 @@ export function PosReviewWorkspace({
                 <div className="overflow-hidden border border-gray-100 rounded-2xl bg-white">
                   <table className="min-w-full text-xs">
                     <thead>
-                      <tr className="border-b border-[#e1e7e2] bg-gray-50 text-[#6d7b73]">
-                        <th className="px-3 py-3 text-start font-bold">المرجع</th>
-                        <th className="px-3 py-3 text-start font-bold">التاريخ</th>
-                        <th className="px-3 py-3 text-start font-bold">العميل</th>
-                        <th className="px-3 py-3 text-start font-bold">نوع الطلب</th>
-                        <th className="px-3 py-3 text-start font-bold">طريقة الدفع</th>
-                        <th className="px-3 py-3 text-start font-bold">الإجمالي</th>
-                        <th className="px-3 py-3 text-center font-bold">حالة المراجعة</th>
-                        <th className="px-3 py-3 text-center font-bold">الإجراءات</th>
+                      <tr className="border-b border-[#e1e7e2] bg-gray-50 text-[#6d7b73] font-bold">
+                        <th className="px-3 py-3 text-start">المرجع</th>
+                        <th className="px-3 py-3 text-start">التاريخ</th>
+                        <th className="px-3 py-3 text-start">العميل</th>
+                        <th className="px-3 py-3 text-start">نوع الطلب</th>
+                        <th className="px-3 py-3 text-start">طريقة الدفع</th>
+                        <th className="px-3 py-3 text-start">الإجمالي</th>
+                        <th className="px-3 py-3 text-center">حالة المراجعة</th>
+                        <th className="px-3 py-3 text-center">الإجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f3f0]">
@@ -585,14 +597,14 @@ export function PosReviewWorkspace({
                         const salePayments = isSale ? (inv.raw.payments || []).map((p: any) => p.paymentMethod).join("، ") : "كاش";
 
                         return (
-                          <tr key={inv.id} className="hover:bg-gray-50/50 transition">
+                          <tr key={inv.id} className="hover:bg-gray-50/50 transition text-xs">
                             <td className="px-3 py-3 font-bold text-gray-900">
                               {inv.reference}
-                              {!isSale && <span className="mr-1.5 text-[10px] text-red-600 font-semibold">(مرتجع)</span>}
+                              {!isSale && <span className="mr-1.5 text-[10px] text-red-600 font-extrabold">(مرتجع)</span>}
                             </td>
                             <td className="px-3 py-3 text-gray-500">{formatDate(inv.date)}</td>
-                            <td className="px-3 py-3 text-gray-700">{inv.customer}</td>
-                            <td className="px-3 py-3 text-gray-700">
+                            <td className="px-3 py-3 text-gray-700 font-semibold">{inv.customer}</td>
+                            <td className="px-3 py-3 text-gray-700 font-semibold">
                               {t(`pos.orderType.${inv.orderType}`)}
                             </td>
                             <td className="px-3 py-3 text-gray-500">{salePayments || "—"}</td>
@@ -618,7 +630,7 @@ export function PosReviewWorkspace({
                                 type="button"
                                 onClick={() => isSale && setActiveInvoiceDetail(inv.raw)}
                                 disabled={!isSale}
-                                className="rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition"
+                                className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition"
                               >
                                 عرض التفاصيل
                               </button>
@@ -637,13 +649,42 @@ export function PosReviewWorkspace({
             <div className="space-y-6">
               {report ? (
                 <>
-                  <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-                    <DetailTile label={getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")} value={report.openingCash} />
-                    <DetailTile label={getTranslation("pos.review.cashSales", "مبيعات الكاش")} value={report.cashSales} />
-                    <DetailTile label={getTranslation("pos.review.cashRefunds", "مرتجعات الكاش")} value={report.cashRefunds} />
-                    <DetailTile label={getTranslation("pos.review.expectedCash", "الكاش المتوقع")} value={report.expectedCash} />
-                    <DetailTile label={getTranslation("pos.review.actualCash", "الكاش الفعلي المعدود")} value={report.actualCash ?? "—"} />
-                    <DetailTile label={getTranslation("pos.review.cashDifference", "فارق الكاش")} value={report.difference ?? "—"} />
+                  <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
+                      <span className="text-lg font-bold text-[#233329]">{report.openingCash}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashSales", "مبيعات الكاش")}</span>
+                      <span className="text-lg font-bold text-[#233329]">{report.cashSales}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashRefunds", "مرتجعات الكاش")}</span>
+                      <span className="text-lg font-bold text-[#233329]">{report.cashRefunds}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
+                      <span className="text-lg font-bold text-[#233329]">{report.expectedCash}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.actualCash", "الكاش الفعلي المعدود")}</span>
+                      <span className="text-lg font-bold text-[#233329]">{report.actualCash ?? "—"}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
+                      <span
+                        className={cn(
+                          "text-lg font-bold",
+                          Number(report.difference) < 0
+                            ? "text-red-600"
+                            : Number(report.difference) > 0
+                            ? "text-emerald-600"
+                            : "text-[#233329]",
+                        )}
+                      >
+                        {report.difference ?? "—"}
+                      </span>
+                    </Card>
                   </div>
 
                   {/* Payments mix breakdown */}
@@ -655,8 +696,8 @@ export function PosReviewWorkspace({
                       <div className="divide-y divide-gray-100 bg-white">
                         {paymentsBreakdown.map(([method, data]) => (
                           <div key={method} className="p-3 flex justify-between items-center text-xs">
-                            <span className="font-semibold text-gray-900">{method}</span>
-                            <span className="font-bold text-gray-700">
+                            <span className="font-bold text-gray-900">{method}</span>
+                            <span className="font-bold text-[#46644b]">
                               {data.total.toFixed(2)} ({data.count} فواتير)
                             </span>
                           </div>
@@ -673,7 +714,7 @@ export function PosReviewWorkspace({
 
           {activeTab === "inventory" && (
             <div className="space-y-4">
-              <div className="text-sm font-bold text-[#233329]">{getTranslation("pos.review.inventoryImpact", "أثر المخزون")}</div>
+              <div className="text-sm font-bold text-[#233329] mb-2">{getTranslation("pos.review.inventoryImpact", "أثر المخزون")}</div>
               {inventoryRows.length === 0 ? (
                 <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
                   لا يوجد أثر مخزني للوردية الحالية.
@@ -682,20 +723,20 @@ export function PosReviewWorkspace({
                 <div className="overflow-hidden border border-gray-100 rounded-2xl bg-white">
                   <table className="min-w-full text-xs">
                     <thead>
-                      <tr className="border-b border-[#e1e7e2] bg-gray-50 text-[#6d7b73]">
-                        <th className="px-3 py-3 text-start font-bold">{getTranslation("pos.review.headerSale", "البيع")}</th>
-                        <th className="px-3 py-3 text-start font-bold">{getTranslation("pos.review.headerItem", "الصنف")}</th>
-                        <th className="px-3 py-3 text-center font-bold">{getTranslation("pos.review.headerQuantity", "الكمية")}</th>
-                        <th className="px-3 py-3 text-start font-bold">{getTranslation("pos.review.headerWarehouse", "المستودع")}</th>
+                      <tr className="border-b border-[#e1e7e2] bg-gray-50 text-[#6d7b73] font-bold">
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerSale", "البيع")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerItem", "الصنف")}</th>
+                        <th className="px-3 py-3 text-center">{getTranslation("pos.review.headerQuantity", "الكمية")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerWarehouse", "المستودع")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f3f0]">
                       {inventoryRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/50 transition">
-                          <td className="px-3 py-3 font-semibold text-gray-900">{row.saleReference}</td>
-                          <td className="px-3 py-3 text-gray-700">{row.itemName}</td>
-                          <td className="px-3 py-3 text-center font-bold text-gray-900">{row.quantity}</td>
-                          <td className="px-3 py-3 text-gray-600">{row.warehouse}</td>
+                        <tr key={idx} className="hover:bg-gray-50/50 transition text-xs">
+                          <td className="px-3 py-3.5 font-bold text-gray-900">{row.saleReference}</td>
+                          <td className="px-3 py-3.5 text-gray-700 font-semibold">{row.itemName}</td>
+                          <td className="px-3 py-3.5 text-center font-bold text-gray-900">{row.quantity}</td>
+                          <td className="px-3 py-3.5 text-gray-600 font-semibold">{row.warehouse}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -707,7 +748,7 @@ export function PosReviewWorkspace({
 
           {activeTab === "journal" && (
             <div className="space-y-4">
-              <div className="text-sm font-bold text-[#233329]">{getTranslation("pos.review.tabJournal", "معاينة القيد المحاسبي")}</div>
+              <div className="text-sm font-bold text-[#233329] mb-2">{getTranslation("pos.review.tabJournal", "معاينة القيد المحاسبي")}</div>
               <div className="space-y-4">
                 {journalEntries.length === 0 ? (
                   <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
@@ -734,11 +775,11 @@ export function PosReviewWorkspace({
                             key={line.id}
                             className="grid grid-cols-[1fr_120px_120px] text-gray-700"
                           >
-                            <span>
+                            <span className="font-semibold">
                               {line.accountCode} · {line.accountName}
                             </span>
-                            <span className="text-left font-semibold text-emerald-700">{line.debitAmount !== "0.00" ? line.debitAmount : "—"}</span>
-                            <span className="text-left font-semibold text-rose-700">{line.creditAmount !== "0.00" ? line.creditAmount : "—"}</span>
+                            <span className="text-left font-bold text-emerald-700">{line.debitAmount !== "0.00" ? line.debitAmount : "—"}</span>
+                            <span className="text-left font-bold text-rose-700">{line.creditAmount !== "0.00" ? line.creditAmount : "—"}</span>
                           </div>
                         ))}
                       </div>
@@ -757,89 +798,110 @@ export function PosReviewWorkspace({
           title={`${getTranslation("pos.review.receipt", "تفاصيل الفاتورة")}: ${
             activeInvoiceDetail?.reference ?? ""
           }`}
+          size="3xl"
         >
           {activeInvoiceDetail && (
             <div className="space-y-6 text-start" dir="rtl">
               {/* Header Info */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm">
                 <div>
-                  <span className="font-bold block text-gray-400 uppercase">الفرع</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">الفرع</span>
                   <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.branchName || selectedSession?.branchName || "—"}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-gray-400 uppercase">التاريخ</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">التاريخ</span>
                   <span className="text-gray-900 font-bold">{formatDate(activeInvoiceDetail.invoiceDate)}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-gray-400 uppercase">المستودع</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">المستودع</span>
                   <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.warehouse?.name || selectedSession?.warehouse?.name || "—"}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-gray-400 uppercase">نوع الطلب</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">نوع الطلب</span>
                   <span className="text-gray-900 font-bold">{t(`pos.orderType.${activeInvoiceDetail.orderType}`)}</span>
                 </div>
               </div>
 
               {/* Invoice Lines */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden text-xs">
-                <div className="bg-gray-50 p-2.5 font-bold uppercase text-gray-600">الأصناف المباعة</div>
-                <div className="divide-y divide-gray-100 bg-white">
-                  {activeInvoiceDetail.lines.map((line) => (
-                    <div key={line.id} className="p-2.5 flex justify-between items-center">
-                      <div>
-                        <div className="font-bold text-gray-900">{line.itemName || line.description}</div>
-                        <div className="text-[10px] text-gray-500">
-                          {line.quantity} x {line.unitPrice} {activeInvoiceDetail.currencyCode}
-                        </div>
-                      </div>
-                      <div className="font-bold text-gray-900">
-                        {line.lineAmount} {activeInvoiceDetail.currencyCode}
-                      </div>
-                    </div>
-                  ))}
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">الأصناف المباعة</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/50 text-gray-500 font-semibold">
+                        <th className="px-4 py-2 text-start">الصنف</th>
+                        <th className="px-4 py-2 text-center">الكمية</th>
+                        <th className="px-4 py-2 text-start">سعر الوحدة</th>
+                        <th className="px-4 py-2 text-left">الإجمالي</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {activeInvoiceDetail.lines.map((line) => (
+                        <tr key={line.id} className="hover:bg-gray-50/30 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-gray-900">{line.itemName || line.description}</td>
+                          <td className="px-4 py-3 text-center text-gray-700 font-bold">{line.quantity}</td>
+                          <td className="px-4 py-3 text-gray-500">
+                            {line.unitPrice} {activeInvoiceDetail.currencyCode}
+                          </td>
+                          <td className="px-4 py-3 text-left font-bold text-gray-900">
+                            {line.lineAmount} {activeInvoiceDetail.currencyCode}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
               {/* Payments */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden text-xs">
-                <div className="bg-gray-50 p-2.5 font-bold uppercase text-gray-600">تفاصيل الدفع</div>
-                <div className="divide-y divide-gray-100 bg-white">
-                  {activeInvoiceDetail.payments.map((payment) => (
-                    <div key={payment.id} className="p-2.5 flex justify-between items-center">
-                      <div>
-                        <div className="font-bold text-gray-900">{payment.paymentMethod}</div>
-                        {payment.reference && <div className="text-[10px] text-gray-500">مرجع: {payment.reference}</div>}
-                      </div>
-                      <div className="font-bold text-gray-900">
-                        {payment.amount} {activeInvoiceDetail.currencyCode}
-                      </div>
-                    </div>
-                  ))}
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">تفاصيل الدفع</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/50 text-gray-500 font-semibold">
+                        <th className="px-4 py-2 text-start">طريقة الدفع</th>
+                        <th className="px-4 py-2 text-start">المرجع</th>
+                        <th className="px-4 py-2 text-left">المبلغ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {activeInvoiceDetail.payments.map((payment) => (
+                        <tr key={payment.id} className="hover:bg-gray-50/30 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-gray-900">{payment.paymentMethod}</td>
+                          <td className="px-4 py-3 text-gray-500">{payment.reference || "—"}</td>
+                          <td className="px-4 py-3 text-left font-bold text-gray-900">
+                            {payment.amount} {activeInvoiceDetail.currencyCode}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
               {/* Financial Summary */}
-              <div className="bg-gray-50 p-3.5 rounded-xl space-y-1.5 text-xs border border-gray-100">
+              <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-sm border border-gray-100">
                 <div className="flex justify-between">
                   <span className="text-gray-500">الإجمالي قبل الضريبة</span>
-                  <span>{activeInvoiceDetail.subtotalAmount}</span>
+                  <span className="font-semibold text-gray-900">{activeInvoiceDetail.subtotalAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">الخصم</span>
-                  <span>{activeInvoiceDetail.discountAmount}</span>
+                  <span className="font-semibold text-red-600">-{activeInvoiceDetail.discountAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">الضريبة</span>
-                  <span>{activeInvoiceDetail.taxAmount}</span>
+                  <span className="font-semibold text-gray-900">{activeInvoiceDetail.taxAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
-                <div className="flex justify-between border-t border-gray-200 pt-2 font-bold text-gray-900">
+                <div className="flex justify-between border-t border-gray-200 pt-3 font-bold text-base text-gray-900">
                   <span>الإجمالي النهائي</span>
-                  <span>{activeInvoiceDetail.totalAmount}</span>
+                  <span>{activeInvoiceDetail.totalAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
               </div>
 
               {/* Individual Actions */}
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
                 {activeInvoiceDetail.posAccountingStatus === "POSTED" ? (
                   <button
                     type="button"
@@ -847,7 +909,7 @@ export function PosReviewWorkspace({
                       onReverseReview(activeInvoiceDetail.id);
                       setActiveInvoiceDetail(null);
                     }}
-                    className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                    className="rounded-full border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100 transition"
                   >
                     {t("pos.review.reverse")}
                   </button>
@@ -858,7 +920,7 @@ export function PosReviewWorkspace({
                       onClick={() => {
                         onOpenCorrectionModal(activeInvoiceDetail);
                       }}
-                      className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition"
+                      className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition"
                     >
                       {t("pos.review.correctOrderType")}
                     </button>
@@ -868,7 +930,7 @@ export function PosReviewWorkspace({
                         onApproveReview(activeInvoiceDetail.id);
                         setActiveInvoiceDetail(null);
                       }}
-                      className="rounded-full bg-[#5f8a67] px-4 py-2 text-xs font-bold text-white hover:bg-[#4d7153] transition"
+                      className="rounded-full bg-[#46644b] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#39523d] transition"
                     >
                       {t("pos.review.approve")}
                     </button>
@@ -878,7 +940,7 @@ export function PosReviewWorkspace({
                         onRejectReview(activeInvoiceDetail.id);
                         setActiveInvoiceDetail(null);
                       }}
-                      className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                      className="rounded-full border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100 transition"
                     >
                       {t("pos.review.reject")}
                     </button>

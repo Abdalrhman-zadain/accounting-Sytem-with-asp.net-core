@@ -758,8 +758,8 @@ export function PosPage() {
   const [correctionTableId, setCorrectionTableId] = useState<string>("");
   const [correctionDeliveryCompanyId, setCorrectionDeliveryCompanyId] = useState<string>("");
   const [correctionDriverId, setCorrectionDriverId] = useState<string>("");
-  const [correctionServiceCharge, setCorrectionServiceCharge] = useState("0");
-  const [correctionDeliveryFee, setCorrectionDeliveryFee] = useState("0");
+  const [correctionServiceCharge, setCorrectionServiceCharge] = useState("");
+  const [correctionDeliveryFee, setCorrectionDeliveryFee] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -2407,8 +2407,16 @@ export function PosPage() {
     setCorrectionTableId(sale.tableId ?? "");
     setCorrectionDeliveryCompanyId(sale.deliveryCompanyId ?? "");
     setCorrectionDriverId(sale.driverId ?? "");
-    setCorrectionServiceCharge(sale.serviceChargeAmount ?? "0");
-    setCorrectionDeliveryFee(sale.deliveryFeeAmount ?? "0");
+    setCorrectionServiceCharge(
+      !sale.serviceChargeAmount || Number(sale.serviceChargeAmount) === 0
+        ? ""
+        : sale.serviceChargeAmount
+    );
+    setCorrectionDeliveryFee(
+      !sale.deliveryFeeAmount || Number(sale.deliveryFeeAmount) === 0
+        ? ""
+        : sale.deliveryFeeAmount
+    );
     setCorrectionReason("");
     setIsCorrectOrderTypeOpen(true);
   };
