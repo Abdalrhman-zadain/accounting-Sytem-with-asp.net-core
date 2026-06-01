@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Card, Modal } from "@/components/ui";
-import { Input } from "@/components/ui/forms";
+import { Input, Field } from "@/components/ui/forms";
 import { DetailTile } from "@/features/pos/pos-detail-cards";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -469,17 +469,31 @@ export function PosReviewWorkspace({
                     )}
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDiffDecision("ACCEPT");
-                      setDiffReason("");
-                      setIsDiffModalOpen(true);
-                    }}
-                    className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
-                  >
-                    مراجعة فرق الكاش
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiffDecision("ACCEPT");
+                        setDiffReason("");
+                        setIsDiffModalOpen(true);
+                      }}
+                      className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
+                    >
+                      مراجعة فرق الكاش
+                    </button>
+                    {onRejectSessionReview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRejectSessionReview(selectedSession.id);
+                          setSelectedSession(null);
+                        }}
+                        className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                      >
+                        {getTranslation("pos.review.reject", "رفض الوردية")}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -954,16 +968,9 @@ export function PosReviewWorkspace({
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">اتخاذ القرار</label>
-                  <select
-                    value={diffDecision}
-                    onChange={(e) => setDiffDecision(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 p-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#46644b]"
-                  >
-                    <option value="ACCEPT">قبول الفرق</option>
-                    <option value="CORRECTION">طلب تصحيح</option>
-                    <option value="REJECT">رفض الوردية</option>
-                    <option value="REOPEN">إعادة فتح الوردية</option>
-                  </select>
+                  <div className="w-full rounded-xl border border-[#dbe2dd] bg-[#f8faf8] px-3 py-2 text-sm font-semibold text-[#233329]">
+                    قبول الفرق
+                  </div>
                 </div>
 
                 {/* Warning message if above tolerance and not a manager */}
@@ -1204,82 +1211,96 @@ export function PosReviewWorkspace({
           title={t("pos.review.correctOrderTypeModal")}
         >
           <div className="space-y-4 text-start" dir="rtl">
-            <select
-              value={correctionOrderType}
-              onChange={(event) => onCorrectionOrderTypeChange(event.target.value as PosOrderType)}
-              className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-            >
-              <option value="DINE_IN">{t("pos.orderType.DINE_IN")}</option>
-              <option value="TAKEAWAY">{t("pos.orderType.TAKEAWAY")}</option>
-              <option value="DELIVERY">{t("pos.orderType.DELIVERY")}</option>
-              <option value="PICKUP">{t("pos.orderType.PICKUP")}</option>
-            </select>
-            {correctionOrderType === "DINE_IN" ? (
+            <Field label={getTranslation("pos.review.orderType", "نوع الطلب")} required labelAlign="start">
               <select
-                value={correctionTableId}
-                onChange={(event) => onCorrectionTableIdChange(event.target.value)}
+                value={correctionOrderType}
+                onChange={(event) => onCorrectionOrderTypeChange(event.target.value as PosOrderType)}
                 className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
               >
-                <option value="">{t("pos.review.selectTable")}</option>
-                {restaurantTables.map((table) => (
-                  <option key={table.id} value={table.id}>
-                    {table.tableNumber}
-                  </option>
-                ))}
+                <option value="DINE_IN">{getTranslation("pos.orderType.DINE_IN", "صالة")}</option>
+                <option value="TAKEAWAY">{getTranslation("pos.orderType.TAKEAWAY", "سفري")}</option>
+                <option value="DELIVERY">{getTranslation("pos.orderType.DELIVERY", "توصيل")}</option>
+                <option value="PICKUP">{getTranslation("pos.orderType.PICKUP", "استلام")}</option>
               </select>
+            </Field>
+            {correctionOrderType === "DINE_IN" ? (
+              <Field label={getTranslation("pos.review.selectTable", "اختر الطاولة")} required labelAlign="start">
+                <select
+                  value={correctionTableId}
+                  onChange={(event) => onCorrectionTableIdChange(event.target.value)}
+                  className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                >
+                  <option value="">{getTranslation("pos.review.selectTable", "اختر الطاولة")}</option>
+                  {restaurantTables.map((table) => (
+                    <option key={table.id} value={table.id}>
+                      {table.tableNumber}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             ) : null}
             {correctionOrderType === "DELIVERY" ? (
               <>
-                <select
-                  value={correctionDeliveryCompanyId}
-                  onChange={(event) => onCorrectionDeliveryCompanyIdChange(event.target.value)}
-                  className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                >
-                  <option value="">{t("pos.review.selectDeliveryCompany")}</option>
-                  {deliveryCompanies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {company.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={correctionDriverId}
-                  onChange={(event) => onCorrectionDriverIdChange(event.target.value)}
-                  className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                >
-                  <option value="">{t("pos.review.selectDriver")}</option>
-                  {deliveryDrivers.map((driver) => (
-                    <option key={driver.id} value={driver.id}>
-                      {driver.name}
-                    </option>
-                  ))}
-                </select>
+                <Field label={getTranslation("pos.review.selectDeliveryCompany", "شركة التوصيل")} required labelAlign="start">
+                  <select
+                    value={correctionDeliveryCompanyId}
+                    onChange={(event) => onCorrectionDeliveryCompanyIdChange(event.target.value)}
+                    className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                  >
+                    <option value="">{getTranslation("pos.review.selectDeliveryCompany", "اختر شركة التوصيل")}</option>
+                    {deliveryCompanies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={getTranslation("pos.review.selectDriver", "السائق")} labelAlign="start">
+                  <select
+                    value={correctionDriverId}
+                    onChange={(event) => onCorrectionDriverIdChange(event.target.value)}
+                    className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+                  >
+                    <option value="">{getTranslation("pos.review.selectDriver", "اختر السائق")}</option>
+                    {deliveryDrivers.map((driver) => (
+                      <option key={driver.id} value={driver.id}>
+                        {driver.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </>
             ) : null}
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={correctionServiceCharge}
-              onChange={(event) => onCorrectionServiceChargeChange(event.target.value)}
-              placeholder={t("pos.review.serviceCharge")}
-              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-            />
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={correctionDeliveryFee}
-              onChange={(event) => onCorrectionDeliveryFeeChange(event.target.value)}
-              placeholder={t("pos.review.deliveryFee")}
-              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-            />
-            <Input
-              value={correctionReason}
-              onChange={(event) => onCorrectionReasonChange(event.target.value)}
-              placeholder={t("pos.review.correctionReason")}
-              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-            />
+            <Field label={getTranslation("pos.review.serviceCharge", "رسوم الخدمة")} labelAlign="start">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={correctionServiceCharge}
+                onChange={(event) => onCorrectionServiceChargeChange(event.target.value)}
+                placeholder={getTranslation("pos.review.serviceCharge", "رسوم الخدمة")}
+                className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+              />
+            </Field>
+            <Field label={getTranslation("pos.review.deliveryFee", "رسوم التوصيل")} labelAlign="start">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={correctionDeliveryFee}
+                onChange={(event) => onCorrectionDeliveryFeeChange(event.target.value)}
+                placeholder={getTranslation("pos.review.deliveryFee", "رسوم التوصيل")}
+                className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+              />
+            </Field>
+            <Field label={getTranslation("pos.review.correctionReason", "سبب التصحيح")} required labelAlign="start">
+              <Input
+                value={correctionReason}
+                onChange={(event) => onCorrectionReasonChange(event.target.value)}
+                placeholder={getTranslation("pos.review.correctionReason", "سبب التصحيح")}
+                className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+              />
+            </Field>
             <button
               type="button"
               disabled={!selectedCorrectionSale || !correctionReason.trim() || savingCorrection}
@@ -1613,18 +1634,29 @@ export function PosReviewWorkspace({
                                   )}
                                 </>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedSession(session);
-                                    setDiffDecision("ACCEPT");
-                                    setDiffReason("");
-                                    setIsDiffModalOpen(true);
-                                  }}
-                                  className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition"
-                                >
-                                  مراجعة الفرق
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedSession(session);
+                                      setDiffDecision("ACCEPT");
+                                      setDiffReason("");
+                                      setIsDiffModalOpen(true);
+                                    }}
+                                    className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition"
+                                  >
+                                    مراجعة الفرق
+                                  </button>
+                                  {onRejectSessionReview && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onRejectSessionReview(session.id)}
+                                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                                    >
+                                      {getTranslation("pos.review.reject", "رفض")}
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </>
                           )}
