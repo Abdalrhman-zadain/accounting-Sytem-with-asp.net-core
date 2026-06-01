@@ -141,6 +141,7 @@ export function PosReviewWorkspace({
   const { user } = useAuth();
   const { language } = useTranslation();
   const isArabic = language === "ar";
+  const pageDir = isArabic ? "rtl" : "ltr";
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [diffDecision, setDiffDecision] = useState("ACCEPT");
   const [diffReason, setDiffReason] = useState("");
@@ -160,6 +161,32 @@ export function PosReviewWorkspace({
 
   const isDifferenceAccepted = (session: PosSession) =>
     Number(session.difference || 0) === 0 || session.differenceStatus === "ACCEPTED_DIFFERENCE";
+
+  const getAccountingStatusLabel = (status?: string) => {
+    switch (status) {
+      case "PENDING_REVIEW":
+        return getTranslation("pos.review.accountingStatusPendingReview", "بانتظار المراجعة");
+      case "POSTED":
+        return getTranslation("pos.review.accountingStatusPosted", "مرحلة");
+      case "REJECTED":
+        return getTranslation("pos.review.accountingStatusRejected", "مرفوضة");
+      case "OPEN":
+        return getTranslation("pos.review.accountingStatusOpen", "مفتوحة");
+      default:
+        return getTranslation("pos.review.accountingStatusClosed", "مغلقة");
+    }
+  };
+
+  const getInvoiceReviewStatusLabel = (status?: string) => {
+    switch (status) {
+      case "PENDING_REVIEW":
+        return getTranslation("pos.review.accountingStatusPendingReview", "بانتظار المراجعة");
+      case "POSTED":
+        return getTranslation("pos.review.accountingStatusPosted", "مرحلة");
+      default:
+        return getTranslation("pos.review.accountingStatusRejected", "مرفوضة");
+    }
+  };
 
   // Translation helpers
   const getTranslation = (key: string, fallback: string) => {
@@ -332,7 +359,7 @@ export function PosReviewWorkspace({
         id: s.id,
         reference: s.reference,
         date: s.invoiceDate,
-        customer: s.customer?.name || "عميل عام",
+        customer: s.customer?.name || getTranslation("pos.review.walkInCustomer", "عميل عام"),
         orderType: s.orderType || "TAKEAWAY",
         total: s.totalAmount,
         status: s.posAccountingStatus || "PENDING_REVIEW",
@@ -346,7 +373,7 @@ export function PosReviewWorkspace({
         id: r.id,
         reference: r.reference,
         date: r.returnDate || r.createdAt,
-        customer: "عميل عام",
+        customer: getTranslation("pos.review.walkInCustomer", "عميل عام"),
         orderType: "TAKEAWAY",
         total: `-${r.totalAmount}`,
         status: r.accountingStatus || "PENDING_REVIEW",
@@ -356,7 +383,7 @@ export function PosReviewWorkspace({
     });
 
     return list;
-  }, [report]);
+  }, [report, language]);
 
   // Compute inventory rows
   const inventoryRows = useMemo(() => {
@@ -402,7 +429,7 @@ export function PosReviewWorkspace({
             className="flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition shadow-sm"
           >
             <LuChevronRight size={14} className="ml-1" />
-            <span>العودة إلى قائمة الورديات</span>
+            <span>{getTranslation("pos.review.backToSessions", "العودة إلى قائمة الورديات")}</span>
           </button>
           
           <span
@@ -419,15 +446,7 @@ export function PosReviewWorkspace({
                 : "bg-slate-50 text-slate-800 border-slate-200",
             )}
           >
-            {selectedSession.accountingStatus === "PENDING_REVIEW"
-              ? "بانتظار المراجعة"
-              : selectedSession.accountingStatus === "POSTED"
-              ? "مرحلة"
-              : selectedSession.accountingStatus === "REJECTED"
-              ? "مرفوضة"
-              : selectedSession.accountingStatus === "OPEN"
-              ? "مفتوحة"
-              : "مغلقة"}
+            {getAccountingStatusLabel(selectedSession.accountingStatus)}
           </span>
         </div>
 
@@ -439,7 +458,10 @@ export function PosReviewWorkspace({
                 {getTranslation("pos.review.sessionReview", "مراجعة الوردية")}: {selectedSession.sessionNumber}
               </h1>
               <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-                مراجعة تفصيلية للمبيعات، الكاش الفعلي، فرق الصندوق، وأثر المخزون قبل الترحيل.
+                {getTranslation(
+                  "pos.review.subtitle",
+                  "مراجعة الورديات المسلمة، المدفوعات، فرق الصندوق، وأثر المخزون قبل الترحيل",
+                )}
               </p>
             </div>
             
@@ -482,7 +504,7 @@ export function PosReviewWorkspace({
                       }}
                       className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
                     >
-                      مراجعة فرق الكاش
+                      {getTranslation("pos.review.reviewCashDifference", "مراجعة فرق الكاش")}
                     </button>
                     {onRejectSessionReview && (
                       <button
@@ -506,25 +528,25 @@ export function PosReviewWorkspace({
         {/* Metadata summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <span className="block text-xs font-semibold text-gray-500 mb-1">الكاشير</span>
+            <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.cashierLabel", "الكاشير")}</span>
             <span className="text-lg font-bold text-[#233329]">
               {selectedSession.cashierUser?.name || selectedSession.cashierUser?.email || "—"}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <span className="block text-xs font-semibold text-gray-500 mb-1">الفرع</span>
+            <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.branch", "الفرع")}</span>
             <span className="text-lg font-bold text-[#233329]">
               {selectedSession.branchName || "—"}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <span className="block text-xs font-semibold text-gray-500 mb-1">المستودع</span>
+            <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.warehouse", "المستودع")}</span>
             <span className="text-lg font-bold text-[#233329]">
               {selectedSession.warehouse?.name || "—"}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <span className="block text-xs font-semibold text-gray-500 mb-1">وقت الفتح / الإغلاق</span>
+            <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.openCloseTime", "وقت الفتح / الإغلاق")}</span>
             <span className="text-lg font-bold text-[#233329]">
               {formatDate(selectedSession.openedAt)}
             </span>
@@ -535,7 +557,7 @@ export function PosReviewWorkspace({
         <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
           {[
             { id: "overview" as const, label: getTranslation("pos.review.tabOverview", "نظرة عامة"), icon: LuEye },
-            { id: "invoices" as const, label: "الفواتير", icon: LuFileText },
+            { id: "invoices" as const, label: getTranslation("pos.sessions.invoices", "الفواتير"), icon: LuFileText },
             { id: "cash" as const, label: getTranslation("pos.review.tabCash", "جرد الكاش"), icon: LuDollarSign },
             { id: "inventory" as const, label: getTranslation("pos.review.tabInventory", "أثر المخزون"), icon: LuBuilding },
             { id: "journal" as const, label: getTranslation("pos.review.tabJournal", "معاينة القيد"), icon: LuRefreshCw },
@@ -652,7 +674,7 @@ export function PosReviewWorkspace({
               {/* Note / Notes if present */}
               {selectedSession.notes && (
                 <div className="rounded-[18px] border border-amber-100 bg-amber-50/30 p-4 text-sm text-[#233329]">
-                  <span className="font-bold block text-xs text-amber-800 uppercase mb-1">ملاحظات الوردية</span>
+                  <span className="font-bold block text-xs text-amber-800 uppercase mb-1">{getTranslation("pos.review.sessionNotes", "ملاحظات الوردية")}</span>
                   {selectedSession.notes}
                 </div>
               )}
@@ -661,37 +683,39 @@ export function PosReviewWorkspace({
 
           {activeTab === "invoices" && (
             <div className="space-y-4">
-              <div className="text-sm font-bold text-[#233329] mb-2">قائمة الفواتير المكتملة والمرتجع للوردية</div>
+              <div className="text-sm font-bold text-[#233329] mb-2">{getTranslation("pos.review.invoicesListTitle", "قائمة الفواتير المكتملة والمرتجع للوردية")}</div>
 
               {invoiceList.length === 0 ? (
                 <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
-                  لا توجد فواتير مسجلة في هذه الوردية.
+                  {getTranslation("pos.review.noInvoices", "لا توجد فواتير مسجلة في هذه الوردية.")}
                 </div>
               ) : (
                 <div className="overflow-hidden border border-gray-100 rounded-2xl bg-white">
                   <table className="min-w-full text-xs">
                     <thead>
                       <tr className="border-b border-[#e1e7e2] bg-gray-50 text-[#6d7b73] font-bold">
-                        <th className="px-3 py-3 text-start">المرجع</th>
-                        <th className="px-3 py-3 text-start">التاريخ</th>
-                        <th className="px-3 py-3 text-start">العميل</th>
-                        <th className="px-3 py-3 text-start">نوع الطلب</th>
-                        <th className="px-3 py-3 text-start">طريقة الدفع</th>
-                        <th className="px-3 py-3 text-start">الإجمالي</th>
-                        <th className="px-3 py-3 text-center">حالة المراجعة</th>
-                        <th className="px-3 py-3 text-center">الإجراءات</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerReference", "المرجع")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerDate", "التاريخ")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerCustomer", "العميل")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerOrderType", "نوع الطلب")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerPaymentMethod", "طريقة الدفع")}</th>
+                        <th className="px-3 py-3 text-start">{getTranslation("pos.review.headerTotal", "الإجمالي")}</th>
+                        <th className="px-3 py-3 text-center">{getTranslation("pos.review.headerReviewStatus", "حالة المراجعة")}</th>
+                        <th className="px-3 py-3 text-center">{getTranslation("payroll.column.action", "الإجراءات")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f3f0]">
                       {invoiceList.map((inv) => {
                         const isSale = inv.type === "sale";
-                        const salePayments = isSale ? (inv.raw.payments || []).map((p: any) => p.paymentMethod).join("، ") : "كاش";
+                        const salePayments = isSale
+                          ? (inv.raw.payments || []).map((p: any) => p.paymentMethod).join(", ")
+                          : getTranslation("pos.review.cashPaymentMethod", "كاش");
 
                         return (
                           <tr key={inv.id} className="hover:bg-gray-50/50 transition text-xs">
                             <td className="px-3 py-3 font-bold text-gray-900">
                               {inv.reference}
-                              {!isSale && <span className="mr-1.5 text-[10px] text-red-600 font-extrabold">(مرتجع)</span>}
+                              {!isSale && <span className="mr-1.5 text-[10px] text-red-600 font-extrabold">({getTranslation("pos.review.returnBadge", "مرتجع")})</span>}
                             </td>
                             <td className="px-3 py-3 text-gray-500">{formatDate(inv.date)}</td>
                             <td className="px-3 py-3 text-gray-700 font-semibold">{inv.customer}</td>
@@ -713,7 +737,7 @@ export function PosReviewWorkspace({
                                     : "bg-rose-50 text-rose-800 border-rose-200",
                                 )}
                               >
-                                {inv.status === "PENDING_REVIEW" ? "بانتظار المراجعة" : inv.status === "POSTED" ? "مرحلة" : "مرفوضة"}
+                                {getInvoiceReviewStatusLabel(inv.status)}
                               </span>
                             </td>
                             <td className="px-3 py-3 text-center">
@@ -723,7 +747,7 @@ export function PosReviewWorkspace({
                                 disabled={!isSale}
                                 className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition"
                               >
-                                عرض التفاصيل
+                                {getTranslation("pos.review.viewDetails", "عرض التفاصيل")}
                               </button>
                             </td>
                           </tr>
@@ -829,16 +853,16 @@ export function PosReviewWorkspace({
 
                   {/* Payments mix breakdown */}
                   <div className="border border-gray-100 rounded-xl overflow-hidden mt-4">
-                    <div className="bg-gray-50 p-3 font-bold text-xs uppercase text-gray-600">تفاصيل وسائل الدفع المستلمة</div>
+                    <div className="bg-gray-50 p-3 font-bold text-xs uppercase text-gray-600">{getTranslation("pos.review.paymentBreakdownTitle", "تفاصيل وسائل الدفع المستلمة")}</div>
                     {paymentsBreakdown.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-gray-500">لا توجد تفاصيل مدفوعات.</div>
+                      <div className="p-4 text-center text-xs text-gray-500">{getTranslation("pos.review.noPaymentDetails", "لا توجد تفاصيل مدفوعات.")}</div>
                     ) : (
                       <div className="divide-y divide-gray-100 bg-white">
                         {paymentsBreakdown.map(([method, data]) => (
                           <div key={method} className="p-3 flex justify-between items-center text-xs">
                             <span className="font-bold text-gray-900">{method}</span>
                             <span className="font-bold text-[#46644b]">
-                              {data.total.toFixed(2)} ({data.count} فواتير)
+                              {data.total.toFixed(2)} ({t("pos.sessions.invoices")} {data.count})
                             </span>
                           </div>
                         ))}
@@ -847,7 +871,7 @@ export function PosReviewWorkspace({
                   </div>
                 </>
               ) : (
-                <div className="p-4 text-center text-xs text-gray-500">جار جلب تفاصيل الجرد...</div>
+                <div className="p-4 text-center text-xs text-gray-500">{getTranslation("pos.review.loadingCashDetails", "جار جلب تفاصيل الجرد...")}</div>
               )}
             </div>
           )}
@@ -857,7 +881,7 @@ export function PosReviewWorkspace({
               <div className="text-sm font-bold text-[#233329] mb-2">{getTranslation("pos.review.inventoryImpact", "أثر المخزون")}</div>
               {inventoryRows.length === 0 ? (
                 <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
-                  لا يوجد أثر مخزني للوردية الحالية.
+                  {getTranslation("pos.review.noInventoryImpact", "لا يوجد أثر مخزني للوردية الحالية.")}
                 </div>
               ) : (
                 <div className="overflow-hidden border border-gray-100 rounded-2xl bg-white">
@@ -906,9 +930,9 @@ export function PosReviewWorkspace({
                       </div>
                       <div className="space-y-2">
                         <div className="grid grid-cols-[1fr_120px_120px] font-bold text-gray-500 border-b border-gray-100 pb-1">
-                          <span>الحساب</span>
-                          <span className="text-left">مدين</span>
-                          <span className="text-left">دائن</span>
+                          <span>{getTranslation("pos.review.journalHeaderAccount", "الحساب")}</span>
+                          <span className="text-left">{getTranslation("pos.review.journalHeaderDebit", "مدين")}</span>
+                          <span className="text-left">{getTranslation("pos.review.journalHeaderCredit", "دائن")}</span>
                         </div>
                         {entry.lines.map((line) => (
                           <div
@@ -935,33 +959,35 @@ export function PosReviewWorkspace({
         <Modal
           isOpen={isDiffModalOpen}
           onClose={() => setIsDiffModalOpen(false)}
-          title="قبول فرق الصندوق"
+          title={getTranslation("pos.review.differenceModalTitle", "قبول فرق الصندوق")}
           size="md"
         >
           {selectedSession && (
-            <div className="space-y-4 text-start" dir="rtl">
+            <div className="space-y-4 text-start" dir={pageDir}>
               <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm">
                 <div>
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">المبلغ المتوقع (الكاش)</span>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.expectedAmount", "المبلغ المتوقع (الكاش)")}</span>
                   <span className="text-base font-bold text-[#233329]">
                     {Number(selectedSession.expectedCash || 0).toFixed(2)} JOD
                   </span>
                 </div>
                 <div>
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">المبلغ الفعلي (الفعلي)</span>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.actualAmount", "المبلغ الفعلي (الفعلي)")}</span>
                   <span className="text-base font-bold text-[#233329]">
                     {Number(selectedSession.actualCash || 0).toFixed(2)} JOD
                   </span>
                 </div>
                 <div className="col-span-2 border-t border-gray-200 pt-3">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">الفارق</span>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.difference", "الفارق")}</span>
                   <span className={cn(
                     "text-lg font-black",
                     Number(selectedSession.difference || 0) < 0 ? "text-red-600" : "text-emerald-600"
                   )}>
                     {Number(selectedSession.difference || 0).toFixed(2)} JOD
                     <span className="text-xs font-bold mr-2 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                      {Number(selectedSession.difference || 0) < 0 ? "عجز" : "زيادة"}
+                      {Number(selectedSession.difference || 0) < 0
+                        ? getTranslation("pos.review.shortage", "عجز")
+                        : getTranslation("pos.review.overage", "زيادة")}
                     </span>
                   </span>
                 </div>
@@ -970,9 +996,9 @@ export function PosReviewWorkspace({
               {/* Resolution Form */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">اتخاذ القرار</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{getTranslation("pos.review.decision", "اتخاذ القرار")}</label>
                   <div className="w-full rounded-xl border border-[#dbe2dd] bg-[#f8faf8] px-3 py-2 text-sm font-semibold text-[#233329]">
-                    قبول الفرق
+                    {getTranslation("pos.review.acceptDifference", "قبول الفرق")}
                   </div>
                 </div>
 
@@ -985,7 +1011,7 @@ export function PosReviewWorkspace({
                     return (
                       <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3 flex items-start gap-2">
                         <LuCircleAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>فرق الصندوق أعلى من الحد المسموح ({tolerance} JOD) ويتطلب موافقة مدير.</span>
+                        <span>{getTranslation("pos.review.differenceToleranceWarning", `فرق الصندوق أعلى من الحد المسموح (${tolerance} JOD) ويتطلب موافقة مدير.`).replace("{tolerance}", String(tolerance))}</span>
                       </div>
                     );
                   }
@@ -994,13 +1020,13 @@ export function PosReviewWorkspace({
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">
-                    السبب / الملاحظات <span className="text-red-500">*</span>
+                    {getTranslation("pos.review.reasonNotes", "السبب / الملاحظات")} <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={diffReason}
                     onChange={(e) => setDiffReason(e.target.value)}
                     rows={3}
-                    placeholder="يرجى إدخال تفاصيل القرار المتخذ وسبب القبول أو الرفض..."
+                    placeholder={getTranslation("pos.review.reasonPlaceholder", "يرجى إدخال تفاصيل القرار المتخذ وسبب القبول أو الرفض...")}
                     className="w-full rounded-xl border border-gray-200 p-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#46644b]"
                     required
                   />
@@ -1012,7 +1038,7 @@ export function PosReviewWorkspace({
                     onClick={() => setIsDiffModalOpen(false)}
                     className="rounded-full border border-gray-200 bg-white px-5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition"
                   >
-                    إلغاء
+                    {getTranslation("common.cancel", "إلغاء")}
                   </button>
                   <button
                     type="button"
@@ -1039,7 +1065,7 @@ export function PosReviewWorkspace({
                       "bg-blue-600 hover:bg-blue-700"
                     )}
                   >
-                    تأكيد القرار
+                    {getTranslation("pos.review.confirmDecision", "تأكيد القرار")}
                   </button>
                 </div>
               </div>
@@ -1057,38 +1083,38 @@ export function PosReviewWorkspace({
           size="3xl"
         >
           {activeInvoiceDetail && (
-            <div className="space-y-6 text-start" dir="rtl">
+            <div className="space-y-6 text-start" dir={pageDir}>
               {/* Header Info */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm">
                 <div>
-                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">الفرع</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.sessions.branch", "الفرع")}</span>
                   <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.branchName || selectedSession?.branchName || "—"}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">التاريخ</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.review.headerDate", "التاريخ")}</span>
                   <span className="text-gray-900 font-bold">{formatDate(activeInvoiceDetail.invoiceDate)}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">المستودع</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.sessions.warehouse", "المستودع")}</span>
                   <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.warehouse?.name || selectedSession?.warehouse?.name || "—"}</span>
                 </div>
                 <div>
-                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">نوع الطلب</span>
+                  <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.review.headerOrderType", "نوع الطلب")}</span>
                   <span className="text-gray-900 font-bold">{t(`pos.orderType.${activeInvoiceDetail.orderType}`)}</span>
                 </div>
               </div>
 
               {/* Invoice Lines */}
               <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">الأصناف المباعة</div>
+                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">{getTranslation("pos.review.soldItems", "الأصناف المباعة")}</div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/50 text-gray-500 font-semibold">
-                        <th className="px-4 py-2 text-start">الصنف</th>
-                        <th className="px-4 py-2 text-center">الكمية</th>
-                        <th className="px-4 py-2 text-start">سعر الوحدة</th>
-                        <th className="px-4 py-2 text-left">الإجمالي</th>
+                        <th className="px-4 py-2 text-start">{getTranslation("pos.review.headerItem", "الصنف")}</th>
+                        <th className="px-4 py-2 text-center">{getTranslation("pos.review.headerQuantity", "الكمية")}</th>
+                        <th className="px-4 py-2 text-start">{getTranslation("pos.review.unitPrice", "سعر الوحدة")}</th>
+                        <th className="px-4 py-2 text-left">{getTranslation("pos.review.headerTotal", "الإجمالي")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
@@ -1111,14 +1137,14 @@ export function PosReviewWorkspace({
 
               {/* Payments */}
               <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">تفاصيل الدفع</div>
+                <div className="bg-gray-50 px-4 py-3 font-bold text-xs uppercase text-gray-600 border-b border-gray-100">{getTranslation("pos.review.paymentDetails", "تفاصيل الدفع")}</div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/50 text-gray-500 font-semibold">
-                        <th className="px-4 py-2 text-start">طريقة الدفع</th>
-                        <th className="px-4 py-2 text-start">المرجع</th>
-                        <th className="px-4 py-2 text-left">المبلغ</th>
+                        <th className="px-4 py-2 text-start">{getTranslation("pos.review.headerPaymentMethod", "طريقة الدفع")}</th>
+                        <th className="px-4 py-2 text-start">{getTranslation("pos.review.headerReference", "المرجع")}</th>
+                        <th className="px-4 py-2 text-left">{getTranslation("pos.review.amount", "المبلغ")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
@@ -1139,19 +1165,19 @@ export function PosReviewWorkspace({
               {/* Financial Summary */}
               <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-sm border border-gray-100">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">الإجمالي قبل الضريبة</span>
+                  <span className="text-gray-500">{getTranslation("pos.review.subtotal", "الإجمالي قبل الضريبة")}</span>
                   <span className="font-semibold text-gray-900">{activeInvoiceDetail.subtotalAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">الخصم</span>
+                  <span className="text-gray-500">{getTranslation("pos.review.discount", "الخصم")}</span>
                   <span className="font-semibold text-red-600">-{activeInvoiceDetail.discountAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">الضريبة</span>
+                  <span className="text-gray-500">{getTranslation("pos.review.tax", "الضريبة")}</span>
                   <span className="font-semibold text-gray-900">{activeInvoiceDetail.taxAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
                 <div className="flex justify-between border-t border-gray-200 pt-3 font-bold text-base text-gray-900">
-                  <span>الإجمالي النهائي</span>
+                  <span>{getTranslation("pos.review.finalTotal", "الإجمالي النهائي")}</span>
                   <span>{activeInvoiceDetail.totalAmount} {activeInvoiceDetail.currencyCode}</span>
                 </div>
               </div>
@@ -1320,7 +1346,7 @@ export function PosReviewWorkspace({
 
   // MAIN SESSIONS LIST DASHBOARD RENDER
   return (
-    <div className="space-y-6 text-start" dir="rtl">
+    <div className="space-y-6 text-start" dir={pageDir}>
       {/* Title block */}
       <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
         <h1 className="text-2xl font-black text-[#233329] arabic-heading">
@@ -1360,7 +1386,7 @@ export function PosReviewWorkspace({
                 onChange={(e) => setStartDate(e.target.value)}
                 className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none"
               />
-              <span className="text-[#64736b] text-xs">إلى</span>
+              <span className="text-[#64736b] text-xs">{getTranslation("common.to", "إلى")}</span>
               <input
                 type="date"
                 value={endDate}
@@ -1375,7 +1401,7 @@ export function PosReviewWorkspace({
               onChange={(e) => setSelectedBranch(e.target.value)}
               className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none"
             >
-              <option value="">{getTranslation("pos.sessions.branch", "كل الفروع")}</option>
+              <option value="">{getTranslation("pos.review.allBranches", "كل الفروع")}</option>
               {branchesList.map((branch) => (
                 <option key={branch} value={branch}>
                   {branch}
@@ -1389,7 +1415,7 @@ export function PosReviewWorkspace({
               onChange={(e) => setSelectedCashier(e.target.value)}
               className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none"
             >
-              <option value="">{getTranslation("pos.sessions.cashierLabel", "كل الكاشيرز")}</option>
+              <option value="">{getTranslation("pos.review.allCashiers", "كل الكاشيرز")}</option>
               {cashiersList.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -1403,12 +1429,12 @@ export function PosReviewWorkspace({
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none"
             >
-              <option value="">{getTranslation("payroll.column.status", "كل الحالات")}</option>
-              <option value="PENDING_REVIEW">بانتظار المراجعة</option>
-              <option value="POSTED">مرحلة</option>
-              <option value="REJECTED">مرفوضة</option>
-              <option value="OPEN">مفتوحة</option>
-              <option value="CLOSED">مغلقة</option>
+              <option value="">{getTranslation("pos.review.allStatuses", "كل الحالات")}</option>
+              <option value="PENDING_REVIEW">{getAccountingStatusLabel("PENDING_REVIEW")}</option>
+              <option value="POSTED">{getAccountingStatusLabel("POSTED")}</option>
+              <option value="REJECTED">{getAccountingStatusLabel("REJECTED")}</option>
+              <option value="OPEN">{getAccountingStatusLabel("OPEN")}</option>
+              <option value="CLOSED">{getAccountingStatusLabel("CLOSED")}</option>
             </select>
 
             {/* Payment Method Filter */}
@@ -1418,9 +1444,9 @@ export function PosReviewWorkspace({
               className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none"
             >
               <option value="">{getTranslation("pos.sales.paymentLabel", "طريقة الدفع")}</option>
-              <option value="CASH">نقدي (Cash)</option>
-              <option value="CARD">بطاقة (Card)</option>
-              <option value="DELIVERY">شركات التوصيل</option>
+              <option value="CASH">{getTranslation("pos.review.paymentMethodCash", "نقدي (Cash)")}</option>
+              <option value="CARD">{getTranslation("pos.review.paymentMethodCard", "بطاقة (Card)")}</option>
+              <option value="DELIVERY">{getTranslation("pos.review.paymentMethodDelivery", "شركات التوصيل")}</option>
             </select>
           </div>
 
@@ -1431,7 +1457,7 @@ export function PosReviewWorkspace({
               className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50 transition"
             >
               <LuFilterX size={14} className="ml-1" />
-              <span>إعادة تعيين</span>
+              <span>{getTranslation("common.reset", "إعادة تعيين")}</span>
             </button>
           </div>
         </div>
@@ -1441,7 +1467,7 @@ export function PosReviewWorkspace({
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>إجمالي المبيعات</span>
+            <span>{getTranslation("pos.sessions.totalSales", "إجمالي المبيعات")}</span>
             <LuDollarSign className="text-emerald-500" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.totalSales}</div>
@@ -1449,7 +1475,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>المبيعات النقدية</span>
+            <span>{getTranslation("pos.sessions.cashSales", "المبيعات النقدية")}</span>
             <LuCreditCard className="text-blue-500" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.cashSales}</div>
@@ -1457,7 +1483,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>مبيعات الشبكة</span>
+            <span>{getTranslation("pos.sessions.cardSales", "مبيعات الشبكة")}</span>
             <LuCreditCard className="text-[#5f8a67]" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.cardSales}</div>
@@ -1465,7 +1491,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>شركات التوصيل</span>
+            <span>{getTranslation("pos.review.paymentMethodDelivery", "شركات التوصيل")}</span>
             <LuTruck className="text-orange-500" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.deliverySales}</div>
@@ -1473,7 +1499,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>الضريبة</span>
+            <span>{getTranslation("pos.sessions.tax", "الضريبة")}</span>
             <LuPercent className="text-purple-500" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.tax}</div>
@@ -1481,7 +1507,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>الخصومات</span>
+            <span>{getTranslation("pos.sessions.discounts", "الخصومات")}</span>
             <LuTag className="text-red-500" size={16} />
           </div>
           <div className="mt-2 text-lg font-bold text-[#233329]">{summary.discounts}</div>
@@ -1489,7 +1515,7 @@ export function PosReviewWorkspace({
 
         <Card className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
-            <span>فرق الصندوق</span>
+            <span>{getTranslation("pos.review.cashDifference", "فرق الصندوق")}</span>
             <LuCircleAlert
               className={cn(
                 Number(summary.cashDifference) !== 0 ? "text-red-500 animate-pulse" : "text-gray-400",
@@ -1593,15 +1619,7 @@ export function PosReviewWorkspace({
                               : "bg-slate-50 text-slate-800 border-slate-200",
                           )}
                         >
-                          {session.accountingStatus === "PENDING_REVIEW"
-                            ? "بانتظار المراجعة"
-                            : session.accountingStatus === "POSTED"
-                            ? "مرحلة"
-                            : session.accountingStatus === "REJECTED"
-                            ? "مرفوضة"
-                            : session.accountingStatus === "OPEN"
-                            ? "مفتوحة"
-                            : "مغلقة"}
+                          {getAccountingStatusLabel(session.accountingStatus)}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
@@ -1612,7 +1630,7 @@ export function PosReviewWorkspace({
                             className="flex items-center gap-1 rounded-full border border-[#d6e0d8] px-3 py-1.5 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition"
                           >
                             <LuEye size={12} />
-                            <span>مراجعة</span>
+                            <span>{getTranslation("pos.review.reviewAction", "مراجعة")}</span>
                           </button>
 
                           {isPending && (
@@ -1648,7 +1666,7 @@ export function PosReviewWorkspace({
                                     }}
                                     className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition"
                                   >
-                                    مراجعة الفرق
+                                    {getTranslation("pos.review.reviewDifference", "مراجعة الفرق")}
                                   </button>
                                   {onRejectSessionReview && (
                                     <button
