@@ -158,6 +158,9 @@ export function PosReviewWorkspace({
   const [activeTab, setActiveTab] = useState<ReviewTab>("overview");
   const [activeInvoiceDetail, setActiveInvoiceDetail] = useState<PosSale | null>(null);
 
+  const isDifferenceAccepted = (session: PosSession) =>
+    Number(session.difference || 0) === 0 || session.differenceStatus === "ACCEPTED_DIFFERENCE";
+
   // Translation helpers
   const getTranslation = (key: string, fallback: string) => {
     try {
@@ -443,7 +446,7 @@ export function PosReviewWorkspace({
             {/* Bulk approve/reject triggers */}
             {selectedSession.accountingStatus === "PENDING_REVIEW" && (
               <div className="flex gap-2">
-                {Number(selectedSession.difference || 0) === 0 ? (
+                {isDifferenceAccepted(selectedSession) ? (
                   <>
                     <button
                       type="button"
@@ -1614,7 +1617,7 @@ export function PosReviewWorkspace({
 
                           {isPending && (
                             <>
-                              {Number(session.difference || 0) === 0 ? (
+                              {isDifferenceAccepted(session) ? (
                                 <>
                                   <button
                                     type="button"

@@ -793,8 +793,7 @@ What else to check:
 - summary cards (Total Sales, Cash Sales, Card Sales, Delivery Sales, Tax, Discounts, Cash Difference) dynamically compute based on current filters.
 - side-drawer details allow drilling down into specific invoices, cash difference analysis, inventory impact, and draft journal previews.
 - when a POS session has a cash discrepancy (difference !== 0), direct approval is blocked. The approval button switches to "مراجعة فرق الكاش".
-- clicking the button opens the "قبول فرق الصندوق" modal where the accountant must choose a decision type (ACCEPT, CORRECTION, REJECT, REOPEN) and supply a mandatory reason.
+- clicking the button opens the "قبول فرق الصندوق" modal where the accountant records the discrepancy acceptance reason before any posting is allowed.
 - if the difference exceeds the configured tolerance threshold (defaulting to 10 JOD), selecting "ACCEPT" requires manager/administrator privileges; otherwise, the option is blocked and a warning is shown.
 - decisions of CORRECTION, REJECT, and REOPEN update the session state, log to the audit log, and return early without posting any accounting entries.
-- accepting the discrepancy updates the session's `differenceStatus = 'ACCEPTED_DIFFERENCE'` and `reviewStatus = 'APPROVED'`, allowing the session sales invoices to be posted to the ledger.
-
+- accepting the discrepancy updates the session's `differenceStatus = 'ACCEPTED_DIFFERENCE'` and `reviewStatus = 'APPROVED'`, then returns control to the review screen. Session posting remains a separate explicit action after the discrepancy has been accepted.

@@ -1160,6 +1160,14 @@ export function PosPage() {
     }) => approvePosSessionAccounting(sessionId, { decision, reason }, token),
     onSuccess: async (response) => {
       await refreshPosData();
+      if (response.approvedCount === 0 && response.differenceStatus === "ACCEPTED_DIFFERENCE") {
+        pushMessage(
+          t("pos.review.alert.differenceAccepted", {
+            sessionNumber: response.sessionNumber,
+          }),
+        );
+        return;
+      }
       pushMessage(
         t("pos.review.alert.sessionApproved", {
           count: response.approvedCount,

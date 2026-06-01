@@ -1105,6 +1105,33 @@ export class PosService {
             acceptanceReason: dto.reason.trim(),
           },
         });
+
+        await this.auditService.log({
+          userId: user?.userId,
+          entity: "PosSession",
+          entityId: session.id,
+          action: AuditAction.UPDATE,
+          details: {
+            sessionId: session.id,
+            sessionNumber: session.sessionNumber,
+            expectedCash: session.expectedCash,
+            actualCash: session.actualCash,
+            cashDifference: session.difference,
+            decision: dto.decision,
+            reason: dto.reason.trim(),
+            decidedBy: user?.username,
+            decidedAt: new Date(),
+          },
+        });
+
+        return {
+          sessionId: session.id,
+          sessionNumber: session.sessionNumber,
+          approvedCount: 0,
+          sales: [],
+          differenceStatus: "ACCEPTED_DIFFERENCE",
+          reviewStatus: "APPROVED",
+        };
       } else if (dto.decision === "CORRECTION") {
         await this.prisma.posSession.update({
           where: { id },
@@ -3328,6 +3355,7 @@ export class PosService {
       expectedCash: row.expectedCash.toString(),
       actualCash: row.actualCash?.toString() ?? null,
       difference: row.difference?.toString() ?? null,
+      differenceStatus: row.differenceStatus ?? null,
       openedAt: row.openedAt.toISOString(),
       closedAt: row.closedAt?.toISOString() ?? null,
       notes: row.notes,
@@ -3342,6 +3370,7 @@ export class PosService {
       taxAmount,
       discountAmount,
       accountingStatus,
+      reviewStatus: row.reviewStatus ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

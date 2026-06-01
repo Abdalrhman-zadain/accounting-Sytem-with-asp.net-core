@@ -3576,6 +3576,7 @@ export type PosSession = {
   expectedCash: string;
   actualCash?: string | null;
   difference?: string | null;
+  differenceStatus?: string | null;
   notes?: string | null;
   openedAt: string;
   closedAt?: string | null;
@@ -3596,6 +3597,7 @@ export type PosSession = {
   taxAmount?: string;
   discountAmount?: string;
   accountingStatus?: "OPEN" | "CLOSED" | "PENDING_REVIEW" | "REJECTED" | "POSTED";
+  reviewStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -3817,6 +3819,8 @@ export type PosSessionAccountingApprovalResponse = {
   sessionNumber: string;
   approvedCount: number;
   sales: PosSale[];
+  differenceStatus?: string;
+  reviewStatus?: string;
 };
 
 export type PosSessionReport = {

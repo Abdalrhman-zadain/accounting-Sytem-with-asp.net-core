@@ -1554,6 +1554,7 @@ Object.assign(enTranslations, {
   "pos.review.alert.approved": "POS sale approved and posted.",
   "pos.review.alert.rejected": "POS sale moved to rejected review status.",
   "pos.review.alert.reversed": "POS accounting reversal has been created.",
+  "pos.review.alert.differenceAccepted": "Cash difference accepted for session {sessionNumber}. You can now post the session.",
   "pos.review.alert.sessionApproved": "Posted {count} POS sale(s) for session {sessionNumber}.",
   "pos.review.alert.sessionRejected": "Rejected {count} POS sale(s) for session {sessionNumber}.",
 

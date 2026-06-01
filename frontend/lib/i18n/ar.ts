@@ -2833,6 +2833,7 @@ Object.assign(arTranslations, {
   "pos.review.alert.approved": "تم اعتماد وترحيل عملية البيع.",
   "pos.review.alert.rejected": "تم نقل عملية البيع إلى حالة المراجعة المرفوضة.",
   "pos.review.alert.reversed": "تم إنشاء عكس القيد المحاسبي لعملية البيع.",
+  "pos.review.alert.differenceAccepted": "تم قبول فرق الصندوق للوردية {sessionNumber}. يمكنك الآن اعتماد وترحيل الوردية.",
   "pos.review.alert.sessionApproved": "تم ترحيل {count} عملية بيع للوردية {sessionNumber}.",
   "pos.review.alert.sessionRejected": "تم رفض {count} عملية بيع للوردية {sessionNumber}.",
 
