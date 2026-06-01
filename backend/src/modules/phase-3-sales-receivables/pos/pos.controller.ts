@@ -13,6 +13,7 @@ import {
   SavePosDraftDto,
   SetPosFavoriteItemsDto,
   VoidPosSaleDto,
+  CorrectOrderTypeDto,
 } from "./dto/pos.dto";
 import { PosService } from "./pos.service";
 
@@ -220,5 +221,47 @@ export class PosController {
     @Body() dto: PosReverseAccountingDto,
   ) {
     return this.service.reverseReturnAccounting(id, dto, req.user);
+  }
+
+  @Post("sales/:id/correct-order-type")
+  correctOrderType(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: CorrectOrderTypeDto,
+  ) {
+    return this.service.correctOrderType(id, dto, req.user);
+  }
+
+  @Get("delivery/companies")
+  listDeliveryCompanies(@Req() req: Request & { user?: any }) {
+    return this.service.listDeliveryCompanies(req.user);
+  }
+
+  @Get("delivery/drivers")
+  listDeliveryDrivers(@Req() req: Request & { user?: any }) {
+    return this.service.listDeliveryDrivers(req.user);
+  }
+
+  @Post("sales/:id/assign-driver")
+  assignDriver(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: { driverId: string | null },
+  ) {
+    return this.service.assignDriver(id, dto.driverId, req.user);
+  }
+
+  @Post("sales/:id/delivery-status")
+  updateDeliveryStatus(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: { status: any },
+  ) {
+    return this.service.updateDeliveryStatus(id, dto.status, req.user);
+  }
+
+  @Get("waiters")
+  listWaiters(@Req() req: Request & { user?: any }) {
+    return this.service.listWaiters(req.user);
   }
 }

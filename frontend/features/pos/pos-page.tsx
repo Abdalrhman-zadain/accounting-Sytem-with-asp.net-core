@@ -45,6 +45,10 @@ import {
   LuArchive,
   LuTag,
   LuCalculator,
+  LuChefHat,
+  LuCheck,
+  LuClock,
+  LuTruck,
 } from "react-icons/lu";
 
 import { Card, Modal, PageShell } from "@/components/ui";
@@ -89,6 +93,21 @@ import {
   savePosDraft,
   setPosFavoriteItemIds,
   voidPosSale,
+  getPosTables,
+  getPosKitchenOrders,
+  updateKitchenOrderStatus,
+  updateKitchenOrderItemStatus,
+  reprintKot,
+  transferPosTable,
+  mergePosTables,
+  splitPosTable,
+  correctPosOrderType,
+  getDeliveryCompanies,
+  getDeliveryDrivers,
+  assignDriver,
+  updateDeliveryStatus,
+  getPosWaiters,
+  getJournalEntryById,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -103,7 +122,10 @@ import {
   type PosCatalogChip,
 } from "@/features/pos/pos-catalog-chips";
 import { PosProductCard } from "@/features/pos/pos-product-card";
+import { DetailTile, DetailedTableCard } from "@/features/pos/pos-detail-cards";
 import { PosRegisterMainGrid } from "@/features/pos/pos-register-layout";
+import { PosRestaurantCartControls } from "@/features/pos/pos-restaurant-cart-controls";
+import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
 import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
@@ -111,6 +133,12 @@ import type {
   Customer,
   InventoryItem,
   InventoryWarehouse,
+  JournalEntry,
+  KitchenOrder,
+  DeliveryCompany,
+  DeliveryDriver,
+  DeliveryStatus,
+  PosOrderType,
   PosInventoryImpactRow,
   PosReportsOverview,
   PosSalesByItemRow,
@@ -119,6 +147,8 @@ import type {
   PosSale,
   PosSession,
   PosSessionReport,
+  PosTable,
+  PosWaiter,
   PosTaxSummaryRow,
   TaxTreatment,
 } from "@/types/api";
@@ -130,7 +160,9 @@ type PosWorkspace =
   | "review"
   | "returns"
   | "reports"
-  | "settings";
+  | "settings"
+  | "kitchen"
+  | "delivery";
 
 type WorkspaceTab = {
   id: PosWorkspace;
@@ -196,6 +228,15 @@ type HeldSale = {
   cartLines: CartLine[];
   paymentEntries: PaymentEntry[];
   customerId?: string | null;
+  orderType: PosOrderType;
+  tableId?: string | null;
+  waiterId?: string | null;
+  deliveryCompanyId?: string | null;
+  driverId?: string | null;
+  deliveryFeeAmount: number;
+  serviceChargeAmount: number;
+  deliveryAddress: string;
+  deliveryNotes: string;
 };
 
 type SessionState = {
@@ -247,6 +288,8 @@ const workspaceTabs: WorkspaceTab[] = [
   { id: "sessions", labelKey: "pos.workspace.sessions", icon: LuTimerReset },
   { id: "held", labelKey: "pos.workspace.held", icon: LuReceipt },
   { id: "review", labelKey: "pos.workspace.review", icon: LuReceipt },
+  { id: "kitchen", labelKey: "pos.workspace.kitchen", icon: LuChefHat },
+  { id: "delivery", labelKey: "pos.workspace.delivery", icon: LuTruck },
   { id: "returns", labelKey: "pos.workspace.returns", icon: LuArrowRightLeft },
   { id: "reports", labelKey: "pos.workspace.reports", icon: LuChartColumn },
   { id: "settings", labelKey: "pos.workspace.settings", icon: LuSettings2 },
@@ -259,6 +302,8 @@ const pathnameWorkspaceMap: Record<string, PosWorkspace> = {
   "/pos/held-sales": "held",
   "/pos/accounting-review": "review",
   "/pos/completed-sales": "review",
+  "/pos/kitchen": "kitchen",
+  "/pos/delivery": "delivery",
   "/pos/returns": "returns",
   "/pos/reports": "reports",
   "/pos/settings": "settings",
@@ -452,6 +497,15 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
       reference: payment.reference ?? "",
     })),
     customerId: sale.customer?.id ?? null,
+    orderType: sale.orderType ?? "TAKEAWAY",
+    tableId: sale.tableId ?? null,
+    waiterId: sale.waiterId ?? null,
+    deliveryCompanyId: sale.deliveryCompanyId ?? null,
+    driverId: sale.driverId ?? null,
+    deliveryFeeAmount: parseAmount(sale.deliveryFeeAmount),
+    serviceChargeAmount: parseAmount(sale.serviceChargeAmount),
+    deliveryAddress: sale.deliveryAddress ?? "",
+    deliveryNotes: sale.deliveryNotes ?? "",
   };
 }
 
@@ -663,6 +717,49 @@ export function PosPage() {
   const [isHeldOrdersOpen, setIsHeldOrdersOpen] = useState(false);
   const [isCancelSaleOpen, setIsCancelSaleOpen] = useState(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [isReprintKotOpen, setIsReprintKotOpen] = useState(false);
+  const [reprintOrderId, setReprintOrderId] = useState("");
+  const [reprintReason, setReprintReason] = useState("");
+  const [kdsPrepAreaFilter, setKdsPrepAreaFilter] = useState<"ALL" | "Kitchen" | "Grill" | "Bar" | "Desserts" | "Drinks">("ALL");
+  const [kdsStatusFilter, setKdsStatusFilter] = useState<"ACTIVE" | "NEW" | "PREPARING" | "READY" | "SERVED" | "ALL">("ACTIVE");
+  const [kdsSearchQuery, setKdsSearchQuery] = useState("");
+  
+  // Restaurant Cart details
+  const [orderType, setOrderType] = useState<PosOrderType>("TAKEAWAY");
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [selectedWaiterId, setSelectedWaiterId] = useState<string | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState<"DIRECT" | "THIRD_PARTY">("DIRECT");
+  const [deliveryCompanyId, setDeliveryCompanyId] = useState<string | null>(null);
+  const [deliveryDriverId, setDeliveryDriverId] = useState<string | null>(null);
+  const [serviceChargeAmount, setServiceChargeAmount] = useState(0);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+
+  // Table selector overlays & actions
+  const [isTableSelectorOpen, setIsTableSelectorOpen] = useState(false);
+  const [isMergeTablesOpen, setIsMergeTablesOpen] = useState(false);
+  const [isTransferTableOpen, setIsTransferTableOpen] = useState(false);
+  const [isSplitBillOpen, setIsSplitBillOpen] = useState(false);
+  const [transferTargetTableId, setTransferTargetTableId] = useState("");
+  const [mergeSourceTableIds, setMergeSourceTableIds] = useState<string[]>([]);
+  const [splitBillQuantities, setSplitBillQuantities] = useState<Record<string, string>>({});
+
+  // Cashier Shift Closing Custom Modal
+  const [isCashierCloseModalOpen, setIsCashierCloseModalOpen] = useState(false);
+  const [actualCashCount, setActualCashCount] = useState("");
+  const [closingNotes, setClosingNotes] = useState("");
+  const [reviewSessionId, setReviewSessionId] = useState<string>("");
+  const [reviewTab, setReviewTab] = useState<"overview" | "cash" | "inventory" | "journal">("overview");
+  const [isCorrectOrderTypeOpen, setIsCorrectOrderTypeOpen] = useState(false);
+  const [selectedCorrectionSale, setSelectedCorrectionSale] = useState<PosSale | null>(null);
+  const [correctionOrderType, setCorrectionOrderType] = useState<PosOrderType>("TAKEAWAY");
+  const [correctionTableId, setCorrectionTableId] = useState<string>("");
+  const [correctionDeliveryCompanyId, setCorrectionDeliveryCompanyId] = useState<string>("");
+  const [correctionDriverId, setCorrectionDriverId] = useState<string>("");
+  const [correctionServiceCharge, setCorrectionServiceCharge] = useState("0");
+  const [correctionDeliveryFee, setCorrectionDeliveryFee] = useState("0");
+  const [correctionReason, setCorrectionReason] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const customersQuery = useQuery({
@@ -676,6 +773,24 @@ export function PosPage() {
     queryKey: ["tax-treatments", "active", token],
     queryFn: () => getActiveTaxTreatments(token),
     staleTime: 5 * 60 * 1000,
+    enabled: Boolean(token),
+  });
+
+  const deliveryCompaniesQuery = useQuery({
+    queryKey: ["delivery-companies", token],
+    queryFn: () => getDeliveryCompanies(token),
+    enabled: Boolean(token),
+  });
+
+  const deliveryDriversQuery = useQuery({
+    queryKey: ["delivery-drivers", token],
+    queryFn: () => getDeliveryDrivers(token),
+    enabled: Boolean(token),
+  });
+
+  const waitersQuery = useQuery({
+    queryKey: ["pos-waiters", token],
+    queryFn: () => getPosWaiters(token),
     enabled: Boolean(token),
   });
 
@@ -828,6 +943,40 @@ export function PosPage() {
     enabled: Boolean(token && selectedSessionId && workspace === "sessions"),
   });
 
+  const reviewSessionReportQuery = useQuery({
+    queryKey: queryKeys.posSessionReport(token, reviewSessionId || null),
+    queryFn: () => getPosSessionReport(reviewSessionId, token),
+    enabled: Boolean(token && reviewSessionId && workspace === "review"),
+  });
+
+  const reviewJournalEntriesQuery = useQuery({
+    queryKey: [
+      "pos-review-journal-entries",
+      token,
+      reviewSessionId,
+      (reviewQuery.data ?? [])
+        .filter((sale) => (sale.session?.id ?? "") === reviewSessionId)
+        .map((sale) => sale.journalEntry?.id)
+        .filter(Boolean)
+        .join(","),
+    ],
+    queryFn: async () => {
+      const ids =
+        (reviewQuery.data ?? [])
+          .filter((sale) => (sale.session?.id ?? "") === reviewSessionId)
+          .map((sale) => sale.journalEntry?.id)
+          .filter((id): id is string => Boolean(id)) ?? [];
+      return Promise.all(ids.map((id) => getJournalEntryById(id, token)));
+    },
+    enabled: Boolean(
+      token &&
+        workspace === "review" &&
+        (reviewQuery.data ?? []).some(
+          (sale) => (sale.session?.id ?? "") === reviewSessionId && Boolean(sale.journalEntry?.id),
+        ),
+    ),
+  });
+
   const salesByPaymentMethodQuery = useQuery({
     queryKey: queryKeys.posSalesByPaymentMethod(token),
     queryFn: () => getPosSalesByPaymentMethodReport(token),
@@ -864,6 +1013,19 @@ export function PosPage() {
     enabled: Boolean(token && workspace === "reports"),
   });
 
+  const posTablesQuery = useQuery({
+    queryKey: queryKeys.posTables(token),
+    queryFn: () => getPosTables(token),
+    enabled: Boolean(token && (workspace === "sales" || workspace === "kitchen")),
+  });
+
+  const posKitchenOrdersQuery = useQuery({
+    queryKey: queryKeys.posKitchenOrders(token),
+    queryFn: () => getPosKitchenOrders(token),
+    enabled: Boolean(token && (workspace === "sales" || workspace === "kitchen")),
+    refetchInterval: 15000,
+  });
+
   const refreshPosData = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.posActiveSession(token) }),
@@ -886,6 +1048,8 @@ export function PosPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.posDraftSales(token, activeSessionQuery.data?.id ?? null),
       }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posTables(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posKitchenOrders(token) }),
     ]);
   };
 
@@ -908,10 +1072,15 @@ export function PosPage() {
   });
 
   const closeSessionMutation = useMutation({
-    mutationFn: (payload: { sessionId: string; actualCash: number }) =>
-      closePosSession(payload.sessionId, { actualCash: payload.actualCash }, token),
+    mutationFn: (payload: { sessionId: string; actualCash: number; notes?: string }) =>
+      closePosSession(
+        payload.sessionId,
+        { actualCash: payload.actualCash, notes: payload.notes },
+        token,
+      ),
     onSuccess: async ({ report }) => {
       setLastSessionReport(report);
+      setIsCashierCloseModalOpen(false);
       await refreshPosData();
       pushMessage(t("pos.sales.alert.sessionMarkedClosed"));
     },
@@ -1099,6 +1268,118 @@ export function PosPage() {
     },
   });
 
+  const updateKitchenOrderStatusMutation = useMutation({
+    mutationFn: (payload: { orderId: string; status: "PREPARING" | "READY" | "SERVED" }) =>
+      updateKitchenOrderStatus(payload.orderId, payload.status, token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.posKitchenOrders(token) });
+      pushMessage("Kitchen order status updated.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to update kitchen order status."));
+    },
+  });
+
+  const updateKitchenOrderItemStatusMutation = useMutation({
+    mutationFn: (payload: { orderId: string; itemId: string; status: "NEW" | "PREPARING" | "READY" | "SERVED" }) =>
+      updateKitchenOrderItemStatus(payload.itemId, payload.status, token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.posKitchenOrders(token) });
+      pushMessage("Kitchen item status updated.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to update kitchen item status."));
+    },
+  });
+
+  const reprintKotMutation = useMutation({
+    mutationFn: (payload: { orderId: string; reason: string }) =>
+      reprintKot(payload.orderId, payload.reason, token),
+    onSuccess: () => {
+      pushMessage("KOT Reprint request sent to kitchen printer successfully.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to reprint KOT."));
+    },
+  });
+
+  const transferTableMutation = useMutation({
+    mutationFn: (payload: { fromTableId: string; toTableId: string }) =>
+      transferPosTable(payload.fromTableId, payload.toTableId, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      setIsTransferTableOpen(false);
+      pushMessage("Table transferred successfully.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to transfer table."));
+    },
+  });
+
+  const mergeTablesMutation = useMutation({
+    mutationFn: (payload: { sourceTableIds: string[]; targetTableId: string }) =>
+      mergePosTables(payload.sourceTableIds, payload.targetTableId, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      setIsMergeTablesOpen(false);
+      pushMessage("Tables merged successfully.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to merge tables."));
+    },
+  });
+
+  const splitBillMutation = useMutation({
+    mutationFn: (payload: { tableId: string; lines: { itemId: string; quantity: number }[] }) =>
+      splitPosTable(payload.tableId, payload.lines, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      setIsSplitBillOpen(false);
+      pushMessage("Bill split created successfully.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to split bill."));
+    },
+  });
+
+  const correctOrderTypeMutation = useMutation({
+    mutationFn: (payload: { saleId: string; data: Parameters<typeof correctPosOrderType>[1] }) =>
+      correctPosOrderType(payload.saleId, payload.data, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      setIsCorrectOrderTypeOpen(false);
+      setSelectedCorrectionSale(null);
+      pushMessage("Order type correction saved.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to correct order type."));
+    },
+  });
+
+  const assignDriverMutation = useMutation({
+    mutationFn: (payload: { saleId: string; driverId: string | null }) =>
+      assignDriver(payload.saleId, payload.driverId, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("Driver assignment updated.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to assign driver."));
+    },
+  });
+
+  const updateDeliveryStatusMutation = useMutation({
+    mutationFn: (payload: { saleId: string; status: DeliveryStatus }) =>
+      updateDeliveryStatus(payload.saleId, payload.status, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      pushMessage("Delivery status updated.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to update delivery status."));
+    },
+  });
+
   const items = itemsQuery.data?.data ?? [];
   const warehouses = warehousesQuery.data ?? [];
   const paymentAccounts = paymentAccountsQuery.data ?? [];
@@ -1106,11 +1387,38 @@ export function PosPage() {
   const posSettings = settingsQuery.data;
   const customers: Customer[] = customersQuery.data ?? [];
   const taxTreatments: TaxTreatment[] = activeTaxTreatmentsQuery.data ?? [];
+  const restaurantTables: PosTable[] = posTablesQuery.data ?? [];
+  const deliveryCompanies: DeliveryCompany[] = deliveryCompaniesQuery.data ?? [];
+  const deliveryDrivers: DeliveryDriver[] = deliveryDriversQuery.data ?? [];
+  const waiters: PosWaiter[] = waitersQuery.data ?? [];
+  const kitchenOrders: KitchenOrder[] = posKitchenOrdersQuery.data ?? [];
   const selectedCustomer = customers.find((c: Customer) => c.id === selectedCustomerId) || null;
   const taxPolicy = posSettings?.runtime.invoiceDiscountTaxPolicy ?? "BEFORE_TAX";
   const completedSales = completedSalesQuery.data ?? [];
   const favoriteIdSet = useMemo(() => new Set(favoriteItemIds), [favoriteItemIds]);
   const shiftReportForRegister = salesShiftReportQuery.data ?? null;
+  const reviewSessionGroups = useMemo(
+    () =>
+      Array.from(
+        (reviewQuery.data ?? []).reduce((groups, sale) => {
+          const key = sale.session?.id ?? `unassigned-${sale.id}`;
+          const current = groups.get(key) ?? {
+            sessionId: sale.session?.id ?? null,
+            sessionNumber: sale.session?.sessionNumber ?? "Unassigned Session",
+            warehouseName: sale.session?.warehouse.name ?? "—",
+            sales: [] as PosSale[],
+          };
+          current.sales.push(sale);
+          groups.set(key, current);
+          return groups;
+        }, new Map<string, { sessionId: string | null; sessionNumber: string; warehouseName: string; sales: PosSale[] }>()),
+      ).map(([, value]) => value),
+    [reviewQuery.data],
+  );
+  const selectedReviewGroup =
+    reviewSessionGroups.find((group) => group.sessionId === reviewSessionId) ??
+    reviewSessionGroups[0] ??
+    null;
   const availableWorkspaceTabs = useMemo(() => {
     const visible = workspaceTabs.filter((tab) => {
       if (tab.id === "sales") return hasPermission(user, "POS_VIEW_POS_SCREEN");
@@ -1122,6 +1430,8 @@ export function PosPage() {
       }
       if (tab.id === "held") return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
       if (tab.id === "review") return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
+      if (tab.id === "kitchen") return hasPermission(user, "POS_VIEW_POS_SCREEN");
+      if (tab.id === "delivery") return hasPermission(user, "POS_VIEW_POS_SCREEN");
       if (tab.id === "returns") return false;
       if (tab.id === "reports") return hasPermission(user, "POS_VIEW_POS_REPORTS");
       if (tab.id === "settings") return hasPermission(user, "POS_VIEW_POS_REPORTS");
@@ -1215,6 +1525,29 @@ export function PosPage() {
   useEffect(() => {
     setDraftSales((draftSalesQuery.data ?? []).map(mapPosSaleToHeldSale));
   }, [draftSalesQuery.data]);
+
+  useEffect(() => {
+    if (!reviewSessionId && reviewSessionGroups.length > 0) {
+      setReviewSessionId(reviewSessionGroups[0].sessionId ?? "");
+    }
+  }, [reviewSessionGroups, reviewSessionId]);
+
+  useEffect(() => {
+    if (orderType !== "DINE_IN") {
+      setSelectedTableId(null);
+      if (orderType === "TAKEAWAY") {
+        setSelectedWaiterId(null);
+      }
+    }
+    if (orderType !== "DELIVERY") {
+      setDeliveryCompanyId(null);
+      setDeliveryDriverId(null);
+      setDeliveryMode("DIRECT");
+      setDeliveryAddress("");
+      setDeliveryNotes("");
+      setDeliveryFee(0);
+    }
+  }, [orderType]);
 
   useEffect(() => {
     const ids = favoritesQuery.data?.itemIds;
@@ -1388,6 +1721,8 @@ export function PosPage() {
     "JOD";
 
   const cartMetrics = useMemo(() => {
+    const serviceCharge = orderType === "DINE_IN" ? serviceChargeAmount : 0;
+    const deliveryCharge = orderType === "DELIVERY" ? deliveryFee : 0;
     const subtotalBeforeDiscount = Number(
       cartLines.reduce((sum, line) => sum + getLineBase(line), 0).toFixed(2)
     );
@@ -1424,7 +1759,7 @@ export function PosPage() {
       taxPolicy === "AFTER_TAX"
         ? Math.max(taxableBase + tax - invoiceDiscount, 0)
         : Math.max(taxableBase - invoiceDiscount, 0) + tax;
-    const total = Number(totalRaw.toFixed(2));
+    const total = Number((totalRaw + serviceCharge + deliveryCharge).toFixed(2));
     const tendered = Number(
       paymentEntriesResolved.reduce(
         (sum, entry) => sum + entry.amountValue,
@@ -1442,6 +1777,8 @@ export function PosPage() {
       discountTotal: Number((lineDiscountTotal + invoiceDiscount).toFixed(2)),
       taxableBase,
       tax,
+      serviceCharge,
+      deliveryCharge,
       total,
       tendered,
       paid,
@@ -1453,6 +1790,8 @@ export function PosPage() {
     invoiceDiscountType,
     invoiceDiscountValue,
     paymentEntriesResolved,
+    deliveryFee,
+    orderType,
     taxPolicy,
   ]);
 
@@ -1544,6 +1883,28 @@ export function PosPage() {
         reference: entry.reference || undefined,
       }));
 
+  const buildRestaurantPayload = () => ({
+    orderType,
+    tableId: orderType === "DINE_IN" ? selectedTableId ?? undefined : undefined,
+    waiterId: orderType === "DINE_IN" ? selectedWaiterId ?? undefined : undefined,
+    serviceChargeAmount: orderType === "DINE_IN" ? serviceChargeAmount : 0,
+    deliveryFeeAmount: orderType === "DELIVERY" ? deliveryFee : 0,
+    driverId:
+      orderType === "DELIVERY" && deliveryMode === "DIRECT"
+        ? deliveryDriverId ?? undefined
+        : undefined,
+    deliveryCompanyId:
+      orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+        ? deliveryCompanyId ?? undefined
+        : undefined,
+    deliveryStatus: orderType === "DELIVERY" ? ("PENDING" as DeliveryStatus) : undefined,
+    deliveryAddress: orderType === "DELIVERY" ? deliveryAddress.trim() || undefined : undefined,
+    deliveryNotes:
+      orderType === "DELIVERY" || deliveryNotes.trim()
+        ? deliveryNotes.trim() || undefined
+        : undefined,
+  });
+
   const setSinglePaymentMethod = (
     method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
   ) => {
@@ -1619,6 +1980,16 @@ export function PosPage() {
     setInvoiceDiscountValue(0);
     setSearch("");
     setSelectedCustomerId(null);
+    setOrderType("TAKEAWAY");
+    setSelectedTableId(null);
+    setSelectedWaiterId(null);
+    setDeliveryMode("DIRECT");
+    setDeliveryCompanyId(null);
+    setDeliveryDriverId(null);
+    setServiceChargeAmount(0);
+    setDeliveryFee(0);
+    setDeliveryAddress("");
+    setDeliveryNotes("");
     const defaultCash =
       paymentAccounts.find((account) =>
         account.type.toUpperCase().includes("CASH"),
@@ -1840,6 +2211,7 @@ export function PosPage() {
       invoiceId: editingInvoiceId ?? undefined,
       customerId: selectedCustomerId || undefined,
       description: search || undefined,
+      ...buildRestaurantPayload(),
       lines: buildSaleLinesPayload(),
       payments: buildPaymentPayload(),
     });
@@ -1859,6 +2231,7 @@ export function PosPage() {
       invoiceId: editingInvoiceId ?? undefined,
       customerId: selectedCustomerId || undefined,
       description: search || undefined,
+      ...buildRestaurantPayload(),
       lines: buildSaleLinesPayload(),
       payments: buildPaymentPayload(),
     });
@@ -1876,6 +2249,16 @@ export function PosPage() {
     setActiveCategory(normalizeResumeCategory(target.activeCategory));
     setEditingInvoiceId(target.id);
     setSelectedCustomerId(target.customerId ?? null);
+    setOrderType(target.orderType);
+    setSelectedTableId(target.tableId ?? null);
+    setSelectedWaiterId(target.waiterId ?? null);
+    setDeliveryCompanyId(target.deliveryCompanyId ?? null);
+    setDeliveryDriverId(target.driverId ?? null);
+    setServiceChargeAmount(target.serviceChargeAmount ?? 0);
+    setDeliveryFee(target.deliveryFeeAmount ?? 0);
+    setDeliveryAddress(target.deliveryAddress ?? "");
+    setDeliveryNotes(target.deliveryNotes ?? "");
+    setDeliveryMode(target.deliveryCompanyId ? "THIRD_PARTY" : "DIRECT");
     pushMessage(t("pos.sales.alert.resumedHeldSale"));
   };
 
@@ -1917,6 +2300,14 @@ export function PosPage() {
     }
     if (cartLines.length === 0) {
       pushMessage(t("pos.sales.alert.emptyCart"));
+      return;
+    }
+    if (orderType === "DINE_IN" && !selectedTableId) {
+      pushError(getLocalizedText("Select a table before completing dine-in orders / اختر طاولة قبل إكمال الطلب الداخلي", language));
+      return;
+    }
+    if (orderType === "DELIVERY" && !deliveryAddress.trim()) {
+      pushError(getLocalizedText("Enter delivery address before completing delivery orders / أدخل عنوان التوصيل قبل إكمال الطلب", language));
       return;
     }
 
@@ -1962,6 +2353,7 @@ export function PosPage() {
       invoiceId: editingInvoiceId ?? undefined,
       customerId: selectedCustomerId || undefined,
       description: search || undefined,
+      ...buildRestaurantPayload(),
       lines: buildSaleLinesPayload(),
       payments: buildPaymentPayload(),
     });
@@ -1986,6 +2378,18 @@ export function PosPage() {
 
     setPayFlowStep("tender");
     setIsPayModalOpen(true);
+  };
+
+  const openCorrectionModal = (sale: PosSale) => {
+    setSelectedCorrectionSale(sale);
+    setCorrectionOrderType(sale.orderType ?? "TAKEAWAY");
+    setCorrectionTableId(sale.tableId ?? "");
+    setCorrectionDeliveryCompanyId(sale.deliveryCompanyId ?? "");
+    setCorrectionDriverId(sale.driverId ?? "");
+    setCorrectionServiceCharge(sale.serviceChargeAmount ?? "0");
+    setCorrectionDeliveryFee(sale.deliveryFeeAmount ?? "0");
+    setCorrectionReason("");
+    setIsCorrectOrderTypeOpen(true);
   };
 
   const createReturnFromSelection = () => {
@@ -2128,15 +2532,9 @@ export function PosPage() {
               );
               return;
             }
-            const raw = window.prompt(
-              getLocalizedText("Enter actual cash counted in the drawer / أدخل النقد الفعلي", language),
-              String(sessionState.expectedCash.toFixed(2)),
-            );
-            if (raw === null) return;
-            closeSessionMutation.mutate({
-              sessionId: activeSession.id,
-              actualCash: parseAmount(raw),
-            });
+            setActualCashCount(String(sessionState.expectedCash.toFixed(2)));
+            setClosingNotes("");
+            setIsCashierCloseModalOpen(true);
           }}
           isPending={closeSessionMutation.isPending}
         />
@@ -2413,6 +2811,46 @@ export function PosPage() {
                   )}
                 </div>
 
+                <div className="border-b border-[#edf1ef] px-3.5 py-3">
+                  <PosRestaurantCartControls
+                    cartLinesCount={cartLines.length}
+                    deliveryAddress={deliveryAddress}
+                    deliveryCompanies={deliveryCompanies}
+                    deliveryCompanyId={deliveryCompanyId}
+                    deliveryDriverId={deliveryDriverId}
+                    deliveryDrivers={deliveryDrivers}
+                    deliveryFee={deliveryFee}
+                    deliveryMode={deliveryMode}
+                    deliveryNotes={deliveryNotes}
+                    editingInvoiceId={editingInvoiceId}
+                    onDeliveryAddressChange={setDeliveryAddress}
+                    onDeliveryCompanyChange={setDeliveryCompanyId}
+                    onDeliveryDriverChange={setDeliveryDriverId}
+                    onDeliveryFeeChange={(value) => setDeliveryFee(parseAmount(value))}
+                    onDeliveryModeChange={setDeliveryMode}
+                    onDeliveryNotesChange={setDeliveryNotes}
+                    onOpenMergeTables={() => setIsMergeTablesOpen(true)}
+                    onOpenSplitBill={() => setIsSplitBillOpen(true)}
+                    onOpenTableSelector={() => setIsTableSelectorOpen(true)}
+                    onOpenTransferTable={() => setIsTransferTableOpen(true)}
+                    onOrderTypeChange={setOrderType}
+                    onSelectTable={(tableId, waiterId) => {
+                      setSelectedTableId(tableId);
+                      setSelectedWaiterId(waiterId);
+                    }}
+                    onServiceChargeChange={(value) =>
+                      setServiceChargeAmount(parseAmount(value))
+                    }
+                    onWaiterChange={setSelectedWaiterId}
+                    orderType={orderType}
+                    restaurantTables={restaurantTables}
+                    selectedTableId={selectedTableId}
+                    selectedWaiterId={selectedWaiterId}
+                    serviceChargeAmount={serviceChargeAmount}
+                    waiters={waiters}
+                  />
+                </div>
+
                 <div className="max-h-[360px] space-y-2 overflow-y-auto px-3.5 py-3">
                   {cartLines.length === 0 ? (
                     <div className="rounded-[8px] border border-dashed border-[#d4ddd6] bg-[#fafbfa] px-4 py-6 text-center">
@@ -2535,6 +2973,14 @@ export function PosPage() {
                       <TotalRow
                         label={t("pos.sales.totalTax")}
                         value={formatCurrency(cartMetrics.tax, currencyCode)}
+                      />
+                      <TotalRow
+                        label="Service charge / رسوم الخدمة"
+                        value={formatCurrency(cartMetrics.serviceCharge, currencyCode)}
+                      />
+                      <TotalRow
+                        label="Delivery fee / رسوم التوصيل"
+                        value={formatCurrency(cartMetrics.deliveryCharge, currencyCode)}
                       />
                       <TotalRow
                         label={t("pos.sales.totalGrand")}
@@ -3111,6 +3557,225 @@ export function PosPage() {
             </button>
           </div>
         </Modal>
+
+        <Modal
+          isOpen={isTableSelectorOpen}
+          onClose={() => setIsTableSelectorOpen(false)}
+          title={getLocalizedText("Floor tables / طاولات المطعم", language)}
+        >
+          <div className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto md:grid-cols-3">
+            {restaurantTables.map((table) => {
+              const isSelected = selectedTableId === table.id;
+              const isBusy = Boolean(table.activeInvoice?.id) && table.activeInvoice?.id !== editingInvoiceId && !isSelected;
+              return (
+                <button
+                  key={table.id}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => {
+                    setSelectedTableId(table.id);
+                    setSelectedWaiterId(table.assignedWaiter?.id ?? null);
+                    setIsTableSelectorOpen(false);
+                  }}
+                  className={cn(
+                    "rounded-[18px] border p-4 text-left transition",
+                    isSelected
+                      ? "border-[#5f8a67] bg-[#edf5ef]"
+                      : isBusy
+                        ? "cursor-not-allowed border-[#ead8d4] bg-[#fff6f5] text-[#94665f]"
+                        : "border-[#dbe4de] bg-white",
+                  )}
+                >
+                  <div className="text-sm font-black text-[#233329]">{table.tableNumber}</div>
+                  <div className="mt-1 text-xs text-[#68776f]">
+                    {table.status.replaceAll("_", " ")} • {table.capacity} seats
+                  </div>
+                  <div className="mt-2 text-[11px] text-[#5a6b61]">
+                    {table.assignedWaiter?.name ?? "No waiter assigned"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={isTransferTableOpen}
+          onClose={() => setIsTransferTableOpen(false)}
+          title="Transfer Table / نقل الطاولة"
+        >
+          <div className="space-y-4">
+            <select
+              value={transferTargetTableId}
+              onChange={(event) => setTransferTargetTableId(event.target.value)}
+              className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+            >
+              <option value="">Select target table / اختر الطاولة الهدف</option>
+              {restaurantTables
+                .filter((table) => table.id !== selectedTableId && !table.activeInvoice?.id)
+                .map((table) => (
+                  <option key={table.id} value={table.id}>
+                    {table.tableNumber}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              disabled={!selectedTableId || !transferTargetTableId || transferTableMutation.isPending}
+              onClick={() =>
+                transferTableMutation.mutate({
+                  fromTableId: selectedTableId!,
+                  toTableId: transferTargetTableId,
+                })
+              }
+              className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            >
+              Confirm transfer / تأكيد النقل
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={isMergeTablesOpen}
+          onClose={() => setIsMergeTablesOpen(false)}
+          title="Merge Tables / دمج الطاولات"
+        >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {restaurantTables
+                .filter((table) => table.id !== selectedTableId && table.activeInvoice?.id)
+                .map((table) => (
+                  <label key={table.id} className="flex items-center gap-3 rounded-[14px] border border-[#dbe4de] bg-[#fafcf9] px-4 py-3 text-sm text-[#42564a]">
+                    <input
+                      type="checkbox"
+                      checked={mergeSourceTableIds.includes(table.id)}
+                      onChange={(event) =>
+                        setMergeSourceTableIds((current) =>
+                          event.target.checked
+                            ? [...current, table.id]
+                            : current.filter((id) => id !== table.id),
+                        )
+                      }
+                    />
+                    <span>{table.tableNumber}</span>
+                  </label>
+                ))}
+            </div>
+            <button
+              type="button"
+              disabled={!selectedTableId || mergeSourceTableIds.length === 0 || mergeTablesMutation.isPending}
+              onClick={() =>
+                mergeTablesMutation.mutate({
+                  sourceTableIds: mergeSourceTableIds,
+                  targetTableId: selectedTableId!,
+                })
+              }
+              className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            >
+              Merge into selected table / دمج في الطاولة المختارة
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={isSplitBillOpen}
+          onClose={() => setIsSplitBillOpen(false)}
+          title="Split Bill / تقسيم الفاتورة"
+        >
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto">
+            {cartLines.map((line) => (
+              <div key={line.itemId} className="grid grid-cols-[minmax(0,1fr)_120px] gap-3 rounded-[14px] border border-[#dbe4de] bg-[#fafcf9] p-3">
+                <div>
+                  <div className="text-sm font-bold text-[#233329]">{line.name}</div>
+                  <div className="text-xs text-[#68776f]">Current qty: {line.quantity}</div>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={line.quantity}
+                  step="1"
+                  value={splitBillQuantities[line.itemId] ?? ""}
+                  onChange={(event) =>
+                    setSplitBillQuantities((current) => ({
+                      ...current,
+                      [line.itemId]: event.target.value,
+                    }))
+                  }
+                  className="rounded-[12px] border border-[#d6e1d9] bg-white px-3 py-2 text-sm font-semibold text-[#233329]"
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              disabled={!selectedTableId || splitBillMutation.isPending}
+              onClick={() => {
+                const lines = cartLines
+                  .map((line) => ({
+                    itemId: line.itemId,
+                    quantity: parseAmount(splitBillQuantities[line.itemId]),
+                  }))
+                  .filter((line) => line.quantity > 0);
+                if (lines.length === 0) {
+                  pushError("Select at least one quantity to split.");
+                  return;
+                }
+                splitBillMutation.mutate({ tableId: selectedTableId!, lines });
+              }}
+              className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            >
+              Create split invoice / إنشاء فاتورة منفصلة
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={isCashierCloseModalOpen}
+          onClose={() => setIsCashierCloseModalOpen(false)}
+          title={getLocalizedText("Close shift / إغلاق الوردية", language)}
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <DetailTile label="Expected cash" value={formatCurrency(sessionState.expectedCash, currencyCode)} compact />
+              <DetailTile label="Actual count" value={formatCurrency(parseAmount(actualCashCount), currencyCode)} compact />
+              <DetailTile
+                label="Difference"
+                value={formatCurrency(parseAmount(actualCashCount) - sessionState.expectedCash, currencyCode)}
+                compact
+              />
+            </div>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={actualCashCount}
+              onChange={(event) => setActualCashCount(event.target.value)}
+              placeholder="Actual counted cash / النقد الفعلي"
+              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+            />
+            <Input
+              value={closingNotes}
+              onChange={(event) => setClosingNotes(event.target.value)}
+              placeholder="Closing notes / ملاحظات الإغلاق"
+              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+            />
+            <button
+              type="button"
+              disabled={!activeSession?.id || closeSessionMutation.isPending}
+              onClick={() =>
+                activeSession
+                  ? closeSessionMutation.mutate({
+                      sessionId: activeSession.id,
+                      actualCash: parseAmount(actualCashCount),
+                      notes: closingNotes.trim() || undefined,
+                    })
+                  : undefined
+              }
+              className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            >
+              Confirm shift close / تأكيد الإغلاق
+            </button>
+          </div>
+        </Modal>
       </div>
     );
   };
@@ -3361,159 +4026,68 @@ export function PosPage() {
   };
 
   const renderReviewWorkspace = () => {
-    const sessionGroups = Array.from(
-      (reviewQuery.data ?? []).reduce((groups, sale) => {
-        const key = sale.session?.id ?? `unassigned-${sale.id}`;
-        const current = groups.get(key) ?? {
-          sessionId: sale.session?.id ?? null,
-          sessionNumber: sale.session?.sessionNumber ?? "Unassigned Session",
-          warehouseName: sale.session?.warehouse.name ?? "—",
-          sales: [] as PosSale[],
-        };
-        current.sales.push(sale);
-        groups.set(key, current);
-        return groups;
-      }, new Map<string, { sessionId: string | null; sessionNumber: string; warehouseName: string; sales: PosSale[] }>()),
-    ).map(([, value]) => value);
-
     return (
-      <div className="space-y-6">
-        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-          <div className="text-2xl font-black text-[#233329] arabic-heading">
-            {t("pos.workspace.review")}
-          </div>
-          <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-            {t("pos.review.description")}
-          </p>
-        </Card>
-        <div className="space-y-6">
-          {sessionGroups.map((group) => (
-            <div key={group.sessionId ?? group.sessionNumber} className="space-y-4">
-              <Card className="rounded-[24px] border-[#d7ddd8] bg-[#f7faf8] p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-[0.16em] text-[#5b7362]">
-                      Session Review
-                    </div>
-                    <div className="mt-1 text-lg font-black text-[#233329]">
-                      {group.sessionNumber}
-                    </div>
-                    <div className="mt-1 text-sm text-[#68776f]">
-                      {group.sales.length} sale(s) pending review · {group.warehouseName}
-                    </div>
-                  </div>
-                  {group.sessionId ? (
-                    <button
-                      type="button"
-                      onClick={() => approveSessionReviewMutation.mutate(group.sessionId!)}
-                      className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-                    >
-                      Approve Session
-                    </button>
-                  ) : null}
-                </div>
-              </Card>
-              {group.sales.map((sale) => (
-                <Card key={sale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="text-lg font-black text-[#233329]">{sale.reference}</div>
-                      <div className="mt-1 text-sm text-[#68776f]">
-                        {sale.posAccountingStatus} · {sale.totalAmount} {sale.currencyCode}
-                      </div>
-                      <div className="mt-1 text-sm text-[#68776f]">
-                        {t("pos.review.sessionWarehouse", {
-                          session: sale.session?.sessionNumber ?? "—",
-                          warehouse: sale.session?.warehouse.name ?? "—",
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => reprintReceiptMutation.mutate(sale.id)}
-                        className="rounded-full border border-[#d6e0d8] px-4 py-2 text-xs font-bold text-[#46644b]"
-                      >
-                        {t("pos.sales.printLastReceipt")}
-                      </button>
-                      {sale.posAccountingStatus === "POSTED" ? (
-                        <button
-                          type="button"
-                          onClick={() => reverseReviewMutation.mutate(sale.id)}
-                          className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-                        >
-                          {t("pos.review.reverse")}
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => approveReviewMutation.mutate(sale.id)}
-                            className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-                          >
-                            {t("pos.review.approve")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => rejectReviewMutation.mutate(sale.id)}
-                            className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-                          >
-                            {t("pos.review.reject")}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <DetailTile label={t("pos.review.subtotal")} value={sale.subtotalAmount} />
-                    <DetailTile label={t("pos.review.discount")} value={sale.discountAmount} />
-                    <DetailTile label={t("pos.review.tax")} value={sale.taxAmount} />
-                    <DetailTile label={t("pos.review.change")} value={sale.posChangeAmount ?? "0.00"} />
-                  </div>
-                  <div className="mt-5 grid gap-3 xl:grid-cols-2">
-                    <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
-                      <div className="font-bold text-[#233329]">{t("pos.review.linesTitle")}</div>
-                      <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
-                        {sale.lines.map((line) => (
-                          <div key={line.id} className="flex items-center justify-between gap-3">
-                            <span>
-                              {line.itemName ?? line.description ?? `Line ${line.lineNumber}`}
-                            </span>
-                            <span>
-                              {line.quantity} x {line.unitPrice} = {line.lineAmount}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4">
-                      <div className="font-bold text-[#233329]">{t("pos.review.paymentsTitle")}</div>
-                      <div className="mt-3 space-y-2 text-sm text-[#5f6d66]">
-                        {sale.payments.map((payment) => (
-                          <div key={payment.id} className="flex items-center justify-between gap-3">
-                            <span>
-                              {payment.paymentMethod} · {payment.bankCashAccount.name}
-                            </span>
-                            <span>
-                              {payment.amount}
-                              {payment.tenderedAmount ? ` / tendered ${payment.tenderedAmount}` : ""}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ))}
-          {(reviewQuery.data ?? []).length === 0 ? (
-            <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
-              {t("pos.review.empty")}
-            </Card>
-          ) : null}
-        </div>
-      </div>
+      <PosReviewWorkspace
+        correctionDeliveryCompanyId={correctionDeliveryCompanyId}
+        correctionDeliveryFee={correctionDeliveryFee}
+        correctionDriverId={correctionDriverId}
+        correctionOrderType={correctionOrderType}
+        correctionReason={correctionReason}
+        correctionServiceCharge={correctionServiceCharge}
+        correctionTableId={correctionTableId}
+        deliveryCompanies={deliveryCompanies}
+        deliveryDrivers={deliveryDrivers}
+        isCorrectOrderTypeOpen={isCorrectOrderTypeOpen}
+        journalEntries={reviewJournalEntriesQuery.data ?? []}
+        onApproveReview={(saleId) => approveReviewMutation.mutate(saleId)}
+        onApproveSessionReview={(sessionId) =>
+          approveSessionReviewMutation.mutate(sessionId)
+        }
+        onAssignDriver={(saleId, driverId) =>
+          assignDriverMutation.mutate({ saleId, driverId })
+        }
+        onCloseCorrectionModal={() => setIsCorrectOrderTypeOpen(false)}
+        onCorrectionDeliveryCompanyIdChange={setCorrectionDeliveryCompanyId}
+        onCorrectionDeliveryFeeChange={setCorrectionDeliveryFee}
+        onCorrectionDriverIdChange={setCorrectionDriverId}
+        onCorrectionOrderTypeChange={setCorrectionOrderType}
+        onCorrectionReasonChange={setCorrectionReason}
+        onCorrectionServiceChargeChange={setCorrectionServiceCharge}
+        onCorrectionTableIdChange={setCorrectionTableId}
+        onOpenCorrectionModal={openCorrectionModal}
+        onRejectReview={(saleId) => rejectReviewMutation.mutate(saleId)}
+        onReprintReceipt={(saleId) => reprintReceiptMutation.mutate(saleId)}
+        onReverseReview={(saleId) => reverseReviewMutation.mutate(saleId)}
+        onReviewSessionChange={setReviewSessionId}
+        onReviewTabChange={setReviewTab}
+        onSaveCorrection={() => {
+          if (!selectedCorrectionSale) return;
+          correctOrderTypeMutation.mutate({
+            saleId: selectedCorrectionSale.id,
+            data: {
+              orderType: correctionOrderType,
+              tableId: correctionTableId || null,
+              deliveryCompanyId: correctionDeliveryCompanyId || null,
+              driverId: correctionDriverId || null,
+              serviceChargeAmount: parseAmount(correctionServiceCharge),
+              deliveryFeeAmount: parseAmount(correctionDeliveryFee),
+              reason: correctionReason.trim(),
+            },
+          });
+        }}
+        onUpdateDeliveryStatus={(saleId, status) =>
+          updateDeliveryStatusMutation.mutate({ saleId, status })
+        }
+        report={reviewSessionReportQuery.data ?? null}
+        restaurantTables={restaurantTables}
+        reviewQueryDataLength={(reviewQuery.data ?? []).length}
+        reviewSessionGroups={reviewSessionGroups}
+        reviewTab={reviewTab}
+        savingCorrection={correctOrderTypeMutation.isPending}
+        selectedCorrectionSale={selectedCorrectionSale}
+        selectedReviewGroup={selectedReviewGroup}
+        t={t}
+      />
     );
   };
 
@@ -3928,6 +4502,523 @@ export function PosPage() {
     );
   };
 
+  const renderReprintKotModal = () => {
+    return (
+      <Modal
+        isOpen={isReprintKotOpen}
+        onClose={() => setIsReprintKotOpen(false)}
+        title={getLocalizedText("Reprint KOT / طباعة KOT", language)}
+      >
+        <div className="space-y-4 p-4 text-[#42564a]">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            {getLocalizedText(
+              "Please enter a reason for reprinting this Kitchen Order Ticket (KOT). This action will be audited.",
+              language
+            )}
+            <span className="arabic-auto block text-[11px] text-[#6b7c70] mt-1">
+              أدخل سبب إعادة طباعة تذكرة المطبخ (KOT). هذا الإجراء سيتم تدقيقه في النظام.
+            </span>
+          </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              {getLocalizedText("Reason / السبب", language)}
+            </label>
+            <input
+              type="text"
+              value={reprintReason}
+              onChange={(e) => setReprintReason(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 p-2 text-xs focus:border-blue-500 focus:ring-blue-500"
+              placeholder={getLocalizedText(
+                "e.g. Printer jammed, customer added instructions",
+                language
+              )}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setIsReprintKotOpen(false)}
+              className="rounded-md border border-gray-300 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {getLocalizedText("Cancel / إلغاء", language)}
+            </button>
+            <button
+              onClick={() => {
+                if (!reprintReason.trim()) {
+                  pushError(getLocalizedText("Reason is required / السبب مطلوب", language));
+                  return;
+                }
+                reprintKotMutation.mutate({ orderId: reprintOrderId, reason: reprintReason });
+                setIsReprintKotOpen(false);
+              }}
+              disabled={reprintKotMutation.isPending}
+              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-blue-300"
+            >
+              {reprintKotMutation.isPending
+                ? getLocalizedText("Reprinting... / جاري الطباعة...", language)
+                : getLocalizedText("Reprint KOT / طباعة", language)}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  };
+
+  const renderKitchenWorkspace = () => {
+    const getPrepAreaName = (itemId: string, itemName: string): "Kitchen" | "Grill" | "Bar" | "Desserts" | "Drinks" => {
+      const lowerName = itemName.toLowerCase();
+      if (lowerName.includes("drink") || lowerName.includes("juice") || lowerName.includes("water") || lowerName.includes("soda") || lowerName.includes("coffee") || lowerName.includes("tea") || lowerName.includes("beverage")) {
+        return "Drinks";
+      }
+      if (lowerName.includes("cocktail") || lowerName.includes("beer") || lowerName.includes("wine") || lowerName.includes("mojito")) {
+        return "Bar";
+      }
+      if (lowerName.includes("cake") || lowerName.includes("ice cream") || lowerName.includes("dessert") || lowerName.includes("sweet") || lowerName.includes("waffle") || lowerName.includes("pancake")) {
+        return "Desserts";
+      }
+      if (lowerName.includes("grill") || lowerName.includes("bbq") || lowerName.includes("kebab") || lowerName.includes("meat") || lowerName.includes("steak") || lowerName.includes("burger")) {
+        return "Grill";
+      }
+      const item = items.find((i) => i.id === itemId);
+      if (!item) return "Kitchen";
+      const groupName = item.itemGroup?.name?.toLowerCase() || "";
+      const catName = item.itemCategory?.name?.toLowerCase() || item.category?.toLowerCase() || "";
+      if (catName.includes("drink") || catName.includes("beverage") || groupName.includes("drink") || groupName.includes("beverage")) {
+        return "Drinks";
+      }
+      if (catName.includes("bar") || groupName.includes("bar")) {
+        return "Bar";
+      }
+      if (catName.includes("dessert") || catName.includes("sweet") || catName.includes("cake") || groupName.includes("dessert") || groupName.includes("sweet")) {
+        return "Desserts";
+      }
+      if (catName.includes("grill") || catName.includes("bbq") || catName.includes("meat") || groupName.includes("grill") || groupName.includes("bbq") || groupName.includes("meat")) {
+        return "Grill";
+      }
+      return "Kitchen";
+    };
+
+    // Filter orders
+    const filteredOrders = kitchenOrders.filter((order) => {
+      if (kdsSearchQuery) {
+        const query = kdsSearchQuery.toLowerCase();
+        const matchesNum = order.orderNumber.toLowerCase().includes(query);
+        const matchesTable = order.tableName?.toLowerCase().includes(query) ?? false;
+        const matchesWaiter = order.waiterName?.toLowerCase().includes(query) ?? false;
+        if (!matchesNum && !matchesTable && !matchesWaiter) return false;
+      }
+
+      if (kdsStatusFilter === "ACTIVE") {
+        if (order.status === "SERVED") return false;
+      } else if (kdsStatusFilter !== "ALL") {
+        if (order.status !== kdsStatusFilter) return false;
+      }
+
+      if (kdsPrepAreaFilter !== "ALL") {
+        const hasMatchingItem = order.items.some(
+          (item) => getPrepAreaName(item.itemId, item.itemName) === kdsPrepAreaFilter
+        );
+        if (!hasMatchingItem) return false;
+      }
+
+      return true;
+    });
+
+    const activeOrdersCount = kitchenOrders.filter((o) => o.status !== "SERVED").length;
+    const pendingOrdersCount = kitchenOrders.filter((o) => o.status === "NEW").length;
+    const preparingOrdersCount = kitchenOrders.filter((o) => o.status === "PREPARING").length;
+    const readyOrdersCount = kitchenOrders.filter((o) => o.status === "READY").length;
+    
+    const delayedOrdersCount = kitchenOrders.filter((o) => {
+      if (o.status === "SERVED") return false;
+      const elapsed = Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000);
+      return elapsed >= 15;
+    }).length;
+
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-gray-50">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-white border-b border-gray-200">
+          <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+            <div className="p-2 bg-blue-500 rounded-lg text-white">
+              <LuChefHat className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs text-blue-600 font-medium uppercase tracking-wider">
+                {getLocalizedText("Active Orders / الطلبات النشطة", language)}
+              </div>
+              <div className="text-xl font-bold text-blue-900">{activeOrdersCount}</div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+            <div className="p-2 bg-amber-500 rounded-lg text-white">
+              <LuClock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs text-amber-600 font-medium uppercase tracking-wider">
+                {getLocalizedText("Pending & Prep / قيد الانتظار والتحضير", language)}
+              </div>
+              <div className="text-xl font-bold text-amber-900">{pendingOrdersCount + preparingOrdersCount}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
+            <div className="p-2 bg-emerald-500 rounded-lg text-white">
+              <LuCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs text-emerald-600 font-medium uppercase tracking-wider">
+                {getLocalizedText("Ready / جاهز للتقديم", language)}
+              </div>
+              <div className="text-xl font-bold text-emerald-900">{readyOrdersCount}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-3 bg-rose-50 border border-rose-100 rounded-lg">
+            <div className="p-2 bg-rose-500 rounded-lg text-white">
+              <LuTriangleAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs text-rose-600 font-medium uppercase tracking-wider">
+                {getLocalizedText("Delayed / متأخر (>15 د)", language)}
+              </div>
+              <div className="text-xl font-bold text-rose-900">{delayedOrdersCount}</div>
+            </div>
+          </div>
+
+          <div className="col-span-2 md:col-span-1 flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <div>
+              <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                {getLocalizedText("KDS Refresh / تحديث تلقائي", language)}
+              </div>
+              <div className="text-xs font-semibold text-gray-700">15s</div>
+            </div>
+            <button
+              onClick={() => posKitchenOrdersQuery.refetch()}
+              className="p-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-600 transition"
+              title="Manual Refresh"
+            >
+              <LuRefreshCcw className={cn("w-4 h-4", posKitchenOrdersQuery.isFetching && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-white border-b border-gray-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase mr-2">
+              {getLocalizedText("Stations / محطات التحضير:", language)}
+            </span>
+            {(["ALL", "Kitchen", "Grill", "Bar", "Desserts", "Drinks"] as const).map((station) => (
+              <button
+                key={station}
+                onClick={() => setKdsPrepAreaFilter(station)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-full border transition",
+                  kdsPrepAreaFilter === station
+                    ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {station === "ALL" ? getLocalizedText("All Stations / الكل", language) : station}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+              {(["ACTIVE", "NEW", "PREPARING", "READY", "SERVED", "ALL"] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setKdsStatusFilter(status)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs font-medium rounded-md transition",
+                    kdsStatusFilter === status
+                      ? "bg-white text-gray-900 shadow-sm border border-gray-200/50"
+                      : "text-gray-500 hover:text-gray-900"
+                  )}
+                >
+                  {status === "ACTIVE"
+                    ? getLocalizedText("Active / النشط", language)
+                    : status === "NEW"
+                    ? getLocalizedText("Pending / جديد", language)
+                    : status === "PREPARING"
+                    ? getLocalizedText("Preparing / تحضير", language)
+                    : status === "READY"
+                    ? getLocalizedText("Ready / جاهز", language)
+                    : status === "SERVED"
+                    ? getLocalizedText("Served / قُدّم", language)
+                    : getLocalizedText("All / الكل", language)}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-64">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                <LuSearch className="w-4 h-4" />
+              </span>
+              <input
+                type="text"
+                value={kdsSearchQuery}
+                onChange={(e) => setKdsSearchQuery(e.target.value)}
+                placeholder={getLocalizedText("Search order, table... / بحث...", language)}
+                className="w-full pl-9 pr-4 py-1.5 text-xs bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {filteredOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 bg-white border border-dashed border-gray-200 rounded-xl p-8 text-center">
+              <div className="p-4 bg-gray-50 text-gray-400 rounded-full mb-3">
+                <LuChefHat className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-800">
+                {getLocalizedText("No Kitchen Orders / لا يوجد طلبات للمطبخ", language)}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                {getLocalizedText(
+                  "No orders match your selected filters, or there are currently no active kitchen tickets.",
+                  language
+                )}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredOrders.map((order) => {
+                const elapsedMins = Math.floor(
+                  (Date.now() - new Date(order.createdAt).getTime()) / 60000
+                );
+                const isDelayed = elapsedMins >= 15 && order.status !== "SERVED";
+
+                const displayItems = order.items.filter((item) => {
+                  if (kdsPrepAreaFilter === "ALL") return true;
+                  return getPrepAreaName(item.itemId, item.itemName) === kdsPrepAreaFilter;
+                });
+
+                let borderClass = "border-blue-200 focus-within:ring-blue-500/20";
+                let statusBadgeClass = "bg-blue-50 text-blue-700 border-blue-200";
+                
+                if (isDelayed) {
+                  borderClass = "border-rose-400 ring-2 ring-rose-500/20 animate-pulse";
+                } else if (order.status === "PREPARING") {
+                  borderClass = "border-amber-300 focus-within:ring-amber-500/20";
+                  statusBadgeClass = "bg-amber-50 text-amber-700 border-amber-200";
+                } else if (order.status === "READY") {
+                  borderClass = "border-emerald-300 focus-within:ring-emerald-500/20";
+                  statusBadgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                } else if (order.status === "SERVED") {
+                  borderClass = "border-gray-200 opacity-75";
+                  statusBadgeClass = "bg-gray-100 text-gray-600 border-gray-200";
+                }
+
+                return (
+                  <div
+                    key={order.id}
+                    className={cn(
+                      "flex flex-col bg-white border rounded-xl shadow-sm hover:shadow-md transition overflow-hidden",
+                      borderClass
+                    )}
+                  >
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                              {order.orderType === "DINE_IN"
+                                ? getLocalizedText("Dine-In / محلي", language)
+                                : order.orderType === "TAKEAWAY"
+                                ? getLocalizedText("Takeaway / سفري", language)
+                                : getLocalizedText("Delivery / توصيل", language)}
+                            </span>
+                            <span className="text-gray-300">•</span>
+                            <span className="text-xs font-bold text-blue-600">
+                              {order.tableName
+                                ? `${getLocalizedText("Table / طاولة", language)} ${order.tableName}`
+                                : getLocalizedText("Walk-in / عميل خارجي", language)}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-800 mt-0.5">
+                            #{order.orderNumber}
+                          </h4>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 text-[9px] font-bold border rounded-full uppercase tracking-wider",
+                              statusBadgeClass
+                            )}
+                          >
+                            {order.status === "NEW"
+                              ? getLocalizedText("New / جديد", language)
+                              : order.status === "PREPARING"
+                              ? getLocalizedText("Preparing / تحضير", language)
+                              : order.status === "READY"
+                              ? getLocalizedText("Ready / جاهز", language)
+                              : getLocalizedText("Served / قُدّم", language)}
+                          </span>
+                          
+                          {order.status !== "SERVED" && (
+                            <div
+                              className={cn(
+                                "flex items-center gap-1 text-[10px] font-semibold",
+                                isDelayed ? "text-rose-600 font-bold" : "text-gray-500"
+                              )}
+                            >
+                              <LuClock className="w-3 h-3" />
+                              <span>{elapsedMins} m</span>
+                              {isDelayed && (
+                                <span className="px-1 py-0.2 bg-rose-100 text-rose-700 text-[8px] rounded uppercase font-extrabold animate-bounce">
+                                  {getLocalizedText("Delay / متأخر", language)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {order.waiterName && (
+                        <div className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                          <span className="font-semibold">{getLocalizedText("Waiter / النادل:", language)}</span>
+                          <span>{order.waiterName}</span>
+                        </div>
+                      )}
+
+                      {order.notes && (
+                        <div className="mt-2 text-[11px] bg-amber-50 border border-amber-100 text-amber-800 rounded p-1.5 italic">
+                          <strong>Note / ملاحظة:</strong> {order.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 p-4 divide-y divide-gray-100 overflow-y-auto max-h-64">
+                      {displayItems.map((item) => {
+                        let itemBadge = "bg-gray-50 text-gray-500 border-gray-200";
+                        if (item.status === "PREPARING") {
+                          itemBadge = "bg-amber-50 text-amber-700 border-amber-100";
+                        } else if (item.status === "READY") {
+                          itemBadge = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                        } else if (item.status === "SERVED") {
+                          itemBadge = "bg-gray-100 text-gray-600 line-through border-gray-200";
+                        }
+
+                        return (
+                          <div key={item.id} className="py-2 flex items-start justify-between gap-2 first:pt-0 last:pb-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start gap-2">
+                                <span className="font-extrabold text-xs text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded min-w-[20px] text-center">
+                                  {Math.floor(parseFloat(item.quantity))}x
+                                </span>
+                                <div>
+                                  <p className="text-xs font-bold text-gray-800 break-words leading-tight">
+                                    {item.itemName}
+                                  </p>
+                                  {kdsPrepAreaFilter === "ALL" && (
+                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5 block">
+                                      {getPrepAreaName(item.itemId, item.itemName)}
+                                    </span>
+                                  )}
+                                  {item.notes && (
+                                    <p className="text-[10px] text-amber-700 font-medium italic mt-0.5">
+                                      * {item.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", itemBadge)}>
+                                {item.status === "NEW"
+                                  ? getLocalizedText("New / جديد", language)
+                                  : item.status === "PREPARING"
+                                  ? getLocalizedText("Prep / تحضير", language)
+                                  : item.status === "READY"
+                                  ? getLocalizedText("Ready / جاهز", language)
+                                  : getLocalizedText("Served / قُدّم", language)}
+                              </span>
+
+                              {item.status !== "SERVED" && (
+                                <button
+                                  onClick={() => {
+                                    let nextStatus: "NEW" | "PREPARING" | "READY" | "SERVED" = "PREPARING";
+                                    if (item.status === "NEW") nextStatus = "PREPARING";
+                                    else if (item.status === "PREPARING") nextStatus = "READY";
+                                    else if (item.status === "READY") nextStatus = "SERVED";
+
+                                    updateKitchenOrderItemStatusMutation.mutate({
+                                      orderId: order.id,
+                                      itemId: item.id,
+                                      status: nextStatus,
+                                    });
+                                  }}
+                                  className="p-1 hover:bg-gray-100 active:bg-gray-200 border border-gray-200 rounded text-gray-600 transition"
+                                  title="Cycle Item Status"
+                                >
+                                  <LuArrowRightLeft className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          setReprintOrderId(order.id);
+                          setReprintReason("");
+                          setIsReprintKotOpen(true);
+                        }}
+                        className="px-2 py-1.5 text-[10px] font-bold border border-gray-200 rounded bg-white hover:bg-gray-50 text-gray-600 transition flex items-center gap-1 shrink-0"
+                        title="Reprint KOT"
+                      >
+                        <LuPrinter className="w-3.5 h-3.5" />
+                        <span>KOT</span>
+                      </button>
+
+                      {order.status !== "SERVED" ? (
+                        <button
+                          onClick={() => {
+                            let nextOrderStatus: "PREPARING" | "READY" | "SERVED" = "PREPARING";
+                            if (order.status === "NEW") nextOrderStatus = "PREPARING";
+                            else if (order.status === "PREPARING") nextOrderStatus = "READY";
+                            else if (order.status === "READY") nextOrderStatus = "SERVED";
+
+                            updateKitchenOrderStatusMutation.mutate({
+                              orderId: order.id,
+                              status: nextOrderStatus,
+                            });
+                          }}
+                          className={cn(
+                            "flex-1 py-1.5 text-xs font-bold text-white rounded shadow-sm transition text-center",
+                            order.status === "READY"
+                              ? "bg-emerald-600 hover:bg-emerald-700"
+                              : "bg-blue-600 hover:bg-blue-700"
+                          )}
+                        >
+                          {order.status === "NEW"
+                            ? getLocalizedText("Start Preparing / بدء التحضير", language)
+                            : order.status === "PREPARING"
+                            ? getLocalizedText("Mark Ready / جاهز", language)
+                            : getLocalizedText("Mark Served / تقديم", language)}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 font-bold uppercase py-1.5 flex-1 text-center bg-gray-100 border border-gray-200 rounded">
+                          {getLocalizedText("Completed / منتهي", language)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderWorkspace = () => {
     if (workspace === "sales") {
       return renderSalesWorkspace();
@@ -3957,6 +5048,10 @@ export function PosPage() {
       return <SettingsWorkspace posSettings={posSettings} t={t} />;
     }
 
+    if (workspace === "kitchen") {
+      return renderKitchenWorkspace();
+    }
+
     const descriptions: Record<Exclude<PosWorkspace, "sales">, string> = {
       sessions: t("pos.placeholder.sessions"),
       held: t("pos.placeholder.held"),
@@ -3964,6 +5059,8 @@ export function PosPage() {
       returns: t("pos.placeholder.returns"),
       reports: t("pos.placeholder.reports"),
       settings: t("pos.placeholder.settings"),
+      kitchen: t("pos.placeholder.kitchen") || "Kitchen Display System",
+      delivery: "Delivery tracking and dispatch workspace / مساحة تتبع وتسليم الطلبات",
     };
 
     return (
@@ -3986,6 +5083,7 @@ export function PosPage() {
         </div>
       ) : null}
       {renderWorkspace()}
+      {renderReprintKotModal()}
     </div>
   );
 }
@@ -4119,71 +5217,6 @@ function ReportCard({
         )}
       </div>
     </Card>
-  );
-}
-
-function DetailedTableCard({
-  title,
-  headers,
-  rows,
-}: {
-  title: string;
-  headers: string[];
-  rows: string[][];
-}) {
-  return (
-    <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-      <div className="text-lg font-black text-[#233329]">{title}</div>
-      {rows.length > 0 ? (
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#e1e7e2] text-left text-[#6d7b73]">
-                {headers.map((header) => (
-                  <th key={header} className="px-3 py-2 font-bold">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={`${title}-${index}`} className="border-b border-[#f0f3f0]">
-                  {row.map((cell, cellIndex) => (
-                    <td key={`${title}-${index}-${cellIndex}`} className="px-3 py-3 text-[#233329]">
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="mt-4 rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-4 text-sm text-[#64736b]">
-          No report rows available.
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function DetailTile({
-  label,
-  value,
-  compact = false,
-}: {
-  label: string;
-  value: string;
-  compact?: boolean;
-}) {
-  return (
-    <div className={cn("rounded-[18px] border border-[#e1e7e2] bg-white", compact ? "px-3 py-3" : "px-4 py-4")}>
-      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-[#718178]">
-        {label}
-      </div>
-      <div className="mt-2 text-sm font-bold text-[#233329]">{value}</div>
-    </div>
   );
 }
 

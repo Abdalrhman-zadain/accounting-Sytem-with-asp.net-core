@@ -11,7 +11,7 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { PosRefundMethod } from "../../../../generated/prisma";
+import { PosRefundMethod, OrderType, DeliveryStatus, TableStatus, KitchenStatus } from "../../../../generated/prisma";
 import { SalesLineDto } from "../../dto/sales-receivables.dto";
 
 export class OpenPosSessionDto {
@@ -99,6 +99,50 @@ class PosSaleBaseDto {
   @ValidateNested({ each: true })
   @Type(() => SalesLineDto)
   lines!: SalesLineDto[];
+
+  @IsOptional()
+  @IsEnum(OrderType)
+  orderType?: OrderType;
+
+  @IsOptional()
+  @IsString()
+  tableId?: string;
+
+  @IsOptional()
+  @IsString()
+  waiterId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  serviceChargeAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  deliveryFeeAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  driverId?: string;
+
+  @IsOptional()
+  @IsEnum(DeliveryStatus)
+  deliveryStatus?: DeliveryStatus;
+
+  @IsOptional()
+  @IsString()
+  deliveryAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  deliveryNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  deliveryCompanyId?: string;
 }
 
 export class HoldPosSaleDto extends PosSaleBaseDto {
@@ -210,4 +254,96 @@ export class CreatePosReturnDto {
   @ValidateNested({ each: true })
   @Type(() => PosReturnPaymentDto)
   payments!: PosReturnPaymentDto[];
+}
+
+export class UpdateTableStatusDto {
+  @IsEnum(TableStatus)
+  status!: TableStatus;
+}
+
+export class UpdateTableWaiterDto {
+  @IsOptional()
+  @IsString()
+  assignedWaiterId?: string;
+}
+
+export class UpdateKitchenOrderStatusDto {
+  @IsEnum(KitchenStatus)
+  status!: KitchenStatus;
+}
+
+export class UpdateKitchenOrderItemStatusDto {
+  @IsEnum(KitchenStatus)
+  status!: KitchenStatus;
+}
+
+export class TransferTableDto {
+  @IsString()
+  fromTableId!: string;
+
+  @IsString()
+  toTableId!: string;
+}
+
+export class MergeTablesDto {
+  @IsArray()
+  @IsString({ each: true })
+  sourceTableIds!: string[];
+
+  @IsString()
+  targetTableId!: string;
+}
+
+export class SplitTableLineDto {
+  @IsString()
+  itemId!: string;
+
+  @IsNumber()
+  @Min(0.0001)
+  quantity!: number;
+}
+
+export class SplitTableDto {
+  @IsString()
+  tableId!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SplitTableLineDto)
+  lines!: SplitTableLineDto[];
+}
+
+export class CorrectOrderTypeDto {
+  @IsEnum(OrderType)
+  orderType!: OrderType;
+
+  @IsOptional()
+  @IsString()
+  tableId?: string;
+
+  @IsOptional()
+  @IsString()
+  deliveryCompanyId?: string;
+
+  @IsOptional()
+  @IsString()
+  driverId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  serviceChargeAmount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryFeeAmount?: number;
+
+  @IsString()
+  reason!: string;
+}
+
+export class ReprintKotDto {
+  @IsString()
+  reason!: string;
 }

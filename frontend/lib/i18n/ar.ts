@@ -2619,6 +2619,7 @@ Object.assign(arTranslations, {
   "pos.workspace.sales": "شاشة البيع",
   "pos.workspace.sessions": "الورديات",
   "pos.workspace.held": "الفواتير المعلقة",
+  "pos.workspace.kitchen": "شاشة المطبخ",
   "pos.workspace.review": "مراجعة المحاسب",
   "pos.workspace.returns": "المرتجعات",
   "pos.workspace.reports": "التقارير",

@@ -193,6 +193,12 @@ export const queryKeys = {
   posSessions(token: string | null) {
     return ["pos-sessions", token] as const;
   },
+  posTables(token: string | null) {
+    return ["pos-tables", token] as const;
+  },
+  posKitchenOrders(token: string | null) {
+    return ["pos-kitchen-orders", token] as const;
+  },
   posHeldSales(token: string | null, sessionId: string | null) {
     return ["pos-held-sales", token, sessionId] as const;
   },

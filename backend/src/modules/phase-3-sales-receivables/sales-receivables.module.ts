@@ -9,13 +9,15 @@ import { PostingLogicModule } from '../phase-1-accounting-foundation/accounting-
 import { ReversalControlModule } from '../phase-1-accounting-foundation/accounting-core/reversal-control/reversal-control.module';
 import { InventoryPostingModule } from '../phase-5-inventory-management/inventory/shared/inventory-posting.module';
 import { PosController } from './pos/pos.controller';
+import { PosTableController } from './pos/pos-table.controller';
+import { PosKitchenController } from './pos/pos-kitchen.controller';
 import { PosService } from './pos/pos.service';
 import { SalesReceivablesController } from './sales-receivables.controller';
 import { SalesReceivablesService } from './sales-receivables.service';
 
 @Module({
   imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule],
-  controllers: [SalesReceivablesController, PosController],
+  controllers: [SalesReceivablesController, PosController, PosTableController, PosKitchenController],
   providers: [SalesReceivablesService, PosService],
   exports: [SalesReceivablesService, PosService],
 })

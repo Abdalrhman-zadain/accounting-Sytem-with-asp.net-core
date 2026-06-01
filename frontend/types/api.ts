@@ -1955,6 +1955,21 @@ export type PosAccountingStatus =
   | "REJECTED"
   | "REVERSED";
 export type PosSessionStatus = "OPEN" | "CLOSED";
+export type PosOrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY" | "PICKUP";
+export type PosTableStatus =
+  | "AVAILABLE"
+  | "OCCUPIED"
+  | "RESERVED"
+  | "WAITING_FOR_PAYMENT"
+  | "CLEANING";
+export type KitchenStatus = "NEW" | "PREPARING" | "READY" | "SERVED";
+export type DeliveryStatus =
+  | "PENDING"
+  | "PREPARING"
+  | "READY_FOR_DELIVERY"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "CANCELLED";
 export type PosPaymentMethod =
   | "CASH"
   | "CARD"
@@ -3461,6 +3476,15 @@ export type HoldPosSalePayload = {
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
+  orderType?: PosOrderType;
+  tableId?: string;
+  waiterId?: string;
+  serviceChargeAmount?: number;
+  deliveryFeeAmount?: number;
+  deliveryStatus?: DeliveryStatus;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryCompanyId?: string;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
 };
@@ -3472,6 +3496,15 @@ export type SavePosDraftPayload = {
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
+  orderType?: PosOrderType;
+  tableId?: string;
+  waiterId?: string;
+  serviceChargeAmount?: number;
+  deliveryFeeAmount?: number;
+  deliveryStatus?: DeliveryStatus;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryCompanyId?: string;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
 };
@@ -3483,6 +3516,15 @@ export type CompletePosSalePayload = {
   invoiceDate?: string;
   currencyCode?: string;
   description?: string;
+  orderType?: PosOrderType;
+  tableId?: string;
+  waiterId?: string;
+  serviceChargeAmount?: number;
+  deliveryFeeAmount?: number;
+  deliveryStatus?: DeliveryStatus;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryCompanyId?: string;
   lines: SalesLinePayload[];
   payments: PosPaymentEntryPayload[];
 };
@@ -3575,6 +3617,20 @@ export type PosSale = {
   posReviewedByUserId?: string | null;
   posReviewNotes?: string | null;
   posChangeAmount?: string | null;
+  orderType?: PosOrderType | null;
+  originalOrderType?: PosOrderType | null;
+  tableId?: string | null;
+  waiterId?: string | null;
+  serviceChargeAmount?: string | null;
+  deliveryFeeAmount?: string | null;
+  deliveryStatus?: DeliveryStatus | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyId?: string | null;
+  driverId?: string | null;
+  isCorrected?: boolean;
+  correctedAt?: string | null;
+  correctionReason?: string | null;
   postedAt?: string | null;
   journalEntry?: {
     id: string;
@@ -3598,6 +3654,18 @@ export type PosSale = {
     id: string;
     name: string;
   } | null;
+  table?: {
+    id: string;
+    tableNumber: string;
+    status: PosTableStatus;
+  } | null;
+  waiter?: {
+    id: string;
+    name?: string | null;
+    email: string;
+  } | null;
+  deliveryCompany?: DeliveryCompany | null;
+  driver?: DeliveryDriver | null;
   lines: Array<{
     id: string;
     lineNumber: number;
@@ -3627,6 +3695,81 @@ export type PosSale = {
   }>;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PosTable = {
+  id: string;
+  tableNumber: string;
+  capacity: number;
+  status: PosTableStatus;
+  assignedWaiterId?: string | null;
+  assignedWaiter?: {
+    id: string;
+    name?: string | null;
+    email: string;
+  } | null;
+  activeInvoice?: {
+    id: string;
+    reference: string;
+    totalAmount: string;
+    status: SalesInvoiceStatus;
+    posOperationalStatus?: PosOperationalStatus | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DeliveryCompany = {
+  id: string;
+  name: string;
+  arabicName?: string | null;
+  receivableAccountId: string;
+  commissionRate: string;
+  commissionAccountId?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DeliveryDriver = {
+  id: string;
+  name: string;
+  phone?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PosWaiter = {
+  id: string;
+  name?: string | null;
+  email: string;
+};
+
+export type KitchenOrder = {
+  id: string;
+  orderNumber: string;
+  salesInvoiceId?: string | null;
+  tableId?: string | null;
+  tableName?: string | null;
+  waiterId?: string | null;
+  waiterName?: string | null;
+  orderType: PosOrderType;
+  status: KitchenStatus;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: Array<{
+    id: string;
+    kitchenOrderId: string;
+    itemId: string;
+    itemName: string;
+    quantity: string;
+    modifiers?: unknown;
+    status: KitchenStatus;
+    notes?: string | null;
+    createdAt: string;
+  }>;
 };
 
 export type PosReceipt = {
@@ -3695,6 +3838,16 @@ export type PosSessionReport = {
   returnCount: number;
   openedAt: string;
   closedAt?: string | null;
+};
+
+export type CorrectPosOrderTypePayload = {
+  orderType: PosOrderType;
+  tableId?: string | null;
+  deliveryCompanyId?: string | null;
+  driverId?: string | null;
+  serviceChargeAmount?: number;
+  deliveryFeeAmount?: number;
+  reason: string;
 };
 
 export type PosReturn = {

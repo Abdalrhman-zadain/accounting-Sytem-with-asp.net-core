@@ -3,9 +3,10 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
-generator erd {
-  provider = "prisma-erd-generator"
-}
+// generator erd {
+//   provider = "prisma-erd-generator"
+// }
+
 
 datasource db {
   provider = "postgresql"
@@ -168,7 +169,66 @@ enum PosPermissionCode {
   POS_CREDIT_SALE
   POS_SELL_NEGATIVE_STOCK
   POS_CHANGE_UNIT_PRICE
+  
+  // Restaurant POS permissions
+  RST_VIEW_TABLE_SCREEN
+  RST_OPEN_TABLE_ORDER
+  RST_TRANSFER_TABLE
+  RST_MERGE_TABLES
+  RST_SPLIT_BILL
+  RST_CREATE_TAKEAWAY_ORDER
+  RST_CREATE_DELIVERY_ORDER
+  RST_ASSIGN_DRIVER
+  RST_SEND_KOT
+  RST_CANCEL_KOT_ITEM
+  RST_REPRINT_KOT
+  RST_VIEW_KITCHEN_SCREEN
+  RST_UPDATE_KITCHEN_STATUS
+  RST_MARK_ITEM_UNAVAILABLE
+  RST_APPLY_SERVICE_CHARGE
+  RST_OVERRIDE_SERVICE_CHARGE
+  RST_PRINT_PRE_BILL
+  RST_COMPLETE_RESTAURANT_PAYMENT
+  RST_CANCEL_RESTAURANT_ORDER
+  RST_VIEW_RESTAURANT_REPORTS
+  
+  // Correction permissions
+  POS_CORRECT_ORDER_TYPE
+  POS_APPROVE_CORRECTION
+  POS_REOPEN_SESSION
 }
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+  PICKUP
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  WAITING_FOR_PAYMENT
+  CLEANING
+}
+
+enum KitchenStatus {
+  NEW
+  PREPARING
+  READY
+  SERVED
+}
+
+enum DeliveryStatus {
+  PENDING
+  PREPARING
+  READY_FOR_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
 
 enum CreditNoteStatus {
   DRAFT
@@ -482,6 +542,11 @@ model Account {
   fixedAssetDisposalExpenseClearingAccounts FixedAssetDisposal[]    @relation("FixedAssetDisposalExpenseClearingAccount")
   taxes                                     Tax[]                   @relation("TaxAccount")
   purchaseDiscountPolicies                  PurchasePolicy[]        @relation("PurchasePolicyDiscountAccount")
+  
+  // Delivery Company relations for Restaurant POS
+  deliveryCompaniesAsReceivable             DeliveryCompany[]       @relation("DeliveryCompanyReceivable")
+  deliveryCompaniesAsCommission             DeliveryCompany[]       @relation("DeliveryCompanyCommission")
+
 
   createdById String?
   createdBy   User?   @relation("AccountCreator", fields: [createdById], references: [id])
@@ -995,8 +1060,14 @@ model InventoryItem {
   costLayers             InventoryCostLayer[]
   stockMovements         InventoryStockMovement[]
   posFavoriteMarkers     PosUserFavoriteItem[]
+  
+  // Restaurant Recipe relations
+  recipe                 RestaurantRecipe?
+  recipesAsIngredient    RestaurantRecipeIngredient[]
+  
   createdAt              DateTime                      @default(now())
   updatedAt              DateTime                      @updatedAt
+
 
   @@index([type, isActive])
   @@index([name])
@@ -1060,8 +1131,10 @@ model InventoryUnitOfMeasure {
   isActive         Boolean                       @default(true)
   items            InventoryItem[]
   itemConversions  InventoryItemUnitConversion[]
+  recipeIngredients RestaurantRecipeIngredient[]
   createdAt        DateTime                      @default(now())
   updatedAt        DateTime                      @updatedAt
+
 
   @@index([isActive, name])
 }
@@ -2285,8 +2358,36 @@ model SalesInvoice {
   creditNotes        CreditNote[]
   receiptAllocations ReceiptAllocation[]
   postedAt           DateTime?
+  
+  // Restaurant POS fields
+  orderType           OrderType?
+  tableId             String?
+  table               PosTable?            @relation("TableInvoiceHistory", fields: [tableId], references: [id], onDelete: Restrict)
+  activeTable         PosTable?            @relation("TableActiveInvoice")
+  waiterId            String?
+  waiter              User?                @relation("InvoiceWaiter", fields: [waiterId], references: [id], onDelete: SetNull)
+  serviceChargeAmount Decimal?             @db.Decimal(18, 2) @default(0)
+  deliveryFeeAmount   Decimal?             @db.Decimal(18, 2) @default(0)
+  driverId            String?
+  driver              DeliveryDriver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  deliveryStatus      DeliveryStatus?
+  deliveryAddress     String?
+  deliveryNotes       String?
+  deliveryCompanyId   String?
+  deliveryCompany     DeliveryCompany?     @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
+  kitchenOrder        KitchenOrder?
+  
+  // Audits & Corrections
+  originalOrderType   OrderType?
+  correctionReason    String?
+  isCorrected         Boolean              @default(false)
+  correctedAt         DateTime?
+  correctedByUserId   String?
+  correctedByUser     User?                @relation("InvoiceCorrector", fields: [correctedByUserId], references: [id], onDelete: SetNull)
+
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+
 
   @@index([customerId, status, invoiceDate])
   @@index([allocationStatus])
@@ -2318,6 +2419,12 @@ model PosSession {
   closedAt       DateTime?
   salesInvoices  SalesInvoice[]
   posReturns     PosReturn[]
+  
+  // Cashier Shift Submission fields
+  submittedAt       DateTime?
+  submittedByUserId String?
+  submittedByUser   User?            @relation("SessionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -2335,11 +2442,17 @@ model PosPayment {
   amount            Decimal         @db.Decimal(18, 2)
   tenderedAmount    Decimal?        @db.Decimal(18, 2)
   reference         String?
+  
+  // Delivery Company details (e.g. Talabat, Careem)
+  deliveryCompanyId String?
+  deliveryCompany   DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
+
   createdAt         DateTime        @default(now())
 
   @@index([salesInvoiceId])
   @@index([bankCashAccountId])
   @@index([paymentMethod])
+
 }
 
 model PosReturn {
@@ -2457,9 +2570,14 @@ model SalesInvoiceLine {
   lineAmount         Decimal        @db.Decimal(18, 2)
   revenueAccountId   String
   revenueAccount     Account        @relation("SalesInvoiceRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  
+  // Modifier options / cooking levels / extras
+  modifiers          Json?
+
   createdAt          DateTime       @default(now())
   creditNoteLines    CreditNoteLine[]
   posReturnLines     PosReturnLine[]
+
 
   @@unique([salesInvoiceId, lineNumber])
   @@index([itemId])
@@ -2744,9 +2862,16 @@ model User {
   posAccessRoles                      UserPosAccessRole[]
   posFavoriteItems                   PosUserFavoriteItem[]
   auditLogs                           AuditLog[]
+  
+  // Restaurant POS relations
+  tablesServed                        PosTable[]                     @relation("TableWaiter")
+  invoicesServed                      SalesInvoice[]                 @relation("InvoiceWaiter")
+  correctedInvoices                   SalesInvoice[]                 @relation("InvoiceCorrector")
+  submittedSessions                   PosSession[]                   @relation("SessionSubmitter")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
 
   @@index([email])
   @@index([username])
@@ -2765,3 +2890,95 @@ model PosUserFavoriteItem {
   @@index([userId])
   @@index([itemId])
 }
+
+model PosTable {
+  id               String          @id @default(cuid())
+  tableNumber      String          @unique
+  capacity         Int
+  status           TableStatus     @default(AVAILABLE)
+  activeInvoiceId  String?         @unique
+  activeInvoice    SalesInvoice?   @relation("TableActiveInvoice", fields: [activeInvoiceId], references: [id], onDelete: SetNull)
+  assignedWaiterId String?
+  assignedWaiter   User?           @relation("TableWaiter", fields: [assignedWaiterId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  invoices         SalesInvoice[]  @relation("TableInvoiceHistory")
+}
+
+model DeliveryCompany {
+  id                  String         @id @default(cuid())
+  name                String         @unique
+  arabicName          String?
+  receivableAccountId String
+  receivableAccount   Account        @relation("DeliveryCompanyReceivable", fields: [receivableAccountId], references: [id], onDelete: Restrict)
+  commissionRate      Decimal        @default(0) @db.Decimal(5, 2)
+  commissionAccountId String?
+  commissionAccount   Account?       @relation("DeliveryCompanyCommission", fields: [commissionAccountId], references: [id], onDelete: Restrict)
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  salesInvoices       SalesInvoice[]
+  posPayments         PosPayment[]
+}
+
+model DeliveryDriver {
+  id            String         @id @default(cuid())
+  name          String
+  phone         String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  salesInvoices SalesInvoice[]
+}
+
+model KitchenOrder {
+  id             String             @id @default(cuid())
+  orderNumber    String             @unique
+  salesInvoiceId String?            @unique
+  salesInvoice   SalesInvoice?      @relation(fields: [salesInvoiceId], references: [id], onDelete: SetNull)
+  tableId        String?
+  tableName      String?
+  waiterId       String?
+  waiterName     String?
+  orderType      OrderType
+  status         KitchenStatus      @default(NEW)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  items          KitchenOrderItem[]
+}
+
+model KitchenOrderItem {
+  id             String       @id @default(cuid())
+  kitchenOrderId String
+  kitchenOrder   KitchenOrder @relation(fields: [kitchenOrderId], references: [id], onDelete: Cascade)
+  itemId         String
+  itemName       String
+  quantity       Decimal      @db.Decimal(18, 4)
+  modifiers      Json?
+  status         KitchenStatus @default(NEW)
+  notes          String?
+  createdAt      DateTime     @default(now())
+}
+
+model RestaurantRecipe {
+  id          String                     @id @default(cuid())
+  itemId      String                     @unique
+  item        InventoryItem              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+  ingredients RestaurantRecipeIngredient[]
+}
+
+model RestaurantRecipeIngredient {
+  id               String                 @id @default(cuid())
+  recipeId         String
+  recipe           RestaurantRecipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientItemId String
+  ingredientItem   InventoryItem          @relation(fields: [ingredientItemId], references: [id], onDelete: Restrict)
+  quantity         Decimal                @db.Decimal(18, 4)
+  unitOfMeasureId  String?
+  unitOfMeasure    InventoryUnitOfMeasure? @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
+  createdAt        DateTime               @default(now())
+}
+

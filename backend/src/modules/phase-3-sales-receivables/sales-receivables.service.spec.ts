@@ -47,6 +47,9 @@ describe("SalesReceivablesService", () => {
     inventoryItem: {
       update: jest.fn(),
     },
+    restaurantRecipe: {
+      findUnique: jest.fn(),
+    },
   };
   const auditService = {
     log: jest.fn(),
@@ -74,6 +77,8 @@ describe("SalesReceivablesService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma as never));
+    prisma.bankCashTransaction.findMany.mockResolvedValue([]);
+    prisma.restaurantRecipe.findUnique.mockResolvedValue(null);
     service = new SalesReceivablesService(
       prisma as never,
       auditService as never,
@@ -410,20 +415,40 @@ describe("SalesReceivablesService", () => {
       noteDate: new Date("2026-05-12"),
       salesInvoiceId: "inv-1",
       totalAmount: decimal("120.00"),
+      subtotalAmount: decimal("120.00"),
+      discountAmount: decimal("0"),
       taxAmount: decimal("0"),
       description: "Post-sale discount",
       customer: {
         id: "cust-1",
         isActive: true,
         receivableAccountId: "recv-1",
+        creditLimit: decimal("0"),
+        currentBalance: decimal("0"),
+      },
+      creditNoteType: {
+        id: "cnt-1",
+        code: "CN-DISCOUNT",
+        name: "خصم ما بعد البيع",
+        effect: "FINANCIAL_ONLY",
+        allowsTaxAdjustment: true,
+        defaultAccountId: "rev-1",
       },
       lines: [
         {
+          lineNumber: 1,
           revenueAccountId: "rev-1",
+          quantity: decimal("1.00"),
+          unitPrice: decimal("120.00"),
+          discountAmount: decimal("0"),
+          taxAmount: decimal("0"),
           lineSubtotalAmount: decimal("120.00"),
+          lineTotalAmount: decimal("120.00"),
           description: null,
         },
       ],
+      createdAt: new Date("2026-05-12"),
+      updatedAt: new Date("2026-05-12"),
     });
     prisma.salesInvoice.findUnique.mockResolvedValue({
       outstandingAmount: decimal("100.00"),

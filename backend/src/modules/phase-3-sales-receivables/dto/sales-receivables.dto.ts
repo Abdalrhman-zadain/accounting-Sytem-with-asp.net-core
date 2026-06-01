@@ -274,6 +274,9 @@ export class SalesLineDto {
   @IsOptional()
   @IsString()
   revenueAccountId?: string;
+
+  @IsOptional()
+  modifiers?: any;
 }
 
 class SalesDocumentBaseDto {

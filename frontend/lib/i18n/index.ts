@@ -1340,6 +1340,7 @@ Object.assign(enTranslations, {
   "pos.workspace.sales": "Sales Screen",
   "pos.workspace.sessions": "Shifts",
   "pos.workspace.held": "Held Invoices",
+  "pos.workspace.kitchen": "Kitchen Display",
   "pos.workspace.review": "Accountant Review",
   "pos.workspace.returns": "Returns",
   "pos.workspace.reports": "Reports",

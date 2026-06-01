@@ -700,6 +700,37 @@ Checks to run:
 - backend build (`npm run build` in `backend/`)
 - frontend typecheck (`npx tsc --noEmit` in `frontend/`)
 
+## Add Or Extend Restaurant POS Register Fields
+
+Where to edit:
+
+- backend DTO/service mapping: `backend/src/modules/phase-3-sales-receivables/pos/dto/pos.dto.ts` and `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts`
+- restaurant read APIs: `backend/src/modules/phase-3-sales-receivables/pos/pos-table.controller.ts` and `pos-kitchen.controller.ts`
+- frontend POS API/types/query keys: `frontend/lib/api/index.ts`, `frontend/lib/query-keys.ts`, and `frontend/types/api.ts`
+- frontend register UI/state: `frontend/features/pos/pos-page.tsx`
+
+What else to check:
+
+- restaurant delivery and correction APIs also live in the main POS service/controller layer; keep `correctOrderType`, delivery-company/driver reads, driver assignment, and delivery-status updates aligned between `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts`, `pos.controller.ts`, `frontend/lib/api/index.ts`, and `frontend/types/api.ts`
+- all three POS sale payloads (`holdSale`, `saveDraftSale`, `completeSale`) must stay aligned for restaurant fields; do not add `orderType`, `tableId`, charges, or delivery notes to only one payload
+- if `orderType === "DINE_IN"`, the register should require a selected table before completion and should clear `tableId` when the user switches away from dine-in
+- `mapPosSale`, `posSaleInclude`, and `mapPosSaleToHeldSale` must stay in sync so drafts/held sales resume with the original order type, table, and fee metadata
+- any frontend total shown to the cashier must include persisted restaurant charges such as `serviceChargeAmount` and `deliveryFeeAmount`, otherwise the pay modal and backend totals drift
+- use `GET /pos/tables` and `GET /pos/kitchen/orders` for live restaurant visibility instead of hardcoded demo state
+- the register-side table controls, delivery panel, and cashier close-shift modal are feature-owned in `frontend/features/pos/pos-page.tsx`; if they grow further, split them into feature-local components rather than moving them into route files or generic UI
+- accountant review now includes session-grouped cash, inventory, journal, and order-correction flows; when extending that area, keep the review screen tied to backend review/session/journal APIs rather than rebuilding calculations purely in the client
+
+Must remain compatible:
+
+- base POS sale completion, held sale resume, and accountant-review flows
+- `SalesInvoice.invoiceType = POS` lifecycle invariants
+- current route ownership under `frontend/features/pos`
+
+Checks to run:
+
+- backend build (`npm run build` in `backend/`)
+- frontend typecheck (`npx tsc --noEmit` in `frontend/`)
+
 ## POS register layout, catalog, favorites, and payments
 
 Where to edit:

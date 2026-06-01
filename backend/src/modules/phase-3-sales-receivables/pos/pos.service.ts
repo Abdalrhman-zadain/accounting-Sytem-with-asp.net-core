@@ -16,6 +16,9 @@ import {
   Prisma,
   SalesInvoiceStatus,
   SalesInvoiceType,
+  TableStatus,
+  OrderType,
+  DeliveryStatus,
 } from "../../../generated/prisma";
 
 import { PrismaService } from "../../../common/prisma/prisma.service";
@@ -42,6 +45,11 @@ import {
   SavePosDraftDto,
   SetPosFavoriteItemsDto,
   VoidPosSaleDto,
+  TransferTableDto,
+  MergeTablesDto,
+  SplitTableDto,
+  CorrectOrderTypeDto,
+  ReprintKotDto,
 } from "./dto/pos.dto";
 
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
@@ -371,6 +379,10 @@ export class PosService {
     }
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
+    const serviceCharge = dto.serviceChargeAmount ?? 0;
+    const deliveryFee = dto.deliveryFeeAmount ?? 0;
+    totals.totalAmount += serviceCharge + deliveryFee;
+
     const holdPaymentAccountMap = dto.payments?.length
       ? await this.resolvePaymentAccounts(dto.payments)
       : null;
@@ -390,6 +402,7 @@ export class PosService {
                 invoiceType: true,
                 posOperationalStatus: true,
                 journalEntryId: true,
+                tableId: true,
               },
             })
           : null;
@@ -398,6 +411,20 @@ export class PosService {
         await tx.posPayment.deleteMany({ where: { salesInvoiceId: existing.id } });
         await tx.salesInvoiceLine.deleteMany({ where: { salesInvoiceId: existing.id } });
       }
+
+      const restaurantFields = {
+        orderType: dto.orderType || null,
+        tableId: dto.tableId?.trim() || null,
+        waiterId: dto.waiterId?.trim() || null,
+        serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
+        deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
+        driverId: dto.driverId?.trim() || null,
+        deliveryStatus: dto.deliveryStatus || null,
+        deliveryAddress: dto.deliveryAddress?.trim() || null,
+        deliveryNotes: dto.deliveryNotes?.trim() || null,
+        deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+        originalOrderType: dto.orderType || null,
+      };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
       const invoice = existing
@@ -429,6 +456,7 @@ export class PosService {
                     this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
                   ),
                 },
+                ...restaurantFields,
               },
               include: this.posSaleInclude(),
             })
@@ -456,9 +484,20 @@ export class PosService {
                     this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
                   ),
                 },
+                ...restaurantFields,
               },
               include: this.posSaleInclude(),
             });
+
+      // Manage dine-in tables
+      if (existing && existing.tableId && existing.tableId !== dto.tableId) {
+        await this.updateTableStatus(tx, existing.tableId, null, null);
+      }
+      if (dto.tableId?.trim()) {
+        await this.updateTableStatus(tx, dto.tableId.trim(), invoice.id, TableStatus.OCCUPIED);
+      }
+
+      await this.createOrUpdateKitchenOrder(tx, invoice.id, dto);
 
       if (dto.payments?.length) {
         await tx.posPayment.createMany({
@@ -511,10 +550,27 @@ export class PosService {
       }
       customerId = cust.id;
     }
+    let deliveryCompany = null;
+    if (dto.deliveryCompanyId?.trim()) {
+      deliveryCompany = await this.prisma.deliveryCompany.findUnique({
+        where: { id: dto.deliveryCompanyId.trim(), isActive: true },
+      });
+      if (!deliveryCompany) {
+        throw new BadRequestException(
+          `Delivery company with ID ${dto.deliveryCompanyId} was not found or is inactive.`,
+        );
+      }
+    }
+
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     await this.ensurePriceChangePermission(dto.lines, user);
     this.ensureDiscountPermission(resolvedLines, user);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
+    
+    const serviceCharge = dto.serviceChargeAmount ?? 0;
+    const deliveryFee = dto.deliveryFeeAmount ?? 0;
+    totals.totalAmount += serviceCharge + deliveryFee;
+
     if (totals.totalAmount <= 0) {
       throw new BadRequestException("POS sale total must be greater than zero.");
     }
@@ -558,7 +614,7 @@ export class PosService {
       totals.totalAmount,
       allowCreditSale,
     );
-    if (normalizedPayments.outstandingAmount > 0 && customerId === walkInCustomer.id) {
+    if (normalizedPayments.outstandingAmount > 0 && customerId === walkInCustomer.id && !dto.deliveryCompanyId) {
       throw new BadRequestException(
         "Partial payment / credit sales require a customer other than POS walk-in.",
       );
@@ -577,6 +633,7 @@ export class PosService {
                 invoiceType: true,
                 posOperationalStatus: true,
                 journalEntryId: true,
+                tableId: true,
               },
             })
           : null;
@@ -589,6 +646,20 @@ export class PosService {
           await tx.journalEntry.delete({ where: { id: existing.journalEntryId } });
         }
       }
+
+      const restaurantFields = {
+        orderType: dto.orderType || null,
+        tableId: dto.tableId?.trim() || null,
+        waiterId: dto.waiterId?.trim() || null,
+        serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
+        deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
+        driverId: dto.driverId?.trim() || null,
+        deliveryStatus: dto.deliveryStatus || null,
+        deliveryAddress: dto.deliveryAddress?.trim() || null,
+        deliveryNotes: dto.deliveryNotes?.trim() || null,
+        deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+        originalOrderType: dto.orderType || null,
+      };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
       const receiptNumber = await this.generateReceiptNumber(tx);
@@ -626,6 +697,7 @@ export class PosService {
                   this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
                 ),
               },
+              ...restaurantFields,
             },
             include: this.posSaleInclude(),
           })
@@ -664,9 +736,20 @@ export class PosService {
                   this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
                 ),
               },
+              ...restaurantFields,
             },
             include: this.posSaleInclude(),
           });
+
+      // Manage dine-in tables
+      if (existing && existing.tableId && existing.tableId !== dto.tableId) {
+        await this.updateTableStatus(tx, existing.tableId, null, null);
+      }
+      if (dto.tableId?.trim()) {
+        await this.updateTableStatus(tx, dto.tableId.trim(), null, null);
+      }
+
+      await this.createOrUpdateKitchenOrder(tx, invoice.id, dto);
 
       await tx.posPayment.createMany({
         data: normalizedPayments.payments.map((payment) => ({
@@ -748,12 +831,51 @@ export class PosService {
         },
         description,
       );
+
+      const salesRevenueAccount = await tx.account.findUniqueOrThrow({
+        where: { code: "4110001" },
+      });
+
+      // Append Service Charge Credit
+      const serviceChargeVal = Number(invoiceWithDetails.serviceChargeAmount);
+      if (serviceChargeVal > 0) {
+        salesCredits.push({
+          accountId: salesRevenueAccount.id,
+          description: `${description} - Service Charge`,
+          debitAmount: 0,
+          creditAmount: serviceChargeVal,
+        });
+      }
+
+      // Append Delivery Fee Credit
+      const deliveryFeeVal = Number(invoiceWithDetails.deliveryFeeAmount);
+      if (deliveryFeeVal > 0) {
+        salesCredits.push({
+          accountId: salesRevenueAccount.id,
+          description: `${description} - Delivery Fee`,
+          debitAmount: 0,
+          creditAmount: deliveryFeeVal,
+        });
+      }
+
+      // Check for third-party delivery company mapping for outstanding balance
+      let receivableAccountId = invoiceWithDetails.customer.receivableAccountId;
+      if (invoiceWithDetails.deliveryCompanyId) {
+        const company = await tx.deliveryCompany.findUnique({
+          where: { id: invoiceWithDetails.deliveryCompanyId },
+          select: { receivableAccountId: true },
+        });
+        if (company?.receivableAccountId) {
+          receivableAccountId = company.receivableAccountId;
+        }
+      }
+
       const paymentDebits = this.aggregatePaymentDebits(normalizedPayments.payments, description);
       const receivableDebits =
         normalizedPayments.outstandingAmount > 0
           ? [
               {
-                accountId: invoiceWithDetails.customer.receivableAccountId,
+                accountId: receivableAccountId,
                 description: `${description} credit balance`,
                 debitAmount: normalizedPayments.outstandingAmount,
                 creditAmount: 0,
@@ -2719,6 +2841,43 @@ export class PosService {
           name: true,
         },
       },
+      table: {
+        select: {
+          id: true,
+          tableNumber: true,
+          status: true,
+        },
+      },
+      waiter: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+      deliveryCompany: {
+        select: {
+          id: true,
+          name: true,
+          arabicName: true,
+          receivableAccountId: true,
+          commissionRate: true,
+          commissionAccountId: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      driver: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       posSession: {
         select: {
           id: true,
@@ -2851,6 +3010,20 @@ export class PosService {
       posReviewedByUserId: row.posReviewedByUserId ?? null,
       posReviewNotes: row.posReviewNotes ?? null,
       posChangeAmount: row.posChangeAmount?.toString() ?? null,
+      orderType: row.orderType ?? null,
+      originalOrderType: row.originalOrderType ?? null,
+      tableId: row.tableId ?? null,
+      waiterId: row.waiterId ?? null,
+      serviceChargeAmount: row.serviceChargeAmount?.toString() ?? null,
+      deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? null,
+      deliveryStatus: row.deliveryStatus ?? null,
+      deliveryAddress: row.deliveryAddress ?? null,
+      deliveryNotes: row.deliveryNotes ?? null,
+      deliveryCompanyId: row.deliveryCompanyId ?? null,
+      driverId: row.driverId ?? null,
+      isCorrected: row.isCorrected ?? false,
+      correctedAt: row.correctedAt?.toISOString() ?? null,
+      correctionReason: row.correctionReason ?? null,
       postedAt: row.postedAt?.toISOString() ?? null,
       journalEntry: row.journalEntry
         ? {
@@ -2862,6 +3035,10 @@ export class PosService {
         : null,
       session: row.posSession ?? null,
       customer: row.customer ?? null,
+      table: row.table ?? null,
+      waiter: row.waiter ?? null,
+      deliveryCompany: row.deliveryCompany ?? null,
+      driver: row.driver ?? null,
       lines: row.lines.map((line: any) => ({
         id: line.id,
         lineNumber: line.lineNumber,
@@ -2992,5 +3169,796 @@ export class PosService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async updateTableStatus(
+    tx: Prisma.TransactionClient,
+    tableId: string | null,
+    invoiceId: string | null,
+    status: TableStatus | null,
+  ) {
+    if (!tableId) return;
+    if (status) {
+      await tx.posTable.update({
+        where: { id: tableId },
+        data: {
+          status,
+          activeInvoiceId: invoiceId,
+        },
+      });
+    } else {
+      await tx.posTable.update({
+        where: { id: tableId },
+        data: {
+          status: TableStatus.AVAILABLE,
+          activeInvoiceId: null,
+        },
+      });
+    }
+  }
+
+  private async createOrUpdateKitchenOrder(
+    tx: Prisma.TransactionClient,
+    invoiceId: string,
+    dto: CompletePosSaleDto | HoldPosSaleDto | SavePosDraftDto,
+  ) {
+    if (!dto.orderType) return;
+
+    // Resolve waiter name and table name if available
+    let waiterName: string | null = null;
+    if (dto.waiterId) {
+      const waiter = await tx.user.findUnique({
+        where: { id: dto.waiterId },
+        select: { name: true },
+      });
+      waiterName = waiter?.name || null;
+    }
+
+    let tableName: string | null = null;
+    if (dto.tableId) {
+      const table = await tx.posTable.findUnique({
+        where: { id: dto.tableId },
+        select: { tableNumber: true },
+      });
+      tableName = table?.tableNumber || null;
+    }
+
+    const orderNumber = `KOT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Upsert or create KitchenOrder
+    const existing = await tx.kitchenOrder.findUnique({
+      where: { salesInvoiceId: invoiceId },
+    });
+
+    if (existing) {
+      // Delete existing lines and re-create them
+      await tx.kitchenOrderItem.deleteMany({
+        where: { kitchenOrderId: existing.id },
+      });
+
+      await tx.kitchenOrder.update({
+        where: { id: existing.id },
+        data: {
+          tableId: dto.tableId || null,
+          tableName,
+          waiterId: dto.waiterId || null,
+          waiterName,
+          orderType: dto.orderType,
+          notes: dto.description || null,
+          items: {
+            create: dto.lines.map((line) => ({
+              itemId: line.itemId!,
+              itemName: line.itemName || "Item",
+              quantity: new Prisma.Decimal(line.quantity ?? 0),
+              notes: line.description || null,
+              modifiers: line.modifiers || null,
+            })),
+          },
+        },
+      });
+    } else {
+      await tx.kitchenOrder.create({
+        data: {
+          orderNumber,
+          salesInvoiceId: invoiceId,
+          tableId: dto.tableId || null,
+          tableName,
+          waiterId: dto.waiterId || null,
+          waiterName,
+          orderType: dto.orderType,
+          notes: dto.description || null,
+          items: {
+            create: dto.lines.map((line) => ({
+              itemId: line.itemId!,
+              itemName: line.itemName || "Item",
+              quantity: new Prisma.Decimal(line.quantity ?? 0),
+              notes: line.description || null,
+              modifiers: line.modifiers || null,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  async transferTable(dto: TransferTableDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_HOLD_SALE", user);
+    const { fromTableId, toTableId } = dto;
+    const fromTable = await this.prisma.posTable.findUnique({
+      where: { id: fromTableId },
+    });
+    if (!fromTable || !fromTable.activeInvoiceId) {
+      throw new BadRequestException("Source table not found or has no active order.");
+    }
+    const toTable = await this.prisma.posTable.findUnique({
+      where: { id: toTableId },
+    });
+    if (!toTable) {
+      throw new BadRequestException("Target table not found.");
+    }
+    if (toTable.activeInvoiceId) {
+      throw new BadRequestException("Target table is already occupied.");
+    }
+
+    const invoiceId = fromTable.activeInvoiceId;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Update the sales invoice tableId
+      await tx.salesInvoice.update({
+        where: { id: invoiceId },
+        data: { tableId: toTableId },
+      });
+
+      // If there is an active KitchenOrder, update its table details
+      const kot = await tx.kitchenOrder.findUnique({
+        where: { salesInvoiceId: invoiceId },
+      });
+      if (kot) {
+        await tx.kitchenOrder.update({
+          where: { id: kot.id },
+          data: {
+            tableId: toTableId,
+            tableName: toTable.tableNumber,
+          },
+        });
+      }
+
+      // Update tables
+      await tx.posTable.update({
+        where: { id: fromTableId },
+        data: {
+          status: TableStatus.AVAILABLE,
+          activeInvoiceId: null,
+        },
+      });
+
+      await tx.posTable.update({
+        where: { id: toTableId },
+        data: {
+          status: TableStatus.OCCUPIED,
+          activeInvoiceId: invoiceId,
+        },
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "PosTable",
+      entityId: toTableId,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Table transferred",
+        fromTableId,
+        toTableId,
+        invoiceId,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async mergeTables(dto: MergeTablesDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_HOLD_SALE", user);
+    const { sourceTableIds, targetTableId } = dto;
+    const targetTable = await this.prisma.posTable.findUnique({
+      where: { id: targetTableId },
+    });
+    if (!targetTable) {
+      throw new BadRequestException("Target table not found.");
+    }
+
+    let targetInvoiceId = targetTable.activeInvoiceId;
+
+    await this.prisma.$transaction(async (tx) => {
+      const sourceInvoices: any[] = [];
+      for (const sourceId of sourceTableIds) {
+        const t = await tx.posTable.findUnique({ where: { id: sourceId } });
+        if (t?.activeInvoiceId) {
+          const inv = await tx.salesInvoice.findUnique({
+            where: { id: t.activeInvoiceId },
+            include: { lines: true },
+          });
+          if (inv) sourceInvoices.push({ tableId: sourceId, invoice: inv });
+        }
+      }
+
+      if (sourceInvoices.length === 0) {
+        throw new BadRequestException("No active orders found on source tables.");
+      }
+
+      let baseInvoice: any = null;
+      if (targetInvoiceId) {
+        baseInvoice = await tx.salesInvoice.findUnique({
+          where: { id: targetInvoiceId },
+          include: { lines: true },
+        });
+      }
+
+      if (!baseInvoice) {
+        const first = sourceInvoices.shift();
+        baseInvoice = first.invoice;
+        targetInvoiceId = baseInvoice.id;
+
+        await tx.salesInvoice.update({
+          where: { id: targetInvoiceId! },
+          data: { tableId: targetTableId },
+        });
+        await tx.posTable.update({
+          where: { id: targetTableId },
+          data: {
+            status: TableStatus.OCCUPIED,
+            activeInvoiceId: targetInvoiceId,
+          },
+        });
+        await tx.posTable.update({
+          where: { id: first.tableId },
+          data: {
+            status: TableStatus.AVAILABLE,
+            activeInvoiceId: null,
+          },
+        });
+      }
+
+      for (const item of sourceInvoices) {
+        const oldInv = item.invoice;
+        for (const line of oldInv.lines) {
+          const match = baseInvoice.lines.find((l: any) => l.itemId === line.itemId);
+          if (match) {
+            await tx.salesInvoiceLine.update({
+              where: { id: match.id },
+              data: {
+                quantity: new Prisma.Decimal(match.quantity).add(new Prisma.Decimal(line.quantity)),
+                lineSubtotalAmount: new Prisma.Decimal(match.lineSubtotalAmount).add(new Prisma.Decimal(line.lineSubtotalAmount)),
+                lineAmount: new Prisma.Decimal(match.lineAmount).add(new Prisma.Decimal(line.lineAmount)),
+              },
+            });
+          } else {
+            await tx.salesInvoiceLine.create({
+              data: {
+                salesInvoiceId: targetInvoiceId!,
+                lineNumber: baseInvoice.lines.length + 1,
+                itemId: line.itemId,
+                itemName: line.itemName,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+                lineSubtotalAmount: line.lineSubtotalAmount,
+                lineAmount: line.lineAmount,
+                discountAmount: line.discountAmount,
+                taxAmount: line.taxAmount,
+                revenueAccountId: line.revenueAccountId,
+                description: line.description,
+              },
+            });
+            baseInvoice.lines.push(line);
+          }
+        }
+
+        await tx.salesInvoiceLine.deleteMany({ where: { salesInvoiceId: oldInv.id } });
+        await tx.kitchenOrder.deleteMany({ where: { salesInvoiceId: oldInv.id } });
+        await tx.salesInvoice.delete({ where: { id: oldInv.id } });
+
+        await tx.posTable.update({
+          where: { id: item.tableId },
+          data: {
+            status: TableStatus.AVAILABLE,
+            activeInvoiceId: null,
+          },
+        });
+      }
+
+      const updatedLines = await tx.salesInvoiceLine.findMany({
+        where: { salesInvoiceId: targetInvoiceId! },
+      });
+      let subtotal = new Prisma.Decimal(0);
+      let tax = new Prisma.Decimal(0);
+      for (const l of updatedLines) {
+         subtotal = subtotal.add(l.lineSubtotalAmount);
+         tax = tax.add(l.taxAmount);
+      }
+      const total = subtotal.add(tax).add(baseInvoice.serviceChargeAmount || 0).add(baseInvoice.deliveryFeeAmount || 0);
+
+      await tx.salesInvoice.update({
+        where: { id: targetInvoiceId! },
+        data: {
+          subtotalAmount: subtotal,
+          taxAmount: tax,
+          totalAmount: total,
+          outstandingAmount: total,
+        },
+      });
+
+      const allLines = updatedLines.map((l) => ({
+        itemId: l.itemId,
+        itemName: l.itemName,
+        quantity: Number(l.quantity),
+        description: l.description,
+      }));
+      await this.createOrUpdateKitchenOrder(tx, targetInvoiceId!, {
+        sessionId: baseInvoice.sessionId,
+        orderType: baseInvoice.orderType || OrderType.DINE_IN,
+        tableId: targetTableId,
+        waiterId: baseInvoice.waiterId,
+        description: baseInvoice.description,
+        lines: allLines,
+      } as any);
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "PosTable",
+      entityId: targetTableId,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Tables merged",
+        sourceTableIds,
+        targetTableId,
+        invoiceId: targetInvoiceId,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async splitTable(dto: SplitTableDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_HOLD_SALE", user);
+    const { tableId, lines } = dto;
+    const table = await this.prisma.posTable.findUnique({
+      where: { id: tableId },
+    });
+    if (!table || !table.activeInvoiceId) {
+      throw new BadRequestException("Table not found or has no active order.");
+    }
+
+    const originalInvoiceId = table.activeInvoiceId;
+    let newInvoiceId = "";
+
+    await this.prisma.$transaction(async (tx) => {
+      const originalInvoice = await tx.salesInvoice.findUnique({
+        where: { id: originalInvoiceId },
+        include: { lines: true },
+      });
+      if (!originalInvoice) {
+        throw new BadRequestException("Original invoice not found.");
+      }
+
+      const invoiceNumber = `INV-SPLIT-${Date.now()}`;
+      const newInvoice = await tx.salesInvoice.create({
+        data: {
+          reference: invoiceNumber,
+          invoiceDate: new Date(),
+          dueDate: new Date(),
+          status: originalInvoice.status,
+          posOperationalStatus: originalInvoice.posOperationalStatus,
+          posAccountingStatus: originalInvoice.posAccountingStatus,
+          invoiceType: originalInvoice.invoiceType,
+          posSessionId: originalInvoice.posSessionId,
+          customerId: originalInvoice.customerId,
+          currencyCode: originalInvoice.currencyCode,
+          waiterId: originalInvoice.waiterId,
+          orderType: originalInvoice.orderType,
+          subtotalAmount: 0,
+          discountAmount: 0,
+          taxAmount: 0,
+          totalAmount: 0,
+          outstandingAmount: 0,
+        },
+      });
+      newInvoiceId = newInvoice.id;
+
+      let splitSubtotal = new Prisma.Decimal(0);
+      let splitTax = new Prisma.Decimal(0);
+
+      for (const splitLine of lines) {
+        const originalLine = originalInvoice.lines.find((l) => l.itemId === splitLine.itemId);
+        if (!originalLine) continue;
+
+        const splitQty = new Prisma.Decimal(splitLine.quantity);
+        const remainingQty = new Prisma.Decimal(originalLine.quantity).sub(splitQty);
+
+        if (remainingQty.lt(0)) {
+          throw new BadRequestException(`Cannot split more quantity than exists for item ${splitLine.itemId}`);
+        }
+
+        const unitPrice = new Prisma.Decimal(originalLine.unitPrice);
+        const originalQty = new Prisma.Decimal(originalLine.quantity);
+        const taxRate = originalQty.gt(0)
+          ? new Prisma.Decimal(originalLine.taxAmount).div(originalQty.mul(unitPrice))
+          : new Prisma.Decimal(0);
+
+        const splitLineSubtotal = splitQty.mul(unitPrice);
+        const splitLineTax = splitLineSubtotal.mul(taxRate);
+        const splitLineTotal = splitLineSubtotal.add(splitLineTax);
+
+        await tx.salesInvoiceLine.create({
+          data: {
+            salesInvoiceId: newInvoiceId,
+            lineNumber: lines.indexOf(splitLine) + 1,
+            itemId: originalLine.itemId,
+            itemName: originalLine.itemName,
+            quantity: splitQty,
+            unitPrice: originalLine.unitPrice,
+            lineSubtotalAmount: splitLineSubtotal,
+            lineAmount: splitLineTotal,
+            discountAmount: 0,
+            taxAmount: splitLineTax,
+            revenueAccountId: originalLine.revenueAccountId,
+            description: originalLine.description,
+          },
+        });
+
+        splitSubtotal = splitSubtotal.add(splitLineSubtotal);
+        splitTax = splitTax.add(splitLineTax);
+
+        if (remainingQty.eq(0)) {
+          await tx.salesInvoiceLine.delete({ where: { id: originalLine.id } });
+        } else {
+          const remainingLineSubtotal = remainingQty.mul(unitPrice);
+          const remainingLineTax = remainingLineSubtotal.mul(taxRate);
+          const remainingLineTotal = remainingLineSubtotal.add(remainingLineTax);
+
+          await tx.salesInvoiceLine.update({
+            where: { id: originalLine.id },
+            data: {
+              quantity: remainingQty,
+              lineSubtotalAmount: remainingLineSubtotal,
+              lineAmount: remainingLineTotal,
+              taxAmount: remainingLineTax,
+            },
+          });
+        }
+      }
+
+      await tx.salesInvoice.update({
+        where: { id: newInvoiceId },
+        data: {
+          subtotalAmount: splitSubtotal,
+          taxAmount: splitTax,
+          totalAmount: splitSubtotal.add(splitTax),
+          outstandingAmount: splitSubtotal.add(splitTax),
+        },
+      });
+
+      const remainingLines = await tx.salesInvoiceLine.findMany({
+        where: { salesInvoiceId: originalInvoiceId },
+      });
+      let origSubtotal = new Prisma.Decimal(0);
+      let origTax = new Prisma.Decimal(0);
+      for (const rl of remainingLines) {
+        origSubtotal = origSubtotal.add(rl.lineSubtotalAmount);
+        origTax = origTax.add(rl.taxAmount);
+      }
+      const origTotal = origSubtotal.add(origTax).add(originalInvoice.serviceChargeAmount || 0).add(originalInvoice.deliveryFeeAmount || 0);
+
+      await tx.salesInvoice.update({
+        where: { id: originalInvoiceId },
+        data: {
+          subtotalAmount: origSubtotal,
+          taxAmount: origTax,
+          totalAmount: origTotal,
+          outstandingAmount: origTotal,
+        },
+      });
+
+      const allOrig = remainingLines.map((l) => ({
+        itemId: l.itemId,
+        itemName: l.itemName,
+        quantity: Number(l.quantity),
+        description: l.description,
+      }));
+      await this.createOrUpdateKitchenOrder(tx, originalInvoiceId, {
+        posSessionId: originalInvoice.posSessionId,
+        orderType: originalInvoice.orderType || OrderType.DINE_IN,
+        tableId,
+        waiterId: originalInvoice.waiterId,
+        description: originalInvoice.description,
+        lines: allOrig,
+      } as any);
+
+      const allSplit = lines.map((l) => {
+        const originalLine = originalInvoice.lines.find((ol) => ol.itemId === l.itemId);
+        return {
+          itemId: l.itemId,
+          itemName: originalLine?.itemName || "Item",
+          quantity: l.quantity,
+        };
+      });
+      await this.createOrUpdateKitchenOrder(tx, newInvoiceId, {
+        posSessionId: originalInvoice.posSessionId,
+        orderType: originalInvoice.orderType || OrderType.DINE_IN,
+        tableId: null,
+        waiterId: originalInvoice.waiterId,
+        lines: allSplit,
+      } as any);
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "PosTable",
+      entityId: tableId,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Table bill split",
+        tableId,
+        originalInvoiceId,
+        newInvoiceId,
+      },
+    });
+
+    return { success: true, originalInvoiceId, newInvoiceId };
+  }
+
+  async correctOrderType(id: string, dto: CorrectOrderTypeDto, user?: AuthorizedUser) {
+    if (
+      !this.hasPosPermissionCode("POS_CORRECT_ORDER_TYPE", user) &&
+      !this.hasPosPermissionCode("POS_APPROVE_ACCOUNTING", user)
+    ) {
+      throw new BadRequestException("You do not have permission for POS_CORRECT_ORDER_TYPE.");
+    }
+    const invoice = await this.prisma.salesInvoice.findUnique({
+      where: { id },
+    });
+    if (!invoice) {
+      throw new BadRequestException(`Invoice ${id} was not found.`);
+    }
+    if (invoice.posAccountingStatus === PosAccountingStatus.POSTED) {
+      throw new BadRequestException("Cannot correct order type of a posted invoice. Reversal is required first.");
+    }
+
+    const originalOrderType = invoice.orderType;
+    const originalTableId = invoice.tableId;
+
+    if (dto.orderType === OrderType.DINE_IN && !dto.tableId?.trim()) {
+      throw new BadRequestException("A table is required when correcting to DINE_IN.");
+    }
+
+    let deliveryCompanyId: string | null = null;
+    if (dto.deliveryCompanyId?.trim()) {
+      const company = await this.prisma.deliveryCompany.findUnique({
+        where: { id: dto.deliveryCompanyId.trim(), isActive: true },
+      });
+      if (!company) {
+        throw new BadRequestException(`Delivery company ${dto.deliveryCompanyId} was not found or is inactive.`);
+      }
+      deliveryCompanyId = company.id;
+    }
+
+    let driverId: string | null = null;
+    if (dto.driverId?.trim()) {
+      const driver = await this.prisma.deliveryDriver.findUnique({
+        where: { id: dto.driverId.trim(), isActive: true },
+      });
+      if (!driver) {
+        throw new BadRequestException(`Delivery driver ${dto.driverId} was not found or is inactive.`);
+      }
+      driverId = driver.id;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const serviceCharge = new Prisma.Decimal(dto.serviceChargeAmount ?? invoice.serviceChargeAmount ?? 0);
+      const deliveryFee = new Prisma.Decimal(dto.deliveryFeeAmount ?? invoice.deliveryFeeAmount ?? 0);
+
+      const subtotal = new Prisma.Decimal(invoice.subtotalAmount);
+      const tax = new Prisma.Decimal(invoice.taxAmount);
+      const total = subtotal.add(tax).add(serviceCharge).add(deliveryFee);
+
+      const nextTableId = dto.orderType === OrderType.DINE_IN ? dto.tableId?.trim() || null : null;
+      if (originalTableId && originalTableId !== nextTableId) {
+        await tx.posTable.update({
+          where: { id: originalTableId },
+          data: {
+            status: TableStatus.AVAILABLE,
+            activeInvoiceId: null,
+          },
+        });
+      }
+      if (nextTableId) {
+        const targetTable = await tx.posTable.findUnique({ where: { id: nextTableId } });
+        if (!targetTable) {
+          throw new BadRequestException(`Table ${nextTableId} was not found.`);
+        }
+        if (targetTable.activeInvoiceId && targetTable.activeInvoiceId !== id) {
+          throw new BadRequestException("Selected table already has an active order.");
+        }
+        await tx.posTable.update({
+          where: { id: nextTableId },
+          data: {
+            status: TableStatus.OCCUPIED,
+            activeInvoiceId: id,
+          },
+        });
+      }
+
+      await tx.salesInvoice.update({
+        where: { id },
+        data: {
+          orderType: dto.orderType,
+          tableId: nextTableId,
+          deliveryCompanyId: dto.orderType === OrderType.DELIVERY ? deliveryCompanyId : null,
+          driverId: dto.orderType === OrderType.DELIVERY ? driverId : null,
+          serviceChargeAmount: serviceCharge,
+          deliveryFeeAmount: deliveryFee,
+          deliveryStatus: dto.orderType === OrderType.DELIVERY ? DeliveryStatus.PENDING : null,
+          totalAmount: total,
+          outstandingAmount: total,
+          originalOrderType: originalOrderType,
+          correctionReason: dto.reason,
+          isCorrected: true,
+          correctedAt: new Date(),
+          correctedByUserId: user?.userId || null,
+        },
+      });
+
+      const kot = await tx.kitchenOrder.findUnique({
+        where: { salesInvoiceId: id },
+      });
+      if (kot) {
+        let tableName: string | null = null;
+        if (nextTableId) {
+          const t = await tx.posTable.findUnique({ where: { id: nextTableId } });
+          tableName = t?.tableNumber || null;
+        }
+        await tx.kitchenOrder.update({
+          where: { id: kot.id },
+          data: {
+            orderType: dto.orderType,
+            tableId: nextTableId,
+            tableName,
+          },
+        });
+      }
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "SalesInvoice",
+      entityId: id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Invoice order type corrected",
+        invoiceId: id,
+        originalOrderType,
+        newOrderType: dto.orderType,
+        tableId: dto.tableId ?? null,
+        deliveryCompanyId,
+        driverId,
+        reason: dto.reason,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async auditKotReprint(id: string, dto: ReprintKotDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_COMPLETE_SALE", user);
+    const kot = await this.prisma.kitchenOrder.findUnique({
+      where: { id },
+    });
+    if (!kot) {
+      throw new BadRequestException(`Kitchen order ${id} not found.`);
+    }
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "KitchenOrder",
+      entityId: id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Kitchen order ticket (KOT) reprinted",
+        kotId: id,
+        reason: dto.reason,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async listDeliveryCompanies(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    return this.prisma.deliveryCompany.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async listDeliveryDrivers(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    return this.prisma.deliveryDriver.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async assignDriver(id: string, driverId: string | null, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    const invoice = await this.prisma.salesInvoice.findUnique({ where: { id } });
+    if (!invoice) throw new BadRequestException(`Invoice ${id} not found.`);
+    if (invoice.orderType !== OrderType.DELIVERY) {
+      throw new BadRequestException("Drivers can only be assigned to delivery orders.");
+    }
+
+    let resolvedDriverId: string | null = null;
+    if (driverId?.trim()) {
+      const driver = await this.prisma.deliveryDriver.findUnique({
+        where: { id: driverId.trim(), isActive: true },
+      });
+      if (!driver) {
+        throw new BadRequestException(`Delivery driver ${driverId} was not found or is inactive.`);
+      }
+      resolvedDriverId = driver.id;
+    }
+
+    await this.prisma.salesInvoice.update({
+      where: { id },
+      data: { driverId: resolvedDriverId },
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "SalesInvoice",
+      entityId: id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Driver assigned to delivery invoice",
+        driverId: resolvedDriverId,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async updateDeliveryStatus(id: string, status: DeliveryStatus, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    const invoice = await this.prisma.salesInvoice.findUnique({ where: { id } });
+    if (!invoice) throw new BadRequestException(`Invoice ${id} not found.`);
+    if (invoice.orderType !== OrderType.DELIVERY) {
+      throw new BadRequestException("Delivery status can only be updated for delivery orders.");
+    }
+
+    await this.prisma.salesInvoice.update({
+      where: { id },
+      data: { deliveryStatus: status },
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "SalesInvoice",
+      entityId: id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Delivery status updated",
+        status,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async listWaiters(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    return this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    });
   }
 }

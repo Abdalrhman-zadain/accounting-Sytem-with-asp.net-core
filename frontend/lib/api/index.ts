@@ -140,7 +140,14 @@ import {
   PosReportsOverview,
   PosSalesByItemRow,
   PosSettings,
+  PosTable,
   PosReturn,
+  KitchenOrder,
+  DeliveryCompany,
+  DeliveryDriver,
+  DeliveryStatus,
+  PosWaiter,
+  CorrectPosOrderTypePayload,
   FixedAsset,
   FixedAssetAcquisition,
   FixedAssetCategory,
@@ -2426,6 +2433,14 @@ export async function getPosSessions(token?: string | null) {
   return apiRequest<PosSession[]>("/pos/sessions", { token });
 }
 
+export async function getPosTables(token?: string | null) {
+  return apiRequest<PosTable[]>("/pos/tables", { token });
+}
+
+export async function getPosKitchenOrders(token?: string | null) {
+  return apiRequest<KitchenOrder[]>("/pos/kitchen/orders", { token });
+}
+
 export async function openPosSession(
   payload: {
     warehouseId: string;
@@ -2676,6 +2691,129 @@ export async function getPosTaxSummaryReport(token?: string | null) {
 export async function reprintPosReceipt(id: string, token?: string | null) {
   return apiRequest<PosCompleteSaleResponse>(`/pos/sales/${id}/reprint`, {
     method: "POST",
+    token,
+  });
+}
+
+export async function transferPosTable(
+  fromTableId: string,
+  toTableId: string,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>("/pos/tables/transfer", {
+    method: "POST",
+    body: JSON.stringify({ fromTableId, toTableId }),
+    token,
+  });
+}
+
+export async function mergePosTables(
+  sourceTableIds: string[],
+  targetTableId: string,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>("/pos/tables/merge", {
+    method: "POST",
+    body: JSON.stringify({ sourceTableIds, targetTableId }),
+    token,
+  });
+}
+
+export async function splitPosTable(
+  tableId: string,
+  lines: { itemId: string; quantity: number }[],
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean; originalInvoiceId: string; newInvoiceId: string }>(
+    "/pos/tables/split",
+    {
+      method: "POST",
+      body: JSON.stringify({ tableId, lines }),
+      token,
+    },
+  );
+}
+
+export async function correctPosOrderType(
+  id: string,
+  payload: CorrectPosOrderTypePayload,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>(`/pos/sales/${id}/correct-order-type`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function reprintKot(
+  id: string,
+  reason: string,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>(`/pos/kitchen/orders/${id}/reprint`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+    token,
+  });
+}
+
+export async function getDeliveryCompanies(token?: string | null) {
+  return apiRequest<DeliveryCompany[]>("/pos/delivery/companies", { token });
+}
+
+export async function getDeliveryDrivers(token?: string | null) {
+  return apiRequest<DeliveryDriver[]>("/pos/delivery/drivers", { token });
+}
+
+export async function assignDriver(
+  id: string,
+  driverId: string | null,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>(`/pos/sales/${id}/assign-driver`, {
+    method: "POST",
+    body: JSON.stringify({ driverId }),
+    token,
+  });
+}
+
+export async function updateDeliveryStatus(
+  id: string,
+  status: DeliveryStatus,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>(`/pos/sales/${id}/delivery-status`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+    token,
+  });
+}
+
+export async function getPosWaiters(token?: string | null) {
+  return apiRequest<PosWaiter[]>("/pos/waiters", { token });
+}
+
+export async function updateKitchenOrderStatus(
+  id: string,
+  status: string,
+  token?: string | null,
+) {
+  return apiRequest<any>(`/pos/kitchen/orders/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+    token,
+  });
+}
+
+export async function updateKitchenOrderItemStatus(
+  itemId: string,
+  status: string,
+  token?: string | null,
+) {
+  return apiRequest<any>(`/pos/kitchen/items/${itemId}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
     token,
   });
 }

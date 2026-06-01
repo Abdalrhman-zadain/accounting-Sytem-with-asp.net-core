@@ -433,6 +433,176 @@ export async function seedPosRegisterDemo(
     },
   });
 
+  // --- RESTAURANT POS SEEDING ---
+  
+  // Helper to create accounts if missing
+  const createAccountIfMissing = async (
+    code: string,
+    name: string,
+    nameAr: string,
+    type: string,
+    subtype: string,
+    parentId: string,
+  ) => {
+    let acc = await prisma.account.findUnique({ where: { code } });
+    if (!acc) {
+      acc = await prisma.account.create({
+        data: {
+          code,
+          name,
+          nameAr,
+          type: type as any,
+          subtype,
+          isPosting: true,
+          isActive: true,
+          parentAccountId: parentId,
+          createdById: options.adminUserId,
+        },
+      });
+    }
+    return acc;
+  };
+
+  // Find parent accounts for classification
+  const tradeReceivablesParent = await prisma.account.findUniqueOrThrow({
+    where: { code: '1121000' },
+  });
+
+  
+  const talabatAcc = await createAccountIfMissing(
+    '1121002',
+    'Talabat Receivable',
+    'ذمم طلبات',
+    'ASSET',
+    'Receivable',
+    tradeReceivablesParent.id,
+  );
+  const careemAcc = await createAccountIfMissing(
+    '1121003',
+    'Careem Receivable',
+    'ذمم كريم',
+    'ASSET',
+    'Receivable',
+    tradeReceivablesParent.id,
+  );
+  const jahezAcc = await createAccountIfMissing(
+    '1121004',
+    'Jahez Receivable',
+    'ذمم جاهز',
+    'ASSET',
+    'Receivable',
+    tradeReceivablesParent.id,
+  );
+  const commissionAcc = await createAccountIfMissing(
+    '5100003',
+    'Delivery Commission Expense',
+    'مصروف عمولات التوصيل',
+    'EXPENSE',
+    'Expense',
+    operatingExpenses.id,
+  );
+
+  // Create/Upsert Delivery Companies
+  const deliveryCompanies = [
+    {
+      id: 'dc_talabat',
+      name: 'Talabat',
+      arabicName: 'طلبات',
+      receivableAccountId: talabatAcc.id,
+      commissionRate: 15.00,
+      commissionAccountId: commissionAcc.id,
+    },
+    {
+      id: 'dc_careem',
+      name: 'Careem',
+      arabicName: 'كريم',
+      receivableAccountId: careemAcc.id,
+      commissionRate: 12.00,
+      commissionAccountId: commissionAcc.id,
+    },
+    {
+      id: 'dc_jahez',
+      name: 'Jahez',
+      arabicName: 'جاهز',
+      receivableAccountId: jahezAcc.id,
+      commissionRate: 18.00,
+      commissionAccountId: commissionAcc.id,
+    },
+  ];
+
+  for (const dc of deliveryCompanies) {
+    await prisma.deliveryCompany.upsert({
+      where: { name: dc.name },
+      update: {
+        arabicName: dc.arabicName,
+        receivableAccountId: dc.receivableAccountId,
+        commissionRate: new Prisma.Decimal(dc.commissionRate),
+        commissionAccountId: dc.commissionAccountId,
+        isActive: true,
+      },
+      create: {
+        id: dc.id,
+        name: dc.name,
+        arabicName: dc.arabicName,
+        receivableAccountId: dc.receivableAccountId,
+        commissionRate: new Prisma.Decimal(dc.commissionRate),
+        commissionAccountId: dc.commissionAccountId,
+        isActive: true,
+      },
+    });
+  }
+
+  // Create standard restaurant Tables
+  const restaurantTables = [
+    { tableNumber: 'T1', capacity: 2 },
+    { tableNumber: 'T2', capacity: 4 },
+    { tableNumber: 'T3', capacity: 4 },
+    { tableNumber: 'T4', capacity: 6 },
+    { tableNumber: 'T5', capacity: 8 },
+    { tableNumber: 'T6', capacity: 2 },
+  ];
+
+  for (const tbl of restaurantTables) {
+    await prisma.posTable.upsert({
+      where: { tableNumber: tbl.tableNumber },
+      update: {
+        capacity: tbl.capacity,
+        status: 'AVAILABLE',
+      },
+      create: {
+        tableNumber: tbl.tableNumber,
+        capacity: tbl.capacity,
+        status: 'AVAILABLE',
+      },
+    });
+  }
+
+  // Create Delivery Drivers
+  const deliveryDrivers = [
+    { id: 'drv_samer', name: 'Samer Jaber / سامر جابر', phone: '+962790000010' },
+    { id: 'drv_tareq', name: 'Tareq Omar / طارق عمر', phone: '+962790000011' },
+  ];
+
+  for (const drv of deliveryDrivers) {
+    await prisma.deliveryDriver.upsert({
+      where: { id: drv.id },
+      update: {
+        name: drv.name,
+        phone: drv.phone,
+        isActive: true,
+      },
+      create: {
+        id: drv.id,
+        name: drv.name,
+        phone: drv.phone,
+        isActive: true,
+      },
+    });
+  }
+
+  // -------------------------------------
+
+
   for (const itemId of favoriteItemIds) {
     try {
       await prisma.posUserFavoriteItem.upsert({

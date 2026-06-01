@@ -80,6 +80,7 @@ type ResolvedLine = {
   taxAmount: number;
   lineSubtotalAmount: number;
   lineTotalAmount: number;
+  modifiers?: any;
 };
 
 export type ResolvedSalesLine = ResolvedLine;
@@ -1692,9 +1693,9 @@ export class SalesReceivablesService {
       if (!invoice) {
         throw new BadRequestException("Linked invoice was not found.");
       }
-      if (Number(note.totalAmount) > Number(invoice.totalAmount)) {
+      if (Number(note.totalAmount) > Number(invoice.outstandingAmount)) {
         throw new BadRequestException(
-          "Credit note amount cannot exceed the referenced invoice amount.",
+          "Credit note amount cannot exceed the referenced invoice outstanding balance.",
         );
       }
     }
@@ -2839,6 +2840,7 @@ export class SalesReceivablesService {
         taxAmount: Number(computedTaxAmount.toFixed(2)),
         lineSubtotalAmount: Number(lineSubtotalAmount.toFixed(2)),
         lineTotalAmount: taxId ? Number((lineSubtotalAmount + computedTaxAmount).toFixed(2)) : finalLineTotalAmount,
+        modifiers: rawLine.modifiers || null,
       });
     }
 
@@ -2916,6 +2918,7 @@ export class SalesReceivablesService {
       lineSubtotalAmount: this.toAmount(line.lineSubtotalAmount),
       lineAmount: this.toAmount(line.lineTotalAmount),
       revenueAccountId: line.revenueAccountId!,
+      modifiers: line.modifiers || null,
     };
   }
 
@@ -4088,121 +4091,191 @@ export class SalesReceivablesService {
     const enforceNonNegative = policyBlocksNegative && !options?.allowNegativeStockIssue;
 
     for (const line of invoice.lines) {
-      if (!line.itemId || !this.lineTracksInventory(line.item)) {
+      if (!line.itemId) {
         continue;
       }
+
+      // Check if a recipe exists for this item
+      const recipe = await tx.restaurantRecipe.findUnique({
+        where: { itemId: line.itemId },
+        include: {
+          ingredients: {
+            include: {
+              ingredientItem: true,
+            },
+          },
+        },
+      });
+
+      const reliefTargets: Array<{
+        itemId: string;
+        quantity: Prisma.Decimal;
+        item: {
+          id: string;
+          code: string;
+          name: string;
+          type: string;
+          trackInventory: boolean;
+          inventoryAccountId: string | null;
+          cogsAccountId: string | null;
+          isActive: boolean;
+        };
+      }> = [];
+
+      if (recipe && recipe.ingredients.length > 0) {
+        for (const ingredient of recipe.ingredients) {
+          if (ingredient.ingredientItem.trackInventory) {
+            reliefTargets.push({
+              itemId: ingredient.ingredientItemId,
+              quantity: new Prisma.Decimal(ingredient.quantity.toString()).mul(line.quantity),
+              item: {
+                id: ingredient.ingredientItem.id,
+                code: ingredient.ingredientItem.code,
+                name: ingredient.ingredientItem.name,
+                type: ingredient.ingredientItem.type,
+                trackInventory: ingredient.ingredientItem.trackInventory,
+                inventoryAccountId: ingredient.ingredientItem.inventoryAccountId,
+                cogsAccountId: ingredient.ingredientItem.cogsAccountId,
+                isActive: ingredient.ingredientItem.isActive,
+              },
+            });
+          }
+        }
+      } else if (line.item && this.lineTracksInventory(line.item)) {
+        reliefTargets.push({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          item: {
+            id: line.item.id,
+            code: line.item.code,
+            name: line.item.name,
+            type: line.item.type,
+            trackInventory: line.item.trackInventory,
+            inventoryAccountId: line.item.inventoryAccountId,
+            cogsAccountId: line.item.cogsAccountId,
+            isActive: line.item.isActive,
+          },
+        });
+      }
+
+      if (reliefTargets.length === 0) {
+        continue;
+      }
+
       if (!line.warehouseId) {
         throw new BadRequestException(
           `Warehouse is required for inventory item line ${line.lineNumber}.`,
         );
       }
-      if (!line.item?.inventoryAccountId || !line.item.cogsAccountId) {
-        throw new BadRequestException(
-          `Item ${line.item?.code ?? line.itemId} requires inventory and COGS accounts before invoice posting.`,
+
+      for (const target of reliefTargets) {
+        if (!target.item.inventoryAccountId || !target.item.cogsAccountId) {
+          throw new BadRequestException(
+            `Item ${target.item.code} requires inventory and COGS accounts before invoice posting.`,
+          );
+        }
+
+        const existingMovement = await tx.inventoryStockMovement.findFirst({
+          where: {
+            transactionType: "SalesInvoice",
+            transactionLineId: line.id,
+            itemId: target.itemId,
+          },
+          select: { id: true },
+        });
+        if (existingMovement) {
+          continue;
+        }
+
+        const currentBalance = await tx.inventoryWarehouseBalance.findUnique({
+          where: {
+            itemId_warehouseId: {
+              itemId: target.itemId,
+              warehouseId: line.warehouseId,
+            },
+          },
+        });
+        const currentQuantity = currentBalance?.onHandQuantity ?? new Prisma.Decimal(0);
+        const currentValuation = currentBalance?.valuationAmount ?? new Prisma.Decimal(0);
+
+        if (enforceNonNegative && currentQuantity.lt(target.quantity)) {
+          throw new BadRequestException(
+            `Item ${target.item.code} does not have enough available stock in the selected warehouse for line ${line.lineNumber}.`,
+          );
+        }
+
+        const fallbackUnitCost = this.inventoryPostingService.averageUnitCost(
+          currentQuantity,
+          currentValuation,
         );
-      }
-
-      const existingMovement = await tx.inventoryStockMovement.findFirst({
-        where: {
-          transactionType: "SalesInvoice",
-          transactionLineId: line.id,
-        },
-        select: { id: true },
-      });
-      if (existingMovement) {
-        continue;
-      }
-
-      const currentBalance = await tx.inventoryWarehouseBalance.findUnique({
-        where: {
-          itemId_warehouseId: {
-            itemId: line.itemId,
-            warehouseId: line.warehouseId,
-          },
-        },
-      });
-      const currentQuantity = currentBalance?.onHandQuantity ?? new Prisma.Decimal(0);
-      const currentValuation =
-        currentBalance?.valuationAmount ?? new Prisma.Decimal(0);
-
-      if (enforceNonNegative && currentQuantity.lt(line.quantity)) {
-        throw new BadRequestException(
-          `Item ${line.item.code} does not have enough available stock in the selected warehouse for line ${line.lineNumber}.`,
-        );
-      }
-
-      const fallbackUnitCost = this.inventoryPostingService.averageUnitCost(
-        currentQuantity,
-        currentValuation,
-      );
-      const valuation = await this.inventoryPostingService.resolveIssueCost({
-        tx,
-        itemId: line.itemId,
-        warehouseId: line.warehouseId,
-        quantity: line.quantity,
-        fallbackUnitCost,
-        reference: invoice.reference,
-        sourceType: "SalesInvoice",
-        sourceId: invoice.id,
-        sourceLineId: line.id,
-        sourceDate: invoice.invoiceDate,
-        costingMethod,
-      });
-
-      await tx.inventoryItem.update({
-        where: { id: line.itemId },
-        data: {
-          onHandQuantity: {
-            decrement: line.quantity,
-          },
-          valuationAmount: {
-            decrement: valuation.totalAmount,
-          },
-        },
-      });
-
-      const warehouseBalance =
-        await this.inventoryPostingService.applyWarehouseBalance(tx, {
-          itemId: line.itemId,
+        const valuation = await this.inventoryPostingService.resolveIssueCost({
+          tx,
+          itemId: target.itemId,
           warehouseId: line.warehouseId,
-          quantityDelta: line.quantity.neg(),
+          quantity: target.quantity,
+          fallbackUnitCost,
+          reference: invoice.reference,
+          sourceType: "SalesInvoice",
+          sourceId: invoice.id,
+          sourceLineId: line.id,
+          sourceDate: invoice.invoiceDate,
+          costingMethod,
+        });
+
+        await tx.inventoryItem.update({
+          where: { id: target.itemId },
+          data: {
+            onHandQuantity: {
+              decrement: target.quantity,
+            },
+            valuationAmount: {
+              decrement: valuation.totalAmount,
+            },
+          },
+        });
+
+        const warehouseBalance = await this.inventoryPostingService.applyWarehouseBalance(tx, {
+          itemId: target.itemId,
+          warehouseId: line.warehouseId,
+          quantityDelta: target.quantity.neg(),
           valueDelta: valuation.totalAmount.neg(),
         });
 
-      await this.inventoryPostingService.createMovement(tx, {
-        movementType: InventoryStockMovementType.SALES_ISSUE,
-        transactionType: "SalesInvoice",
-        transactionId: invoice.id,
-        transactionLineId: line.id,
-        transactionReference: invoice.reference,
-        transactionDate: invoice.invoiceDate,
-        itemId: line.itemId,
-        warehouseId: line.warehouseId,
-        quantityIn: new Prisma.Decimal(0),
-        quantityOut: line.quantity,
-        unitCost: valuation.unitCost,
-        valueIn: new Prisma.Decimal(0),
-        valueOut: valuation.totalAmount,
-        balanceId: warehouseBalance.id,
-        runningQuantity: warehouseBalance.onHandQuantity,
-        runningValuation: warehouseBalance.valuationAmount,
-        description: line.description ?? invoice.description,
-      });
+        await this.inventoryPostingService.createMovement(tx, {
+          movementType: InventoryStockMovementType.SALES_ISSUE,
+          transactionType: "SalesInvoice",
+          transactionId: invoice.id,
+          transactionLineId: line.id,
+          transactionReference: invoice.reference,
+          transactionDate: invoice.invoiceDate,
+          itemId: target.itemId,
+          warehouseId: line.warehouseId,
+          quantityIn: new Prisma.Decimal(0),
+          quantityOut: target.quantity,
+          unitCost: valuation.unitCost,
+          valueIn: new Prisma.Decimal(0),
+          valueOut: valuation.totalAmount,
+          balanceId: warehouseBalance.id,
+          runningQuantity: warehouseBalance.onHandQuantity,
+          runningValuation: warehouseBalance.valuationAmount,
+          description: line.description ?? invoice.description,
+        });
 
-      const amount = Number(valuation.totalAmount.toFixed(2));
-      if (amount > 0) {
-        accountingLines.push({
-          accountId: line.item.cogsAccountId,
-          description: `COGS ${invoice.reference}`,
-          debitAmount: amount,
-          creditAmount: 0,
-        });
-        accountingLines.push({
-          accountId: line.item.inventoryAccountId,
-          description: `Inventory relief ${invoice.reference}`,
-          debitAmount: 0,
-          creditAmount: amount,
-        });
+        const amount = Number(valuation.totalAmount.toFixed(2));
+        if (amount > 0) {
+          accountingLines.push({
+            accountId: target.item.cogsAccountId,
+            description: `COGS ${invoice.reference}`,
+            debitAmount: amount,
+            creditAmount: 0,
+          });
+          accountingLines.push({
+            accountId: target.item.inventoryAccountId,
+            description: `Inventory relief ${invoice.reference}`,
+            debitAmount: 0,
+            creditAmount: amount,
+          });
+        }
       }
     }
 
