@@ -520,42 +520,91 @@ export function PosReviewWorkspace({
           {activeTab === "overview" && (
             <div className="space-y-6">
               {/* Detailed metrics tiles */}
-              <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
-                  <span className="text-lg font-bold text-[#233329]">{selectedSession.openingCash}</span>
-                </Card>
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
-                  <span className="text-lg font-bold text-[#233329]">{selectedSession.expectedCash}</span>
-                </Card>
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.actualCash", "الكاش الفعلي")}</span>
-                  <span className="text-lg font-bold text-[#233329]">{selectedSession.actualCash || "—"}</span>
-                </Card>
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
-                  <span
-                    className={cn(
-                      "text-lg font-bold",
-                      Number(selectedSession.difference) < 0
-                        ? "text-red-600"
-                        : Number(selectedSession.difference) > 0
-                        ? "text-emerald-600"
-                        : "text-[#233329]",
-                    )}
-                  >
-                    {selectedSession.difference || "—"}
-                  </span>
-                </Card>
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.totalSales", "صافي المبيعات")}</span>
-                  <span className="text-lg font-bold text-[#233329]">{selectedSession.totalSales || "0.00"}</span>
-                </Card>
-                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.invoices", "عدد الفواتير")}</span>
-                  <span className="text-lg font-bold text-[#233329]">{selectedSession.invoiceCount ?? 0}</span>
-                </Card>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {/* 1. الرصيد الافتتاحي */}
+                <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                  <div className="space-y-1 text-right">
+                    <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
+                    <span className="block text-xl font-bold text-gray-900">{selectedSession.openingCash}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 text-slate-600">
+                    <LuCalculator size={20} />
+                  </div>
+                </div>
+
+                {/* 2. الكاش المتوقع */}
+                <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                  <div className="space-y-1 text-right">
+                    <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
+                    <span className="block text-xl font-bold text-gray-900">{selectedSession.expectedCash}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
+                    <LuDollarSign size={20} />
+                  </div>
+                </div>
+
+                {/* 3. الكاش الفعلي */}
+                <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                  <div className="space-y-1 text-right">
+                    <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.actualCash", "الكاش الفعلي")}</span>
+                    <span className="block text-xl font-bold text-gray-900">{selectedSession.actualCash || "—"}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+                    <LuCreditCard size={20} />
+                  </div>
+                </div>
+
+                {/* 4. فارق الكاش */}
+                {(() => {
+                  const diffVal = Number(selectedSession.difference || 0);
+                  const hasDifference = diffVal !== 0;
+                  return (
+                    <div className={cn(
+                      "flex items-center justify-between rounded-2xl border p-5 shadow-sm transition hover:shadow-md",
+                      hasDifference
+                        ? "border-red-100 bg-red-50/20 hover:border-red-200"
+                        : "border-gray-100 bg-white hover:border-gray-200"
+                    )}>
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
+                        <span className={cn(
+                          "block text-xl font-bold",
+                          hasDifference ? "text-red-600" : "text-[#233329]"
+                        )}>
+                          {selectedSession.difference || "—"}
+                        </span>
+                      </div>
+                      <div className={cn(
+                        "p-3 rounded-xl",
+                        hasDifference ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-600"
+                      )}>
+                        <LuCircleAlert size={20} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 5. صافي المبيعات */}
+                <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                  <div className="space-y-1 text-right">
+                    <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.sessions.totalSales", "صافي المبيعات")}</span>
+                    <span className="block text-xl font-bold text-gray-900">{selectedSession.totalSales || "0.00"}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
+                    <LuTag size={20} />
+                  </div>
+                </div>
+
+                {/* 6. عدد الفواتير */}
+                <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                  <div className="space-y-1 text-right">
+                    <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.sessions.invoices", "عدد الفواتير")}</span>
+                    <span className="block text-xl font-bold text-gray-900">{selectedSession.invoiceCount ?? 0}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
+                    <LuFileText size={20} />
+                  </div>
+                </div>
               </div>
 
               {/* Note / Notes if present */}
@@ -649,42 +698,91 @@ export function PosReviewWorkspace({
             <div className="space-y-6">
               {report ? (
                 <>
-                  <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
-                      <span className="text-lg font-bold text-[#233329]">{report.openingCash}</span>
-                    </Card>
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashSales", "مبيعات الكاش")}</span>
-                      <span className="text-lg font-bold text-[#233329]">{report.cashSales}</span>
-                    </Card>
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashRefunds", "مرتجعات الكاش")}</span>
-                      <span className="text-lg font-bold text-[#233329]">{report.cashRefunds}</span>
-                    </Card>
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
-                      <span className="text-lg font-bold text-[#233329]">{report.expectedCash}</span>
-                    </Card>
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.actualCash", "الكاش الفعلي المعدود")}</span>
-                      <span className="text-lg font-bold text-[#233329]">{report.actualCash ?? "—"}</span>
-                    </Card>
-                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                      <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
-                      <span
-                        className={cn(
-                          "text-lg font-bold",
-                          Number(report.difference) < 0
-                            ? "text-red-600"
-                            : Number(report.difference) > 0
-                            ? "text-emerald-600"
-                            : "text-[#233329]",
-                        )}
-                      >
-                        {report.difference ?? "—"}
-                      </span>
-                    </Card>
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                    {/* 1. الرصيد الافتتاحي */}
+                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.openingCash", "الرصيد الافتتاحي")}</span>
+                        <span className="block text-xl font-bold text-gray-900">{report.openingCash}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-50 text-slate-600">
+                        <LuCalculator size={20} />
+                      </div>
+                    </div>
+
+                    {/* 2. مبيعات الكاش */}
+                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.cashSales", "مبيعات الكاش")}</span>
+                        <span className="block text-xl font-bold text-gray-900">{report.cashSales}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
+                        <LuDollarSign size={20} />
+                      </div>
+                    </div>
+
+                    {/* 3. مرتجعات الكاش */}
+                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.cashRefunds", "مرتجعات الكاش")}</span>
+                        <span className="block text-xl font-bold text-gray-900">{report.cashRefunds}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-rose-50 text-rose-600">
+                        <LuX size={20} />
+                      </div>
+                    </div>
+
+                    {/* 4. الكاش المتوقع */}
+                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.expectedCash", "الكاش المتوقع")}</span>
+                        <span className="block text-xl font-bold text-gray-900">{report.expectedCash}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+                        <LuCreditCard size={20} />
+                      </div>
+                    </div>
+
+                    {/* 5. الكاش الفعلي المعدود */}
+                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-200">
+                      <div className="space-y-1 text-right">
+                        <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.actualCash", "الكاش الفعلي المعدود")}</span>
+                        <span className="block text-xl font-bold text-gray-900">{report.actualCash ?? "—"}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
+                        <LuCheck size={20} />
+                      </div>
+                    </div>
+
+                    {/* 6. فارق الكاش */}
+                    {(() => {
+                      const diffVal = Number(report.difference || 0);
+                      const hasDifference = diffVal !== 0;
+                      return (
+                        <div className={cn(
+                          "flex items-center justify-between rounded-2xl border p-5 shadow-sm transition hover:shadow-md",
+                          hasDifference
+                            ? "border-red-100 bg-red-50/20 hover:border-red-200"
+                            : "border-gray-100 bg-white hover:border-gray-200"
+                        )}>
+                          <div className="space-y-1 text-right">
+                            <span className="block text-xs font-semibold text-gray-500">{getTranslation("pos.review.cashDifference", "فارق الكاش")}</span>
+                            <span className={cn(
+                              "block text-xl font-bold",
+                              hasDifference ? "text-red-600" : "text-[#233329]"
+                            )}>
+                              {report.difference ?? "—"}
+                            </span>
+                          </div>
+                          <div className={cn(
+                            "p-3 rounded-xl",
+                            hasDifference ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-600"
+                          )}>
+                            <LuCircleAlert size={20} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Payments mix breakdown */}
