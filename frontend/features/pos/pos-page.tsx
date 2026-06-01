@@ -1149,8 +1149,15 @@ export function PosPage() {
   });
 
   const approveSessionReviewMutation = useMutation({
-    mutationFn: (sessionId: string) =>
-      approvePosSessionAccounting(sessionId, {}, token),
+    mutationFn: ({
+      sessionId,
+      decision,
+      reason,
+    }: {
+      sessionId: string;
+      decision?: string;
+      reason?: string;
+    }) => approvePosSessionAccounting(sessionId, { decision, reason }, token),
     onSuccess: async (response) => {
       await refreshPosData();
       pushMessage(
@@ -4073,8 +4080,8 @@ export function PosPage() {
         isCorrectOrderTypeOpen={isCorrectOrderTypeOpen}
         journalEntries={reviewJournalEntriesQuery.data ?? []}
         onApproveReview={(saleId) => approveReviewMutation.mutate(saleId)}
-        onApproveSessionReview={(sessionId) =>
-          approveSessionReviewMutation.mutate(sessionId)
+        onApproveSessionReview={(sessionId, decision, reason) =>
+          approveSessionReviewMutation.mutate({ sessionId, decision, reason })
         }
         onAssignDriver={(saleId, driverId) =>
           assignDriverMutation.mutate({ saleId, driverId })

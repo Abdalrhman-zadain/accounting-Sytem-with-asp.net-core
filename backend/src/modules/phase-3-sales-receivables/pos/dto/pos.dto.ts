@@ -186,6 +186,14 @@ export class PosReviewDecisionDto {
   @IsString()
   @Length(0, 255)
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  decision?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class PosReverseAccountingDto {

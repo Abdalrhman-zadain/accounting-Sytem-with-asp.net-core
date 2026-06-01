@@ -5,6 +5,7 @@ import { Card, Modal } from "@/components/ui";
 import { Input } from "@/components/ui/forms";
 import { DetailTile } from "@/features/pos/pos-detail-cards";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 import type {
   DeliveryCompany,
   DeliveryDriver,
@@ -63,7 +64,7 @@ type PosReviewWorkspaceProps = {
   isCorrectOrderTypeOpen: boolean;
   journalEntries: JournalEntry[];
   onApproveReview: (saleId: string) => void;
-  onApproveSessionReview: (sessionId: string) => void;
+  onApproveSessionReview: (sessionId: string, decision?: string, reason?: string) => void;
   onAssignDriver: (saleId: string, driverId: string | null) => void;
   onCloseCorrectionModal: () => void;
   onCorrectionDeliveryCompanyIdChange: (value: string) => void;
@@ -136,6 +137,11 @@ export function PosReviewWorkspace({
   savingCorrection,
 }: PosReviewWorkspaceProps) {
   // Local filter states
+  const { user } = useAuth();
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
+  const [diffDecision, setDiffDecision] = useState("ACCEPT");
+  const [diffReason, setDiffReason] = useState("");
+
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -434,26 +440,42 @@ export function PosReviewWorkspace({
             {/* Bulk approve/reject triggers */}
             {selectedSession.accountingStatus === "PENDING_REVIEW" && (
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onApproveSessionReview(selectedSession.id);
-                    setSelectedSession(null);
-                  }}
-                  className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md"
-                >
-                  {getTranslation("pos.review.approveSession", "اعتماد وترحيل الوردية")}
-                </button>
-                {onRejectSessionReview && (
+                {Number(selectedSession.difference || 0) === 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onApproveSessionReview(selectedSession.id);
+                        setSelectedSession(null);
+                      }}
+                      className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md"
+                    >
+                      {getTranslation("pos.review.approveSession", "اعتماد وترحيل الوردية")}
+                    </button>
+                    {onRejectSessionReview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRejectSessionReview(selectedSession.id);
+                          setSelectedSession(null);
+                        }}
+                        className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                      >
+                        {getTranslation("pos.review.reject", "رفض الوردية")}
+                      </button>
+                    )}
+                  </>
+                ) : (
                   <button
                     type="button"
                     onClick={() => {
-                      onRejectSessionReview(selectedSession.id);
-                      setSelectedSession(null);
+                      setDiffDecision("ACCEPT");
+                      setDiffReason("");
+                      setIsDiffModalOpen(true);
                     }}
-                    className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                    className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
                   >
-                    {getTranslation("pos.review.reject", "رفض الوردية")}
+                    مراجعة فرق الكاش
                   </button>
                 )}
               </div>
@@ -888,6 +910,129 @@ export function PosReviewWorkspace({
             </div>
           )}
         </Card>
+
+        {/* Cash Discrepancy Resolution Modal */}
+        <Modal
+          isOpen={isDiffModalOpen}
+          onClose={() => setIsDiffModalOpen(false)}
+          title="قبول فرق الصندوق"
+          size="md"
+        >
+          {selectedSession && (
+            <div className="space-y-4 text-start" dir="rtl">
+              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm">
+                <div>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">المبلغ المتوقع (الكاش)</span>
+                  <span className="text-base font-bold text-[#233329]">
+                    {Number(selectedSession.expectedCash || 0).toFixed(2)} JOD
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">المبلغ الفعلي (الفعلي)</span>
+                  <span className="text-base font-bold text-[#233329]">
+                    {Number(selectedSession.actualCash || 0).toFixed(2)} JOD
+                  </span>
+                </div>
+                <div className="col-span-2 border-t border-gray-200 pt-3">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">الفارق</span>
+                  <span className={cn(
+                    "text-lg font-black",
+                    Number(selectedSession.difference || 0) < 0 ? "text-red-600" : "text-emerald-600"
+                  )}>
+                    {Number(selectedSession.difference || 0).toFixed(2)} JOD
+                    <span className="text-xs font-bold mr-2 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                      {Number(selectedSession.difference || 0) < 0 ? "عجز" : "زيادة"}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Resolution Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">اتخاذ القرار</label>
+                  <select
+                    value={diffDecision}
+                    onChange={(e) => setDiffDecision(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 p-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#46644b]"
+                  >
+                    <option value="ACCEPT">قبول الفرق</option>
+                    <option value="CORRECTION">طلب تصحيح</option>
+                    <option value="REJECT">رفض الوردية</option>
+                    <option value="REOPEN">إعادة فتح الوردية</option>
+                  </select>
+                </div>
+
+                {/* Warning message if above tolerance and not a manager */}
+                {(() => {
+                  const diffVal = Math.abs(Number(selectedSession.difference || 0));
+                  const tolerance = Number(process.env.NEXT_PUBLIC_POS_CASH_TOLERANCE) || 10.0;
+                  const isManagerOrAdmin = user?.role === "ADMIN" || user?.role === "MANAGER";
+                  if (diffDecision === "ACCEPT" && diffVal > tolerance && !isManagerOrAdmin) {
+                    return (
+                      <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3 flex items-start gap-2">
+                        <LuCircleAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>فرق الصندوق أعلى من الحد المسموح ({tolerance} JOD) ويتطلب موافقة مدير.</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    السبب / الملاحظات <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={diffReason}
+                    onChange={(e) => setDiffReason(e.target.value)}
+                    rows={3}
+                    placeholder="يرجى إدخال تفاصيل القرار المتخذ وسبب القبول أو الرفض..."
+                    className="w-full rounded-xl border border-gray-200 p-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#46644b]"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsDiffModalOpen(false)}
+                    className="rounded-full border border-gray-200 bg-white px-5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    disabled={(() => {
+                      if (!diffReason.trim()) return true;
+                      const diffVal = Math.abs(Number(selectedSession.difference || 0));
+                      const tolerance = Number(process.env.NEXT_PUBLIC_POS_CASH_TOLERANCE) || 10.0;
+                      const isManagerOrAdmin = user?.role === "ADMIN" || user?.role === "MANAGER";
+                      if (diffDecision === "ACCEPT" && diffVal > tolerance && !isManagerOrAdmin) {
+                        return true;
+                      }
+                      return false;
+                    })()}
+                    onClick={() => {
+                      onApproveSessionReview(selectedSession.id, diffDecision, diffReason);
+                      setIsDiffModalOpen(false);
+                      setSelectedSession(null);
+                    }}
+                    className={cn(
+                      "rounded-full px-5 py-2 text-xs font-bold text-white transition shadow-md",
+                      diffDecision === "ACCEPT" ? "bg-[#46644b] hover:bg-[#39523d]" :
+                      diffDecision === "CORRECTION" ? "bg-amber-600 hover:bg-amber-700" :
+                      diffDecision === "REJECT" ? "bg-red-600 hover:bg-red-700" :
+                      "bg-blue-600 hover:bg-blue-700"
+                    )}
+                  >
+                    تأكيد القرار
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
 
         {/* Compact Read-only Invoice Details Modal */}
         <Modal
@@ -1445,20 +1590,37 @@ export function PosReviewWorkspace({
 
                           {isPending && (
                             <>
-                              <button
-                                type="button"
-                                onClick={() => onApproveSessionReview(session.id)}
-                                className="rounded-full bg-[#46644b] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#39523d] transition"
-                              >
-                                {getTranslation("pos.review.approve", "اعتماد")}
-                              </button>
-                              {onRejectSessionReview && (
+                              {Number(session.difference || 0) === 0 ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => onApproveSessionReview(session.id)}
+                                    className="rounded-full bg-[#46644b] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#39523d] transition"
+                                  >
+                                    {getTranslation("pos.review.approve", "اعتماد")}
+                                  </button>
+                                  {onRejectSessionReview && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onRejectSessionReview(session.id)}
+                                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                                    >
+                                      {getTranslation("pos.review.reject", "رفض")}
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
                                 <button
                                   type="button"
-                                  onClick={() => onRejectSessionReview(session.id)}
-                                  className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                                  onClick={() => {
+                                    setSelectedSession(session);
+                                    setDiffDecision("ACCEPT");
+                                    setDiffReason("");
+                                    setIsDiffModalOpen(true);
+                                  }}
+                                  className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition"
                                 >
-                                  {getTranslation("pos.review.reject", "رفض")}
+                                  مراجعة الفرق
                                 </button>
                               )}
                             </>

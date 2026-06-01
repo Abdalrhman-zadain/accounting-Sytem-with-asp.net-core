@@ -2563,7 +2563,7 @@ export async function approvePosAccounting(
 
 export async function approvePosSessionAccounting(
   id: string,
-  payload: { notes?: string } = {},
+  payload: { notes?: string; decision?: string; reason?: string } = {},
   token?: string | null,
 ) {
   return apiRequest<PosSessionAccountingApprovalResponse>(

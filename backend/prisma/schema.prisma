@@ -2425,6 +2425,15 @@ model PosSession {
   submittedByUserId String?
   submittedByUser   User?            @relation("SessionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
 
+  // Accountant Decision fields
+  differenceStatus  String?  // e.g. "ACCEPTED_DIFFERENCE"
+  reviewStatus      String?  // e.g. "APPROVED", "CORRECTION_REQUESTED", "REJECTED"
+  acceptedByUserId  String?
+  acceptedByUser    User?            @relation("SessionAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  acceptedAt        DateTime?
+  acceptanceReason  String?
+  rejectionReason   String?
+
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -2868,6 +2877,7 @@ model User {
   invoicesServed                      SalesInvoice[]                 @relation("InvoiceWaiter")
   correctedInvoices                   SalesInvoice[]                 @relation("InvoiceCorrector")
   submittedSessions                   PosSession[]                   @relation("SessionSubmitter")
+  acceptedSessions                    PosSession[]                   @relation("SessionAcceptor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

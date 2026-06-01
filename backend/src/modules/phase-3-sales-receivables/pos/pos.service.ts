@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  ForbiddenException,
 } from "@nestjs/common";
 import {
   AllocationStatus,
@@ -1002,6 +1003,20 @@ export class PosService {
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
     }
+
+    if (sale.posSessionId) {
+      const session = await this.prisma.posSession.findUnique({
+        where: { id: sale.posSessionId },
+        select: { difference: true, differenceStatus: true },
+      });
+      if (session) {
+        const diffVal = Number(session.difference || 0);
+        if (diffVal !== 0 && session.differenceStatus !== "ACCEPTED_DIFFERENCE") {
+          throw new BadRequestException("لا يمكن ترحيل القيود المحاسبية لهذه الوردية لوجود فارق كاش لم يتم قبوله بعد.");
+        }
+      }
+    }
+
     if (sale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
       throw new BadRequestException("Only completed POS sales can be posted accounting-wise.");
     }
@@ -1044,10 +1059,168 @@ export class PosService {
     this.ensurePosPermissionCode("POS_POST_BY_SESSION", user);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
-      select: { id: true, sessionNumber: true },
+      select: {
+        id: true,
+        sessionNumber: true,
+        difference: true,
+        expectedCash: true,
+        actualCash: true,
+        status: true,
+        differenceStatus: true,
+        reviewStatus: true,
+      },
     });
     if (!session) {
       throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+
+    const diffVal = Number(session.difference || 0);
+
+    // If there is a cash difference and no differenceStatus exists yet:
+    if (diffVal !== 0 && session.differenceStatus !== "ACCEPTED_DIFFERENCE") {
+      if (!dto.decision) {
+        throw new BadRequestException("يجب مراجعة فارق الكاش أولاً واتخاذ قرار بشأنه.");
+      }
+
+      if (dto.decision === "ACCEPT") {
+        const absDiff = Math.abs(diffVal);
+        const tolerance = Number(process.env.POS_CASH_TOLERANCE) || 10.0;
+        const isManagerOrAdmin = user?.role === "ADMIN" || user?.role === "MANAGER";
+        
+        if (absDiff > tolerance && !isManagerOrAdmin) {
+          throw new ForbiddenException("فرق الصندوق أعلى من الحد المسموح ويتطلب موافقة مدير.");
+        }
+
+        if (!dto.reason || !dto.reason.trim()) {
+          throw new BadRequestException("يجب إدخال سبب قبول فارق الكاش.");
+        }
+
+        await this.prisma.posSession.update({
+          where: { id },
+          data: {
+            differenceStatus: "ACCEPTED_DIFFERENCE",
+            reviewStatus: "APPROVED",
+            acceptedByUserId: user?.userId ?? null,
+            acceptedAt: new Date(),
+            acceptanceReason: dto.reason.trim(),
+          },
+        });
+      } else if (dto.decision === "CORRECTION") {
+        await this.prisma.posSession.update({
+          where: { id },
+          data: {
+            reviewStatus: "CORRECTION_REQUESTED",
+            rejectionReason: dto.reason?.trim() || null,
+          },
+        });
+        
+        await this.auditService.log({
+          userId: user?.userId,
+          entity: "PosSession",
+          entityId: session.id,
+          action: AuditAction.UPDATE,
+          details: {
+            sessionId: session.id,
+            sessionNumber: session.sessionNumber,
+            expectedCash: session.expectedCash,
+            actualCash: session.actualCash,
+            cashDifference: session.difference,
+            decision: dto.decision,
+            reason: dto.reason?.trim() || null,
+            decidedBy: user?.username,
+            decidedAt: new Date(),
+          },
+        });
+
+        return {
+          sessionId: session.id,
+          sessionNumber: session.sessionNumber,
+          approvedCount: 0,
+          sales: [],
+          reviewStatus: "CORRECTION_REQUESTED",
+        };
+      } else if (dto.decision === "REJECT") {
+        if (!dto.reason || !dto.reason.trim()) {
+          throw new BadRequestException("يجب إدخال سبب رفض الوردية.");
+        }
+        await this.prisma.posSession.update({
+          where: { id },
+          data: {
+            reviewStatus: "REJECTED",
+            rejectionReason: dto.reason.trim(),
+          },
+        });
+
+        await this.auditService.log({
+          userId: user?.userId,
+          entity: "PosSession",
+          entityId: session.id,
+          action: AuditAction.UPDATE,
+          details: {
+            sessionId: session.id,
+            sessionNumber: session.sessionNumber,
+            expectedCash: session.expectedCash,
+            actualCash: session.actualCash,
+            cashDifference: session.difference,
+            decision: dto.decision,
+            reason: dto.reason.trim(),
+            decidedBy: user?.username,
+            decidedAt: new Date(),
+          },
+        });
+
+        return {
+          sessionId: session.id,
+          sessionNumber: session.sessionNumber,
+          approvedCount: 0,
+          sales: [],
+          reviewStatus: "REJECTED",
+        };
+      } else if (dto.decision === "REOPEN") {
+        await this.prisma.posSession.update({
+          where: { id },
+          data: {
+            status: "OPEN",
+            closedAt: null,
+            actualCash: null,
+            difference: null,
+            reviewStatus: null,
+            differenceStatus: null,
+            acceptedByUserId: null,
+            acceptedAt: null,
+            acceptanceReason: null,
+            rejectionReason: null,
+          },
+        });
+
+        await this.auditService.log({
+          userId: user?.userId,
+          entity: "PosSession",
+          entityId: session.id,
+          action: AuditAction.UPDATE,
+          details: {
+            sessionId: session.id,
+            sessionNumber: session.sessionNumber,
+            expectedCash: session.expectedCash,
+            actualCash: session.actualCash,
+            cashDifference: session.difference,
+            decision: dto.decision,
+            reason: dto.reason?.trim() || null,
+            decidedBy: user?.username,
+            decidedAt: new Date(),
+          },
+        });
+
+        return {
+          sessionId: session.id,
+          sessionNumber: session.sessionNumber,
+          approvedCount: 0,
+          sales: [],
+          status: "OPEN",
+        };
+      } else {
+        throw new BadRequestException("القرار غير صالح.");
+      }
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -1103,9 +1276,17 @@ export class PosService {
       entityId: session.id,
       action: AuditAction.POST,
       details: {
+        sessionId: session.id,
         sessionNumber: session.sessionNumber,
         approvedSalesCount: result.length,
         notes: dto.notes?.trim() || null,
+        expectedCash: session.expectedCash,
+        actualCash: session.actualCash,
+        cashDifference: session.difference,
+        decision: dto.decision || "NORMAL_APPROVE",
+        reason: dto.reason || null,
+        decidedBy: user?.username,
+        decidedAt: new Date(),
       },
     });
 
