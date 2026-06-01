@@ -257,7 +257,7 @@ export function BankCashAccountsPage({ headerTabs }: { headerTabs?: ReactNode })
           isOpen={!!selectedId}
           onClose={() => setSelectedId(null)}
           title={t("bankCash.title")}
-          size="4xl"
+          size="7xl"
         >
           <div className="max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
             <BankCashAccountDetails

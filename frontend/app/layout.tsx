@@ -66,9 +66,10 @@ export default async function RootLayout({
       className={`${inter.variable} antialiased bg-[#f5f5f5]`}
     >
       <body suppressHydrationWarning className="font-sans selection:bg-primary/30">
-        <Script id="app-language-init" strategy="beforeInteractive">
-          {getLanguageInitScript(initialLanguage)}
-        </Script>
+        <script
+          id="app-language-init"
+          dangerouslySetInnerHTML={{ __html: getLanguageInitScript(initialLanguage) }}
+        />
         <AppProviders initialLanguage={initialLanguage}>
           <AppShell>{children}</AppShell>
         </AppProviders>
