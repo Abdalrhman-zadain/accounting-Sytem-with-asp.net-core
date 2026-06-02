@@ -560,6 +560,12 @@ export async function seedPosRegisterDemo(
     { tableNumber: 'T4', capacity: 6 },
     { tableNumber: 'T5', capacity: 8 },
     { tableNumber: 'T6', capacity: 2 },
+    { tableNumber: 'T7', capacity: 4 },
+    { tableNumber: 'T8', capacity: 4 },
+    { tableNumber: 'T9', capacity: 6 },
+    { tableNumber: 'T10', capacity: 6 },
+    { tableNumber: 'T11', capacity: 8 },
+    { tableNumber: 'T12', capacity: 10 },
   ];
 
   for (const tbl of restaurantTables) {

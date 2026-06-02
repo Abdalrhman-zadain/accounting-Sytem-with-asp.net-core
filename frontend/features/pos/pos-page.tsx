@@ -595,15 +595,11 @@ function buildReceiptHtml(receipt: CompletedReceipt) {
         </style>
       </head>
       <body>
-        <h1>${receipt.companyName}</h1>
-        <h2>${receipt.receiptNumber}</h2>
         <div class="meta">
-          <p>الفرع: ${receipt.branchName || "—"}</p>
           <p>الرقم الضريبي: ${receipt.taxNumber || "—"}</p>
           <p>التاريخ: ${new Date(receipt.soldAt).toLocaleString()}</p>
           <p>الكاشير: ${receipt.cashierName}</p>
           <p>الجهاز: ${receipt.terminalName || "—"}</p>
-          <p>المستودع: ${receipt.warehouseName}</p>
           <p>الدفع: ${receipt.paymentSummary}</p>
         </div>
         <table>
@@ -706,6 +702,7 @@ export function PosPage() {
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
   const messageTimeoutRef = useRef<number | null>(null);
   const resumedSaleRef = useRef<string | null>(null);
+  const resumedTableIdRef = useRef<string | null>(null);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [searchCustomer, setSearchCustomer] = useState("");
@@ -1113,11 +1110,14 @@ export function PosPage() {
   const holdSaleMutation = useMutation({
     mutationFn: (payload: Parameters<typeof holdPosSale>[0]) =>
       holdPosSale(payload, token),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       setEditingInvoiceId(null);
       resetSale();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.savedToHold"));
+      if (variables.tableId) {
+        router.push("/pos/tables");
+      }
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1484,7 +1484,67 @@ export function PosPage() {
   }, [user]);
   const requestedWorkspace = pathnameWorkspaceMap[pathname] ?? searchParams.get("tab");
   const resumeSaleId = searchParams.get("resume");
+  const urlTableId = searchParams.get("tableId");
   const fallbackWorkspace = availableWorkspaceTabs[0]?.id ?? "sales";
+
+  useEffect(() => {
+    if (workspace !== "sales" || !urlTableId || !activeSession?.id) {
+      if (!urlTableId) {
+        resumedTableIdRef.current = null;
+      }
+      return;
+    }
+
+    const isSalesLoaded = heldSalesQuery.isSuccess && draftSalesQuery.isSuccess;
+    if (!isSalesLoaded) {
+      return;
+    }
+
+    if (resumedTableIdRef.current === urlTableId) {
+      return;
+    }
+
+    resumedTableIdRef.current = urlTableId;
+
+    const targetSale = [...draftSales, ...heldSales].find(
+      (row) => row.tableId === urlTableId
+    );
+
+    if (targetSale) {
+      setOrderType("DINE_IN");
+      resumeHeldSale(targetSale.id);
+    } else {
+      setEditingInvoiceId(null);
+      resetSale();
+
+      // We must use queueMicrotask or set these AFTER resetSale
+      // so they don't get overwritten by resetSale's default TAKEOUT state.
+      setTimeout(() => {
+        setOrderType("DINE_IN");
+        setSelectedTableId(urlTableId);
+        
+        const tbl = restaurantTables.find((t) => t.id === urlTableId);
+        if (tbl?.assignedWaiter) {
+          setSelectedWaiterId(tbl.assignedWaiter.id);
+        } else {
+          setSelectedWaiterId(null);
+        }
+      }, 0);
+    }
+
+    startRoutingTransition(() => {
+      router.replace("/pos/register", { scroll: false });
+    });
+  }, [
+    workspace,
+    urlTableId,
+    draftSales,
+    heldSales,
+    activeSession,
+    restaurantTables,
+    heldSalesQuery.isSuccess,
+    draftSalesQuery.isSuccess,
+  ]);
 
   useEffect(() => {
     if (!requestedWorkspace) {
@@ -1500,6 +1560,9 @@ export function PosPage() {
       return;
     }
     if (workspace === requestedWorkspace) return;
+    if (workspace === "sales") {
+      autoSaveCurrentTableOrderIfAny();
+    }
     setWorkspace(requestedWorkspace as PosWorkspace);
   }, [availableWorkspaceTabs, fallbackWorkspace, requestedWorkspace, router, workspace]);
 
@@ -2239,6 +2302,27 @@ export function PosPage() {
     setReturnPayments((current) => current.filter((entry) => entry.id !== entryId));
   };
 
+  const autoSaveCurrentTableOrderIfAny = async (tableIdToExclude?: string | null) => {
+    if (orderType === "DINE_IN" && selectedTableId && cartLines.length > 0) {
+      if (tableIdToExclude && selectedTableId === tableIdToExclude) {
+        return;
+      }
+      try {
+        await holdSaleMutation.mutateAsync({
+          sessionId: activeSession?.id ?? "",
+          invoiceId: editingInvoiceId ?? undefined,
+          customerId: selectedCustomerId || undefined,
+          description: search || undefined,
+          ...buildRestaurantPayload(),
+          lines: buildSaleLinesPayload(),
+          payments: buildPaymentPayload(),
+        });
+      } catch (err) {
+        console.error("Failed to auto-save table order:", err);
+      }
+    }
+  };
+
   const holdSale = () => {
     if (!sessionState.isOpen) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
@@ -2884,9 +2968,20 @@ export function PosPage() {
                     onOpenTableSelector={() => setIsTableSelectorOpen(true)}
                     onOpenTransferTable={() => setIsTransferTableOpen(true)}
                     onOrderTypeChange={setOrderType}
-                    onSelectTable={(tableId, waiterId) => {
+                    onSelectTable={async (tableId, waiterId) => {
+                      if (selectedTableId && selectedTableId !== tableId) {
+                        await autoSaveCurrentTableOrderIfAny(tableId);
+                      }
                       setSelectedTableId(tableId);
                       setSelectedWaiterId(waiterId);
+                    }}
+                    onBackToTables={async () => {
+                      await autoSaveCurrentTableOrderIfAny();
+                      setSelectedTableId(null);
+                      setSelectedWaiterId(null);
+                      setEditingInvoiceId(null);
+                      resetSale();
+                      router.push("/pos/tables");
                     }}
                     onServiceChargeChange={(value) =>
                       setServiceChargeAmount(parseAmount(value))
@@ -3006,9 +3101,9 @@ export function PosPage() {
                   </div>
                 ) : null}
 
-                <div className="sticky bottom-0 space-y-3 border-t border-[#edf1ef] bg-white px-3.5 py-3">
-                  <div className="rounded-[8px] bg-[#f7f9f8] p-3">
-                    <div className="grid gap-2">
+                <div className="sticky bottom-0 space-y-4 border-t border-[#edf1ef] bg-white px-3.5 py-4">
+                  <div className="rounded-[17px] bg-[#f7f9f8] p-4">
+                    <div className="grid gap-3">
                       <TotalRow
                         label={t("pos.sales.totalSubtotal")}
                         value={formatCurrency(
@@ -3281,14 +3376,6 @@ export function PosPage() {
                             placeholder={getLocalizedText("Amount / المبلغ", language)}
                             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                           />
-                          <Input
-                            value={entry.reference}
-                            onChange={(event) =>
-                              updatePaymentEntry(entry.id, { reference: event.target.value })
-                            }
-                            placeholder={getLocalizedText("Reference / المرجع", language)}
-                            className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                          />
                         </div>
                         <button
                           type="button"
@@ -3336,20 +3423,6 @@ export function PosPage() {
                           })
                           : undefined
                       }
-                      className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                    />
-                  </Field>
-                  <Field label={t("pos.sales.paymentReference")} className="mb-0">
-                    <Input
-                      value={singlePaymentEntry?.reference ?? ""}
-                      onChange={(event) =>
-                        singlePaymentEntry
-                          ? updatePaymentEntry(singlePaymentEntry.id, {
-                            reference: event.target.value,
-                          })
-                          : undefined
-                      }
-                      placeholder={t("pos.sales.referencePlaceholder")}
                       className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                     />
                   </Field>
@@ -5550,10 +5623,15 @@ function TotalRow({
         emphasized ? "text-[#223228]" : "text-[#5f6d66]",
       )}
     >
-      <span className={cn("text-[11px] arabic-auto", emphasized && "font-bold")}>
+      <span className={cn("text-[16px] arabic-auto", emphasized && "font-bold text-[16px]")}>
         {label}
       </span>
-      <span className={cn("text-xs font-black", emphasized && "text-sm")}>
+      <span
+        className={cn(
+          "text-[18px] font-black text-[#111827]",
+          emphasized && "text-[22px]",
+        )}
+      >
         {value}
       </span>
     </div>

@@ -1341,6 +1341,7 @@ Object.assign(enTranslations, {
 
 Object.assign(enTranslations, {
   "pos.workspace.sales": "Sales Screen",
+  "pos.workspace.tables": "Dine-In",
   "pos.workspace.sessions": "Shifts",
   "pos.workspace.held": "Held Invoices",
   "pos.workspace.kitchen": "Kitchen Display",

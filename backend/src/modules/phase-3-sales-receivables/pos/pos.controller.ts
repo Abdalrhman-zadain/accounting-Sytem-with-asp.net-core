@@ -121,6 +121,15 @@ export class PosController {
     return this.service.getTaxSummaryReport(req.user);
   }
 
+  @Get("reports/time-window")
+  getTimeWindow(
+    @Req() req: Request & { user?: any },
+    @Query("from") from: string,
+    @Query("to") to: string,
+  ) {
+    return this.service.getTimeWindowReport({ from, to }, req.user);
+  }
+
   @Get("returns")
   listReturns(@Req() req: Request & { user?: any }) {
     return this.service.listReturns(req.user);

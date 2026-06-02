@@ -14,6 +14,27 @@ import {
 import { PosRefundMethod, OrderType, DeliveryStatus, TableStatus, KitchenStatus } from "../../../../generated/prisma";
 import { SalesLineDto } from "../../dto/sales-receivables.dto";
 
+export class CreateTableReservationDto {
+  @IsDateString()
+  reservedFrom!: string;
+
+  @IsDateString()
+  reservedTo!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  notes?: string;
+}
+
+export class CancelTableReservationDto {
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  reason?: string;
+}
+
+
 export class OpenPosSessionDto {
   @IsString()
   warehouseId!: string;
@@ -354,4 +375,14 @@ export class CorrectOrderTypeDto {
 export class ReprintKotDto {
   @IsString()
   reason!: string;
+}
+
+export class CreateTableDto {
+  @IsString()
+  tableNumber!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  capacity!: number;
 }

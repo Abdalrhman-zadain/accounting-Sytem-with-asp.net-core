@@ -3712,6 +3712,15 @@ export type PosTable = {
   tableNumber: string;
   capacity: number;
   status: PosTableStatus;
+  reservations?: Array<{
+    id: string;
+    reservedFrom: string;
+    reservedTo: string;
+    status: "ACTIVE" | "CANCELLED" | "EXPIRED";
+    notes?: string | null;
+    createdByUserId?: string | null;
+    createdAt: string;
+  }>;
   assignedWaiterId?: string | null;
   assignedWaiter?: {
     id: string;
@@ -3754,6 +3763,34 @@ export type PosWaiter = {
   id: string;
   name?: string | null;
   email: string;
+};
+
+export type PosTimeWindowReport = {
+  window: { from: string; to: string };
+  reservations: Array<{
+    id: string;
+    tableId: string;
+    tableNumber: string;
+    reservedFrom: string;
+    reservedTo: string;
+    status: "ACTIVE" | "CANCELLED" | "EXPIRED";
+    notes?: string | null;
+    createdByUserId?: string | null;
+    createdAt: string;
+  }>;
+  sales: Array<{
+    id: string;
+    reference: string;
+    posOperationalStatus?: PosOperationalStatus | null;
+    posAccountingStatus?: PosAccountingStatus | null;
+    orderType?: PosOrderType | null;
+    tableId?: string | null;
+    tableNumber?: string | null;
+    waiter?: { id: string; name?: string | null; email: string } | null;
+    totalAmount: string;
+    posCompletedAt?: string | null;
+    updatedAt: string;
+  }>;
 };
 
 export type KitchenOrder = {

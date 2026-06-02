@@ -66,7 +66,7 @@ export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
 ];
 
 export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
-  CASHIER: ["/pos", "/pos/register", "/pos/session", "/pos/held-sales", "/pos/receipt"],
+  CASHIER: ["/pos", "/pos/register", "/pos/session", "/pos/held-sales", "/pos/receipt", "/pos/tables"],
   ACCOUNTANT: [
     "/dashboard",
     "/accounts",
@@ -80,6 +80,7 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/completed-sales",
     "/pos/reports",
     "/pos/settings",
+    "/pos/tables",
   ],
 };
 

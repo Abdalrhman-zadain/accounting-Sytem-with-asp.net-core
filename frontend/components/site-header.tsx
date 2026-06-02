@@ -32,6 +32,7 @@ import {
   LuClipboardCheck as ClipboardCheck,
   LuUndo2 as Undo2,
   LuChartNoAxesColumn as ChartNoAxesColumn,
+  LuUtensils as Utensils,
 } from "react-icons/lu";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -108,6 +109,7 @@ const navGroups: NavGroup[] = [
         icon: Store,
         children: [
           { href: "/pos/register", labelKey: "pos.workspace.sales", icon: Monitor },
+          { href: "/pos/tables", labelKey: "pos.workspace.tables", icon: Utensils },
           { href: "/pos/sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
           { href: "/pos/held-sales", labelKey: "pos.workspace.held", icon: FileClock },
           { href: "/pos/accounting-review", labelKey: "pos.workspace.review", icon: ClipboardCheck },

@@ -7,7 +7,6 @@ generator client {
 //   provider = "prisma-erd-generator"
 // }
 
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -169,7 +168,7 @@ enum PosPermissionCode {
   POS_CREDIT_SALE
   POS_SELL_NEGATIVE_STOCK
   POS_CHANGE_UNIT_PRICE
-  
+
   // Restaurant POS permissions
   RST_VIEW_TABLE_SCREEN
   RST_OPEN_TABLE_ORDER
@@ -191,7 +190,7 @@ enum PosPermissionCode {
   RST_COMPLETE_RESTAURANT_PAYMENT
   RST_CANCEL_RESTAURANT_ORDER
   RST_VIEW_RESTAURANT_REPORTS
-  
+
   // Correction permissions
   POS_CORRECT_ORDER_TYPE
   POS_APPROVE_CORRECTION
@@ -228,7 +227,6 @@ enum DeliveryStatus {
   DELIVERED
   CANCELLED
 }
-
 
 enum CreditNoteStatus {
   DRAFT
@@ -542,11 +540,10 @@ model Account {
   fixedAssetDisposalExpenseClearingAccounts FixedAssetDisposal[]    @relation("FixedAssetDisposalExpenseClearingAccount")
   taxes                                     Tax[]                   @relation("TaxAccount")
   purchaseDiscountPolicies                  PurchasePolicy[]        @relation("PurchasePolicyDiscountAccount")
-  
-  // Delivery Company relations for Restaurant POS
-  deliveryCompaniesAsReceivable             DeliveryCompany[]       @relation("DeliveryCompanyReceivable")
-  deliveryCompaniesAsCommission             DeliveryCompany[]       @relation("DeliveryCompanyCommission")
 
+  // Delivery Company relations for Restaurant POS
+  deliveryCompaniesAsReceivable DeliveryCompany[] @relation("DeliveryCompanyReceivable")
+  deliveryCompaniesAsCommission DeliveryCompany[] @relation("DeliveryCompanyCommission")
 
   createdById String?
   createdBy   User?   @relation("AccountCreator", fields: [createdById], references: [id])
@@ -739,16 +736,16 @@ model PaymentMethodType {
 }
 
 model Currency {
-  id           String   @id @default(cuid())
-  code         String   @unique // e.g. JOD, USD, EUR
-  name         String?  // e.g. Jordanian Dinar
-  nameAr       String?  // e.g. دينار أردني
-  symbol       String?  // e.g. JD, $
-  decimalPlaces Int     @default(3)
-  isActive     Boolean  @default(true)
-  isBase       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  code          String   @unique // e.g. JOD, USD, EUR
+  name          String? // e.g. Jordanian Dinar
+  nameAr        String? // e.g. دينار أردني
+  symbol        String? // e.g. JD, $
+  decimalPlaces Int      @default(3)
+  isActive      Boolean  @default(true)
+  isBase        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([isActive])
 }
@@ -798,40 +795,40 @@ model TaxTreatment {
 }
 
 model CreditNoteType {
-  id                       String                           @id @default(cuid())
-  code                     String                           @unique
+  id                       String                             @id @default(cuid())
+  code                     String                             @unique
   name                     String
   effect                   CreditNoteTypeEffect
   linkedInvoiceRequirement CreditNoteLinkedInvoiceRequirement
-  affectsInventory         Boolean                          @default(false)
-  allowsTaxAdjustment      Boolean                          @default(false)
+  affectsInventory         Boolean                            @default(false)
+  allowsTaxAdjustment      Boolean                            @default(false)
   defaultAccountId         String
-  defaultAccount           Account                          @relation("CreditNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
+  defaultAccount           Account                            @relation("CreditNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
   helperText               String?
-  isActive                 Boolean                          @default(true)
+  isActive                 Boolean                            @default(true)
   creditNotes              CreditNote[]
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @updatedAt
+  createdAt                DateTime                           @default(now())
+  updatedAt                DateTime                           @updatedAt
 
   @@index([isActive, code])
   @@index([defaultAccountId])
 }
 
 model SupplierDebitNoteType {
-  id                       String                           @id @default(cuid())
-  code                     String                           @unique
+  id                       String                             @id @default(cuid())
+  code                     String                             @unique
   name                     String
   effect                   CreditNoteTypeEffect
   linkedInvoiceRequirement CreditNoteLinkedInvoiceRequirement
-  affectsInventory         Boolean                          @default(false)
-  allowsTaxAdjustment      Boolean                          @default(false)
+  affectsInventory         Boolean                            @default(false)
+  allowsTaxAdjustment      Boolean                            @default(false)
   defaultAccountId         String
-  defaultAccount           Account                          @relation("SupplierDebitNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
+  defaultAccount           Account                            @relation("SupplierDebitNoteTypeDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: Restrict)
   helperText               String?
-  isActive                 Boolean                          @default(true)
+  isActive                 Boolean                            @default(true)
   debitNotes               DebitNote[]
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @updatedAt
+  createdAt                DateTime                           @default(now())
+  updatedAt                DateTime                           @updatedAt
 
   @@index([isActive, code])
   @@index([defaultAccountId])
@@ -892,7 +889,7 @@ model JournalEntry {
   currencyCode String?   @db.VarChar(12)
 
   createdById String?
-  createdBy   User?   @relation("JournalCreator", fields: [createdById], references: [id])
+  createdBy   User?    @relation("JournalCreator", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -901,9 +898,9 @@ model JournalEntry {
   @@index([journalEntryTypeId])
   @@index([sourceType, sourceId])
   @@index([customerId])
-  }
+}
 
-  model Customer {
+model Customer {
   id                   String                @id @default(cuid())
   code                 String                @unique
   name                 String
@@ -929,7 +926,6 @@ model JournalEntry {
   journalEntries       JournalEntry[]        @relation("CustomerToJournalEntry")
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
-
 
   @@index([isActive, name])
   @@index([salesRepId])
@@ -1060,14 +1056,13 @@ model InventoryItem {
   costLayers             InventoryCostLayer[]
   stockMovements         InventoryStockMovement[]
   posFavoriteMarkers     PosUserFavoriteItem[]
-  
-  // Restaurant Recipe relations
-  recipe                 RestaurantRecipe?
-  recipesAsIngredient    RestaurantRecipeIngredient[]
-  
-  createdAt              DateTime                      @default(now())
-  updatedAt              DateTime                      @updatedAt
 
+  // Restaurant Recipe relations
+  recipe              RestaurantRecipe?
+  recipesAsIngredient RestaurantRecipeIngredient[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type, isActive])
   @@index([name])
@@ -1122,19 +1117,18 @@ model InventoryItemCategory {
 }
 
 model InventoryUnitOfMeasure {
-  id               String                        @id @default(cuid())
-  code             String                        @unique
-  name             String
-  description      String?
-  unitType         String?
-  decimalPrecision Int                           @default(0)
-  isActive         Boolean                       @default(true)
-  items            InventoryItem[]
-  itemConversions  InventoryItemUnitConversion[]
+  id                String                        @id @default(cuid())
+  code              String                        @unique
+  name              String
+  description       String?
+  unitType          String?
+  decimalPrecision  Int                           @default(0)
+  isActive          Boolean                       @default(true)
+  items             InventoryItem[]
+  itemConversions   InventoryItemUnitConversion[]
   recipeIngredients RestaurantRecipeIngredient[]
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
 
   @@index([isActive, name])
 }
@@ -2059,28 +2053,28 @@ model PurchaseInvoice {
 }
 
 model PurchaseInvoiceLine {
-  id                 String          @id @default(cuid())
+  id                 String              @id @default(cuid())
   purchaseInvoiceId  String
-  purchaseInvoice    PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  purchaseInvoice    PurchaseInvoice     @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
   lineNumber         Int
   itemId             String?
-  item               InventoryItem?  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item               InventoryItem?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
   warehouseId        String?
   warehouse          InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   itemName           String?
   description        String
-  quantity           Decimal         @default(1) @db.Decimal(18, 4)
-  unitPrice          Decimal         @default(0) @db.Decimal(18, 2)
-  discountAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  quantity           Decimal             @default(1) @db.Decimal(18, 4)
+  unitPrice          Decimal             @default(0) @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
   taxId              String?
-  tax                Tax?            @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  taxAmount          Decimal         @default(0) @db.Decimal(18, 2)
-  lineSubtotalAmount Decimal         @default(0) @db.Decimal(18, 2)
-  lineTotalAmount    Decimal         @default(0) @db.Decimal(18, 2)
+  tax                Tax?                @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  lineSubtotalAmount Decimal             @default(0) @db.Decimal(18, 2)
+  lineTotalAmount    Decimal             @default(0) @db.Decimal(18, 2)
   accountId          String
-  account            Account         @relation("PurchaseInvoiceClassificationAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  account            Account             @relation("PurchaseInvoiceClassificationAccount", fields: [accountId], references: [id], onDelete: Restrict)
   debitNoteLines     DebitNoteLine[]
-  createdAt          DateTime        @default(now())
+  createdAt          DateTime            @default(now())
 
   @@unique([purchaseInvoiceId, lineNumber])
   @@index([itemId])
@@ -2128,27 +2122,27 @@ model SupplierPaymentAllocation {
 }
 
 model DebitNote {
-  id                String           @id @default(cuid())
-  reference         String           @unique
-  status            DebitNoteStatus  @default(DRAFT)
-  noteDate          DateTime
-  supplierId        String
-  supplier          Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  purchaseInvoiceId String?
-  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Restrict)
+  id                      String                @id @default(cuid())
+  reference               String                @unique
+  status                  DebitNoteStatus       @default(DRAFT)
+  noteDate                DateTime
+  supplierId              String
+  supplier                Supplier              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseInvoiceId       String?
+  purchaseInvoice         PurchaseInvoice?      @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Restrict)
   supplierDebitNoteTypeId String
-  supplierDebitNoteType SupplierDebitNoteType @relation(fields: [supplierDebitNoteTypeId], references: [id], onDelete: Restrict)
-  currencyCode      String           @default("JOD")
-  description       String?
-  subtotalAmount    Decimal          @default(0) @db.Decimal(18, 2)
-  taxAmount         Decimal          @default(0) @db.Decimal(18, 2)
-  totalAmount       Decimal          @default(0) @db.Decimal(18, 2)
-  journalEntryId    String?          @unique
-  journalEntry      JournalEntry?    @relation("DebitNoteToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
-  lines             DebitNoteLine[]
-  postedAt          DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  supplierDebitNoteType   SupplierDebitNoteType @relation(fields: [supplierDebitNoteTypeId], references: [id], onDelete: Restrict)
+  currencyCode            String                @default("JOD")
+  description             String?
+  subtotalAmount          Decimal               @default(0) @db.Decimal(18, 2)
+  taxAmount               Decimal               @default(0) @db.Decimal(18, 2)
+  totalAmount             Decimal               @default(0) @db.Decimal(18, 2)
+  journalEntryId          String?               @unique
+  journalEntry            JournalEntry?         @relation("DebitNoteToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  lines                   DebitNoteLine[]
+  postedAt                DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 
   @@index([supplierId, status, noteDate])
   @@index([purchaseInvoiceId])
@@ -2156,41 +2150,41 @@ model DebitNote {
 }
 
 model DebitNoteLine {
-  id              String    @id @default(cuid())
-  debitNoteId     String
-  debitNote       DebitNote @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
-  lineNumber      Int
+  id                    String               @id @default(cuid())
+  debitNoteId           String
+  debitNote             DebitNote            @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
+  lineNumber            Int
   purchaseInvoiceLineId String?
-  purchaseInvoiceLine PurchaseInvoiceLine? @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
-  itemId          String?
-  item            InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  warehouseId     String?
-  warehouse       InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  itemName        String?
-  description     String?
-  quantity        Decimal   @default(1) @db.Decimal(18, 4)
-  unitPrice       Decimal   @default(0) @db.Decimal(18, 2)
-  amount          Decimal   @default(0) @db.Decimal(18, 2)
-  discountAccountId String?
-  discountAccount Account?  @relation("DebitNoteDiscountAccount", fields: [discountAccountId], references: [id], onDelete: Restrict)
-  taxId           String?
-  tax             Tax?      @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  taxAmount       Decimal   @default(0) @db.Decimal(18, 2)
-  originalUnitPrice  Decimal?   @db.Decimal(18, 2)
-  correctedUnitPrice Decimal?   @db.Decimal(18, 2)
-  originalTaxAmount  Decimal?   @db.Decimal(18, 2)
-  correctedTaxAmount Decimal?   @db.Decimal(18, 2)
-  returnToStock   Boolean   @default(false)
-  returnReason    String?
-  itemCondition   String?
-  lineSubtotalAmount Decimal @default(0) @db.Decimal(18, 2)
-  inventoryAccountId String?
-  inventoryAccount Account? @relation("DebitNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
-  unitCost        Decimal?  @db.Decimal(18, 4)
-  totalCost       Decimal?  @db.Decimal(18, 2)
-  reason          String
-  lineTotalAmount Decimal   @default(0) @db.Decimal(18, 2)
-  createdAt       DateTime  @default(now())
+  purchaseInvoiceLine   PurchaseInvoiceLine? @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
+  itemId                String?
+  item                  InventoryItem?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId           String?
+  warehouse             InventoryWarehouse?  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  itemName              String?
+  description           String?
+  quantity              Decimal              @default(1) @db.Decimal(18, 4)
+  unitPrice             Decimal              @default(0) @db.Decimal(18, 2)
+  amount                Decimal              @default(0) @db.Decimal(18, 2)
+  discountAccountId     String?
+  discountAccount       Account?             @relation("DebitNoteDiscountAccount", fields: [discountAccountId], references: [id], onDelete: Restrict)
+  taxId                 String?
+  tax                   Tax?                 @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount             Decimal              @default(0) @db.Decimal(18, 2)
+  originalUnitPrice     Decimal?             @db.Decimal(18, 2)
+  correctedUnitPrice    Decimal?             @db.Decimal(18, 2)
+  originalTaxAmount     Decimal?             @db.Decimal(18, 2)
+  correctedTaxAmount    Decimal?             @db.Decimal(18, 2)
+  returnToStock         Boolean              @default(false)
+  returnReason          String?
+  itemCondition         String?
+  lineSubtotalAmount    Decimal              @default(0) @db.Decimal(18, 2)
+  inventoryAccountId    String?
+  inventoryAccount      Account?             @relation("DebitNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  unitCost              Decimal?             @db.Decimal(18, 4)
+  totalCost             Decimal?             @db.Decimal(18, 2)
+  reason                String
+  lineTotalAmount       Decimal              @default(0) @db.Decimal(18, 2)
+  createdAt             DateTime             @default(now())
 
   @@unique([debitNoteId, lineNumber])
   @@index([purchaseInvoiceLineId])
@@ -2316,78 +2310,77 @@ model SalesOrderLine {
 }
 
 model SalesInvoice {
-  id                 String              @id @default(cuid())
-  reference          String              @unique
-  status             SalesInvoiceStatus  @default(DRAFT)
-  invoiceType        SalesInvoiceType    @default(STANDARD)
-  invoiceDate        DateTime
-  dueDate            DateTime?
-  customerId         String
-  customer           Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  currencyCode       String              @default("JOD")
-  description        String?
-  sourceQuotationId  String?
-  sourceQuotation    SalesQuotation?     @relation("InvoiceSourceQuotation", fields: [sourceQuotationId], references: [id], onDelete: Restrict)
-  sourceSalesOrderId String?
-  sourceSalesOrder   SalesOrder?         @relation("InvoiceSourceSalesOrder", fields: [sourceSalesOrderId], references: [id], onDelete: Restrict)
-  subtotalAmount     Decimal             @default(0) @db.Decimal(18, 2)
-  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
-  taxAmount          Decimal             @default(0) @db.Decimal(18, 2)
-  totalAmount        Decimal             @default(0) @db.Decimal(18, 2)
-  allocatedAmount    Decimal             @default(0) @db.Decimal(18, 2)
-  outstandingAmount  Decimal             @default(0) @db.Decimal(18, 2)
-  allocationStatus   AllocationStatus    @default(UNALLOCATED)
+  id                   String                @id @default(cuid())
+  reference            String                @unique
+  status               SalesInvoiceStatus    @default(DRAFT)
+  invoiceType          SalesInvoiceType      @default(STANDARD)
+  invoiceDate          DateTime
+  dueDate              DateTime?
+  customerId           String
+  customer             Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currencyCode         String                @default("JOD")
+  description          String?
+  sourceQuotationId    String?
+  sourceQuotation      SalesQuotation?       @relation("InvoiceSourceQuotation", fields: [sourceQuotationId], references: [id], onDelete: Restrict)
+  sourceSalesOrderId   String?
+  sourceSalesOrder     SalesOrder?           @relation("InvoiceSourceSalesOrder", fields: [sourceSalesOrderId], references: [id], onDelete: Restrict)
+  subtotalAmount       Decimal               @default(0) @db.Decimal(18, 2)
+  discountAmount       Decimal               @default(0) @db.Decimal(18, 2)
+  taxAmount            Decimal               @default(0) @db.Decimal(18, 2)
+  totalAmount          Decimal               @default(0) @db.Decimal(18, 2)
+  allocatedAmount      Decimal               @default(0) @db.Decimal(18, 2)
+  outstandingAmount    Decimal               @default(0) @db.Decimal(18, 2)
+  allocationStatus     AllocationStatus      @default(UNALLOCATED)
   posOperationalStatus PosOperationalStatus?
   posAccountingStatus  PosAccountingStatus?
   posSessionId         String?
-  posSession           PosSession?          @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
-  posReceiptNumber     String?              @unique
+  posSession           PosSession?           @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
+  posReceiptNumber     String?               @unique
   posCompletedAt       DateTime?
   posVoidedAt          DateTime?
   posVoidReason        String?
   posReviewedAt        DateTime?
   posReviewedByUserId  String?
-  posReviewedByUser    User?                @relation("PosReviewedByUser", fields: [posReviewedByUserId], references: [id], onDelete: SetNull)
+  posReviewedByUser    User?                 @relation("PosReviewedByUser", fields: [posReviewedByUserId], references: [id], onDelete: SetNull)
   posReviewNotes       String?
-  posChangeAmount      Decimal?             @db.Decimal(18, 2)
+  posChangeAmount      Decimal?              @db.Decimal(18, 2)
   posPayments          PosPayment[]
   posReturns           PosReturn[]
-  journalEntryId     String?             @unique
-  journalEntry       JournalEntry?       @relation("SalesInvoiceToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
-  lines              SalesInvoiceLine[]
-  creditNotes        CreditNote[]
-  receiptAllocations ReceiptAllocation[]
-  postedAt           DateTime?
-  
+  journalEntryId       String?               @unique
+  journalEntry         JournalEntry?         @relation("SalesInvoiceToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  lines                SalesInvoiceLine[]
+  creditNotes          CreditNote[]
+  receiptAllocations   ReceiptAllocation[]
+  postedAt             DateTime?
+
   // Restaurant POS fields
   orderType           OrderType?
   tableId             String?
-  table               PosTable?            @relation("TableInvoiceHistory", fields: [tableId], references: [id], onDelete: Restrict)
-  activeTable         PosTable?            @relation("TableActiveInvoice")
+  table               PosTable?        @relation("TableInvoiceHistory", fields: [tableId], references: [id], onDelete: Restrict)
+  activeTable         PosTable?        @relation("TableActiveInvoice")
   waiterId            String?
-  waiter              User?                @relation("InvoiceWaiter", fields: [waiterId], references: [id], onDelete: SetNull)
-  serviceChargeAmount Decimal?             @db.Decimal(18, 2) @default(0)
-  deliveryFeeAmount   Decimal?             @db.Decimal(18, 2) @default(0)
+  waiter              User?            @relation("InvoiceWaiter", fields: [waiterId], references: [id], onDelete: SetNull)
+  serviceChargeAmount Decimal?         @default(0) @db.Decimal(18, 2)
+  deliveryFeeAmount   Decimal?         @default(0) @db.Decimal(18, 2)
   driverId            String?
-  driver              DeliveryDriver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driver              DeliveryDriver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
   deliveryStatus      DeliveryStatus?
   deliveryAddress     String?
   deliveryNotes       String?
   deliveryCompanyId   String?
-  deliveryCompany     DeliveryCompany?     @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
+  deliveryCompany     DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
   kitchenOrder        KitchenOrder?
-  
+
   // Audits & Corrections
-  originalOrderType   OrderType?
-  correctionReason    String?
-  isCorrected         Boolean              @default(false)
-  correctedAt         DateTime?
-  correctedByUserId   String?
-  correctedByUser     User?                @relation("InvoiceCorrector", fields: [correctedByUserId], references: [id], onDelete: SetNull)
+  originalOrderType OrderType?
+  correctionReason  String?
+  isCorrected       Boolean    @default(false)
+  correctedAt       DateTime?
+  correctedByUserId String?
+  correctedByUser   User?      @relation("InvoiceCorrector", fields: [correctedByUserId], references: [id], onDelete: SetNull)
 
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([customerId, status, invoiceDate])
   @@index([allocationStatus])
@@ -2399,31 +2392,31 @@ model SalesInvoice {
 }
 
 model PosSession {
-  id             String           @id @default(cuid())
-  sessionNumber  String           @unique
-  terminalName   String
-  branchName     String?
-  warehouseId    String
-  warehouse      InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  cashierUserId  String?
-  cashierUser    User?            @relation("PosSessionCashier", fields: [cashierUserId], references: [id], onDelete: SetNull)
-  cashAccountId  String
-  cashAccount    BankCashAccount  @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
-  openingCash    Decimal          @db.Decimal(18, 2)
-  expectedCash   Decimal          @default(0) @db.Decimal(18, 2)
-  actualCash     Decimal?         @db.Decimal(18, 2)
-  difference     Decimal?         @db.Decimal(18, 2)
-  status         PosSessionStatus @default(OPEN)
-  notes          String?
-  openedAt       DateTime         @default(now())
-  closedAt       DateTime?
-  salesInvoices  SalesInvoice[]
-  posReturns     PosReturn[]
-  
+  id            String             @id @default(cuid())
+  sessionNumber String             @unique
+  terminalName  String
+  branchName    String?
+  warehouseId   String
+  warehouse     InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  cashierUserId String?
+  cashierUser   User?              @relation("PosSessionCashier", fields: [cashierUserId], references: [id], onDelete: SetNull)
+  cashAccountId String
+  cashAccount   BankCashAccount    @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  openingCash   Decimal            @db.Decimal(18, 2)
+  expectedCash  Decimal            @default(0) @db.Decimal(18, 2)
+  actualCash    Decimal?           @db.Decimal(18, 2)
+  difference    Decimal?           @db.Decimal(18, 2)
+  status        PosSessionStatus   @default(OPEN)
+  notes         String?
+  openedAt      DateTime           @default(now())
+  closedAt      DateTime?
+  salesInvoices SalesInvoice[]
+  posReturns    PosReturn[]
+
   // Cashier Shift Submission fields
   submittedAt       DateTime?
   submittedByUserId String?
-  submittedByUser   User?            @relation("SessionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  submittedByUser   User?     @relation("SessionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
 
   // Accountant Decision fields
   differenceStatus  String?  // e.g. "ACCEPTED_DIFFERENCE"
@@ -2442,61 +2435,60 @@ model PosSession {
 }
 
 model PosPayment {
-  id                String          @id @default(cuid())
+  id                String           @id @default(cuid())
   salesInvoiceId    String
-  salesInvoice      SalesInvoice    @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  salesInvoice      SalesInvoice     @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
   bankCashAccountId String
-  bankCashAccount   BankCashAccount @relation(fields: [bankCashAccountId], references: [id], onDelete: Restrict)
+  bankCashAccount   BankCashAccount  @relation(fields: [bankCashAccountId], references: [id], onDelete: Restrict)
   paymentMethod     PosPaymentMethod
-  amount            Decimal         @db.Decimal(18, 2)
-  tenderedAmount    Decimal?        @db.Decimal(18, 2)
+  amount            Decimal          @db.Decimal(18, 2)
+  tenderedAmount    Decimal?         @db.Decimal(18, 2)
   reference         String?
-  
+
   // Delivery Company details (e.g. Talabat, Careem)
   deliveryCompanyId String?
   deliveryCompany   DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
 
-  createdAt         DateTime        @default(now())
+  createdAt DateTime @default(now())
 
   @@index([salesInvoiceId])
   @@index([bankCashAccountId])
   @@index([paymentMethod])
-
 }
 
 model PosReturn {
-  id                   String              @id @default(cuid())
-  reference            String              @unique
-  status               PosReturnStatus     @default(COMPLETED)
-  returnDate           DateTime
-  salesInvoiceId       String
-  salesInvoice         SalesInvoice        @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
-  posSessionId         String?
-  posSession           PosSession?         @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
-  customerId           String
-  customer             Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  currencyCode         String              @default("JOD")
-  reason               String?
-  subtotalAmount       Decimal             @default(0) @db.Decimal(18, 2)
-  discountAmount       Decimal             @default(0) @db.Decimal(18, 2)
-  taxAmount            Decimal             @default(0) @db.Decimal(18, 2)
-  totalAmount          Decimal             @default(0) @db.Decimal(18, 2)
-  refundAmount         Decimal             @default(0) @db.Decimal(18, 2)
-  accountingStatus     PosAccountingStatus @default(PENDING_REVIEW)
-  journalEntryId       String?             @unique
-  journalEntry         JournalEntry?       @relation("PosReturnToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
-  reviewedAt           DateTime?
-  reviewedByUserId     String?
-  reviewedByUser       User?               @relation("PosReturnReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  reviewNotes          String?
-  postedAt             DateTime?
-  reversedAt           DateTime?
-  createdByUserId      String?
-  createdByUser        User?               @relation("PosReturnCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  lines                PosReturnLine[]
-  payments             PosReturnPayment[]
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  id               String              @id @default(cuid())
+  reference        String              @unique
+  status           PosReturnStatus     @default(COMPLETED)
+  returnDate       DateTime
+  salesInvoiceId   String
+  salesInvoice     SalesInvoice        @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  posSessionId     String?
+  posSession       PosSession?         @relation(fields: [posSessionId], references: [id], onDelete: SetNull)
+  customerId       String
+  customer         Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currencyCode     String              @default("JOD")
+  reason           String?
+  subtotalAmount   Decimal             @default(0) @db.Decimal(18, 2)
+  discountAmount   Decimal             @default(0) @db.Decimal(18, 2)
+  taxAmount        Decimal             @default(0) @db.Decimal(18, 2)
+  totalAmount      Decimal             @default(0) @db.Decimal(18, 2)
+  refundAmount     Decimal             @default(0) @db.Decimal(18, 2)
+  accountingStatus PosAccountingStatus @default(PENDING_REVIEW)
+  journalEntryId   String?             @unique
+  journalEntry     JournalEntry?       @relation("PosReturnToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedByUser   User?               @relation("PosReturnReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewNotes      String?
+  postedAt         DateTime?
+  reversedAt       DateTime?
+  createdByUserId  String?
+  createdByUser    User?               @relation("PosReturnCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lines            PosReturnLine[]
+  payments         PosReturnPayment[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@index([salesInvoiceId, returnDate])
   @@index([posSessionId])
@@ -2505,35 +2497,35 @@ model PosReturn {
 }
 
 model PosReturnLine {
-  id                    String             @id @default(cuid())
-  posReturnId           String
-  posReturn             PosReturn          @relation(fields: [posReturnId], references: [id], onDelete: Cascade)
-  lineNumber            Int
-  salesInvoiceLineId    String?
-  salesInvoiceLine      SalesInvoiceLine?  @relation(fields: [salesInvoiceLineId], references: [id], onDelete: SetNull)
-  itemId                String?
-  item                  InventoryItem?     @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  warehouseId           String?
-  warehouse             InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  itemName              String?
-  description           String?
-  quantity              Decimal            @default(1) @db.Decimal(18, 4)
-  unitPrice             Decimal            @db.Decimal(18, 2)
-  discountAmount        Decimal            @default(0) @db.Decimal(18, 2)
-  taxId                 String?
-  tax                   Tax?               @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  taxAmount             Decimal            @default(0) @db.Decimal(18, 2)
-  lineSubtotalAmount    Decimal            @db.Decimal(18, 2)
-  lineAmount            Decimal            @db.Decimal(18, 2)
-  revenueAccountId      String
-  revenueAccount        Account            @relation("PosReturnRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
-  inventoryAccountId    String?
-  inventoryAccount      Account?           @relation("PosReturnInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
-  cogsAccountId         String?
-  cogsAccount           Account?           @relation("PosReturnCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
-  unitCost              Decimal?           @db.Decimal(18, 4)
-  totalCost             Decimal?           @db.Decimal(18, 2)
-  createdAt             DateTime           @default(now())
+  id                 String              @id @default(cuid())
+  posReturnId        String
+  posReturn          PosReturn           @relation(fields: [posReturnId], references: [id], onDelete: Cascade)
+  lineNumber         Int
+  salesInvoiceLineId String?
+  salesInvoiceLine   SalesInvoiceLine?   @relation(fields: [salesInvoiceLineId], references: [id], onDelete: SetNull)
+  itemId             String?
+  item               InventoryItem?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouseId        String?
+  warehouse          InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  itemName           String?
+  description        String?
+  quantity           Decimal             @default(1) @db.Decimal(18, 4)
+  unitPrice          Decimal             @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
+  taxId              String?
+  tax                Tax?                @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  lineSubtotalAmount Decimal             @db.Decimal(18, 2)
+  lineAmount         Decimal             @db.Decimal(18, 2)
+  revenueAccountId   String
+  revenueAccount     Account             @relation("PosReturnRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  inventoryAccountId String?
+  inventoryAccount   Account?            @relation("PosReturnInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  cogsAccountId      String?
+  cogsAccount        Account?            @relation("PosReturnCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  unitCost           Decimal?            @db.Decimal(18, 4)
+  totalCost          Decimal?            @db.Decimal(18, 2)
+  createdAt          DateTime            @default(now())
 
   @@unique([posReturnId, lineNumber])
   @@index([salesInvoiceLineId])
@@ -2559,34 +2551,33 @@ model PosReturnPayment {
 }
 
 model SalesInvoiceLine {
-  id                 String         @id @default(cuid())
+  id                 String              @id @default(cuid())
   salesInvoiceId     String
-  salesInvoice       SalesInvoice   @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  salesInvoice       SalesInvoice        @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
   lineNumber         Int
   itemId             String?
-  item               InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item               InventoryItem?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
   warehouseId        String?
   warehouse          InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   itemName           String?
   description        String?
-  quantity           Decimal        @default(1) @db.Decimal(18, 4)
-  unitPrice          Decimal        @db.Decimal(18, 2)
-  discountAmount     Decimal        @default(0) @db.Decimal(18, 2)
+  quantity           Decimal             @default(1) @db.Decimal(18, 4)
+  unitPrice          Decimal             @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
   taxId              String?
-  tax                Tax?           @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  taxAmount          Decimal        @default(0) @db.Decimal(18, 2)
-  lineSubtotalAmount Decimal        @db.Decimal(18, 2)
-  lineAmount         Decimal        @db.Decimal(18, 2)
+  tax                Tax?                @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  lineSubtotalAmount Decimal             @db.Decimal(18, 2)
+  lineAmount         Decimal             @db.Decimal(18, 2)
   revenueAccountId   String
-  revenueAccount     Account        @relation("SalesInvoiceRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
-  
+  revenueAccount     Account             @relation("SalesInvoiceRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+
   // Modifier options / cooking levels / extras
-  modifiers          Json?
+  modifiers Json?
 
-  createdAt          DateTime       @default(now())
-  creditNoteLines    CreditNoteLine[]
-  posReturnLines     PosReturnLine[]
-
+  createdAt       DateTime         @default(now())
+  creditNoteLines CreditNoteLine[]
+  posReturnLines  PosReturnLine[]
 
   @@unique([salesInvoiceId, lineNumber])
   @@index([itemId])
@@ -2596,28 +2587,28 @@ model SalesInvoiceLine {
 }
 
 model CreditNote {
-  id             String           @id @default(cuid())
-  reference      String           @unique
-  status         CreditNoteStatus @default(DRAFT)
-  noteDate       DateTime
-  customerId     String
-  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  salesInvoiceId String?
-  salesInvoice   SalesInvoice?    @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  id               String           @id @default(cuid())
+  reference        String           @unique
+  status           CreditNoteStatus @default(DRAFT)
+  noteDate         DateTime
+  customerId       String
+  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesInvoiceId   String?
+  salesInvoice     SalesInvoice?    @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
   creditNoteTypeId String
-  creditNoteType   CreditNoteType @relation(fields: [creditNoteTypeId], references: [id], onDelete: Restrict)
-  currencyCode   String           @default("JOD")
-  description    String?
-  subtotalAmount Decimal          @default(0) @db.Decimal(18, 2)
-  discountAmount Decimal          @default(0) @db.Decimal(18, 2)
-  taxAmount      Decimal          @default(0) @db.Decimal(18, 2)
-  totalAmount    Decimal          @default(0) @db.Decimal(18, 2)
-  journalEntryId String?          @unique
-  journalEntry   JournalEntry?    @relation("CreditNoteToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
-  lines          CreditNoteLine[]
-  postedAt       DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  creditNoteType   CreditNoteType   @relation(fields: [creditNoteTypeId], references: [id], onDelete: Restrict)
+  currencyCode     String           @default("JOD")
+  description      String?
+  subtotalAmount   Decimal          @default(0) @db.Decimal(18, 2)
+  discountAmount   Decimal          @default(0) @db.Decimal(18, 2)
+  taxAmount        Decimal          @default(0) @db.Decimal(18, 2)
+  totalAmount      Decimal          @default(0) @db.Decimal(18, 2)
+  journalEntryId   String?          @unique
+  journalEntry     JournalEntry?    @relation("CreditNoteToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  lines            CreditNoteLine[]
+  postedAt         DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([customerId, status, noteDate])
   @@index([salesInvoiceId])
@@ -2625,41 +2616,41 @@ model CreditNote {
 }
 
 model CreditNoteLine {
-  id                 String     @id @default(cuid())
+  id                 String              @id @default(cuid())
   creditNoteId       String
-  creditNote         CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  creditNote         CreditNote          @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   lineNumber         Int
   salesInvoiceLineId String?
-  salesInvoiceLine   SalesInvoiceLine? @relation(fields: [salesInvoiceLineId], references: [id], onDelete: Restrict)
+  salesInvoiceLine   SalesInvoiceLine?   @relation(fields: [salesInvoiceLineId], references: [id], onDelete: Restrict)
   itemId             String?
-  item               InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item               InventoryItem?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
   warehouseId        String?
   warehouse          InventoryWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   itemName           String?
   description        String?
-  quantity           Decimal    @default(1) @db.Decimal(18, 4)
-  unitPrice          Decimal    @db.Decimal(18, 2)
-  discountAmount     Decimal    @default(0) @db.Decimal(18, 2)
+  quantity           Decimal             @default(1) @db.Decimal(18, 4)
+  unitPrice          Decimal             @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
   taxId              String?
-  tax                Tax?       @relation(fields: [taxId], references: [id], onDelete: Restrict)
-  taxAmount          Decimal    @default(0) @db.Decimal(18, 2)
-  originalUnitPrice  Decimal?   @db.Decimal(18, 2)
-  correctedUnitPrice Decimal?   @db.Decimal(18, 2)
-  originalTaxAmount  Decimal?   @db.Decimal(18, 2)
-  correctedTaxAmount Decimal?   @db.Decimal(18, 2)
-  returnToStock      Boolean    @default(false)
+  tax                Tax?                @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  taxAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  originalUnitPrice  Decimal?            @db.Decimal(18, 2)
+  correctedUnitPrice Decimal?            @db.Decimal(18, 2)
+  originalTaxAmount  Decimal?            @db.Decimal(18, 2)
+  correctedTaxAmount Decimal?            @db.Decimal(18, 2)
+  returnToStock      Boolean             @default(false)
   itemCondition      String?
-  lineSubtotalAmount Decimal    @db.Decimal(18, 2)
-  lineAmount         Decimal    @db.Decimal(18, 2)
+  lineSubtotalAmount Decimal             @db.Decimal(18, 2)
+  lineAmount         Decimal             @db.Decimal(18, 2)
   revenueAccountId   String
-  revenueAccount     Account    @relation("CreditNoteRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  revenueAccount     Account             @relation("CreditNoteRevenueAccount", fields: [revenueAccountId], references: [id], onDelete: Restrict)
   inventoryAccountId String?
-  inventoryAccount   Account?   @relation("CreditNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  inventoryAccount   Account?            @relation("CreditNoteInventoryAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
   cogsAccountId      String?
-  cogsAccount        Account?   @relation("CreditNoteCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
-  unitCost           Decimal?   @db.Decimal(18, 4)
-  totalCost          Decimal?   @db.Decimal(18, 2)
-  createdAt          DateTime   @default(now())
+  cogsAccount        Account?            @relation("CreditNoteCogsAccount", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  unitCost           Decimal?            @db.Decimal(18, 4)
+  totalCost          Decimal?            @db.Decimal(18, 2)
+  createdAt          DateTime            @default(now())
 
   @@unique([creditNoteId, lineNumber])
   @@index([salesInvoiceLineId])
@@ -2869,9 +2860,9 @@ model User {
   createdPosReturns                   PosReturn[]                    @relation("PosReturnCreatedByUser")
   reviewedPosReturns                  PosReturn[]                    @relation("PosReturnReviewedByUser")
   posAccessRoles                      UserPosAccessRole[]
-  posFavoriteItems                   PosUserFavoriteItem[]
+  posFavoriteItems                    PosUserFavoriteItem[]
   auditLogs                           AuditLog[]
-  
+
   // Restaurant POS relations
   tablesServed                        PosTable[]                     @relation("TableWaiter")
   invoicesServed                      SalesInvoice[]                 @relation("InvoiceWaiter")
@@ -2882,19 +2873,18 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-
   @@index([email])
   @@index([username])
   @@index([companyId])
 }
 
 model PosUserFavoriteItem {
-  id        String          @id @default(cuid())
+  id        String        @id @default(cuid())
   userId    String
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   itemId    String
-  item      InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  createdAt DateTime        @default(now())
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
 
   @@unique([userId, itemId])
   @@index([userId])
@@ -2902,17 +2892,42 @@ model PosUserFavoriteItem {
 }
 
 model PosTable {
-  id               String          @id @default(cuid())
-  tableNumber      String          @unique
+  id               String                @id @default(cuid())
+  tableNumber      String                @unique
   capacity         Int
-  status           TableStatus     @default(AVAILABLE)
-  activeInvoiceId  String?         @unique
-  activeInvoice    SalesInvoice?   @relation("TableActiveInvoice", fields: [activeInvoiceId], references: [id], onDelete: SetNull)
+  status           TableStatus           @default(AVAILABLE)
+  activeInvoiceId  String?               @unique
+  activeInvoice    SalesInvoice?         @relation("TableActiveInvoice", fields: [activeInvoiceId], references: [id], onDelete: SetNull)
   assignedWaiterId String?
-  assignedWaiter   User?           @relation("TableWaiter", fields: [assignedWaiterId], references: [id], onDelete: SetNull)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  invoices         SalesInvoice[]  @relation("TableInvoiceHistory")
+  assignedWaiter   User?                 @relation("TableWaiter", fields: [assignedWaiterId], references: [id], onDelete: SetNull)
+  reservations     PosTableReservation[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  invoices         SalesInvoice[]        @relation("TableInvoiceHistory")
+}
+
+enum PosTableReservationStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+model PosTableReservation {
+  id      String   @id @default(cuid())
+  tableId String
+  table   PosTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  reservedFrom DateTime
+  reservedTo   DateTime
+
+  status          PosTableReservationStatus @default(ACTIVE)
+  notes           String?
+  createdByUserId String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([tableId, reservedFrom, reservedTo])
+  @@index([status])
 }
 
 model DeliveryCompany {
@@ -2959,36 +2974,35 @@ model KitchenOrder {
 }
 
 model KitchenOrderItem {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   kitchenOrderId String
-  kitchenOrder   KitchenOrder @relation(fields: [kitchenOrderId], references: [id], onDelete: Cascade)
+  kitchenOrder   KitchenOrder  @relation(fields: [kitchenOrderId], references: [id], onDelete: Cascade)
   itemId         String
   itemName       String
-  quantity       Decimal      @db.Decimal(18, 4)
+  quantity       Decimal       @db.Decimal(18, 4)
   modifiers      Json?
   status         KitchenStatus @default(NEW)
   notes          String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime      @default(now())
 }
 
 model RestaurantRecipe {
-  id          String                     @id @default(cuid())
-  itemId      String                     @unique
-  item        InventoryItem              @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  id          String                       @id @default(cuid())
+  itemId      String                       @unique
+  item        InventoryItem                @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
   ingredients RestaurantRecipeIngredient[]
 }
 
 model RestaurantRecipeIngredient {
-  id               String                 @id @default(cuid())
+  id               String                  @id @default(cuid())
   recipeId         String
-  recipe           RestaurantRecipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipe           RestaurantRecipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   ingredientItemId String
-  ingredientItem   InventoryItem          @relation(fields: [ingredientItemId], references: [id], onDelete: Restrict)
-  quantity         Decimal                @db.Decimal(18, 4)
+  ingredientItem   InventoryItem           @relation(fields: [ingredientItemId], references: [id], onDelete: Restrict)
+  quantity         Decimal                 @db.Decimal(18, 4)
   unitOfMeasureId  String?
   unitOfMeasure    InventoryUnitOfMeasure? @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
-  createdAt        DateTime               @default(now())
+  createdAt        DateTime                @default(now())
 }
-

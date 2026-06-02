@@ -422,7 +422,6 @@ export async function createAccount(
     token,
   });
 }
-
 export async function updateAccount(
   id: string,
   payload: UpdateAccountPayload,
@@ -2403,7 +2402,7 @@ export async function getAgingReport(asOfDate?: string, token?: string | null) {
   const suffix = searchParams.toString() ? `?${searchParams}` : "";
   return apiRequest<AgingReport>(`/sales-receivables/reports/aging${suffix}`, {
     token,
-  });
+  });     
 }
 
 export async function getActivePosSession(token?: string | null) {
@@ -2435,6 +2434,63 @@ export async function getPosSessions(token?: string | null) {
 
 export async function getPosTables(token?: string | null) {
   return apiRequest<PosTable[]>("/pos/tables", { token });
+}
+
+export async function createPosTable(
+  payload: { tableNumber: string; capacity: number },
+  token?: string | null,
+) {
+  return apiRequest<PosTable>("/pos/tables", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function deletePosTable(
+  id: string,
+  token?: string | null,
+) {
+  return apiRequest<PosTable>(`/pos/tables/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function reservePosTable(
+  tableId: string,
+  payload: { reservedFrom: string; reservedTo: string; notes?: string },
+  token?: string | null,
+) {
+  return apiRequest(`/pos/tables/${tableId}/reservations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function cancelPosTableReservation(
+  reservationId: string,
+  payload: { reason?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest(`/pos/tables/reservations/${reservationId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function getPosTimeWindowReport(
+  params: { from: string; to: string },
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  searchParams.set("from", params.from);
+  searchParams.set("to", params.to);
+  return apiRequest<import("@/types/api").PosTimeWindowReport>(`/pos/reports/time-window?${searchParams}`, {
+    token,
+  });
 }
 
 export async function getPosKitchenOrders(token?: string | null) {

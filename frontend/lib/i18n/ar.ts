@@ -2620,6 +2620,7 @@ Object.assign(arTranslations, {
   "salesReceivables.validation.warehouseRequiredForInventory": "المستودع مطلوب للأصناف المخزنية في السطر {index}.",
   "salesReceivables.validation.revenueAccountRequired": "حساب الإيراد مطلوب في السطر {index}.",
   "pos.workspace.sales": "شاشة البيع",
+  "pos.workspace.tables": "صالة الطعام / Dine-In",
   "pos.workspace.sessions": "الورديات",
   "pos.workspace.held": "الفواتير المعلقة",
   "pos.workspace.kitchen": "شاشة المطبخ",

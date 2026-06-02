@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   ForbiddenException,
+  NotFoundException,
 } from "@nestjs/common";
 import {
   AllocationStatus,
@@ -104,6 +105,199 @@ export class PosService {
     };
   }
 
+  async getTimeWindowReport(
+    dto: { from: string; to: string },
+    user?: AuthorizedUser,
+  ) {
+    // Keep this aligned with the tables/report screens access.
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+
+    const from = new Date(dto.from);
+    const to = new Date(dto.to);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw new BadRequestException("Invalid from/to date.");
+    }
+    if (to <= from) {
+      throw new BadRequestException("Time window end must be after start.");
+    }
+
+    const reservations = await this.prisma.posTableReservation.findMany({
+      where: {
+        status: "ACTIVE",
+        reservedFrom: { lt: to },
+        reservedTo: { gt: from },
+      },
+      include: {
+        table: { select: { id: true, tableNumber: true } },
+      },
+      orderBy: [{ reservedFrom: "asc" }, { reservedTo: "asc" }],
+      take: 500,
+    });
+
+    const sales = await this.prisma.salesInvoice.findMany({
+      where: {
+        invoiceType: SalesInvoiceType.POS,
+        OR: [
+          // Completed/refunded: use completed timestamp
+          {
+            posOperationalStatus: { in: [PosOperationalStatus.COMPLETED, PosOperationalStatus.REFUNDED] },
+            posCompletedAt: { gte: from, lte: to },
+          },
+          // Draft/held: treat "activity" as updatedAt, but only for dine-in (table-linked)
+          {
+            posOperationalStatus: { in: [PosOperationalStatus.DRAFT, PosOperationalStatus.HELD] },
+            tableId: { not: null },
+            updatedAt: { gte: from, lte: to },
+          },
+        ],
+      },
+      include: {
+        table: { select: { id: true, tableNumber: true } },
+        waiter: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ posCompletedAt: "desc" }, { updatedAt: "desc" }],
+      take: 500,
+    });
+
+    return {
+      window: { from: from.toISOString(), to: to.toISOString() },
+      reservations: reservations.map((row) => ({
+        id: row.id,
+        tableId: row.tableId,
+        tableNumber: row.table.tableNumber,
+        reservedFrom: row.reservedFrom.toISOString(),
+        reservedTo: row.reservedTo.toISOString(),
+        status: row.status,
+        notes: row.notes ?? null,
+        createdByUserId: row.createdByUserId ?? null,
+        createdAt: row.createdAt.toISOString(),
+      })),
+      sales: sales.map((row) => ({
+        id: row.id,
+        reference: row.reference,
+        posOperationalStatus: row.posOperationalStatus,
+        posAccountingStatus: row.posAccountingStatus,
+        orderType: row.orderType,
+        tableId: row.tableId ?? null,
+        tableNumber: row.table?.tableNumber ?? null,
+        waiter: row.waiter
+          ? { id: row.waiter.id, name: row.waiter.name ?? null, email: row.waiter.email }
+          : null,
+        totalAmount: row.totalAmount.toString(),
+        posCompletedAt: row.posCompletedAt ? row.posCompletedAt.toISOString() : null,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    };
+  }
+  async createTableReservation(
+    tableId: string,
+    dto: { reservedFrom: string; reservedTo: string; notes?: string },
+    user?: AuthorizedUser,
+  ) {
+    // TODO: add explicit permission when permissions list is finalized
+    // this.ensurePosPermissionCode("RST_RESERVE_TABLE", user);
+
+    const from = new Date(dto.reservedFrom);
+    const to = new Date(dto.reservedTo);
+
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw new BadRequestException("Invalid reservation time.");
+    }
+    if (to <= from) {
+      throw new BadRequestException("Reservation end time must be after start time.");
+    }
+    // For "special" reservations we require same-day (choose date once, then pick time range).
+    // We validate using the UTC calendar date portion of the parsed ISO timestamps.
+    const fromUtcDate = from.toISOString().slice(0, 10);
+    const toUtcDate = to.toISOString().slice(0, 10);
+    if (fromUtcDate !== toUtcDate) {
+      throw new BadRequestException("Special reservation must be within the same day.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const table = await tx.posTable.findUnique({ where: { id: tableId } });
+      if (!table) throw new NotFoundException("Table not found.");
+
+      if (table.activeInvoiceId) {
+        throw new BadRequestException("Table already has an active order.");
+      }
+
+      const overlap = await tx.posTableReservation.findFirst({
+        where: {
+          tableId,
+          status: "ACTIVE",
+          reservedFrom: { lt: to },
+          reservedTo: { gt: from },
+        },
+        select: { id: true },
+      });
+
+      if (overlap) {
+        throw new BadRequestException("Table is already reserved in that time range.");
+      }
+
+      const reservation = await tx.posTableReservation.create({
+        data: {
+          tableId,
+          reservedFrom: from,
+          reservedTo: to,
+          status: "ACTIVE",
+          notes: dto.notes?.trim() || null,
+          createdByUserId: user?.userId ?? null,
+        },
+      });
+
+      await tx.posTable.update({
+        where: { id: tableId },
+        data: { status: "RESERVED" },
+      });
+
+      return reservation;
+    });
+  }
+
+  async cancelTableReservation(
+    reservationId: string,
+    dto: { reason?: string },
+    user?: AuthorizedUser,
+  ) {
+    // TODO: add explicit permission when permissions list is finalized
+    // this.ensurePosPermissionCode("RST_CANCEL_TABLE_RESERVATION", user);
+    void dto;
+    void user;
+
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.posTableReservation.findUnique({
+        where: { id: reservationId },
+        select: { id: true, tableId: true, status: true },
+      });
+      if (!reservation) throw new NotFoundException("Reservation not found.");
+      if (reservation.status !== "ACTIVE") {
+        throw new BadRequestException("Only ACTIVE reservations can be cancelled.");
+      }
+
+      await tx.posTableReservation.update({
+        where: { id: reservationId },
+        data: { status: "CANCELLED" },
+      });
+
+      const stillActive = await tx.posTableReservation.findFirst({
+        where: { tableId: reservation.tableId, status: "ACTIVE" },
+        select: { id: true },
+      });
+
+      if (!stillActive) {
+        await tx.posTable.update({
+          where: { id: reservation.tableId },
+          data: { status: "AVAILABLE" },
+        });
+      }
+
+      return { success: true };
+    });
+  }
+
+
   async listFavoriteItemIds(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
     if (!user?.userId) {
@@ -159,6 +353,9 @@ export class PosService {
 
   async openSession(dto: OpenPosSessionDto, user?: AuthorizedUser) {
     this.ensurePosPermission("OPEN_SESSION", user);
+    if (user?.userId) {
+      await this.ensureUserExists(user.userId);
+    }
     await this.ensureWarehouse(dto.warehouseId);
     await this.ensureBankCashAccount(dto.cashAccountId);
 
@@ -289,8 +486,11 @@ export class PosService {
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
-        posSessionId: sessionId,
         posOperationalStatus: PosOperationalStatus.HELD,
+        OR: [
+          { posSessionId: sessionId },
+          { tableId: { not: null } }
+        ]
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
@@ -304,8 +504,11 @@ export class PosService {
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
-        posSessionId: sessionId,
         posOperationalStatus: PosOperationalStatus.DRAFT,
+        OR: [
+          { posSessionId: sessionId },
+          { tableId: { not: null } }
+        ]
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
@@ -964,15 +1167,23 @@ export class PosService {
       throw new BadRequestException("Only draft or held POS sales can be voided.");
     }
 
-    const updated = await this.prisma.salesInvoice.update({
-      where: { id },
-      data: {
-        status: SalesInvoiceStatus.CANCELLED,
-        posOperationalStatus: PosOperationalStatus.VOIDED,
-        posVoidedAt: new Date(),
-        posVoidReason: dto.reason?.trim() || null,
-      },
-      include: this.posSaleInclude(),
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.salesInvoice.update({
+        where: { id },
+        data: {
+          status: SalesInvoiceStatus.CANCELLED,
+          posOperationalStatus: PosOperationalStatus.VOIDED,
+          posVoidedAt: new Date(),
+          posVoidReason: dto.reason?.trim() || null,
+        },
+        include: this.posSaleInclude(),
+      });
+
+      if (sale.tableId) {
+        await this.updateTableStatus(tx, sale.tableId, null, null);
+      }
+
+      return invoice;
     });
 
     await this.auditService.log({
@@ -2967,6 +3178,17 @@ export class PosService {
       throw new BadRequestException("POS session warehouse must be active.");
     }
     return warehouse;
+  }
+
+  private async ensureUserExists(id: string) {
+    const u = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, isActive: true },
+    });
+    if (!u?.isActive) {
+      throw new BadRequestException("User session is invalid. Please login again.");
+    }
+    return u;
   }
 
   private async ensureBankCashAccount(id: string) {

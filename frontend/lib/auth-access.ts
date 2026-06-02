@@ -31,6 +31,10 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
     return allowedRoutes.some((route) => route === POS_ROUTE_PREFIX || route.startsWith(`${POS_ROUTE_PREFIX}/`));
   }
 
+  if (normalizedPath === "/pos/tables") {
+    return allowedRoutes.includes("/pos/register") || allowedRoutes.includes("/pos") || allowedRoutes.includes("/pos/tables") || hasPermission(user, "RST_VIEW_TABLE_SCREEN" as any);
+  }
+
   return allowedRoutes.some((route) => route !== POS_ROUTE_PREFIX && normalizedPath.startsWith(`${route}/`));
 }
 

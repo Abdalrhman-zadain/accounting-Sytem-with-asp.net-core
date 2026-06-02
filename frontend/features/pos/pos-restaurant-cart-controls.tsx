@@ -40,6 +40,9 @@ type PosRestaurantCartControlsProps = {
   selectedWaiterId: string | null;
   serviceChargeAmount: number;
   waiters: PosWaiter[];
+  lockedTableId?: string | null;
+  waiterMode?: boolean;
+  onBackToTables?: () => void;
 };
 
 export function PosRestaurantCartControls({
@@ -73,131 +76,90 @@ export function PosRestaurantCartControls({
   selectedWaiterId,
   serviceChargeAmount,
   waiters,
+  lockedTableId,
+  waiterMode,
+  onBackToTables,
 }: PosRestaurantCartControlsProps) {
   return (
-    <div className="space-y-3">
-      <div>
-        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7a8780]">
-          Order type / نوع الطلب
-        </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {([
-            ["DINE_IN", "Dine-In / داخلي"],
-            ["TAKEAWAY", "Takeaway / سفري"],
-            ["DELIVERY", "Delivery / توصيل"],
-            ["PICKUP", "Pickup / استلام"],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onOrderTypeChange(value)}
-              className={cn(
-                "rounded-[10px] border px-3 py-2 text-[11px] font-bold transition",
-                orderType === value
-                  ? "border-[#5f8a67] bg-[#edf5ef] text-[#2d4a33]"
-                  : "border-[#d6e1d9] bg-[#fbfcfb] text-[#60746a] hover:bg-white",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-3.5">
+      {waiterMode && onBackToTables && (
+        <button
+          type="button"
+          onClick={onBackToTables}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#cbd5d0] bg-[#edf5ef] px-4 py-2.5 text-xs font-bold text-[#2e5d3c] shadow-sm transition hover:bg-[#e1f2e5]"
+        >
+          ← Back to Tables / العودة للطاولات
+        </button>
+      )}
 
       {orderType === "DINE_IN" ? (
-        <div className="space-y-2 rounded-[12px] border border-[#dbe4de] bg-[#f8faf8] p-3">
+        <div className="space-y-3.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7a8780]">
-                Floor tables / الطاولات
+              <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#46644b]">
+                {lockedTableId ? "Your Table / طاولتك" : "Floor tables / الطاولات"}
               </div>
-              <div className="mt-1 text-[11px] text-[#62736a]">
+              <div className="mt-1 text-sm font-black text-[#1e2c22]">
                 {selectedTableId
-                  ? `Selected table: ${restaurantTables.find((table) => table.id === selectedTableId)?.tableNumber ?? "—"}`
-                  : "Select a table for dine-in orders / اختر طاولة للطلبات الداخلية"}
+                  ? `Table: ${restaurantTables.find((table) => table.id === selectedTableId)?.tableNumber ?? "—"}`
+                  : "Select a table / اختر طاولة"}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onOpenTableSelector}
-              className="rounded-full border border-[#cfe0d3] bg-white px-3 py-1.5 text-[10px] font-bold text-[#46644b]"
-            >
-              Open floor / فتح القاعة
-            </button>
+            {!lockedTableId && (
+              <button
+                type="button"
+                onClick={onOpenTableSelector}
+                className="whitespace-nowrap rounded-full border border-[#b8ccbf] bg-white px-4 py-2 text-xs font-bold text-[#2e5d3c] shadow-sm transition-colors hover:bg-[#edf5ef]"
+              >
+                Open floor / فتح القاعة
+              </button>
+            )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {restaurantTables.slice(0, 6).map((table) => {
-              const isSelected = selectedTableId === table.id;
-              const isBusy =
-                Boolean(table.activeInvoice?.id) &&
-                table.activeInvoice?.id !== editingInvoiceId &&
-                !isSelected;
-              return (
-                <button
-                  key={table.id}
-                  type="button"
-                  disabled={isBusy}
-                  onClick={() => onSelectTable(table.id, table.assignedWaiter?.id ?? null)}
-                  className={cn(
-                    "rounded-[10px] border px-2 py-2 text-left transition",
-                    isSelected
-                      ? "border-[#5f8a67] bg-[#edf5ef]"
-                      : isBusy
-                        ? "cursor-not-allowed border-[#ead7d5] bg-[#fff6f5] text-[#9a6a63]"
-                        : "border-[#dbe4de] bg-white text-[#42554a]",
-                  )}
-                >
-                  <div className="text-[11px] font-black">{table.tableNumber}</div>
-                  <div className="mt-1 text-[10px]">
-                    {table.status.replaceAll("_", " ")} • {table.capacity} seats
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <select
-            value={selectedWaiterId ?? ""}
-            onChange={(event) => onWaiterChange(event.target.value || null)}
-            className="w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 py-2 text-[11px] font-semibold text-[#233329]"
-          >
-            <option value="">Select waiter / اختر النادل</option>
-            {waiters.map((waiter) => (
-              <option key={waiter.id} value={waiter.id}>
-                {waiter.name ?? waiter.email}
-              </option>
-            ))}
-          </select>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onOpenTransferTable}
-              disabled={!selectedTableId}
-              className="rounded-full border border-[#d6e1d9] bg-white px-3 py-1.5 text-[10px] font-bold text-[#46644b] disabled:opacity-40"
+          {!lockedTableId && (
+            <select
+              value={selectedWaiterId ?? ""}
+              onChange={(event) => onWaiterChange(event.target.value || null)}
+              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
             >
-              Transfer table
-            </button>
-            <button
-              type="button"
-              onClick={onOpenMergeTables}
-              disabled={!selectedTableId}
-              className="rounded-full border border-[#d6e1d9] bg-white px-3 py-1.5 text-[10px] font-bold text-[#46644b] disabled:opacity-40"
-            >
-              Merge tables
-            </button>
-            <button
-              type="button"
-              onClick={onOpenSplitBill}
-              disabled={!selectedTableId || cartLinesCount === 0}
-              className="rounded-full border border-[#d6e1d9] bg-white px-3 py-1.5 text-[10px] font-bold text-[#46644b] disabled:opacity-40"
-            >
-              Split bill
-            </button>
-          </div>
+              <option value="">Select waiter / اختر النادل</option>
+              {waiters.map((waiter) => (
+                <option key={waiter.id} value={waiter.id}>
+                  {waiter.name ?? waiter.email}
+                </option>
+              ))}
+            </select>
+          )}
+          {selectedTableId && !lockedTableId && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onOpenTransferTable}
+                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef]"
+              >
+                Transfer table
+              </button>
+              <button
+                type="button"
+                onClick={onOpenMergeTables}
+                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef]"
+              >
+                Merge tables
+              </button>
+              <button
+                type="button"
+                onClick={onOpenSplitBill}
+                disabled={cartLinesCount === 0}
+                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef] disabled:opacity-40"
+              >
+                Split bill
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 
       {orderType === "DELIVERY" ? (
-        <div className="space-y-3 rounded-[12px] border border-[#dbe4de] bg-[#f8faf8] p-3">
+        <div className="space-y-3.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
           <div className="flex gap-2">
             {(["DIRECT", "THIRD_PARTY"] as const).map((mode) => (
               <button
@@ -205,10 +167,10 @@ export function PosRestaurantCartControls({
                 type="button"
                 onClick={() => onDeliveryModeChange(mode)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-[10px] font-bold transition",
+                  "rounded-full px-4 py-2 text-xs font-bold transition",
                   deliveryMode === mode
                     ? "bg-[#46644b] text-white"
-                    : "border border-[#d6e1d9] bg-white text-[#46644b]",
+                    : "border border-[#cbd5cf] bg-white text-[#46644b]",
                 )}
               >
                 {mode === "DIRECT"
@@ -221,7 +183,7 @@ export function PosRestaurantCartControls({
             <select
               value={deliveryDriverId ?? ""}
               onChange={(event) => onDeliveryDriverChange(event.target.value || null)}
-              className="w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 py-2 text-[11px] font-semibold text-[#233329]"
+              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
             >
               <option value="">Select driver / اختر السائق</option>
               {deliveryDrivers.map((driver) => (
@@ -234,7 +196,7 @@ export function PosRestaurantCartControls({
             <select
               value={deliveryCompanyId ?? ""}
               onChange={(event) => onDeliveryCompanyChange(event.target.value || null)}
-              className="w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 py-2 text-[11px] font-semibold text-[#233329]"
+              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
             >
               <option value="">Select company / اختر الشركة</option>
               {deliveryCompanies.map((company) => (
@@ -250,14 +212,14 @@ export function PosRestaurantCartControls({
             value={deliveryAddress}
             onChange={(event) => onDeliveryAddressChange(event.target.value)}
             placeholder="Address / العنوان"
-            className="h-9 w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 text-[11px] font-medium text-[#233329]"
+            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
           />
           <input
             type="text"
             value={deliveryNotes}
             onChange={(event) => onDeliveryNotesChange(event.target.value)}
             placeholder="Notes / ملاحظات"
-            className="h-9 w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 text-[11px] font-medium text-[#233329]"
+            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
           />
           <input
             type="number"
@@ -266,14 +228,14 @@ export function PosRestaurantCartControls({
             value={deliveryFee}
             onChange={(event) => onDeliveryFeeChange(event.target.value)}
             placeholder="Delivery fee / رسوم التوصيل"
-            className="h-9 w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 text-[11px] font-medium text-[#233329]"
+            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
           />
         </div>
       ) : null}
 
       {orderType === "DINE_IN" ? (
-        <div className="rounded-[12px] border border-[#dbe4de] bg-[#f8faf8] p-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7a8780]">
+        <div className="rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
+          <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#46644b]">
             Service charge / رسوم الخدمة
           </div>
           <input
@@ -282,7 +244,7 @@ export function PosRestaurantCartControls({
             step="0.01"
             value={serviceChargeAmount}
             onChange={(event) => onServiceChargeChange(event.target.value)}
-            className="mt-2 h-9 w-full rounded-[10px] border border-[#d6e1d9] bg-white px-3 text-[11px] font-medium text-[#233329]"
+            className="mt-2.5 h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-black text-[#233329]"
           />
         </div>
       ) : null}
