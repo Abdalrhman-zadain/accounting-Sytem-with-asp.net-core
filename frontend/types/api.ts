@@ -1975,7 +1975,8 @@ export type PosPaymentMethod =
   | "CARD"
   | "CLIQ"
   | "BANK_TRANSFER"
-  | "WALLET";
+  | "WALLET"
+  | "DELIVERY";
 export type PosReturnStatus =
   | "COMPLETED"
   | "APPROVED"
@@ -3701,6 +3702,8 @@ export type PosSale = {
     amount: string;
     tenderedAmount?: string | null;
     reference?: string | null;
+    deliveryCompanyId?: string | null;
+    deliveryCompany?: Pick<DeliveryCompany, "id" | "name" | "arabicName"> | null;
     bankCashAccount: Pick<BankCashAccount, "id" | "name" | "type" | "currencyCode"> & {
       account: Pick<Account, "id" | "code" | "name">;
     };
@@ -3879,6 +3882,7 @@ export type PosSessionReport = {
   cliqSales: string;
   bankTransferSales: string;
   walletSales: string;
+  deliveryCompanySales?: string;
   totalSales: string;
   discounts: string;
   tax: string;
@@ -3909,6 +3913,13 @@ export type CorrectPosOrderTypePayload = {
   driverId?: string | null;
   serviceChargeAmount?: number;
   deliveryFeeAmount?: number;
+  reason: string;
+};
+
+export type CorrectPosPaymentMethodPayload = {
+  paymentMethod: PosPaymentMethod;
+  deliveryCompanyId?: string | null;
+  reference?: string | null;
   reason: string;
 };
 

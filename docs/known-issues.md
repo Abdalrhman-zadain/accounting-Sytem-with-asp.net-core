@@ -206,7 +206,7 @@ Current limitation:
 - cashier catalog favorites persist through `GET`/`PUT /pos/favorites/items` (requires the Prisma migration that adds `PosUserFavoriteItem` and related enum values when the database is upgraded).
 - register layout is partially split into `pos-product-card.tsx`, `pos-session-bar.tsx`, and `pos-register-layout.tsx` while state and mutations remain in `pos-page.tsx`.
 - the **Offers** category chip still uses a lightweight text/metadata heuristic (not a dedicated promotion price table); treat it as UX-only until item master exposes promotional fields.
-- the restaurant POS addendum now includes live table and kitchen APIs, delivery company/driver endpoints, restaurant metadata persistence across draft/hold/complete flows, register-side order-type selection, dine-in table controls, waiter/driver/company selectors, table transfer/merge/split actions, cashier close-shift cash counting, and accountant review tabs with order-type correction.
+- the restaurant POS addendum now includes live table and kitchen APIs, delivery company/driver endpoints, restaurant metadata persistence across draft/hold/complete flows, register-side order-type selection, dine-in table controls, waiter/driver/company selectors, table transfer/merge/split actions, cashier close-shift cash counting, and accountant review tabs with order-type and payment-method correction.
 - the restaurant workflow is still incomplete: waiter master-data administration is still lightweight, the dedicated `/pos/kitchen` KDS workflow still needs deeper operational polish, delivery-company settlement/accounting follow-up is still basic, and broader reopen/correction lifecycle tooling remains narrower than the full restaurant requirements.
 
 What this means for future edits:

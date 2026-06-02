@@ -8,11 +8,13 @@ import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useTranslation } from "@/lib/i18n";
 import type {
+  BankCashAccount,
   DeliveryCompany,
   DeliveryDriver,
   DeliveryStatus,
   JournalEntry,
   PosOrderType,
+  PosPaymentMethod,
   PosSale,
   PosSettings,
   PosSessionReport,
@@ -58,31 +60,44 @@ type PosReviewWorkspaceProps = {
   correctionDeliveryFee: string;
   correctionDriverId: string;
   correctionOrderType: PosOrderType;
+  correctionPaymentDeliveryCompanyId: string;
+  correctionPaymentMethod: PosPaymentMethod;
+  correctionPaymentReason: string;
+  correctionPaymentReference: string;
   correctionReason: string;
   correctionServiceCharge: string;
   correctionTableId: string;
   deliveryCompanies: DeliveryCompany[];
   deliveryDrivers: DeliveryDriver[];
   isCorrectOrderTypeOpen: boolean;
+  isCorrectPaymentMethodOpen: boolean;
   journalEntries: JournalEntry[];
+  paymentAccounts: BankCashAccount[];
   onApproveReview: (saleId: string) => void;
   onApproveSessionReview: (sessionId: string, decision?: string, reason?: string) => void;
   onAssignDriver: (saleId: string, driverId: string | null) => void;
   onCloseCorrectionModal: () => void;
+  onClosePaymentCorrectionModal: () => void;
   onCorrectionDeliveryCompanyIdChange: (value: string) => void;
   onCorrectionDeliveryFeeChange: (value: string) => void;
   onCorrectionDriverIdChange: (value: string) => void;
   onCorrectionOrderTypeChange: (value: PosOrderType) => void;
+  onCorrectionPaymentDeliveryCompanyIdChange: (value: string) => void;
+  onCorrectionPaymentMethodChange: (value: PosPaymentMethod) => void;
+  onCorrectionPaymentReasonChange: (value: string) => void;
+  onCorrectionPaymentReferenceChange: (value: string) => void;
   onCorrectionReasonChange: (value: string) => void;
   onCorrectionServiceChargeChange: (value: string) => void;
   onCorrectionTableIdChange: (value: string) => void;
   onOpenCorrectionModal: (sale: PosSale) => void;
+  onOpenPaymentCorrectionModal: (sale: PosSale) => void;
   onRejectReview: (saleId: string) => void;
   onReprintReceipt: (saleId: string) => void;
   onReverseReview: (saleId: string) => void;
   onReviewSessionChange: (sessionId: string) => void;
   onReviewTabChange: (tab: "overview" | "cash" | "inventory" | "journal") => void;
   onSaveCorrection: () => void;
+  onSavePaymentCorrection: () => void;
   onUpdateDeliveryStatus: (saleId: string, status: DeliveryStatus) => void;
   report: PosSessionReport | null;
   posSettings: PosSettings | null;
@@ -91,9 +106,11 @@ type PosReviewWorkspaceProps = {
   reviewSessionGroups: ReviewSessionGroup[];
   reviewTab: "overview" | "cash" | "inventory" | "journal";
   selectedCorrectionSale: PosSale | null;
+  selectedPaymentCorrectionSale: PosSale | null;
   selectedReviewGroup: ReviewSessionGroup | null;
   t: (key: string, params?: Record<string, string | number>) => string;
   savingCorrection: boolean;
+  savingPaymentCorrection: boolean;
 };
 
 export function PosReviewWorkspace({
@@ -103,31 +120,44 @@ export function PosReviewWorkspace({
   correctionDeliveryFee,
   correctionDriverId,
   correctionOrderType,
+  correctionPaymentDeliveryCompanyId,
+  correctionPaymentMethod,
+  correctionPaymentReason,
+  correctionPaymentReference,
   correctionReason,
   correctionServiceCharge,
   correctionTableId,
   deliveryCompanies,
   deliveryDrivers,
   isCorrectOrderTypeOpen,
+  isCorrectPaymentMethodOpen,
   journalEntries,
+  paymentAccounts,
   onApproveReview,
   onApproveSessionReview,
   onAssignDriver,
   onCloseCorrectionModal,
+  onClosePaymentCorrectionModal,
   onCorrectionDeliveryCompanyIdChange,
   onCorrectionDeliveryFeeChange,
   onCorrectionDriverIdChange,
   onCorrectionOrderTypeChange,
+  onCorrectionPaymentDeliveryCompanyIdChange,
+  onCorrectionPaymentMethodChange,
+  onCorrectionPaymentReasonChange,
+  onCorrectionPaymentReferenceChange,
   onCorrectionReasonChange,
   onCorrectionServiceChargeChange,
   onCorrectionTableIdChange,
   onOpenCorrectionModal,
+  onOpenPaymentCorrectionModal,
   onRejectReview,
   onReprintReceipt,
   onReverseReview,
   onReviewSessionChange,
   onReviewTabChange,
   onSaveCorrection,
+  onSavePaymentCorrection,
   onUpdateDeliveryStatus,
   report,
   posSettings,
@@ -136,9 +166,11 @@ export function PosReviewWorkspace({
   reviewSessionGroups,
   reviewTab,
   selectedCorrectionSale,
+  selectedPaymentCorrectionSale,
   selectedReviewGroup,
   t,
   savingCorrection,
+  savingPaymentCorrection,
 }: PosReviewWorkspaceProps) {
   // Local filter states
   const { user } = useAuth();
@@ -222,6 +254,44 @@ export function PosReviewWorkspace({
         return localizeDisplayText(method, "—");
     }
   };
+
+  const getPaymentDisplayLabel = (payment?: {
+    paymentMethod?: string | null;
+    deliveryCompanyId?: string | null;
+    deliveryCompany?: Pick<DeliveryCompany, "id" | "name" | "arabicName"> | null;
+  } | null) => {
+    if (payment?.deliveryCompanyId && payment.deliveryCompany) {
+      return localizeDisplayText(
+        isArabic
+          ? payment.deliveryCompany.arabicName || payment.deliveryCompany.name
+          : payment.deliveryCompany.name,
+      );
+    }
+    return localizePaymentMethod(payment?.paymentMethod);
+  };
+
+  const paymentRequiresReference = (method: PosPaymentMethod) =>
+    ["CARD", "CLIQ", "BANK_TRANSFER", "WALLET"].includes(method);
+
+  const availablePaymentMethods = useMemo(() => {
+    const methods = new Set<PosPaymentMethod>();
+    paymentAccounts.forEach((account) => {
+      const normalized = String(account.type || "").toUpperCase();
+      if (normalized.includes("CARD")) {
+        methods.add("CARD");
+      } else if (normalized.includes("CLIQ")) {
+        methods.add("CLIQ");
+      } else if (normalized.includes("WALLET")) {
+        methods.add("WALLET");
+      } else if (normalized.includes("BANK")) {
+        methods.add("BANK_TRANSFER");
+      } else {
+        methods.add("CASH");
+      }
+    });
+    methods.add("CASH");
+    return Array.from(methods);
+  }, [paymentAccounts]);
 
   const formatDate = (dateStr: string | Date | null | undefined) => {
     if (!dateStr) return "—";
@@ -1248,7 +1318,7 @@ export function PosReviewWorkspace({
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {activeInvoiceDetail.payments.map((payment) => (
                         <tr key={payment.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-gray-900">{localizePaymentMethod(payment.paymentMethod)}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">{getPaymentDisplayLabel(payment)}</td>
                           <td className="px-4 py-3 text-gray-500">{payment.reference || "—"}</td>
                           <td className="px-4 py-3 text-left font-bold text-gray-900">
                             {payment.amount} {activeInvoiceDetail.currencyCode}
@@ -1299,6 +1369,16 @@ export function PosReviewWorkspace({
                     >
                       {t("pos.review.correctOrderType")}
                     </button>
+                    <button
+                      type="button"
+                      disabled={activeInvoiceDetail.payments.length !== 1}
+                      onClick={() => {
+                        onOpenPaymentCorrectionModal(activeInvoiceDetail);
+                      }}
+                      className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t("pos.review.correctPaymentMethod")}
+                    </button>
                   </>
                 ) : activeInvoiceDetail.posAccountingStatus === "POSTED" ? (
                   <button
@@ -1321,6 +1401,16 @@ export function PosReviewWorkspace({
                       className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition"
                     >
                       {t("pos.review.correctOrderType")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={activeInvoiceDetail.payments.length !== 1}
+                      onClick={() => {
+                        onOpenPaymentCorrectionModal(activeInvoiceDetail);
+                      }}
+                      className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t("pos.review.correctPaymentMethod")}
                     </button>
                     <button
                       type="button"
@@ -1450,6 +1540,109 @@ export function PosReviewWorkspace({
               type="button"
               disabled={!selectedCorrectionSale || !correctionReason.trim() || savingCorrection}
               onClick={onSaveCorrection}
+              className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            >
+              {t("pos.review.saveCorrection")}
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={isCorrectPaymentMethodOpen}
+          onClose={onClosePaymentCorrectionModal}
+          title={t("pos.review.correctPaymentMethodModal")}
+        >
+          <div className="space-y-4 text-start" dir={pageDir}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[18px] border border-[#d6e1d9] bg-[#f8fbf8] px-4 py-3">
+                <div className="text-xs font-semibold text-[#6c7b73]">
+                  {getTranslation("pos.review.invoiceNumber", "رقم الفاتورة")}
+                </div>
+                <div className="mt-1 text-sm font-bold text-[#233329]">
+                  {selectedPaymentCorrectionSale?.reference || "—"}
+                </div>
+              </div>
+              <div className="rounded-[18px] border border-[#d6e1d9] bg-[#f8fbf8] px-4 py-3">
+                <div className="text-xs font-semibold text-[#6c7b73]">
+                  {getTranslation("pos.review.invoiceTotal", "إجمالي الفاتورة")}
+                </div>
+                <div className="mt-1 text-sm font-bold text-[#233329]">
+                  {selectedPaymentCorrectionSale?.totalAmount || "0.00"} {selectedPaymentCorrectionSale?.currencyCode || ""}
+                </div>
+              </div>
+              <div className="rounded-[18px] border border-[#d6e1d9] bg-[#f8fbf8] px-4 py-3 sm:col-span-2">
+                <div className="text-xs font-semibold text-[#6c7b73]">
+                  {getTranslation("pos.review.currentPaymentMethod", "طريقة الدفع الحالية")}
+                </div>
+                <div className="mt-1 text-sm font-bold text-[#233329]">
+                  {getPaymentDisplayLabel(selectedPaymentCorrectionSale?.payments?.[0])}
+                </div>
+              </div>
+            </div>
+
+            <Field label={getTranslation("pos.review.newPaymentMethod", "طريقة الدفع الجديدة")} required labelAlign="start">
+              <select
+                value={
+                  correctionPaymentMethod === "DELIVERY" && correctionPaymentDeliveryCompanyId
+                    ? `DELIVERY:${correctionPaymentDeliveryCompanyId}`
+                    : correctionPaymentMethod
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value.startsWith("DELIVERY:")) {
+                    onCorrectionPaymentMethodChange("DELIVERY");
+                    onCorrectionPaymentDeliveryCompanyIdChange(value.slice("DELIVERY:".length));
+                    return;
+                  }
+                  onCorrectionPaymentMethodChange(value as PosPaymentMethod);
+                  onCorrectionPaymentDeliveryCompanyIdChange("");
+                }}
+                className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+              >
+                {availablePaymentMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {localizePaymentMethod(method)}
+                  </option>
+                ))}
+                {deliveryCompanies.map((company) => (
+                  <option key={company.id} value={`DELIVERY:${company.id}`}>
+                    {getTranslation("pos.review.paymentMethodDeliveryCompany", "شركة توصيل")}:{" "}
+                    {localizeDisplayText(isArabic ? company.arabicName || company.name : company.name)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {paymentRequiresReference(correctionPaymentMethod) ? (
+              <Field label={getTranslation("pos.review.paymentReference", "رقم المرجع")} required labelAlign="start">
+                <Input
+                  value={correctionPaymentReference}
+                  onChange={(event) => onCorrectionPaymentReferenceChange(event.target.value)}
+                  placeholder={getTranslation("pos.review.paymentReference", "رقم المرجع")}
+                  className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                />
+              </Field>
+            ) : null}
+
+            <Field label={getTranslation("pos.review.correctionReason", "سبب التصحيح")} required labelAlign="start">
+              <textarea
+                value={correctionPaymentReason}
+                onChange={(event) => onCorrectionPaymentReasonChange(event.target.value)}
+                placeholder={getTranslation("pos.review.correctionReason", "سبب التصحيح")}
+                className="min-h-[110px] w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329] outline-none ring-0"
+              />
+            </Field>
+
+            <button
+              type="button"
+              disabled={
+                !selectedPaymentCorrectionSale ||
+                !correctionPaymentReason.trim() ||
+                (correctionPaymentMethod === "DELIVERY" && !correctionPaymentDeliveryCompanyId) ||
+                (paymentRequiresReference(correctionPaymentMethod) && !correctionPaymentReference.trim()) ||
+                savingPaymentCorrection
+              }
+              onClick={onSavePaymentCorrection}
               className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
               {t("pos.review.saveCorrection")}

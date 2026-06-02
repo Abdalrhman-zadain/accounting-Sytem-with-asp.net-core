@@ -147,6 +147,7 @@ import {
   DeliveryDriver,
   DeliveryStatus,
   PosWaiter,
+  CorrectPosPaymentMethodPayload,
   CorrectPosOrderTypePayload,
   FixedAsset,
   FixedAssetAcquisition,
@@ -2825,6 +2826,18 @@ export async function correctPosOrderType(
   token?: string | null,
 ) {
   return apiRequest<{ success: boolean }>(`/pos/sales/${id}/correct-order-type`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function correctPosPaymentMethod(
+  id: string,
+  payload: CorrectPosPaymentMethodPayload,
+  token?: string | null,
+) {
+  return apiRequest<{ success: boolean }>(`/pos/sales/${id}/correct-payment-method`, {
     method: "POST",
     body: JSON.stringify(payload),
     token,

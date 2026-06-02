@@ -6,9 +6,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  AccountType,
   AllocationStatus,
   AuditAction,
   InventoryStockMovementType,
+  JournalEntryStatus,
   PosAccountingStatus,
   PosOperationalStatus,
   PosPaymentMethod,
@@ -52,6 +54,7 @@ import {
   MergeTablesDto,
   SplitTableDto,
   CorrectOrderTypeDto,
+  CorrectPaymentMethodDto,
   ReprintKotDto,
 } from "./dto/pos.dto";
 
@@ -1533,7 +1536,7 @@ export class PosService {
           where: {
             sourceType: "PosSession",
             sourceId: id,
-            status: "POSTED",
+            status: JournalEntryStatus.POSTED,
           },
           select: { id: true },
         });
@@ -2171,7 +2174,10 @@ export class PosService {
     const totals = new Map<string, { method: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
       for (const payment of sale.posPayments) {
-        const key = payment.paymentMethod;
+        const key =
+          payment.paymentMethod === PosPaymentMethod.DELIVERY || payment.deliveryCompanyId
+            ? sale.deliveryCompany?.arabicName || sale.deliveryCompany?.name || PosPaymentMethod.DELIVERY
+            : payment.paymentMethod;
         const current = totals.get(key) ?? { method: key, salesAmount: 0, invoiceCount: 0 };
         current.salesAmount += Number(payment.amount);
         current.invoiceCount += 1;
@@ -2404,9 +2410,13 @@ export class PosService {
       totalTax += Number(invoice.taxAmount);
       invoiceCount += 1;
       for (const payment of invoice.posPayments) {
-        const current = paymentTotals.get(payment.paymentMethod) ?? 0;
+        const paymentMethod =
+          payment.paymentMethod === PosPaymentMethod.DELIVERY || payment.deliveryCompanyId
+            ? PosPaymentMethod.DELIVERY
+            : payment.paymentMethod;
+        const current = paymentTotals.get(paymentMethod) ?? 0;
         paymentTotals.set(
-          payment.paymentMethod,
+          paymentMethod,
           Number((current + Number(payment.amount)).toFixed(2)),
         );
       }
@@ -2445,6 +2455,7 @@ export class PosService {
       cliqSales: (paymentTotals.get(PosPaymentMethod.CLIQ) ?? 0).toFixed(2),
       bankTransferSales: (paymentTotals.get(PosPaymentMethod.BANK_TRANSFER) ?? 0).toFixed(2),
       walletSales: (paymentTotals.get(PosPaymentMethod.WALLET) ?? 0).toFixed(2),
+      deliveryCompanySales: (paymentTotals.get(PosPaymentMethod.DELIVERY) ?? 0).toFixed(2),
       totalSales: totalSales.toFixed(2),
       discounts: totalDiscounts.toFixed(2),
       tax: totalTax.toFixed(2),
@@ -3034,6 +3045,13 @@ export class PosService {
       include: {
         posPayments: true,
         lines: true,
+        deliveryCompany: {
+          select: {
+            id: true,
+            name: true,
+            arabicName: true,
+          },
+        },
         posSession: {
           select: {
             id: true,
@@ -3208,6 +3226,281 @@ export class PosService {
     }));
   }
 
+  private requiresPaymentReference(method: PosPaymentMethod) {
+    return (
+      method === PosPaymentMethod.CARD ||
+      method === PosPaymentMethod.CLIQ ||
+      method === PosPaymentMethod.BANK_TRANSFER ||
+      method === PosPaymentMethod.WALLET
+    );
+  }
+
+  private async resolveCorrectionBankCashAccountId(
+    tx: Prisma.TransactionClient,
+    invoice: {
+      posSessionId: string | null;
+      posSession?: { cashAccountId: string } | null;
+    },
+    currentPayment: {
+      bankCashAccountId: string;
+      bankCashAccount: { type: string };
+    },
+    paymentMethod: PosPaymentMethod,
+  ) {
+    if (paymentMethod === PosPaymentMethod.DELIVERY) {
+      return invoice.posSession?.cashAccountId || currentPayment.bankCashAccountId;
+    }
+
+    if (paymentMethod === PosPaymentMethod.CASH && invoice.posSession?.cashAccountId) {
+      return invoice.posSession.cashAccountId;
+    }
+
+    if (this.mapPaymentMethod(currentPayment.bankCashAccount.type) === paymentMethod) {
+      return currentPayment.bankCashAccountId;
+    }
+
+    const fallbackAccount = await tx.bankCashAccount.findFirst({
+      where: { isActive: true },
+      select: { id: true, type: true },
+      orderBy: [{ name: "asc" }],
+    });
+
+    if (
+      fallbackAccount &&
+      this.mapPaymentMethod(fallbackAccount.type) === paymentMethod
+    ) {
+      return fallbackAccount.id;
+    }
+
+    const accounts = await tx.bankCashAccount.findMany({
+      where: { isActive: true },
+      select: { id: true, type: true },
+      orderBy: [{ name: "asc" }],
+    });
+    const resolved = accounts.find((account) => this.mapPaymentMethod(account.type) === paymentMethod);
+    if (!resolved) {
+      throw new BadRequestException(`No active bank/cash account is configured for ${paymentMethod}.`);
+    }
+    return resolved.id;
+  }
+
+  private async recomputeSessionExpectedCash(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+  ) {
+    const session = await tx.posSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: {
+        openingCash: true,
+        salesInvoices: {
+          where: {
+            invoiceType: SalesInvoiceType.POS,
+            posOperationalStatus: PosOperationalStatus.COMPLETED,
+          },
+          select: {
+            posPayments: {
+              select: {
+                amount: true,
+                paymentMethod: true,
+                deliveryCompanyId: true,
+              },
+            },
+          },
+        },
+        posReturns: {
+          where: {
+            status: { not: PosReturnStatus.REVERSED },
+          },
+          select: {
+            payments: {
+              select: {
+                amount: true,
+                refundMethod: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const cashSales = session.salesInvoices.reduce((sum, sale) => {
+      const saleCash = sale.posPayments.reduce((paymentSum, payment) => {
+        if (
+          payment.paymentMethod !== PosPaymentMethod.CASH ||
+          payment.deliveryCompanyId
+        ) {
+          return paymentSum;
+        }
+        return paymentSum + Number(payment.amount);
+      }, 0);
+      return sum + saleCash;
+    }, 0);
+
+    const cashRefunds = session.posReturns.reduce((sum, posReturn) => {
+      const refundCash = posReturn.payments.reduce((paymentSum, payment) => {
+        if (payment.refundMethod !== PosRefundMethod.CASH) {
+          return paymentSum;
+        }
+        return paymentSum + Number(payment.amount);
+      }, 0);
+      return sum + refundCash;
+    }, 0);
+
+    const expectedCash = Number(
+      (Number(session.openingCash) + cashSales - cashRefunds).toFixed(2),
+    );
+
+    await tx.posSession.update({
+      where: { id: sessionId },
+      data: {
+        expectedCash: this.toAmount(expectedCash),
+      },
+    });
+
+    return expectedCash;
+  }
+
+  private buildCorrectedInvoiceDebitLines(
+    invoice: {
+      reference: string;
+      description?: string | null;
+      outstandingAmount: Prisma.Decimal | number | string;
+      customer: { receivableAccountId: string };
+      deliveryCompany?: { id: string; receivableAccountId: string | null } | null;
+      posPayments: Array<{
+        amount: Prisma.Decimal | number | string;
+        paymentMethod: PosPaymentMethod;
+        deliveryCompanyId?: string | null;
+        bankCashAccount: { accountId: string };
+        deliveryCompany?: { receivableAccountId: string | null } | null;
+      }>;
+    },
+    description: string,
+  ) {
+    const debitByAccount = new Map<string, number>();
+    const addAmount = (accountId: string, amount: number) => {
+      const current = debitByAccount.get(accountId) ?? 0;
+      debitByAccount.set(accountId, Number((current + amount).toFixed(2)));
+    };
+
+    for (const payment of invoice.posPayments) {
+      const amount = Number(payment.amount);
+      if (amount <= 0) {
+        continue;
+      }
+
+      let accountId = payment.bankCashAccount.accountId;
+      if (
+        payment.paymentMethod === PosPaymentMethod.DELIVERY &&
+        payment.deliveryCompany?.receivableAccountId &&
+        invoice.deliveryCompany?.id &&
+        payment.deliveryCompanyId === invoice.deliveryCompany.id
+      ) {
+        accountId = payment.deliveryCompany.receivableAccountId;
+      }
+      addAmount(accountId, amount);
+    }
+
+    const outstandingAmount = Number(invoice.outstandingAmount ?? 0);
+    if (outstandingAmount > 0) {
+      const receivableAccountId =
+        invoice.deliveryCompany?.receivableAccountId || invoice.customer.receivableAccountId;
+      addAmount(receivableAccountId, outstandingAmount);
+    }
+
+    return Array.from(debitByAccount.entries()).map(([accountId, amount]) => ({
+      accountId,
+      description,
+      debitAmount: amount,
+      creditAmount: 0,
+    }));
+  }
+
+  private async refreshInvoiceDraftAccountingPreview(
+    tx: Prisma.TransactionClient,
+    invoiceId: string,
+  ) {
+    const invoice = await tx.salesInvoice.findUniqueOrThrow({
+      where: { id: invoiceId },
+      include: {
+        customer: {
+          select: {
+            receivableAccountId: true,
+          },
+        },
+        deliveryCompany: {
+          select: {
+            id: true,
+            receivableAccountId: true,
+          },
+        },
+        posPayments: {
+          include: {
+            bankCashAccount: {
+              select: {
+                accountId: true,
+              },
+            },
+            deliveryCompany: {
+              select: {
+                receivableAccountId: true,
+              },
+            },
+          },
+        },
+        journalEntry: {
+          select: {
+            id: true,
+            status: true,
+            lines: {
+              include: {
+                account: {
+                  select: {
+                    type: true,
+                  },
+                },
+              },
+              orderBy: { lineNumber: "asc" },
+            },
+          },
+        },
+      },
+    });
+
+    if (!invoice.journalEntry?.id || invoice.journalEntry.status === JournalEntryStatus.POSTED) {
+      return;
+    }
+
+    const description = invoice.description
+      ? `${invoice.reference} - ${invoice.description}`
+      : invoice.reference;
+    const debitLines = this.buildCorrectedInvoiceDebitLines(invoice, description);
+    const preservedLines = invoice.journalEntry.lines
+      .filter((line) => !(Number(line.debitAmount) > 0 && line.account.type === AccountType.ASSET))
+      .map((line) => ({
+        accountId: line.accountId,
+        description: line.description,
+        debitAmount: Number(line.debitAmount),
+        creditAmount: Number(line.creditAmount),
+      }));
+    const journalLines = [...debitLines, ...preservedLines];
+    this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
+
+    await tx.journalEntryLine.deleteMany({
+      where: { journalEntryId: invoice.journalEntry.id },
+    });
+    await tx.journalEntryLine.createMany({
+      data: journalLines.map((line, index) => ({
+        journalEntryId: invoice.journalEntry!.id,
+        accountId: line.accountId,
+        lineNumber: index + 1,
+        description: line.description ?? null,
+        debitAmount: this.toAmount(line.debitAmount),
+        creditAmount: this.toAmount(line.creditAmount),
+      })),
+    });
+  }
+
   private async syncSessionGroupedJournalEntry(
     tx: Prisma.TransactionClient,
     sessionId: string,
@@ -3230,7 +3523,7 @@ export class PosService {
       },
     });
 
-    if (existingSessionJournal?.status === "POSTED") {
+    if (existingSessionJournal?.status === JournalEntryStatus.POSTED) {
       return existingSessionJournal;
     }
 
@@ -3934,6 +4227,13 @@ export class PosService {
               account: { select: { id: true, code: true, name: true } },
             },
           },
+          deliveryCompany: {
+            select: {
+              id: true,
+              name: true,
+              arabicName: true,
+            },
+          },
         },
       },
       journalEntry: {
@@ -4015,12 +4315,20 @@ export class PosService {
     for (const sale of sales) {
       for (const p of (sale.posPayments ?? [])) {
         const amt = Number(p.amount);
-        if (p.paymentMethod === "CASH") {
+        const normalizedPaymentMethod =
+          p.paymentMethod === PosPaymentMethod.DELIVERY || p.deliveryCompanyId
+            ? PosPaymentMethod.DELIVERY
+            : p.paymentMethod;
+        if (normalizedPaymentMethod === PosPaymentMethod.CASH) {
           cashSalesVal += amt;
-        } else if (["CARD", "CLIQ", "WALLET"].includes(p.paymentMethod)) {
+        } else if (
+          [PosPaymentMethod.CARD, PosPaymentMethod.CLIQ, PosPaymentMethod.WALLET].includes(
+            normalizedPaymentMethod,
+          )
+        ) {
           cardSalesVal += amt;
         }
-        if (p.deliveryCompanyId) {
+        if (normalizedPaymentMethod === PosPaymentMethod.DELIVERY) {
           deliveryCompanySalesVal += amt;
         }
       }
@@ -4165,6 +4473,8 @@ export class PosService {
         amount: payment.amount.toString(),
         tenderedAmount: payment.tenderedAmount?.toString() ?? null,
         reference: payment.reference ?? null,
+        deliveryCompanyId: payment.deliveryCompanyId ?? null,
+        deliveryCompany: payment.deliveryCompany ?? null,
         bankCashAccount: payment.bankCashAccount,
       })),
       createdAt: row.createdAt.toISOString(),
@@ -4945,6 +5255,190 @@ export class PosService {
         deliveryCompanyId,
         driverId,
         reason: dto.reason,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async correctPaymentMethod(id: string, dto: CorrectPaymentMethodDto, user?: AuthorizedUser) {
+    if (
+      !this.hasPosPermissionCode("POS_CORRECT_ORDER_TYPE", user) &&
+      !this.hasPosPermissionCode("POS_APPROVE_ACCOUNTING", user)
+    ) {
+      throw new BadRequestException("You do not have permission to correct POS payment methods.");
+    }
+
+    const invoice = await this.prisma.salesInvoice.findUnique({
+      where: { id },
+      include: {
+        posSession: {
+          select: {
+            id: true,
+            cashAccountId: true,
+          },
+        },
+        deliveryCompany: {
+          select: {
+            id: true,
+            name: true,
+            receivableAccountId: true,
+          },
+        },
+        posPayments: {
+          include: {
+            bankCashAccount: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+            deliveryCompany: {
+              select: {
+                id: true,
+                name: true,
+                receivableAccountId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!invoice) {
+      throw new BadRequestException(`Invoice ${id} was not found.`);
+    }
+    if (invoice.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
+      throw new BadRequestException("Only completed POS invoices can be corrected.");
+    }
+    if (!invoice.posSessionId) {
+      throw new BadRequestException("POS invoice is not linked to a session.");
+    }
+    if (invoice.posAccountingStatus === PosAccountingStatus.POSTED) {
+      throw new BadRequestException("Cannot correct payment method after final posting. Reversal is required first.");
+    }
+    if (invoice.posPayments.length !== 1) {
+      throw new BadRequestException("Payment method correction currently supports invoices with exactly one payment.");
+    }
+    if (!dto.reason.trim()) {
+      throw new BadRequestException("Correction reason is required.");
+    }
+    if (this.requiresPaymentReference(dto.paymentMethod) && !dto.reference?.trim()) {
+      throw new BadRequestException("Reference number is required for the selected payment method.");
+    }
+
+    const currentPayment = invoice.posPayments[0];
+    const existingSessionJournal = await this.prisma.journalEntry.findFirst({
+      where: {
+        sourceType: "PosSession",
+        sourceId: invoice.posSessionId,
+        status: JournalEntryStatus.POSTED,
+      },
+      select: { id: true },
+    });
+    if (existingSessionJournal?.id) {
+      throw new BadRequestException("Cannot correct payment method after final session posting. Reversal is required first.");
+    }
+
+    let targetDeliveryCompany:
+      | {
+          id: string;
+          name: string;
+          receivableAccountId: string | null;
+        }
+      | null = null;
+    if (dto.paymentMethod === PosPaymentMethod.DELIVERY) {
+      if (!dto.deliveryCompanyId?.trim()) {
+        throw new BadRequestException("A delivery company is required for delivery payment correction.");
+      }
+      targetDeliveryCompany = await this.prisma.deliveryCompany.findUnique({
+        where: { id: dto.deliveryCompanyId.trim(), isActive: true },
+        select: {
+          id: true,
+          name: true,
+          receivableAccountId: true,
+        },
+      });
+      if (!targetDeliveryCompany) {
+        throw new BadRequestException(`Delivery company ${dto.deliveryCompanyId} was not found or is inactive.`);
+      }
+      if (!targetDeliveryCompany.receivableAccountId) {
+        throw new BadRequestException("Selected delivery company must have a receivable account before correction.");
+      }
+    }
+
+    const bankCashAccountId = await this.prisma.$transaction(async (tx) => {
+      const nextBankCashAccountId = await this.resolveCorrectionBankCashAccountId(
+        tx,
+        invoice,
+        currentPayment,
+        dto.paymentMethod,
+      );
+
+      await tx.posPayment.update({
+        where: { id: currentPayment.id },
+        data: {
+          paymentMethod: dto.paymentMethod,
+          bankCashAccountId: nextBankCashAccountId,
+          deliveryCompanyId:
+            dto.paymentMethod === PosPaymentMethod.DELIVERY
+              ? targetDeliveryCompany!.id
+              : null,
+          reference: dto.reference?.trim() || null,
+        },
+      });
+
+      await tx.salesInvoice.update({
+        where: { id },
+        data: {
+          deliveryCompanyId:
+            dto.paymentMethod === PosPaymentMethod.DELIVERY
+              ? targetDeliveryCompany!.id
+              : invoice.deliveryCompanyId ?? null,
+          correctionReason: dto.reason.trim(),
+          isCorrected: true,
+          correctedAt: new Date(),
+          correctedByUserId: user?.userId || null,
+        },
+      });
+
+      await this.recomputeSessionExpectedCash(tx, invoice.posSessionId!);
+
+      if ((await this.getPosPostingMode(tx)) === "BY_SESSION") {
+        await this.syncSessionGroupedJournalEntry(tx, invoice.posSessionId!);
+      } else {
+        await this.refreshInvoiceDraftAccountingPreview(tx, id);
+      }
+
+      return nextBankCashAccountId;
+    });
+
+    await this.auditService.log({
+      userId: user?.userId || "system",
+      entity: "SalesInvoice",
+      entityId: id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "Invoice payment method corrected",
+        invoiceId: id,
+        oldPaymentMethod:
+          currentPayment.paymentMethod === PosPaymentMethod.DELIVERY || currentPayment.deliveryCompanyId
+            ? currentPayment.deliveryCompany?.name || PosPaymentMethod.DELIVERY
+            : currentPayment.paymentMethod,
+        newPaymentMethod:
+          dto.paymentMethod === PosPaymentMethod.DELIVERY
+            ? targetDeliveryCompany?.name || PosPaymentMethod.DELIVERY
+            : dto.paymentMethod,
+        oldReference: currentPayment.reference ?? null,
+        newReference: dto.reference?.trim() || null,
+        correctionReason: dto.reason.trim(),
+        correctedBy: user?.userId || null,
+        correctedAt: new Date().toISOString(),
+        oldDeliveryCompanyId: currentPayment.deliveryCompanyId ?? null,
+        newDeliveryCompanyId:
+          dto.paymentMethod === PosPaymentMethod.DELIVERY
+            ? targetDeliveryCompany?.id ?? null
+            : null,
+        bankCashAccountId,
       },
     });
 

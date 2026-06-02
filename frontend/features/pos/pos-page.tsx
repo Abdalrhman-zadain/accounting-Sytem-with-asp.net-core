@@ -104,6 +104,7 @@ import {
   mergePosTables,
   splitPosTable,
   correctPosOrderType,
+  correctPosPaymentMethod,
   getDeliveryCompanies,
   getDeliveryDrivers,
   assignDriver,
@@ -141,6 +142,7 @@ import type {
   DeliveryDriver,
   DeliveryStatus,
   PosOrderType,
+  PosPaymentMethod,
   PosInventoryImpactRow,
   PosReportsOverview,
   PosSalesByItemRow,
@@ -751,7 +753,9 @@ export function PosPage() {
   const [reviewSessionId, setReviewSessionId] = useState<string>("");
   const [reviewTab, setReviewTab] = useState<"overview" | "cash" | "inventory" | "journal">("overview");
   const [isCorrectOrderTypeOpen, setIsCorrectOrderTypeOpen] = useState(false);
+  const [isCorrectPaymentMethodOpen, setIsCorrectPaymentMethodOpen] = useState(false);
   const [selectedCorrectionSale, setSelectedCorrectionSale] = useState<PosSale | null>(null);
+  const [selectedPaymentCorrectionSale, setSelectedPaymentCorrectionSale] = useState<PosSale | null>(null);
   const [correctionOrderType, setCorrectionOrderType] = useState<PosOrderType>("TAKEAWAY");
   const [correctionTableId, setCorrectionTableId] = useState<string>("");
   const [correctionDeliveryCompanyId, setCorrectionDeliveryCompanyId] = useState<string>("");
@@ -759,6 +763,10 @@ export function PosPage() {
   const [correctionServiceCharge, setCorrectionServiceCharge] = useState("");
   const [correctionDeliveryFee, setCorrectionDeliveryFee] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionPaymentMethod, setCorrectionPaymentMethod] = useState<PosPaymentMethod>("CASH");
+  const [correctionPaymentDeliveryCompanyId, setCorrectionPaymentDeliveryCompanyId] = useState("");
+  const [correctionPaymentReference, setCorrectionPaymentReference] = useState("");
+  const [correctionPaymentReason, setCorrectionPaymentReason] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const customersQuery = useQuery({
@@ -1414,6 +1422,20 @@ export function PosPage() {
     },
     onError: (error) => {
       pushError(getErrorMessage(error, "Failed to correct order type."));
+    },
+  });
+
+  const correctPaymentMethodMutation = useMutation({
+    mutationFn: (payload: { saleId: string; data: Parameters<typeof correctPosPaymentMethod>[1] }) =>
+      correctPosPaymentMethod(payload.saleId, payload.data, token),
+    onSuccess: async () => {
+      await refreshPosData();
+      setIsCorrectPaymentMethodOpen(false);
+      setSelectedPaymentCorrectionSale(null);
+      pushMessage("Payment method correction saved.");
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to correct payment method."));
     },
   });
 
@@ -2543,6 +2565,22 @@ export function PosPage() {
     );
     setCorrectionReason("");
     setIsCorrectOrderTypeOpen(true);
+  };
+
+  const openPaymentCorrectionModal = (sale: PosSale) => {
+    const currentPayment = sale.payments[0];
+    if (!currentPayment) {
+      pushError("No payment was found for this invoice.");
+      return;
+    }
+    setSelectedPaymentCorrectionSale(sale);
+    setCorrectionPaymentMethod(
+      currentPayment.deliveryCompanyId ? "DELIVERY" : currentPayment.paymentMethod,
+    );
+    setCorrectionPaymentDeliveryCompanyId(currentPayment.deliveryCompanyId ?? "");
+    setCorrectionPaymentReference(currentPayment.reference ?? "");
+    setCorrectionPaymentReason("");
+    setIsCorrectPaymentMethodOpen(true);
   };
 
   const createReturnFromSelection = () => {
@@ -4178,13 +4216,19 @@ export function PosPage() {
         correctionDeliveryFee={correctionDeliveryFee}
         correctionDriverId={correctionDriverId}
         correctionOrderType={correctionOrderType}
+        correctionPaymentDeliveryCompanyId={correctionPaymentDeliveryCompanyId}
+        correctionPaymentMethod={correctionPaymentMethod}
+        correctionPaymentReason={correctionPaymentReason}
+        correctionPaymentReference={correctionPaymentReference}
         correctionReason={correctionReason}
         correctionServiceCharge={correctionServiceCharge}
         correctionTableId={correctionTableId}
         deliveryCompanies={deliveryCompanies}
         deliveryDrivers={deliveryDrivers}
         isCorrectOrderTypeOpen={isCorrectOrderTypeOpen}
+        isCorrectPaymentMethodOpen={isCorrectPaymentMethodOpen}
         journalEntries={reviewJournalEntriesQuery.data ?? []}
+        paymentAccounts={paymentAccountsQuery.data ?? []}
         onApproveReview={(saleId) => approveReviewMutation.mutate(saleId)}
         onApproveSessionReview={(sessionId, decision, reason) =>
           approveSessionReviewMutation.mutate({ sessionId, decision, reason })
@@ -4192,15 +4236,27 @@ export function PosPage() {
         onAssignDriver={(saleId, driverId) =>
           assignDriverMutation.mutate({ saleId, driverId })
         }
-        onCloseCorrectionModal={() => setIsCorrectOrderTypeOpen(false)}
+        onCloseCorrectionModal={() => {
+          setIsCorrectOrderTypeOpen(false);
+          setSelectedCorrectionSale(null);
+        }}
+        onClosePaymentCorrectionModal={() => {
+          setIsCorrectPaymentMethodOpen(false);
+          setSelectedPaymentCorrectionSale(null);
+        }}
         onCorrectionDeliveryCompanyIdChange={setCorrectionDeliveryCompanyId}
         onCorrectionDeliveryFeeChange={setCorrectionDeliveryFee}
         onCorrectionDriverIdChange={setCorrectionDriverId}
         onCorrectionOrderTypeChange={setCorrectionOrderType}
+        onCorrectionPaymentDeliveryCompanyIdChange={setCorrectionPaymentDeliveryCompanyId}
+        onCorrectionPaymentMethodChange={setCorrectionPaymentMethod}
+        onCorrectionPaymentReasonChange={setCorrectionPaymentReason}
+        onCorrectionPaymentReferenceChange={setCorrectionPaymentReference}
         onCorrectionReasonChange={setCorrectionReason}
         onCorrectionServiceChargeChange={setCorrectionServiceCharge}
         onCorrectionTableIdChange={setCorrectionTableId}
         onOpenCorrectionModal={openCorrectionModal}
+        onOpenPaymentCorrectionModal={openPaymentCorrectionModal}
         onRejectReview={(saleId) => rejectReviewMutation.mutate(saleId)}
         onReprintReceipt={(saleId) => reprintReceiptMutation.mutate(saleId)}
         onReverseReview={(saleId) => reverseReviewMutation.mutate(saleId)}
@@ -4221,6 +4277,21 @@ export function PosPage() {
             },
           });
         }}
+        onSavePaymentCorrection={() => {
+          if (!selectedPaymentCorrectionSale) return;
+          correctPaymentMethodMutation.mutate({
+            saleId: selectedPaymentCorrectionSale.id,
+            data: {
+              paymentMethod: correctionPaymentMethod,
+              deliveryCompanyId:
+                correctionPaymentMethod === "DELIVERY"
+                  ? correctionPaymentDeliveryCompanyId || null
+                  : null,
+              reference: correctionPaymentReference.trim() || null,
+              reason: correctionPaymentReason.trim(),
+            },
+          });
+        }}
         onUpdateDeliveryStatus={(saleId, status) =>
           updateDeliveryStatusMutation.mutate({ saleId, status })
         }
@@ -4231,7 +4302,9 @@ export function PosPage() {
         reviewTab={reviewTab}
         posSettings={settingsQuery.data ?? null}
         savingCorrection={correctOrderTypeMutation.isPending}
+        savingPaymentCorrection={correctPaymentMethodMutation.isPending}
         selectedCorrectionSale={selectedCorrectionSale}
+        selectedPaymentCorrectionSale={selectedPaymentCorrectionSale}
         selectedReviewGroup={selectedReviewGroup}
         t={t}
       />

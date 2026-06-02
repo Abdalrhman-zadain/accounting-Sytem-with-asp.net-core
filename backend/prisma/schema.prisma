@@ -110,6 +110,7 @@ enum PosPaymentMethod {
   CLIQ
   BANK_TRANSFER
   WALLET
+  DELIVERY
 }
 
 enum PosReturnStatus {

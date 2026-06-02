@@ -13,7 +13,14 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { PosRefundMethod, OrderType, DeliveryStatus, TableStatus, KitchenStatus } from "../../../../generated/prisma";
+import {
+  PosPaymentMethod,
+  PosRefundMethod,
+  OrderType,
+  DeliveryStatus,
+  TableStatus,
+  KitchenStatus,
+} from "../../../../generated/prisma";
 import { SalesLineDto } from "../../dto/sales-receivables.dto";
 
 export class CreateTableReservationDto {
@@ -381,6 +388,24 @@ export class CorrectOrderTypeDto {
   deliveryFeeAmount?: number;
 
   @IsString()
+  reason!: string;
+}
+
+export class CorrectPaymentMethodDto {
+  @IsEnum(PosPaymentMethod)
+  paymentMethod!: PosPaymentMethod;
+
+  @IsOptional()
+  @IsString()
+  deliveryCompanyId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 120)
+  reference?: string;
+
+  @IsString()
+  @Length(1, 255)
   reason!: string;
 }
 

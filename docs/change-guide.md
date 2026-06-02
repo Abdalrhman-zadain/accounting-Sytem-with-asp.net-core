@@ -711,7 +711,7 @@ Where to edit:
 
 What else to check:
 
-- restaurant delivery and correction APIs also live in the main POS service/controller layer; keep `correctOrderType`, delivery-company/driver reads, driver assignment, and delivery-status updates aligned between `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts`, `pos.controller.ts`, `frontend/lib/api/index.ts`, and `frontend/types/api.ts`
+- restaurant delivery and correction APIs also live in the main POS service/controller layer; keep `correctOrderType`, `correctPaymentMethod`, delivery-company/driver reads, driver assignment, and delivery-status updates aligned between `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts`, `pos.controller.ts`, `frontend/lib/api/index.ts`, and `frontend/types/api.ts`
 - all three POS sale payloads (`holdSale`, `saveDraftSale`, `completeSale`) must stay aligned for restaurant fields; do not add `orderType`, `tableId`, charges, or delivery notes to only one payload
 - if `orderType === "DINE_IN"`, the register should require a selected table before completion and should clear `tableId` when the user switches away from dine-in
 - `mapPosSale`, `posSaleInclude`, and `mapPosSaleToHeldSale` must stay in sync so drafts/held sales resume with the original order type, table, and fee metadata

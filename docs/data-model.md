@@ -143,7 +143,8 @@ Key fields:
 - customer receipt transactions `customerId`, settlement text, and links to posted receipt transactions
 - allocation `amount`, `allocatedAt`, and links to posted receipt transactions
 - POS session `sessionNumber`, `terminalName`, optional `branchName`, linked `warehouseId`, linked cash drawer `cashAccountId`, `openingCash`, `expectedCash`, optional `actualCash`, optional `difference`, `status`, `openedAt`, and optional `closedAt`
-- POS payment `salesInvoiceId`, `bankCashAccountId`, `paymentMethod`, `amount`, optional `tenderedAmount`, and optional `reference`
+- POS payment `salesInvoiceId`, `bankCashAccountId`, `paymentMethod` (including grouped `DELIVERY` settlement rows for third-party companies), `amount`, optional `tenderedAmount`, optional `reference`, and optional `deliveryCompanyId`
+- POS invoice correction audit now records payment-method corrections through audit-log details containing old/new method and reference values, correction reason, corrected-by user, and correction timestamp
 - POS return `reference`, linked original `salesInvoiceId`, optional `posSessionId`, linked `customerId`, `status`, `accountingStatus`, totals, refund amount, optional review/reversal metadata, and linked refund/accounting records
 - POS return line `salesInvoiceLineId`, optional `itemId`, optional `warehouseId`, quantity, price/discount/tax totals, posting-account references, and optional unit/total cost for stock returns
 - POS return payment `refundMethod`, optional `bankCashAccountId`, refund `amount`, and optional external `reference`

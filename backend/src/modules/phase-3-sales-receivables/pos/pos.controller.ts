@@ -15,6 +15,7 @@ import {
   SetPosFavoriteItemsDto,
   VoidPosSaleDto,
   CorrectOrderTypeDto,
+  CorrectPaymentMethodDto,
 } from "./dto/pos.dto";
 import { PosService } from "./pos.service";
 
@@ -208,6 +209,15 @@ export class PosController {
     @Body() dto: PosReverseAccountingDto,
   ) {
     return this.service.reverseAccounting(id, dto, req.user);
+  }
+
+  @Post("sales/:id/correct-payment-method")
+  correctPaymentMethod(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: CorrectPaymentMethodDto,
+  ) {
+    return this.service.correctPaymentMethod(id, dto, req.user);
   }
 
   @Post("sales/:id/reprint")
