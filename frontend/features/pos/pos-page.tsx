@@ -955,25 +955,31 @@ export function PosPage() {
       "pos-review-journal-entries",
       token,
       reviewSessionId,
-      (reviewQuery.data ?? [])
-        .filter((sale) => (sale.session?.id ?? "") === reviewSessionId)
-        .map((sale) => sale.journalEntry?.id)
+      [
+        ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? ""),
+        ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? ""),
+      ]
         .filter(Boolean)
         .join(","),
     ],
     queryFn: async () => {
-      const ids =
-        (reviewQuery.data ?? [])
-          .filter((sale) => (sale.session?.id ?? "") === reviewSessionId)
-          .map((sale) => sale.journalEntry?.id)
-          .filter((id): id is string => Boolean(id)) ?? [];
+      const ids = Array.from(
+        new Set(
+          [
+            ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? null),
+            ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? null),
+          ].filter((id): id is string => Boolean(id)),
+        ),
+      );
       return Promise.all(ids.map((id) => getJournalEntryById(id, token)));
     },
     enabled: Boolean(
       token &&
         workspace === "review" &&
-        (reviewQuery.data ?? []).some(
-          (sale) => (sale.session?.id ?? "") === reviewSessionId && Boolean(sale.journalEntry?.id),
+        reviewSessionReportQuery.data &&
+        (
+          (reviewSessionReportQuery.data.sales ?? []).some((sale) => Boolean(sale.journalEntry?.id)) ||
+          (reviewSessionReportQuery.data.returns ?? []).some((posReturn) => Boolean(posReturn.journalEntry?.id))
         ),
     ),
   });
@@ -4433,6 +4439,35 @@ export function PosPage() {
     const salesByItem = salesByItemQuery.data ?? [];
     const inventoryImpact = inventoryImpactQuery.data ?? [];
     const taxSummary = taxSummaryQuery.data ?? overview?.taxSummary ?? [];
+    const localizeReportName = (value?: string | null) => {
+      if (!value || value === "Unassigned") {
+        return t("pos.reports.unassigned");
+      }
+      if (value === "Untaxed" || value === "UNTAXED") {
+        return t("pos.reports.untaxed");
+      }
+      return getLocalizedText(value, language);
+    };
+    const localizeReportPaymentMethod = (method: string) => {
+      switch (method) {
+        case "CASH":
+        case "CARD":
+        case "CLIQ":
+        case "BANK_TRANSFER":
+        case "WALLET":
+        case "STORE_CREDIT":
+          return t(`pos.returns.method.${method}`);
+        default:
+          return getLocalizedText(method, language);
+      }
+    };
+    const localizeTaxSummaryLabel = (row: PosTaxSummaryRow) => {
+      const taxLabel =
+        row.taxCode === "UNTAXED"
+          ? t("pos.reports.untaxed")
+          : getLocalizedText(row.taxCode || row.taxName, language);
+      return `${taxLabel} (${row.rate}%)`;
+    };
 
     return (
       <div className="space-y-6">
@@ -4473,7 +4508,7 @@ export function PosPage() {
           <ReportCard
             title={t("pos.reports.salesByPaymentTitle")}
             rows={salesByPaymentMethod.map((row) => ({
-              label: row.method,
+              label: localizeReportPaymentMethod(row.method),
               value: t("pos.reports.paymentValue", {
                 amount: row.salesAmount,
                 count: row.invoiceCount,
@@ -4483,7 +4518,7 @@ export function PosPage() {
           <ReportCard
             title={t("pos.reports.salesByCashierTitle")}
             rows={salesByCashier.map((row) => ({
-              label: row.cashierName,
+              label: localizeReportName(row.cashierName),
               value: t("pos.reports.paymentValue", {
                 amount: row.salesAmount,
                 count: row.invoiceCount,
@@ -4493,7 +4528,7 @@ export function PosPage() {
           <ReportCard
             title={t("pos.reports.salesByBranchTitle")}
             rows={salesByBranch.map((row) => ({
-              label: row.branchName,
+              label: localizeReportName(row.branchName),
               value: t("pos.reports.paymentValue", {
                 amount: row.salesAmount,
                 count: row.invoiceCount,
@@ -4503,7 +4538,7 @@ export function PosPage() {
           <ReportCard
             title={t("pos.reports.taxSummaryTitle")}
             rows={taxSummary.map((row: PosTaxSummaryRow) => ({
-              label: `${row.taxCode} (${row.rate}%)`,
+              label: localizeTaxSummaryLabel(row),
               value: t("pos.reports.taxValue", {
                 netTax: row.netTax,
                 returnTax: row.returnTax,
@@ -4522,7 +4557,7 @@ export function PosPage() {
               t("pos.reports.header.tax"),
             ]}
             rows={salesByItem.map((row: PosSalesByItemRow) => [
-              row.itemName,
+              localizeReportName(row.itemName),
               row.quantity,
               row.salesAmount,
               row.taxAmount,
@@ -4539,8 +4574,8 @@ export function PosPage() {
             ]}
             rows={inventoryImpact.map((row: PosInventoryImpactRow) => [
               row.transactionReference,
-              row.item?.name ?? "—",
-              row.warehouse?.name ?? "—",
+              row.item?.name ? getLocalizedText(row.item.name, language) : "—",
+              row.warehouse?.name ? getLocalizedText(row.warehouse.name, language) : "—",
               `${row.quantityOut} / ${row.quantityIn}`,
               row.runningQuantity,
             ])}
@@ -5260,12 +5295,17 @@ function ReportCard({
           ))
         ) : (
           <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-4 text-sm text-[#64736b]">
-            No report rows available.
+            <ReportCardEmptyState />
           </div>
         )}
       </div>
     </Card>
   );
+}
+
+function ReportCardEmptyState() {
+  const { t } = useTranslation();
+  return <>{t("pos.reports.noRows")}</>;
 }
 
 function OpenShiftPanel({

@@ -2952,6 +2952,8 @@ Object.assign(arTranslations, {
   "pos.reports.header.warehouse": "المستودع",
   "pos.reports.header.qtyInOut": "الكمية الخارجة / الداخلة",
   "pos.reports.header.runningQty": "الكمية الجارية",
+  "pos.reports.unassigned": "غير معين",
+  "pos.reports.untaxed": "غير خاضع للضريبة",
   "pos.reports.noRows": "لا توجد بيانات متاحة حالياً.",
 
   "pos.settings.description": "سياسات تشغيل POS وصلاحيات الوصول بناءً على إعدادات النظام الحالية.",

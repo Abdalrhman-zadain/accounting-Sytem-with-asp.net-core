@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { Card, Modal } from "@/components/ui";
 import { Input, Field } from "@/components/ui/forms";
 import { DetailTile } from "@/features/pos/pos-detail-cards";
-import { cn } from "@/lib/utils";
+import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useTranslation } from "@/lib/i18n";
 import type {
@@ -195,6 +195,27 @@ export function PosReviewWorkspace({
       return val && val !== key ? val : fallback;
     } catch {
       return fallback;
+    }
+  };
+
+  const localizeDisplayText = (value?: string | null, emptyFallback = "—") => {
+    if (!value) return emptyFallback;
+    return getLocalizedText(value, language);
+  };
+
+  const localizePaymentMethod = (method?: string | null) => {
+    switch (method) {
+      case "CASH":
+      case "CARD":
+      case "CLIQ":
+      case "BANK_TRANSFER":
+      case "WALLET":
+      case "STORE_CREDIT":
+        return t(`pos.returns.method.${method}`);
+      case "DELIVERY":
+        return t("pos.review.paymentMethodDelivery");
+      default:
+        return localizeDisplayText(method, "—");
     }
   };
 
@@ -392,10 +413,13 @@ export function PosReviewWorkspace({
       sale.lines
         .filter((line) => line.item?.trackInventory)
         .map((line) => ({
-          itemName: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
+          itemName: localizeDisplayText(
+            line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
+            `Line ${line.lineNumber}`,
+          ),
           quantity: line.quantity,
           saleReference: sale.reference,
-          warehouse: line.warehouse?.name ?? "—",
+          warehouse: localizeDisplayText(line.warehouse?.name),
         })),
     );
   }, [report]);
@@ -417,10 +441,39 @@ export function PosReviewWorkspace({
     return Object.entries(breakdown);
   }, [report]);
 
+  const orderedJournalEntries = useMemo(() => {
+    const journalById = new Map(journalEntries.map((entry) => [entry.id, entry]));
+
+    return invoiceList
+      .map((invoice) => {
+        const journalId = invoice.raw?.journalEntry?.id;
+        if (!journalId) return null;
+        const entry = journalById.get(journalId);
+        if (!entry) return null;
+        return {
+          entry,
+          sourceReference: invoice.reference,
+          sourceType:
+            invoice.type === "return"
+              ? getTranslation("pos.review.returnBadge", "مرتجع")
+              : getTranslation("pos.sessions.invoices", "الفواتير"),
+        };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          entry: JournalEntry;
+          sourceReference: string;
+          sourceType: string;
+        } => Boolean(item),
+      );
+  }, [invoiceList, journalEntries, language]);
+
   // INLINE SUB-PAGE RENDER
   if (selectedSession) {
     return (
-      <div className="space-y-6 text-start" dir="rtl">
+      <div className="space-y-6 text-start" dir={pageDir}>
         {/* Back Button and status bar */}
         <div className="flex items-center justify-between">
           <button
@@ -428,7 +481,7 @@ export function PosReviewWorkspace({
             onClick={() => setSelectedSession(null)}
             className="flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition shadow-sm"
           >
-            <LuChevronRight size={14} className="ml-1" />
+            {isArabic ? <LuChevronRight size={14} className="ml-1" /> : <LuChevronLeft size={14} className="mr-1" />}
             <span>{getTranslation("pos.review.backToSessions", "العودة إلى قائمة الورديات")}</span>
           </button>
           
@@ -530,19 +583,19 @@ export function PosReviewWorkspace({
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.cashierLabel", "الكاشير")}</span>
             <span className="text-lg font-bold text-[#233329]">
-              {selectedSession.cashierUser?.name || selectedSession.cashierUser?.email || "—"}
+              {localizeDisplayText(selectedSession.cashierUser?.name || selectedSession.cashierUser?.email)}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.branch", "الفرع")}</span>
             <span className="text-lg font-bold text-[#233329]">
-              {selectedSession.branchName || "—"}
+              {localizeDisplayText(selectedSession.branchName)}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <span className="block text-xs font-semibold text-gray-500 mb-1">{getTranslation("pos.sessions.warehouse", "المستودع")}</span>
             <span className="text-lg font-bold text-[#233329]">
-              {selectedSession.warehouse?.name || "—"}
+              {localizeDisplayText(selectedSession.warehouse?.name)}
             </span>
           </Card>
           <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -708,7 +761,9 @@ export function PosReviewWorkspace({
                       {invoiceList.map((inv) => {
                         const isSale = inv.type === "sale";
                         const salePayments = isSale
-                          ? (inv.raw.payments || []).map((p: any) => p.paymentMethod).join(", ")
+                          ? (inv.raw.payments || [])
+                              .map((p: any) => localizePaymentMethod(p.paymentMethod))
+                              .join(", ")
                           : getTranslation("pos.review.cashPaymentMethod", "كاش");
 
                         return (
@@ -718,7 +773,7 @@ export function PosReviewWorkspace({
                               {!isSale && <span className="mr-1.5 text-[10px] text-red-600 font-extrabold">({getTranslation("pos.review.returnBadge", "مرتجع")})</span>}
                             </td>
                             <td className="px-3 py-3 text-gray-500">{formatDate(inv.date)}</td>
-                            <td className="px-3 py-3 text-gray-700 font-semibold">{inv.customer}</td>
+                            <td className="px-3 py-3 text-gray-700 font-semibold">{localizeDisplayText(inv.customer)}</td>
                             <td className="px-3 py-3 text-gray-700 font-semibold">
                               {t(`pos.orderType.${inv.orderType}`)}
                             </td>
@@ -860,7 +915,7 @@ export function PosReviewWorkspace({
                       <div className="divide-y divide-gray-100 bg-white">
                         {paymentsBreakdown.map(([method, data]) => (
                           <div key={method} className="p-3 flex justify-between items-center text-xs">
-                            <span className="font-bold text-gray-900">{method}</span>
+                            <span className="font-bold text-gray-900">{localizePaymentMethod(method)}</span>
                             <span className="font-bold text-[#46644b]">
                               {data.total.toFixed(2)} ({t("pos.sessions.invoices")} {data.count})
                             </span>
@@ -914,18 +969,25 @@ export function PosReviewWorkspace({
             <div className="space-y-4">
               <div className="text-sm font-bold text-[#233329] mb-2">{getTranslation("pos.review.tabJournal", "معاينة القيد المحاسبي")}</div>
               <div className="space-y-4">
-                {journalEntries.length === 0 ? (
+                {orderedJournalEntries.length === 0 ? (
                   <div className="rounded-[18px] border border-dashed border-[#d7ddd8] bg-[#fafcf9] px-4 py-8 text-center text-sm text-[#64736b]">
                     {getTranslation("pos.review.noJournals", "لا توجد قيود محاسبية مسودة مرتبطة بالوردية المختارة.")}
                   </div>
                 ) : (
-                  journalEntries.map((entry) => (
+                  orderedJournalEntries.map(({ entry, sourceReference, sourceType }) => (
                     <div
-                      key={entry.id}
+                      key={`${entry.id}-${sourceReference}`}
                       className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4 text-xs"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-2 mb-2">
-                        <div className="font-bold text-[#233329]">{entry.reference}</div>
+                        <div className="space-y-1">
+                          <div className="font-bold text-[#233329]">{entry.reference}</div>
+                          <div className="text-[11px] font-semibold text-[#5f6d66]">
+                            {getTranslation("pos.review.headerReference", "المرجع")}: {sourceReference}
+                            {" · "}
+                            {sourceType}
+                          </div>
+                        </div>
                         <div className="font-bold text-[#5f6d66]">{entry.status}</div>
                       </div>
                       <div className="space-y-2">
@@ -1088,7 +1150,7 @@ export function PosReviewWorkspace({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm">
                 <div>
                   <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.sessions.branch", "الفرع")}</span>
-                  <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.branchName || selectedSession?.branchName || "—"}</span>
+                  <span className="text-gray-900 font-bold">{localizeDisplayText(activeInvoiceDetail.session?.branchName || selectedSession?.branchName)}</span>
                 </div>
                 <div>
                   <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.review.headerDate", "التاريخ")}</span>
@@ -1096,7 +1158,7 @@ export function PosReviewWorkspace({
                 </div>
                 <div>
                   <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.sessions.warehouse", "المستودع")}</span>
-                  <span className="text-gray-900 font-bold">{activeInvoiceDetail.session?.warehouse?.name || selectedSession?.warehouse?.name || "—"}</span>
+                  <span className="text-gray-900 font-bold">{localizeDisplayText(activeInvoiceDetail.session?.warehouse?.name || selectedSession?.warehouse?.name)}</span>
                 </div>
                 <div>
                   <span className="font-bold block text-[10px] text-gray-400 uppercase mb-0.5">{getTranslation("pos.review.headerOrderType", "نوع الطلب")}</span>
@@ -1120,7 +1182,7 @@ export function PosReviewWorkspace({
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {activeInvoiceDetail.lines.map((line) => (
                         <tr key={line.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-gray-900">{line.itemName || line.description}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">{localizeDisplayText(line.itemName || line.description)}</td>
                           <td className="px-4 py-3 text-center text-gray-700 font-bold">{line.quantity}</td>
                           <td className="px-4 py-3 text-gray-500">
                             {line.unitPrice} {activeInvoiceDetail.currencyCode}
@@ -1150,7 +1212,7 @@ export function PosReviewWorkspace({
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {activeInvoiceDetail.payments.map((payment) => (
                         <tr key={payment.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-gray-900">{payment.paymentMethod}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">{localizePaymentMethod(payment.paymentMethod)}</td>
                           <td className="px-4 py-3 text-gray-500">{payment.reference || "—"}</td>
                           <td className="px-4 py-3 text-left font-bold text-gray-900">
                             {payment.amount} {activeInvoiceDetail.currencyCode}
@@ -1239,7 +1301,7 @@ export function PosReviewWorkspace({
           onClose={onCloseCorrectionModal}
           title={t("pos.review.correctOrderTypeModal")}
         >
-          <div className="space-y-4 text-start" dir="rtl">
+          <div className="space-y-4 text-start" dir={pageDir}>
             <Field label={getTranslation("pos.review.orderType", "نوع الطلب")} required labelAlign="start">
               <select
                 value={correctionOrderType}

@@ -1673,6 +1673,8 @@ Object.assign(enTranslations, {
   "pos.reports.header.warehouse": "Warehouse",
   "pos.reports.header.qtyInOut": "Qty Out / In",
   "pos.reports.header.runningQty": "Running Qty",
+  "pos.reports.unassigned": "Unassigned",
+  "pos.reports.untaxed": "Untaxed",
   "pos.reports.noRows": "No report rows available.",
 
   "pos.settings.description": "Runtime POS policies and role-based access derived from current system configuration.",
