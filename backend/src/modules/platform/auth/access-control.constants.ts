@@ -47,7 +47,6 @@ export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
   "POS_CREDIT_SALE",
   "POS_SELL_NEGATIVE_STOCK",
   "POS_CHANGE_UNIT_PRICE",
-  "RST_VIEW_TABLE_SCREEN",
   "RST_TRANSFER_TABLE",
   "RST_MERGE_TABLES",
   "RST_SPLIT_BILL",
@@ -80,7 +79,6 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/completed-sales",
     "/pos/reports",
     "/pos/settings",
-    "/pos/tables",
   ],
 };
 

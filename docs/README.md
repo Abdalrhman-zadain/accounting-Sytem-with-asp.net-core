@@ -69,6 +69,7 @@ Implemented:
 - cashier-only backend sessions are blocked from non-POS APIs by the JWT auth guard
 - POS backend actions now enforce permission-based access inside the POS service for session open/close, sales completion, held sales, review, reports, and accounting approval/rejection flows
 - POS route aliases now exist for cashier and accountant flows, including `/pos/register`, `/pos/session`, `/pos/sessions`, `/pos/held-sales`, `/pos/accounting-review`, `/pos/completed-sales`, `/pos/reports`, and `/pos/settings`
+- the restaurant dine-in tables screen `/pos/tables` is treated as a cashier-side operational route and is no longer granted to accountant-only access snapshots
 - seed/setup support now includes a dedicated cashier login: `cashier / cashier123`
 
 Not fully implemented yet:
