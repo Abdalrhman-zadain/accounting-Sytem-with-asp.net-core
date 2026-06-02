@@ -2781,6 +2781,24 @@ export async function reprintPosReceipt(id: string, token?: string | null) {
   });
 }
 
+export async function printPosSessionRollReport(
+  sessionId: string,
+  printType: "SESSION_ROLL_REPORT" | "INVOICE_LIST_ROLL" | "ALL_RECEIPTS_ROLL",
+  token?: string | null,
+) {
+  return apiRequest<{
+    sessionId: string;
+    sessionNumber: string;
+    printType: string;
+    printedBy: string | null;
+    printedAt: string;
+  }>(`/pos/sessions/${sessionId}/print-roll-report`, {
+    method: "POST",
+    body: JSON.stringify({ printType }),
+    token,
+  });
+}
+
 export async function transferPosTable(
   fromTableId: string,
   toTableId: string,

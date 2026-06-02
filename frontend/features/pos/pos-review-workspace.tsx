@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, Modal } from "@/components/ui";
 import { Input, Field } from "@/components/ui/forms";
 import { DetailTile } from "@/features/pos/pos-detail-cards";
@@ -42,7 +42,10 @@ import {
   LuTag,
   LuFilterX,
   LuDollarSign,
+  LuChevronDown,
 } from "react-icons/lu";
+import { printSessionRollReport, type SessionRollPrintType } from "@/features/pos/pos-session-roll-print";
+import { printPosSessionRollReport } from "@/lib/api";
 
 type ReviewTab = "overview" | "invoices" | "cash" | "inventory" | "journal";
 
@@ -173,7 +176,7 @@ export function PosReviewWorkspace({
   savingPaymentCorrection,
 }: PosReviewWorkspaceProps) {
   // Local filter states
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { language } = useTranslation();
   const isArabic = language === "ar";
   const isSessionPosting = posSettings?.runtime.postingMode === "BY_SESSION";
@@ -181,6 +184,37 @@ export function PosReviewWorkspace({
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [diffDecision, setDiffDecision] = useState("ACCEPT");
   const [diffReason, setDiffReason] = useState("");
+  // Print dropdown
+  const [isPrintDropdownOpen, setIsPrintDropdownOpen] = useState(false);
+  const printDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close print dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (printDropdownRef.current && !printDropdownRef.current.contains(e.target as Node)) {
+        setIsPrintDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const handlePrintRollReport = async (printType: SessionRollPrintType) => {
+    if (!selectedSession) return;
+    setIsPrintDropdownOpen(false);
+    // Log audit trail (fire-and-forget; don't block UI)
+    try {
+      await printPosSessionRollReport(selectedSession.id, printType, token);
+    } catch {
+      // Non-critical – proceed with client-side print even if audit call fails
+    }
+    printSessionRollReport({
+      session: selectedSession,
+      report,
+      printedBy: user?.name || user?.username || "—",
+      printType,
+    });
+  };
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -617,64 +651,115 @@ export function PosReviewWorkspace({
                 )}
               </p>
             </div>
-            
-            {/* Bulk approve/reject triggers */}
-            {selectedSession.accountingStatus === "PENDING_REVIEW" && (
-              <div className="flex gap-2">
-                {isDifferenceAccepted(selectedSession) ? (
-                  <>
+
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* ── Print dropdown ── */}
+              <div className="relative" ref={printDropdownRef}>
+                <button
+                  type="button"
+                  id="pos-print-roll-btn"
+                  onClick={() => setIsPrintDropdownOpen((v) => !v)}
+                  className="flex items-center gap-1.5 rounded-full border border-[#d6e1d9] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-[#eff4f0] transition shadow-sm"
+                >
+                  <LuPrinter size={14} />
+                  <span>طباعة</span>
+                  <LuChevronDown size={12} className={cn("transition-transform", isPrintDropdownOpen ? "rotate-180" : "")} />
+                </button>
+
+                {isPrintDropdownOpen && (
+                  <div
+                    className="absolute z-50 mt-1 w-52 rounded-2xl border border-[#d6e1d9] bg-white shadow-xl overflow-hidden"
+                    style={{ insetInlineEnd: 0 }}
+                  >
                     <button
                       type="button"
-                      onClick={() => {
-                        onApproveSessionReview(selectedSession.id);
-                        setSelectedSession(null);
-                      }}
-                      className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md"
+                      id="pos-print-session-roll"
+                      onClick={() => handlePrintRollReport("SESSION_ROLL_REPORT")}
+                      className="flex w-full items-center gap-2 px-4 py-3 text-right text-xs font-bold text-[#233329] hover:bg-[#eff4f0] transition border-b border-[#f0f3f0]"
                     >
-                      {getTranslation("pos.review.approveSession", "اعتماد وترحيل الوردية")}
+                      <LuPrinter size={13} className="text-[#46644b] flex-shrink-0" />
+                      طباعة رول الوردية
                     </button>
-                    {onRejectSessionReview && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onRejectSessionReview(selectedSession.id);
-                          setSelectedSession(null);
-                        }}
-                        className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
-                      >
-                        {getTranslation("pos.review.reject", "رفض الوردية")}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
                     <button
                       type="button"
-                      onClick={() => {
-                        setDiffDecision("ACCEPT");
-                        setDiffReason("");
-                        setIsDiffModalOpen(true);
-                      }}
-                      className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
+                      id="pos-print-invoice-list-roll"
+                      onClick={() => handlePrintRollReport("INVOICE_LIST_ROLL")}
+                      className="flex w-full items-center gap-2 px-4 py-3 text-right text-xs font-bold text-[#233329] hover:bg-[#eff4f0] transition border-b border-[#f0f3f0]"
                     >
-                      {getTranslation("pos.review.reviewCashDifference", "مراجعة فرق الكاش")}
+                      <LuFileText size={13} className="text-[#46644b] flex-shrink-0" />
+                      طباعة قائمة الفواتير رول
                     </button>
-                    {onRejectSessionReview && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onRejectSessionReview(selectedSession.id);
-                          setSelectedSession(null);
-                        }}
-                        className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
-                      >
-                        {getTranslation("pos.review.reject", "رفض الوردية")}
-                      </button>
-                    )}
-                  </>
+                    <button
+                      type="button"
+                      id="pos-print-all-receipts-roll"
+                      onClick={() => handlePrintRollReport("ALL_RECEIPTS_ROLL")}
+                      className="flex w-full items-center gap-2 px-4 py-3 text-right text-xs font-bold text-[#233329] hover:bg-[#eff4f0] transition"
+                    >
+                      <LuFileText size={13} className="text-[#46644b] flex-shrink-0" />
+                      طباعة كل الإيصالات
+                    </button>
+                  </div>
                 )}
               </div>
-            )}
+
+              {/* Bulk approve/reject triggers */}
+              {selectedSession.accountingStatus === "PENDING_REVIEW" && (
+                <>
+                  {isDifferenceAccepted(selectedSession) ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onApproveSessionReview(selectedSession.id);
+                          setSelectedSession(null);
+                        }}
+                        className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md"
+                      >
+                        {getTranslation("pos.review.approveSession", "اعتماد وترحيل الوردية")}
+                      </button>
+                      {onRejectSessionReview && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRejectSessionReview(selectedSession.id);
+                            setSelectedSession(null);
+                          }}
+                          className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                        >
+                          {getTranslation("pos.review.reject", "رفض الوردية")}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDiffDecision("ACCEPT");
+                          setDiffReason("");
+                          setIsDiffModalOpen(true);
+                        }}
+                        className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 transition shadow-md"
+                      >
+                        {getTranslation("pos.review.reviewCashDifference", "مراجعة فرق الكاش")}
+                      </button>
+                      {onRejectSessionReview && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRejectSessionReview(selectedSession.id);
+                            setSelectedSession(null);
+                          }}
+                          className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 hover:bg-red-100 transition"
+                        >
+                          {getTranslation("pos.review.reject", "رفض الوردية")}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </Card>
 

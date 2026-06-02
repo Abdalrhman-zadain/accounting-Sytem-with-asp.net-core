@@ -225,6 +225,15 @@ export class PosController {
     return this.service.reprintReceipt(id, req.user);
   }
 
+  @Post("sessions/:id/print-roll-report")
+  printSessionRollReport(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: { printType: "SESSION_ROLL_REPORT" | "INVOICE_LIST_ROLL" | "ALL_RECEIPTS_ROLL" },
+  ) {
+    return this.service.printSessionRollReport(id, dto.printType ?? "SESSION_ROLL_REPORT", req.user);
+  }
+
   @Post("returns")
   createReturn(@Req() req: Request & { user?: any }, @Body() dto: CreatePosReturnDto) {
     return this.service.createReturn(dto, req.user);

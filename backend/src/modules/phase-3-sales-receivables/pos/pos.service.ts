@@ -1828,6 +1828,48 @@ export class PosService {
     };
   }
 
+  async printSessionRollReport(
+    sessionId: string,
+    printType: "SESSION_ROLL_REPORT" | "INVOICE_LIST_ROLL" | "ALL_RECEIPTS_ROLL",
+    user?: AuthorizedUser,
+  ) {
+    this.ensurePosPermissionCode("POS_VIEW_SESSION_REPORT", user);
+    const session = await this.prisma.posSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        sessionNumber: true,
+        reviewStatus: true,
+      },
+    });
+    if (!session) {
+      throw new BadRequestException(`POS session ${sessionId} was not found.`);
+    }
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "PosSession",
+      entityId: session.id,
+      action: AuditAction.VIEW,
+      details: {
+        sessionId: session.id,
+        sessionNumber: session.sessionNumber,
+        printType,
+        printedBy: user?.username,
+        printedAt: new Date(),
+        event: "PRINT_ROLL_REPORT",
+      },
+    });
+
+    return {
+      sessionId: session.id,
+      sessionNumber: session.sessionNumber,
+      printType,
+      printedBy: user?.username ?? null,
+      printedAt: new Date().toISOString(),
+    };
+  }
+
   async listReturns(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
     const rows = await this.prisma.posReturn.findMany({
