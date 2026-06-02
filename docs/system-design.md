@@ -14,7 +14,8 @@ The current business scope is:
 - sales and receivables workflows for customers, quotations, sales orders, invoices, customer receipts, credit notes, receipt allocation, balance tracking, and aging
 - sales-invoice posting can optionally hand off into a separate prefilled customer-receipt creation flow (`Post & Create Receipt`) while keeping the invoice document, receipt document, receipt allocation, and journal entries distinct
 - posted sales invoices now also issue stock for inventory-tracked lines from the selected warehouse, validate warehouse availability, and add COGS/inventory-relief lines to the invoice posting while service lines remain revenue-only
-- POS now reuses the sales-invoice domain through `SalesInvoice.invoiceType = POS`, stores cashier shifts in `PosSession`, stores tender/payment splits in `PosPayment`, stores return/refund records in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, supports cashier-side draft and held sale persistence before completion, completes the operational sale before GL posting, issues inventory immediately on completion, creates a draft journal for accountant review, posts that journal later per sale or in session-level batches from the POS review queue, and exposes cashier-side draft/held-sale, return/refund, session-report, and detailed reporting workspaces from `/pos`
+- POS now reuses the sales-invoice domain through `SalesInvoice.invoiceType = POS`, stores cashier shifts in `PosSession`, stores tender/payment splits in `PosPayment`, stores return/refund records in `PosReturn`/`PosReturnLine`/`PosReturnPayment`, supports cashier-side draft and held sale persistence before completion, completes the operational sale before GL posting, issues inventory immediately on completion, keeps full invoice/payment/tax detail on each completed POS sale, prepares one grouped draft accounting journal per session using `JournalEntry.sourceType/sourceId/sourceNumber = PosSession/<sessionId>/<sessionNumber>`, and posts that grouped sales/payment journal from the POS review queue while leaving COGS/inventory accounting lines disabled for session posting by default
+- POS runtime accounting behavior for posting mode and COGS inclusion is configurable from the POS settings screen and persisted in a lightweight `PosRuntimeSetting` store, with environment values retained only as defaults/fallbacks
 - tax master data for controlled tax codes, rates, active/inactive status, and optional posting-account mappings used by sales and purchase document lines
 - Phase 4 purchases includes supplier master management, internal purchase requests with approval/status history, dedicated purchase-request details pages with in-page approval/conversion actions, purchase orders with direct/request-linked creation plus draft-through-close operational statuses, purchase invoice drafts with source-order or source-request linkage and line-level account classification, automatic source-request closure when a draft order or draft invoice is created from an approved request, supplier payments with invoice allocation plus Bank & Cash posting integration, and supplier debit notes with master-data-driven type selection, optional/required purchase-invoice linkage, supplier/payable balance reduction, type-specific posting rules, and optional inventory reduction for purchase returns
 - Phase 5 inventory currently implements `item-groups`, `item-categories`, `units-of-measure`, `item-master`, `warehouses`, `goods-receipts`, `goods-issues`, sales-invoice stock issues, `transfers`, `adjustments`, `stock-ledger`, and `policy` slices with enforced group/category/material hierarchy, managed base units of measure, warehouse-level balances, stock movement history, source-document drill-down, organization-level costing method selection via `inventory/policy` (`WEIGHTED_AVERAGE` or `FIFO`), prevent-negative-stock policy toggles, optional accounting posting integration through Phase 1 journal/posting services, reverse-status workflows for posted inventory documents, and operational item barcode/QR identifiers used for scanning and label workflows without creating accounting entries
@@ -120,7 +121,7 @@ Browser
   -> PosController / PosService
   -> SalesInvoice(invoiceType=POS) + PosSession + PosPayment + PosReturn
   -> inventory movement on sale complete and return complete
-  -> draft journal entry for sale/return review
+  -> grouped draft journal entry for session sales review plus separate return journal review
   -> POST /pos/sales/:id/accounting-approve, /pos/sessions/:id/accounting-approve, and /accounting-reverse
   -> POST /pos/returns/:id/accounting-approve and /accounting-reverse
 ```
@@ -129,7 +130,7 @@ POS design meaning:
 
 - operational completion and accounting posting are intentionally separated
 - completing a POS sale creates warehouse stock relief immediately
-- completing a POS sale creates a draft journal entry instead of writing posted ledger rows by default
+- completing a POS sale refreshes a grouped draft sales/payment journal for the owning session instead of writing posted ledger rows by default
 - completing a POS return creates warehouse stock-in immediately and prepares a separate refund/sales-return journal for review
 - accountant approval posts the already-prepared journal entry through Phase 1 `PostingService`
 - session expected cash is derived from opening cash plus completed cash payments recorded on POS sales

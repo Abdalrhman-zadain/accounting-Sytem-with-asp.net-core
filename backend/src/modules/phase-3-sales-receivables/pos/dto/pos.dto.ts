@@ -1,8 +1,10 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -193,6 +195,16 @@ export class SetPosFavoriteItemsDto {
   @IsArray()
   @IsString({ each: true })
   itemIds!: string[];
+}
+
+export class UpdatePosSettingsDto {
+  @IsOptional()
+  @IsIn(["BY_INVOICE", "BY_SESSION"])
+  postingMode?: "BY_INVOICE" | "BY_SESSION";
+
+  @IsOptional()
+  @IsBoolean()
+  cogsPostingEnabled?: boolean;
 }
 
 export class VoidPosSaleDto {

@@ -10,6 +10,7 @@ import {
   OpenPosSessionDto,
   PosReverseAccountingDto,
   PosReviewDecisionDto,
+  UpdatePosSettingsDto,
   SavePosDraftDto,
   SetPosFavoriteItemsDto,
   VoidPosSaleDto,
@@ -30,6 +31,11 @@ export class PosController {
   @Get("settings")
   getSettings(@Req() req: Request & { user?: any }) {
     return this.service.getSettings(req.user);
+  }
+
+  @Put("settings")
+  updateSettings(@Req() req: Request & { user?: any }, @Body() dto: UpdatePosSettingsDto) {
+    return this.service.updateSettings(dto, req.user);
   }
 
   @Get("favorites/items")

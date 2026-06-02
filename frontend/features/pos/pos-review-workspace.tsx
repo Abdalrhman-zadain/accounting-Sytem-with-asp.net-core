@@ -14,6 +14,7 @@ import type {
   JournalEntry,
   PosOrderType,
   PosSale,
+  PosSettings,
   PosSessionReport,
   PosTable,
   PosSession,
@@ -84,6 +85,7 @@ type PosReviewWorkspaceProps = {
   onSaveCorrection: () => void;
   onUpdateDeliveryStatus: (saleId: string, status: DeliveryStatus) => void;
   report: PosSessionReport | null;
+  posSettings: PosSettings | null;
   restaurantTables: PosTable[];
   reviewQueryDataLength: number;
   reviewSessionGroups: ReviewSessionGroup[];
@@ -128,6 +130,7 @@ export function PosReviewWorkspace({
   onSaveCorrection,
   onUpdateDeliveryStatus,
   report,
+  posSettings,
   restaurantTables,
   reviewQueryDataLength,
   reviewSessionGroups,
@@ -141,6 +144,7 @@ export function PosReviewWorkspace({
   const { user } = useAuth();
   const { language } = useTranslation();
   const isArabic = language === "ar";
+  const isSessionPosting = posSettings?.runtime.postingMode === "BY_SESSION";
   const pageDir = isArabic ? "rtl" : "ltr";
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [diffDecision, setDiffDecision] = useState("ACCEPT");
@@ -443,9 +447,31 @@ export function PosReviewWorkspace({
 
   const orderedJournalEntries = useMemo(() => {
     const journalById = new Map(journalEntries.map((entry) => [entry.id, entry]));
+    const entries: Array<{
+      entry: JournalEntry;
+      sourceReference: string;
+      sourceType: string;
+      includedReferences?: string[];
+    }> = [];
 
-    return invoiceList
+    if (isSessionPosting && report?.sessionJournalEntry?.id) {
+      const sessionEntry = journalById.get(report.sessionJournalEntry.id);
+      if (sessionEntry) {
+        entries.push({
+          entry: sessionEntry,
+          sourceReference: report.sessionJournalEntry.sourceNumber || report.sessionNumber,
+          sourceType: getTranslation("pos.review.sessionGroupedEntry", "قيد مجمع للوردية"),
+          includedReferences: (report.sales || []).map((sale) => sale.reference),
+        });
+      }
+    }
+
+    entries.push(
+      ...invoiceList
       .map((invoice) => {
+        if (isSessionPosting && invoice.type === "sale") {
+          return null;
+        }
         const journalId = invoice.raw?.journalEntry?.id;
         if (!journalId) return null;
         const entry = journalById.get(journalId);
@@ -466,9 +492,13 @@ export function PosReviewWorkspace({
           entry: JournalEntry;
           sourceReference: string;
           sourceType: string;
+          includedReferences?: string[];
         } => Boolean(item),
-      );
-  }, [invoiceList, journalEntries, language]);
+      ),
+    );
+
+    return entries;
+  }, [invoiceList, isSessionPosting, journalEntries, language, report]);
 
   // INLINE SUB-PAGE RENDER
   if (selectedSession) {
@@ -974,7 +1004,7 @@ export function PosReviewWorkspace({
                     {getTranslation("pos.review.noJournals", "لا توجد قيود محاسبية مسودة مرتبطة بالوردية المختارة.")}
                   </div>
                 ) : (
-                  orderedJournalEntries.map(({ entry, sourceReference, sourceType }) => (
+                  orderedJournalEntries.map(({ entry, sourceReference, sourceType, includedReferences }) => (
                     <div
                       key={`${entry.id}-${sourceReference}`}
                       className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4 text-xs"
@@ -987,6 +1017,12 @@ export function PosReviewWorkspace({
                             {" · "}
                             {sourceType}
                           </div>
+                          {includedReferences?.length ? (
+                            <div className="text-[11px] text-[#5f6d66]">
+                              {getTranslation("pos.sessions.invoices", "الفواتير")}:{" "}
+                              {includedReferences.join("، ")}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="font-bold text-[#5f6d66]">{entry.status}</div>
                       </div>
@@ -1246,7 +1282,25 @@ export function PosReviewWorkspace({
 
               {/* Individual Actions */}
               <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
-                {activeInvoiceDetail.posAccountingStatus === "POSTED" ? (
+                {isSessionPosting ? (
+                  <>
+                    <div className="me-auto text-xs font-semibold text-[#5f6d66]">
+                      {getTranslation(
+                        "pos.review.sessionPostingOnly",
+                        "يتم ترحيل محاسبة نقاط البيع على مستوى الوردية فقط.",
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenCorrectionModal(activeInvoiceDetail);
+                      }}
+                      className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition"
+                    >
+                      {t("pos.review.correctOrderType")}
+                    </button>
+                  </>
+                ) : activeInvoiceDetail.posAccountingStatus === "POSTED" ? (
                   <button
                     type="button"
                     onClick={() => {

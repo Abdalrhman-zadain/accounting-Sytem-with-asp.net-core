@@ -1679,6 +1679,13 @@ Object.assign(enTranslations, {
   "pos.reports.noRows": "No report rows available.",
 
   "pos.settings.description": "Runtime POS policies and role-based access derived from current system configuration.",
+  "pos.settings.postingMode": "Posting mode",
+  "pos.settings.postingMode.BY_SESSION": "By session",
+  "pos.settings.postingMode.BY_INVOICE": "By invoice",
+  "pos.settings.postingMode.help": "Choose whether POS sales accounting is grouped per session or prepared per invoice.",
+  "pos.settings.cogsPostingEnabled": "COGS posting",
+  "pos.settings.saveRuntime": "Save POS settings",
+  "pos.settings.saving": "Saving...",
   "pos.settings.discountTaxPolicy": "Invoice discount tax policy",
   "pos.settings.creditSale": "Credit sale",
   "pos.settings.autoPost": "Auto post",

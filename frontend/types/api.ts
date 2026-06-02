@@ -3558,6 +3558,8 @@ export type PosSettings = {
   runtime: {
     autoPost: boolean;
     allowCloseWithDrafts: boolean;
+    postingMode: "BY_INVOICE" | "BY_SESSION";
+    cogsPostingEnabled: boolean;
     allowCreditSale: boolean;
     invoiceDiscountTaxPolicy: "BEFORE_TAX" | "AFTER_TAX";
     negativeStockAllowed: boolean;
@@ -3887,6 +3889,15 @@ export type PosSessionReport = {
   returnCount: number;
   openedAt: string;
   closedAt?: string | null;
+  sessionJournalEntry?: {
+    id: string;
+    reference: string;
+    status: "DRAFT" | "POSTED";
+    postedAt?: string | null;
+    sourceType?: string | null;
+    sourceId?: string | null;
+    sourceNumber?: string | null;
+  } | null;
   sales: PosSale[];
   returns: PosReturn[];
 };
@@ -4051,6 +4062,9 @@ export type JournalEntry = {
   postingBatchId?: string | null;
   reversalOfId?: string | null;
   fiscalPeriodId?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  sourceNumber?: string | null;
   lines: JournalEntryLine[];
 };
 

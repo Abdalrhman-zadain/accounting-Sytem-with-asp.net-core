@@ -74,6 +74,7 @@ import {
   getPosSessionReport,
   getPosFavoriteItemIds,
   getPosSettings,
+  updatePosSettings,
   getPosTaxSummaryReport,
   getInventoryItems,
   getInventoryWarehouses,
@@ -867,6 +868,21 @@ export function PosPage() {
     enabled: Boolean(token && (workspace === "sales" || workspace === "settings")),
   });
 
+  const updatePosSettingsMutation = useMutation({
+    mutationFn: (payload: {
+      postingMode?: "BY_INVOICE" | "BY_SESSION";
+      cogsPostingEnabled?: boolean;
+    }) => updatePosSettings(payload, token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.posSettings(token),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.posReview(token),
+      });
+    },
+  });
+
   const favoritesQuery = useQuery({
     queryKey: queryKeys.posFavoriteItems(token),
     queryFn: () => getPosFavoriteItemIds(token),
@@ -953,6 +969,7 @@ export function PosPage() {
       token,
       reviewSessionId,
       [
+        reviewSessionReportQuery.data?.sessionJournalEntry?.id ?? "",
         ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? ""),
         ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? ""),
       ]
@@ -963,6 +980,7 @@ export function PosPage() {
       const ids = Array.from(
         new Set(
           [
+            reviewSessionReportQuery.data?.sessionJournalEntry?.id ?? null,
             ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? null),
             ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? null),
           ].filter((id): id is string => Boolean(id)),
@@ -975,6 +993,7 @@ export function PosPage() {
         workspace === "review" &&
         reviewSessionReportQuery.data &&
         (
+          Boolean(reviewSessionReportQuery.data.sessionJournalEntry?.id) ||
           (reviewSessionReportQuery.data.sales ?? []).some((sale) => Boolean(sale.journalEntry?.id)) ||
           (reviewSessionReportQuery.data.returns ?? []).some((posReturn) => Boolean(posReturn.journalEntry?.id))
         ),
@@ -4210,6 +4229,7 @@ export function PosPage() {
         reviewQueryDataLength={(reviewQuery.data ?? []).length}
         reviewSessionGroups={reviewSessionGroups}
         reviewTab={reviewTab}
+        posSettings={settingsQuery.data ?? null}
         savingCorrection={correctOrderTypeMutation.isPending}
         selectedCorrectionSale={selectedCorrectionSale}
         selectedReviewGroup={selectedReviewGroup}
@@ -5201,7 +5221,14 @@ export function PosPage() {
     }
 
     if (workspace === "settings") {
-      return <SettingsWorkspace posSettings={posSettings} t={t} />;
+      return (
+        <SettingsWorkspace
+          posSettings={posSettings}
+          t={t}
+          isSavingRuntimeSettings={updatePosSettingsMutation.isPending}
+          onSaveRuntimeSettings={(payload) => updatePosSettingsMutation.mutate(payload)}
+        />
+      );
     }
 
     if (workspace === "kitchen") {
@@ -5759,19 +5786,21 @@ function SettingToggleCard({
   label,
   value,
   enabled,
-  isToggle = true
+  isToggle = true,
+  onToggle,
 }: {
   label: string;
   value?: string;
   enabled?: boolean;
   isToggle?: boolean;
+  onToggle?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between rounded-[24px] border border-[#e1e7e2] bg-white p-6 shadow-sm transition-all hover:border-[#c5d0c9]">
       <div className="font-bold text-[#233329] text-lg">{label}</div>
       <div>
         {isToggle ? (
-          <Switch checked={!!enabled} onChange={() => {}} />
+          <Switch checked={!!enabled} onChange={onToggle ?? (() => {})} />
         ) : (
           <div className="text-lg font-black tracking-wider text-[#46644b]">{value}</div>
         )}
@@ -5802,11 +5831,28 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: () => void 
 }
 
 
-function SettingsWorkspace({ posSettings, t }: { posSettings: any; t: any }) {
+function SettingsWorkspace({
+  posSettings,
+  t,
+  isSavingRuntimeSettings,
+  onSaveRuntimeSettings,
+}: {
+  posSettings: PosSettings | null | undefined;
+  t: (key: string) => string;
+  isSavingRuntimeSettings: boolean;
+  onSaveRuntimeSettings: (payload: {
+    postingMode?: "BY_INVOICE" | "BY_SESSION";
+    cogsPostingEnabled?: boolean;
+  }) => void;
+}) {
     const settings = posSettings;
     const [searchTerm, setSearchTerm] = useState("");
     const [role, setRole] = useState("MANAGER");
     const [localPermissions, setLocalPermissions] = useState<Record<string, boolean> | null>(null);
+    const [localRuntime, setLocalRuntime] = useState<{
+      postingMode: "BY_INVOICE" | "BY_SESSION";
+      cogsPostingEnabled: boolean;
+    } | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
       Session: false,
       Cart: false,
@@ -5820,7 +5866,16 @@ function SettingsWorkspace({ posSettings, t }: { posSettings: any; t: any }) {
       }
     }, [settings, localPermissions]);
 
-    if (!settings || !localPermissions) {
+    useEffect(() => {
+      if (settings) {
+        setLocalRuntime({
+          postingMode: settings.runtime.postingMode,
+          cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
+        });
+      }
+    }, [settings?.runtime.cogsPostingEnabled, settings?.runtime.postingMode]);
+
+    if (!settings || !localPermissions || !localRuntime) {
       return (
         <div className="space-y-6">
           <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
@@ -5837,7 +5892,9 @@ function SettingsWorkspace({ posSettings, t }: { posSettings: any; t: any }) {
       }));
     };
 
-    const isDirty = JSON.stringify(localPermissions) !== JSON.stringify(settings.permissions);
+    const runtimeDirty =
+      localRuntime.postingMode !== settings.runtime.postingMode ||
+      localRuntime.cogsPostingEnabled !== settings.runtime.cogsPostingEnabled;
 
     const handleRoleChange = (newRole: string) => {
       setRole(newRole);
@@ -5907,16 +5964,63 @@ function SettingsWorkspace({ posSettings, t }: { posSettings: any; t: any }) {
                 {t("pos.settings.description")}
               </p>
             </div>
-            {isDirty && (
-              <button className="flex items-center gap-2 rounded-full bg-[#0f8f67] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57]">
+            {runtimeDirty && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSaveRuntimeSettings({
+                    postingMode: localRuntime.postingMode,
+                    cogsPostingEnabled: localRuntime.cogsPostingEnabled,
+                  })
+                }
+                disabled={isSavingRuntimeSettings}
+                className="flex items-center gap-2 rounded-full bg-[#0f8f67] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <LuSave className="h-4 w-4" />
-                حفظ التغييرات
+                {isSavingRuntimeSettings ? t("pos.settings.saving") : t("pos.settings.saveRuntime")}
               </button>
             )}
           </div>
         </Card>
 
         <div className="grid gap-6 md:grid-cols-2">
+          <div className="flex items-center justify-between rounded-[24px] border border-[#e1e7e2] bg-white p-6 shadow-sm transition-all hover:border-[#c5d0c9]">
+            <div>
+              <div className="font-bold text-[#233329] text-lg">{t("pos.settings.postingMode")}</div>
+              <div className="mt-1 text-sm text-[#64736b]">{t("pos.settings.postingMode.help")}</div>
+            </div>
+            <select
+              value={localRuntime.postingMode}
+              onChange={(event) =>
+                setLocalRuntime((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        postingMode: event.target.value as "BY_INVOICE" | "BY_SESSION",
+                      }
+                    : prev,
+                )
+              }
+              className="rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2.5 text-sm font-bold text-[#233329]"
+            >
+              <option value="BY_SESSION">{t("pos.settings.postingMode.BY_SESSION")}</option>
+              <option value="BY_INVOICE">{t("pos.settings.postingMode.BY_INVOICE")}</option>
+            </select>
+          </div>
+          <SettingToggleCard
+            label={t("pos.settings.cogsPostingEnabled")}
+            enabled={localRuntime.cogsPostingEnabled}
+            onToggle={() =>
+              setLocalRuntime((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      cogsPostingEnabled: !prev.cogsPostingEnabled,
+                    }
+                  : prev,
+              )
+            }
+          />
           <SettingToggleCard
             label={t("pos.settings.discountTaxPolicy")}
             value={settings.runtime.invoiceDiscountTaxPolicy}

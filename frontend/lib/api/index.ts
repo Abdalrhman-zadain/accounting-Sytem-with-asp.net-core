@@ -2413,6 +2413,20 @@ export async function getPosSettings(token?: string | null) {
   return apiRequest<PosSettings>("/pos/settings", { token });
 }
 
+export async function updatePosSettings(
+  payload: {
+    postingMode?: "BY_INVOICE" | "BY_SESSION";
+    cogsPostingEnabled?: boolean;
+  },
+  token?: string | null,
+) {
+  return apiRequest<PosSettings>("/pos/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
 export async function getPosFavoriteItemIds(token?: string | null) {
   return apiRequest<{ itemIds: string[] }>("/pos/favorites/items", { token });
 }

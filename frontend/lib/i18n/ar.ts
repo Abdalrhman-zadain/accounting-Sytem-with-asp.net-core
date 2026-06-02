@@ -2958,6 +2958,13 @@ Object.assign(arTranslations, {
   "pos.reports.noRows": "لا توجد بيانات متاحة حالياً.",
 
   "pos.settings.description": "سياسات تشغيل POS وصلاحيات الوصول بناءً على إعدادات النظام الحالية.",
+  "pos.settings.postingMode": "وضع الترحيل",
+  "pos.settings.postingMode.BY_SESSION": "على مستوى الوردية",
+  "pos.settings.postingMode.BY_INVOICE": "على مستوى الفاتورة",
+  "pos.settings.postingMode.help": "حدد ما إذا كان ترحيل محاسبة POS يتم مجمعًا لكل وردية أو لكل فاتورة.",
+  "pos.settings.cogsPostingEnabled": "ترحيل تكلفة البضاعة",
+  "pos.settings.saveRuntime": "حفظ إعدادات POS",
+  "pos.settings.saving": "جارٍ الحفظ...",
   "pos.settings.discountTaxPolicy": "سياسة ضريبة خصم الفاتورة",
   "pos.settings.creditSale": "البيع الآجل",
   "pos.settings.autoPost": "الترحيل التلقائي",

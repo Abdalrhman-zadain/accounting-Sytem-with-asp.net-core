@@ -44,6 +44,7 @@ import {
   PosReverseAccountingDto,
   PosReturnPaymentDto,
   PosReviewDecisionDto,
+  UpdatePosSettingsDto,
   SavePosDraftDto,
   SetPosFavoriteItemsDto,
   VoidPosSaleDto,
@@ -56,6 +57,7 @@ import {
 
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
 const POS_WALK_IN_CUSTOMER_NAME = "POS Walk-in Customer";
+type PosDb = Prisma.TransactionClient | PrismaService;
 
 @Injectable()
 export class PosService {
@@ -83,10 +85,13 @@ export class PosService {
   }
 
   async getSettings(user?: AuthorizedUser) {
+    const runtimeConfig = await this.getPosRuntimeConfig();
     return {
       runtime: {
         autoPost: this.parseBoolean(process.env.POS_AUTO_POST, false),
         allowCloseWithDrafts: this.parseBoolean(process.env.POS_ALLOW_CLOSE_WITH_DRAFTS, false),
+        postingMode: runtimeConfig.postingMode,
+        cogsPostingEnabled: runtimeConfig.cogsPostingEnabled,
         allowCreditSale:
           this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
           this.hasPosPermissionCode("POS_CREDIT_SALE", user),
@@ -103,6 +108,23 @@ export class PosService {
         ]),
       ),
     };
+  }
+
+  async updateSettings(dto: UpdatePosSettingsDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    await this.prisma.$transaction(async (tx) => {
+      if (dto.postingMode) {
+        await this.upsertPosRuntimeSetting(tx, "POS_POSTING_MODE", dto.postingMode);
+      }
+      if (dto.cogsPostingEnabled !== undefined) {
+        await this.upsertPosRuntimeSetting(
+          tx,
+          "POS_COGS_POSTING_ENABLED",
+          dto.cogsPostingEnabled ? "true" : "false",
+        );
+      }
+    });
+    return this.getSettings(user);
   }
 
   async getTimeWindowReport(
@@ -296,8 +318,6 @@ export class PosService {
       return { success: true };
     });
   }
-
-
   async listFavoriteItemIds(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
     if (!user?.userId) {
@@ -451,6 +471,12 @@ export class PosService {
       },
       include: this.posSessionInclude(),
     });
+
+    if ((await this.getPosPostingMode()) === "BY_SESSION") {
+      await this.prisma.$transaction(async (tx) => {
+        await this.syncSessionGroupedJournalEntry(tx, id);
+      });
+    }
 
     await this.auditService.log({
       userId: user?.userId,
@@ -812,6 +838,9 @@ export class PosService {
     const allowNegativeStockIssue =
       this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
       this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user);
+    const runtimeConfig = await this.getPosRuntimeConfig();
+    const posPostingMode = runtimeConfig.postingMode;
+    const cogsPostingEnabled = runtimeConfig.cogsPostingEnabled;
     const normalizedPayments = this.normalizePayments(
       dto.payments,
       accountMap,
@@ -823,7 +852,10 @@ export class PosService {
         "Partial payment / credit sales require a customer other than POS walk-in.",
       );
     }
-    const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
+    const autoPost =
+      posPostingMode === "BY_INVOICE"
+        ? this.parseBoolean(process.env.POS_AUTO_POST, false)
+        : false;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : new Date();
@@ -963,6 +995,7 @@ export class PosService {
           amount: this.toAmount(payment.appliedAmount),
           tenderedAmount: this.toAmount(payment.amount),
           reference: payment.reference?.trim() || null,
+          deliveryCompanyId: invoice.deliveryCompanyId ?? null,
         })),
       });
 
@@ -1013,109 +1046,113 @@ export class PosService {
         { allowNegativeStockIssue },
       );
 
-      const description = invoiceWithDetails.description
-        ? `${invoiceWithDetails.reference} - ${invoiceWithDetails.description}`
-        : invoiceWithDetails.reference;
-      const salesCredits = await this.salesReceivablesService.buildSalesInvoiceCreditJournalLines(
-        tx,
-        {
-          id: invoiceWithDetails.id,
-          reference: invoiceWithDetails.reference,
-          customerId: invoiceWithDetails.customerId,
-          customer: { receivableAccountId: invoiceWithDetails.customer.receivableAccountId },
-          lines: invoiceWithDetails.lines.map((line) => ({
-            lineNumber: line.lineNumber,
-            description: line.description,
-            revenueAccountId: line.revenueAccountId,
-            taxId: line.taxId,
-            taxAmount: line.taxAmount,
-            lineSubtotalAmount: line.lineSubtotalAmount,
-          })),
-          totalAmount: invoiceWithDetails.totalAmount,
-        },
-        description,
-      );
-
-      const salesRevenueAccount = await tx.account.findUniqueOrThrow({
-        where: { code: "4110001" },
-      });
-
-      // Append Service Charge Credit
-      const serviceChargeVal = Number(invoiceWithDetails.serviceChargeAmount);
-      if (serviceChargeVal > 0) {
-        salesCredits.push({
-          accountId: salesRevenueAccount.id,
-          description: `${description} - Service Charge`,
-          debitAmount: 0,
-          creditAmount: serviceChargeVal,
-        });
-      }
-
-      // Append Delivery Fee Credit
-      const deliveryFeeVal = Number(invoiceWithDetails.deliveryFeeAmount);
-      if (deliveryFeeVal > 0) {
-        salesCredits.push({
-          accountId: salesRevenueAccount.id,
-          description: `${description} - Delivery Fee`,
-          debitAmount: 0,
-          creditAmount: deliveryFeeVal,
-        });
-      }
-
-      // Check for third-party delivery company mapping for outstanding balance
-      let receivableAccountId = invoiceWithDetails.customer.receivableAccountId;
-      if (invoiceWithDetails.deliveryCompanyId) {
-        const company = await tx.deliveryCompany.findUnique({
-          where: { id: invoiceWithDetails.deliveryCompanyId },
-          select: { receivableAccountId: true },
-        });
-        if (company?.receivableAccountId) {
-          receivableAccountId = company.receivableAccountId;
-        }
-      }
-
-      const paymentDebits = this.aggregatePaymentDebits(normalizedPayments.payments, description);
-      const receivableDebits =
-        normalizedPayments.outstandingAmount > 0
-          ? [
-              {
-                accountId: receivableAccountId,
-                description: `${description} credit balance`,
-                debitAmount: normalizedPayments.outstandingAmount,
-                creditAmount: 0,
-              },
-            ]
-          : [];
-      const journalLines = [
-        ...paymentDebits,
-        ...receivableDebits,
-        ...salesCredits,
-        ...inventoryPosting.accountingLines,
-      ];
-      this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
-
-      const journal = await this.journalEntriesService.create(
-        {
-          entryDate: invoiceWithDetails.invoiceDate.toISOString(),
+      if (posPostingMode === "BY_INVOICE") {
+        const description = invoiceWithDetails.description
+          ? `${invoiceWithDetails.reference} - ${invoiceWithDetails.description}`
+          : invoiceWithDetails.reference;
+        const salesCredits = await this.salesReceivablesService.buildSalesInvoiceCreditJournalLines(
+          tx,
+          {
+            id: invoiceWithDetails.id,
+            reference: invoiceWithDetails.reference,
+            customerId: invoiceWithDetails.customerId,
+            customer: { receivableAccountId: invoiceWithDetails.customer.receivableAccountId },
+            lines: invoiceWithDetails.lines.map((line) => ({
+              lineNumber: line.lineNumber,
+              description: line.description,
+              revenueAccountId: line.revenueAccountId,
+              taxId: line.taxId,
+              taxAmount: line.taxAmount,
+              lineSubtotalAmount: line.lineSubtotalAmount,
+            })),
+            totalAmount: invoiceWithDetails.totalAmount,
+          },
           description,
-          lines: journalLines,
-        },
-        { tx },
-      );
+        );
 
-      let postedAt: Date | null = null;
-      if (autoPost) {
-        const posted = await this.postingService.post(journal.id, tx as never);
-        postedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
+        const salesRevenueAccount = await tx.account.findUniqueOrThrow({
+          where: { code: "4110001" },
+        });
+
+        const serviceChargeVal = Number(invoiceWithDetails.serviceChargeAmount);
+        if (serviceChargeVal > 0) {
+          salesCredits.push({
+            accountId: salesRevenueAccount.id,
+            description: `${description} - Service Charge`,
+            debitAmount: 0,
+            creditAmount: serviceChargeVal,
+          });
+        }
+
+        const deliveryFeeVal = Number(invoiceWithDetails.deliveryFeeAmount);
+        if (deliveryFeeVal > 0) {
+          salesCredits.push({
+            accountId: salesRevenueAccount.id,
+            description: `${description} - Delivery Fee`,
+            debitAmount: 0,
+            creditAmount: deliveryFeeVal,
+          });
+        }
+
+        let receivableAccountId = invoiceWithDetails.customer.receivableAccountId;
+        if (invoiceWithDetails.deliveryCompanyId) {
+          const company = await tx.deliveryCompany.findUnique({
+            where: { id: invoiceWithDetails.deliveryCompanyId },
+            select: { receivableAccountId: true },
+          });
+          if (company?.receivableAccountId) {
+            receivableAccountId = company.receivableAccountId;
+          }
+        }
+
+        const paymentDebits = this.aggregatePaymentDebits(normalizedPayments.payments, description);
+        const receivableDebits =
+          normalizedPayments.outstandingAmount > 0
+            ? [
+                {
+                  accountId: receivableAccountId,
+                  description: `${description} credit balance`,
+                  debitAmount: normalizedPayments.outstandingAmount,
+                  creditAmount: 0,
+                },
+              ]
+            : [];
+        const journalLines = [
+          ...paymentDebits,
+          ...receivableDebits,
+          ...salesCredits,
+          ...(cogsPostingEnabled ? inventoryPosting.accountingLines : []),
+        ];
+        this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
+
+        const journal = await this.journalEntriesService.create(
+          {
+            entryDate: invoiceWithDetails.invoiceDate.toISOString(),
+            description,
+            sourceType: "SalesInvoice",
+            sourceId: invoiceWithDetails.id,
+            sourceNumber: invoiceWithDetails.reference,
+            lines: journalLines,
+          },
+          { tx },
+        );
+
+        let postedAt: Date | null = null;
+        if (autoPost) {
+          const posted = await this.postingService.post(journal.id, tx as never);
+          postedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
+        }
+
+        await tx.salesInvoice.update({
+          where: { id: invoiceWithDetails.id },
+          data: {
+            journalEntryId: journal.id,
+            postedAt,
+          },
+        });
+      } else {
+        await this.syncSessionGroupedJournalEntry(tx, session.id);
       }
-
-      await tx.salesInvoice.update({
-        where: { id: invoiceWithDetails.id },
-        data: {
-          journalEntryId: journal.id,
-          postedAt,
-        },
-      });
 
       await tx.posSession.update({
         where: { id: session.id },
@@ -1203,6 +1240,9 @@ export class PosService {
 
   async approveAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    if ((await this.getPosPostingMode()) === "BY_SESSION") {
+      throw new BadRequestException("POS accounting posting is configured by session. Approve the session instead of a single invoice.");
+    }
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       include: {
@@ -1468,14 +1508,16 @@ export class PosService {
           posSessionId: id,
           posOperationalStatus: PosOperationalStatus.COMPLETED,
           posAccountingStatus: {
-            in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.REJECTED],
+            in: [
+              PosAccountingStatus.PENDING_REVIEW,
+              PosAccountingStatus.REJECTED,
+              PosAccountingStatus.UNPOSTED,
+            ],
           },
-          journalEntryId: { not: null },
         },
         select: {
           id: true,
           reference: true,
-          journalEntryId: true,
         },
         orderBy: [{ posCompletedAt: "asc" }, { createdAt: "asc" }],
       });
@@ -1485,8 +1527,51 @@ export class PosService {
         );
       }
 
+      let groupedPostedAt = new Date();
+      if ((await this.getPosPostingMode(tx)) === "BY_SESSION") {
+        const existingPostedSessionJournal = await tx.journalEntry.findFirst({
+          where: {
+            sourceType: "PosSession",
+            sourceId: id,
+            status: "POSTED",
+          },
+          select: { id: true },
+        });
+        if (existingPostedSessionJournal) {
+          throw new BadRequestException("This POS session has already been posted.");
+        }
+
+        const draftJournal = await this.syncSessionGroupedJournalEntry(tx, id);
+        if (!draftJournal) {
+          throw new BadRequestException(
+            "No grouped POS session journal entry could be prepared for posting.",
+          );
+        }
+
+        const posted = await this.postingService.post(draftJournal.id, tx as never);
+        groupedPostedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
+      } else {
+        const salesWithJournals = await tx.salesInvoice.findMany({
+          where: {
+            id: { in: sales.map((sale) => sale.id) },
+          },
+          select: {
+            id: true,
+            journalEntryId: true,
+          },
+        });
+
+        for (const sale of salesWithJournals) {
+          if (!sale.journalEntryId) {
+            throw new BadRequestException(
+              `POS sale ${sale.id} does not have a draft journal entry to review.`,
+            );
+          }
+          await this.postingService.post(sale.journalEntryId, tx as never);
+        }
+      }
+
       for (const sale of sales) {
-        await this.postingService.post(sale.journalEntryId!, tx as never);
         await tx.salesInvoice.update({
           where: { id: sale.id },
           data: {
@@ -1494,7 +1579,7 @@ export class PosService {
             posReviewedAt: new Date(),
             posReviewedByUserId: user?.userId ?? null,
             posReviewNotes: dto.notes?.trim() || null,
-            postedAt: new Date(),
+            postedAt: groupedPostedAt,
           },
         });
       }
@@ -1610,6 +1695,9 @@ export class PosService {
 
   async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
+    if ((await this.getPosPostingMode()) === "BY_SESSION") {
+      throw new BadRequestException("POS accounting posting is configured by session. Review the session instead of a single invoice.");
+    }
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       include: this.posSaleInclude(),
@@ -1652,6 +1740,9 @@ export class PosService {
 
   async reverseAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    if ((await this.getPosPostingMode()) === "BY_SESSION") {
+      throw new BadRequestException("POS accounting reversal is configured by session. Reverse the grouped session posting instead of a single invoice.");
+    }
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
       select: {
@@ -2255,6 +2346,12 @@ export class PosService {
   }
 
   private async buildSessionReport(sessionId: string) {
+    if ((await this.getPosPostingMode()) === "BY_SESSION") {
+      await this.prisma.$transaction(async (tx) => {
+        await this.syncSessionGroupedJournalEntry(tx, sessionId);
+      });
+    }
+
     const session = await this.prisma.posSession.findUniqueOrThrow({
       where: { id: sessionId },
       include: {
@@ -2273,6 +2370,22 @@ export class PosService {
           },
           include: this.posReturnInclude(),
         },
+      },
+    });
+    const sessionJournalEntry = await this.prisma.journalEntry.findFirst({
+      where: {
+        sourceType: "PosSession",
+        sourceId: session.id,
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        reference: true,
+        status: true,
+        postedAt: true,
+        sourceType: true,
+        sourceId: true,
+        sourceNumber: true,
       },
     });
 
@@ -2345,6 +2458,17 @@ export class PosService {
       returnCount: completedReturns.length,
       openedAt: session.openedAt.toISOString(),
       closedAt: session.closedAt?.toISOString() ?? null,
+      sessionJournalEntry: sessionJournalEntry
+        ? {
+            id: sessionJournalEntry.id,
+            reference: sessionJournalEntry.reference,
+            status: sessionJournalEntry.status,
+            postedAt: sessionJournalEntry.postedAt?.toISOString() ?? null,
+            sourceType: sessionJournalEntry.sourceType,
+            sourceId: sessionJournalEntry.sourceId,
+            sourceNumber: sessionJournalEntry.sourceNumber,
+          }
+        : null,
       sales: completedSales.map((s) => this.mapPosSale(s)),
       returns: completedReturns.map((r) => this.mapPosReturn(r)),
     };
@@ -3084,6 +3208,318 @@ export class PosService {
     }));
   }
 
+  private async syncSessionGroupedJournalEntry(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+  ) {
+    if ((await this.getPosPostingMode(tx)) !== "BY_SESSION") {
+      return null;
+    }
+
+    const existingSessionJournal = await tx.journalEntry.findFirst({
+      where: {
+        sourceType: "PosSession",
+        sourceId: sessionId,
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        reference: true,
+        status: true,
+        postedAt: true,
+      },
+    });
+
+    if (existingSessionJournal?.status === "POSTED") {
+      return existingSessionJournal;
+    }
+
+    const sales = await tx.salesInvoice.findMany({
+      where: {
+        invoiceType: SalesInvoiceType.POS,
+        posSessionId: sessionId,
+        posOperationalStatus: PosOperationalStatus.COMPLETED,
+        posAccountingStatus: {
+          in: [
+            PosAccountingStatus.PENDING_REVIEW,
+            PosAccountingStatus.REJECTED,
+            PosAccountingStatus.UNPOSTED,
+          ],
+        },
+      },
+      include: {
+        customer: {
+          select: {
+            receivableAccountId: true,
+          },
+        },
+        deliveryCompany: {
+          select: {
+            id: true,
+            receivableAccountId: true,
+          },
+        },
+        lines: {
+          select: {
+            id: true,
+            lineNumber: true,
+            revenueAccountId: true,
+            taxId: true,
+            taxAmount: true,
+            lineSubtotalAmount: true,
+          },
+          orderBy: { lineNumber: "asc" },
+        },
+        posPayments: {
+          include: {
+            bankCashAccount: {
+              select: {
+                accountId: true,
+                account: {
+                  select: {
+                    id: true,
+                    isActive: true,
+                    isPosting: true,
+                    allowManualPosting: true,
+                  },
+                },
+              },
+            },
+            deliveryCompany: {
+              select: {
+                receivableAccountId: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ posCompletedAt: "asc" }, { createdAt: "asc" }],
+    });
+
+    if (!sales.length) {
+      if (existingSessionJournal?.id) {
+        await tx.journalEntryLine.deleteMany({
+          where: { journalEntryId: existingSessionJournal.id },
+        });
+        await tx.journalEntry.delete({
+          where: { id: existingSessionJournal.id },
+        });
+      }
+      return null;
+    }
+
+    const legacyDraftJournalIds = sales
+      .map((sale) => sale.journalEntryId)
+      .filter((id): id is string => Boolean(id));
+
+    if (legacyDraftJournalIds.length) {
+      await tx.salesInvoice.updateMany({
+        where: { id: { in: sales.map((sale) => sale.id) } },
+        data: { journalEntryId: null },
+      });
+      await tx.journalEntryLine.deleteMany({
+        where: { journalEntryId: { in: legacyDraftJournalIds } },
+      });
+      await tx.journalEntry.deleteMany({
+        where: {
+          id: { in: legacyDraftJournalIds },
+          status: "DRAFT",
+        },
+      });
+    }
+
+    const session = await tx.posSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        sessionNumber: true,
+      },
+    });
+
+    const journalLines = await this.buildGroupedSessionJournalLines(tx, sales, session.sessionNumber);
+    this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
+
+    if (existingSessionJournal?.id) {
+      await tx.journalEntryLine.deleteMany({
+        where: { journalEntryId: existingSessionJournal.id },
+      });
+      await tx.journalEntry.delete({
+        where: { id: existingSessionJournal.id },
+      });
+    }
+
+    const latestInvoiceDate = sales[sales.length - 1]?.invoiceDate ?? new Date();
+    return this.journalEntriesService.create(
+      {
+        entryDate: latestInvoiceDate.toISOString(),
+        description: `POS session ${session.sessionNumber} grouped posting`,
+        sourceType: "PosSession",
+        sourceId: session.id,
+        sourceNumber: session.sessionNumber,
+        lines: journalLines,
+      },
+      { tx },
+    );
+  }
+
+  private async buildGroupedSessionJournalLines(
+    tx: Prisma.TransactionClient,
+    sales: Array<any>,
+    sessionNumber: string,
+  ) {
+    const debitByAccount = new Map<string, number>();
+    const revenueByAccount = new Map<string, number>();
+    const taxByAccount = new Map<string, number>();
+
+    const addAmount = (bucket: Map<string, number>, accountId: string, amount: number) => {
+      const current = bucket.get(accountId) ?? 0;
+      bucket.set(accountId, Number((current + amount).toFixed(2)));
+    };
+
+    const taxIds = Array.from(
+      new Set(
+        sales.flatMap((sale) =>
+          sale.lines.map((line: { taxId?: string | null }) => line.taxId).filter(Boolean),
+        ),
+      ),
+    ) as string[];
+
+    const taxes = taxIds.length
+      ? await tx.tax.findMany({
+          where: { id: { in: taxIds }, isActive: true },
+          select: {
+            id: true,
+            taxAccountId: true,
+            taxAccount: {
+              select: {
+                id: true,
+                isActive: true,
+                isPosting: true,
+                allowManualPosting: true,
+              },
+            },
+          },
+        })
+      : [];
+    const taxMap = new Map(taxes.map((tax) => [tax.id, tax]));
+    const fallbackTaxAccountId = await this.getPosSalesTaxAccountId(tx);
+    const salesRevenueAccount = await tx.account.findUniqueOrThrow({
+      where: { code: "4110001" },
+      select: { id: true },
+    });
+
+    for (const sale of sales) {
+      for (const payment of sale.posPayments) {
+        const amount = Number(payment.amount);
+        if (amount <= 0) {
+          continue;
+        }
+
+        let debitAccountId = payment.bankCashAccount.accountId;
+        if (
+          payment.deliveryCompany?.receivableAccountId &&
+          sale.deliveryCompany?.id &&
+          payment.deliveryCompanyId === sale.deliveryCompany.id
+        ) {
+          debitAccountId = payment.deliveryCompany.receivableAccountId;
+        }
+        addAmount(debitByAccount, debitAccountId, amount);
+      }
+
+      const outstandingAmount = Number(sale.outstandingAmount ?? 0);
+      if (outstandingAmount > 0) {
+        const receivableAccountId =
+          sale.deliveryCompany?.receivableAccountId || sale.customer?.receivableAccountId;
+        if (!receivableAccountId) {
+          throw new BadRequestException(
+            `POS sale ${sale.reference} requires a receivable account for the outstanding balance.`,
+          );
+        }
+        addAmount(debitByAccount, receivableAccountId, outstandingAmount);
+      }
+
+      for (const line of sale.lines) {
+        addAmount(
+          revenueByAccount,
+          line.revenueAccountId,
+          Number(line.lineSubtotalAmount),
+        );
+
+        const taxAmount = Number(line.taxAmount);
+        if (taxAmount <= 0) {
+          continue;
+        }
+
+        if (!line.taxId) {
+          if (!fallbackTaxAccountId) {
+            throw new BadRequestException("Output VAT account is required because tax is applied.");
+          }
+          addAmount(taxByAccount, fallbackTaxAccountId, taxAmount);
+          continue;
+        }
+
+        const tax = taxMap.get(line.taxId);
+        if (!tax?.taxAccountId || !tax.taxAccount?.isActive || !tax.taxAccount.isPosting || !tax.taxAccount.allowManualPosting) {
+          throw new BadRequestException("Output VAT account is required because tax is applied.");
+        }
+        addAmount(taxByAccount, tax.taxAccountId, taxAmount);
+      }
+
+      const serviceChargeVal = Number(sale.serviceChargeAmount ?? 0);
+      if (serviceChargeVal > 0) {
+        addAmount(revenueByAccount, salesRevenueAccount.id, serviceChargeVal);
+      }
+
+      const deliveryFeeVal = Number(sale.deliveryFeeAmount ?? 0);
+      if (deliveryFeeVal > 0) {
+        addAmount(revenueByAccount, salesRevenueAccount.id, deliveryFeeVal);
+      }
+    }
+
+    const description = `POS session ${sessionNumber} grouped posting`;
+    return [
+      ...Array.from(debitByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description,
+        debitAmount: Number(amount.toFixed(2)),
+        creditAmount: 0,
+      })),
+      ...Array.from(revenueByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description,
+        debitAmount: 0,
+        creditAmount: Number(amount.toFixed(2)),
+      })),
+      ...Array.from(taxByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description: `${description} tax`,
+        debitAmount: 0,
+        creditAmount: Number(amount.toFixed(2)),
+      })),
+    ];
+  }
+
+  private async getPosSalesTaxAccountId(tx: Prisma.TransactionClient) {
+    const account = await tx.account.findFirst({
+      where: {
+        type: "LIABILITY",
+        isActive: true,
+        isPosting: true,
+        allowManualPosting: true,
+        OR: [
+          { subtype: { contains: "tax", mode: "insensitive" } },
+          { subtype: { contains: "vat", mode: "insensitive" } },
+          { name: { contains: "tax", mode: "insensitive" } },
+          { name: { contains: "vat", mode: "insensitive" } },
+        ],
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return account?.id ?? null;
+  }
+
   private async ensureWalkInCustomer() {
     const existing = await this.prisma.customer.findFirst({
       where: {
@@ -3305,12 +3741,65 @@ export class PosService {
     return new Prisma.Decimal(value).toDecimalPlaces(4);
   }
 
-  private parseBoolean(value: string | undefined, fallback: boolean) {
-    if (value === undefined) {
+  private parseBoolean(value: string | undefined | null, fallback: boolean) {
+    if (value === undefined || value === null) {
       return fallback;
     }
     const normalized = value.trim().toLowerCase();
     return ["1", "true", "yes", "on"].includes(normalized);
+  }
+
+  private async getPosPostingMode(db: PosDb = this.prisma): Promise<"BY_INVOICE" | "BY_SESSION"> {
+    const config = await this.getPosRuntimeConfig(db);
+    return config.postingMode;
+  }
+
+  private async isPosCogsPostingEnabled(db: PosDb = this.prisma) {
+    const config = await this.getPosRuntimeConfig(db);
+    return config.cogsPostingEnabled;
+  }
+
+  private resolvePosPostingMode(value: string | undefined | null): "BY_INVOICE" | "BY_SESSION" {
+    return value?.trim().toUpperCase() === "BY_INVOICE"
+      ? "BY_INVOICE"
+      : "BY_SESSION";
+  }
+
+  private async getPosRuntimeConfig(db: PosDb = this.prisma) {
+    let overrides = new Map<string, string>();
+    try {
+      const rows = await db.$queryRaw<Array<{ key: string; value: string }>>(Prisma.sql`
+        SELECT "key", "value"
+        FROM "PosRuntimeSetting"
+        WHERE "key" IN ('POS_POSTING_MODE', 'POS_COGS_POSTING_ENABLED')
+      `);
+      overrides = new Map(rows.map((row) => [row.key, row.value]));
+    } catch (error) {
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code !== "P2021" && code !== "P2022") {
+        throw error;
+      }
+    }
+    return {
+      postingMode: this.resolvePosPostingMode(
+        overrides.get("POS_POSTING_MODE") ?? process.env.POS_POSTING_MODE,
+      ),
+      cogsPostingEnabled: this.parseBoolean(
+        overrides.get("POS_COGS_POSTING_ENABLED") ?? process.env.POS_COGS_POSTING_ENABLED,
+        false,
+      ),
+    };
+  }
+
+  private async upsertPosRuntimeSetting(db: PosDb, key: string, value: string) {
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO "PosRuntimeSetting" ("key", "value")
+      VALUES (${key}, ${value})
+      ON CONFLICT ("key")
+      DO UPDATE SET
+        "value" = EXCLUDED."value",
+        "updatedAt" = CURRENT_TIMESTAMP
+    `);
   }
 
   private parseTaxPolicy(value: string | undefined) {
