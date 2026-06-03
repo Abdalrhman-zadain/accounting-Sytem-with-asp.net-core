@@ -2,7 +2,8 @@ import React, { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./skeleton";
-export { Skeleton };
+import { SearchableSelect } from "./searchable-select";
+export { Skeleton, SearchableSelect };
 
 export function PageShell({
   children,

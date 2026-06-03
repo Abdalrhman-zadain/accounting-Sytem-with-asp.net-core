@@ -51,7 +51,7 @@ import {
   LuTruck,
 } from "react-icons/lu";
 
-import { Card, Modal, PageShell } from "@/components/ui";
+import { Card, Modal, PageShell, SearchableSelect } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
   approvePosAccounting,
@@ -676,6 +676,7 @@ export function PosPage() {
   const searchParams = useSearchParams();
   const { token, user } = useAuth();
   const { t, language } = useTranslation();
+  const isArabic = language === "ar";
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<PosWorkspace>("sales");
   const [, startRoutingTransition] = useTransition();
@@ -4499,7 +4500,7 @@ export function PosPage() {
                         >
                           {paymentAccounts.map((account) => (
                             <option key={account.id} value={account.id}>
-                              {account.name}
+                              {isArabic ? (account.account?.nameAr || account.name) : account.name}
                             </option>
                           ))}
                         </select>
@@ -5560,6 +5561,7 @@ function OpenShiftPanel({
   canOpenShift?: boolean;
 }) {
   const { t, language } = useTranslation();
+  const isArabic = language === "ar";
   const [openingCash, setOpeningCash] = useState(sessionState.openingCash);
   const [warehouseId, setWarehouseId] = useState(sessionState.warehouseId ?? "");
   const [cashAccountId, setCashAccountId] = useState(sessionState.cashAccountId ?? "");
@@ -5638,7 +5640,7 @@ function OpenShiftPanel({
         >
           {paymentAccounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.name}
+              {isArabic ? (account.account?.nameAr || account.name) : account.name}
             </option>
           ))}
         </select>
@@ -5958,6 +5960,144 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: () => void 
   );
 }
 
+const PERMISSION_LABELS: Record<string, { en: string; ar: string }> = {
+  POS_OPEN_SESSION: {
+    en: "Open POS Session",
+    ar: "فتح وردية جديدة",
+  },
+  POS_CLOSE_OWN_SESSION: {
+    en: "Close Own POS Session",
+    ar: "إغلاق الوردية الخاصة بي",
+  },
+  POS_VIEW_POS_SCREEN: {
+    en: "View POS Sale Screen",
+    ar: "عرض شاشة المبيعات (POS)",
+  },
+  POS_SCAN_BARCODE: {
+    en: "Scan Item Barcode",
+    ar: "قراءة باركود الأصناف",
+  },
+  POS_SEARCH_ITEM: {
+    en: "Search Catalog Items",
+    ar: "البحث عن الأصناف في الكتالوج",
+  },
+  POS_ADD_ITEM_TO_CART: {
+    en: "Add Item to Cart",
+    ar: "إضافة الأصناف إلى السلة",
+  },
+  POS_UPDATE_ITEM_QUANTITY: {
+    en: "Update Item Quantity",
+    ar: "تعديل كمية الصنف في السلة",
+  },
+  POS_REMOVE_ITEM_FROM_CART: {
+    en: "Remove Item from Cart",
+    ar: "حذف صنف من السلة",
+  },
+  POS_HOLD_SALE: {
+    en: "Hold / Suspend Sale",
+    ar: "تعليق الفواتير / حفظ مؤقت",
+  },
+  POS_RESUME_OWN_HELD_SALE: {
+    en: "Resume Own Held Sale",
+    ar: "استئناف الفواتير المعلقة الخاصة بي",
+  },
+  POS_VOID_DRAFT_SALE: {
+    en: "Void Draft Sale",
+    ar: "إلغاء مسودة البيع بالكامل",
+  },
+  POS_COMPLETE_SALE: {
+    en: "Complete Sale & Pay",
+    ar: "إتمام عملية البيع والدفع",
+  },
+  POS_SELECT_PAYMENT_METHOD: {
+    en: "Select Payment Method",
+    ar: "تحديد طريقة الدفع",
+  },
+  POS_PRINT_RECEIPT: {
+    en: "Print Sales Receipt",
+    ar: "طباعة فاتورة البيع",
+  },
+  POS_VIEW_OWN_SESSION_REPORT: {
+    en: "View Own Session Report",
+    ar: "عرض تقرير ورديتي الحالية",
+  },
+  POS_VIEW_COMPLETED_SALES: {
+    en: "View Completed Sales List",
+    ar: "عرض قائمة المبيعات المكتملة",
+  },
+  POS_VIEW_PENDING_ACCOUNTING: {
+    en: "View Pending Accountant Review",
+    ar: "عرض الفواتير قيد مراجعة المحاسب",
+  },
+  POS_VIEW_POS_INVOICE_DETAILS: {
+    en: "View Sales Invoice Details",
+    ar: "عرض تفاصيل فاتورة المبيعات",
+  },
+  POS_VIEW_POS_PAYMENTS: {
+    en: "View POS Sales Payments",
+    ar: "عرض مدفوعات المبيعات",
+  },
+  POS_VIEW_POS_INVENTORY_MOVEMENTS: {
+    en: "View POS Inventory Movements",
+    ar: "عرض الحركات المخزنية لنقاط البيع",
+  },
+  POS_VIEW_SESSIONS: {
+    en: "View All POS Sessions",
+    ar: "عرض جميع ورديات نقاط البيع",
+  },
+  POS_VIEW_SESSION_REPORT: {
+    en: "View Session Summary Report",
+    ar: "عرض التقارير الملخصة للورديات",
+  },
+  POS_APPROVE_ACCOUNTING: {
+    en: "Approve Accountant Review",
+    ar: "اعتماد مراجعة وتصفية الوردية",
+  },
+  POS_REJECT_ACCOUNTING: {
+    en: "Reject Accountant Review",
+    ar: "رفض مراجعة الوردية وإعادتها",
+  },
+  POS_POST_BY_INVOICE: {
+    en: "Post Accounting By Invoice",
+    ar: "ترحيل قيود اليومية لكل فاتورة",
+  },
+  POS_POST_BY_SESSION: {
+    en: "Post Accounting By Session",
+    ar: "ترحيل قيود اليومية مجمعة للوردية",
+  },
+  POS_VIEW_POS_REPORTS: {
+    en: "View POS Analytical Reports",
+    ar: "عرض التقارير التحليلية لنقاط البيع",
+  },
+  POS_EXPORT_POS_REPORTS: {
+    en: "Export POS Reports Data",
+    ar: "تصدير بيانات تقارير نقاط البيع",
+  },
+  VIEW_JOURNAL_ENTRIES: {
+    en: "View Related Journal Entries",
+    ar: "عرض قيود اليومية المحاسبية للوردية",
+  },
+  VIEW_GENERAL_LEDGER: {
+    en: "View General Ledger Accounts",
+    ar: "عرض كشوفات الحسابات بالأستاذ العام",
+  },
+  VIEW_INVENTORY_MOVEMENTS: {
+    en: "View General Inventory Movements",
+    ar: "عرض تقارير حركات المخزون",
+  },
+  POS_CREDIT_SALE: {
+    en: "Allow Sales on Credit (Ajel)",
+    ar: "السماح بالبيع الآجل (ذمم عملاء)",
+  },
+  POS_SELL_NEGATIVE_STOCK: {
+    en: "Allow Sell Negative Stock",
+    ar: "السماح بالبيع بالسالب دون رصيد مخزني",
+  },
+  POS_CHANGE_UNIT_PRICE: {
+    en: "Allow Changing Item Unit Price",
+    ar: "السماح بتعديل سعر بيع الصنف",
+  },
+};
 
 function SettingsWorkspace({
   posSettings,
@@ -6020,6 +6160,8 @@ function SettingsWorkspace({
       delivery: true,
       posting: true
     });
+    const { language } = useTranslation();
+    const isArabic = language === "ar";
 
     useEffect(() => {
       if (settings && !localPermissions) {
@@ -6316,18 +6458,18 @@ function SettingsWorkspace({
                         <div className="mt-1 text-xs text-[#6b7b72]">Cash Register Account / حساب الصندوق</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.cashAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cashAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {paymentAccounts.map((account) => (
-                            <option key={account.id} value={account.account.id}>
-                              {account.name} - {account.account.code}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, cashAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...paymentAccounts.map((account) => ({
+                              value: account.account.id,
+                              label: `${isArabic ? (account.account.nameAr || account.name) : account.name} - ${account.account.code}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6336,18 +6478,18 @@ function SettingsWorkspace({
                         <div className="mt-1 text-xs text-[#6b7b72]">Card Clearing Account / حساب وسيط البطاقات</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.cardAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cardAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {paymentAccounts.map((account) => (
-                            <option key={account.id} value={account.account.id}>
-                              {account.name} - {account.account.code}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, cardAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...paymentAccounts.map((account) => ({
+                              value: account.account.id,
+                              label: `${isArabic ? (account.account.nameAr || account.name) : account.name} - ${account.account.code}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6356,18 +6498,18 @@ function SettingsWorkspace({
                         <div className="mt-1 text-xs text-[#6b7b72]">CliQ Clearing Account / حساب وسيط كليك</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.cliqAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cliqAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {paymentAccounts.map((account) => (
-                            <option key={account.id} value={account.account.id}>
-                              {account.name} - {account.account.code}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, cliqAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...paymentAccounts.map((account) => ({
+                              value: account.account.id,
+                              label: `${isArabic ? (account.account.nameAr || account.name) : account.name} - ${account.account.code}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6376,18 +6518,18 @@ function SettingsWorkspace({
                         <div className="mt-1 text-xs text-[#6b7b72]">Wallet Clearing Account / حساب وسيط المحفظة</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.walletAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, walletAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {paymentAccounts.map((account) => (
-                            <option key={account.id} value={account.account.id}>
-                              {account.name} - {account.account.code}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, walletAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...paymentAccounts.map((account) => ({
+                              value: account.account.id,
+                              label: `${isArabic ? (account.account.nameAr || account.name) : account.name} - ${account.account.code}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6396,18 +6538,18 @@ function SettingsWorkspace({
                         <div className="mt-1 text-xs text-[#6b7b72]">Bank Account / حساب البنك</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.bankTransferAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, bankTransferAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {paymentAccounts.map((account) => (
-                            <option key={account.id} value={account.account.id}>
-                              {account.name} - {account.account.code}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, bankTransferAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...paymentAccounts.map((account) => ({
+                              value: account.account.id,
+                              label: `${isArabic ? (account.account.nameAr || account.name) : account.name} - ${account.account.code}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                   </>
@@ -6437,29 +6579,29 @@ function SettingsWorkspace({
                           </div>
                         </td>
                         <td className="px-6 py-4 text-end align-middle">
-                          <select
+                          <SearchableSelect
                             value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ?? ""}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               setLocalAccountMappings((prev) =>
                                 prev
                                   ? {
                                       ...prev,
                                       deliveryCompanies: prev.deliveryCompanies.map((row) =>
-                                        row.id === company.id ? { ...row, receivableAccountId: e.target.value } : row,
+                                        row.id === company.id ? { ...row, receivableAccountId: val } : row,
                                       ),
                                     }
                                   : prev,
                               )
                             }
-                            className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                          >
-                            <option value="">غير محدد / Not mapped</option>
-                            {accountOptions.map((account) => (
-                              <option key={account.id} value={account.id}>
-                                {account.code} - {account.name}
-                              </option>
-                            ))}
-                          </select>
+                            className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                            options={[
+                              { value: "", label: "غير محدد / Not mapped" },
+                              ...accountOptions.map((account) => ({
+                                value: account.id,
+                                label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                              }))
+                            ]}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -6486,18 +6628,18 @@ function SettingsWorkspace({
                         <div className="text-sm font-bold text-[#233329]">Sales Revenue Account / حساب إيرادات المبيعات</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.salesRevenueAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesRevenueAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {accountOptions.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.code} - {account.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, salesRevenueAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...accountOptions.map((account) => ({
+                              value: account.id,
+                              label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6505,18 +6647,18 @@ function SettingsWorkspace({
                         <div className="text-sm font-bold text-[#233329]">Output VAT Account / حساب ضريبة المخرجات</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.outputVatAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, outputVatAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {accountOptions.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.code} - {account.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, outputVatAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...accountOptions.map((account) => ({
+                              value: account.id,
+                              label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6524,18 +6666,18 @@ function SettingsWorkspace({
                         <div className="text-sm font-bold text-[#233329]">Sales Discount Account / حساب خصم المبيعات</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.salesDiscountAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesDiscountAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {accountOptions.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.code} - {account.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, salesDiscountAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...accountOptions.map((account) => ({
+                              value: account.id,
+                              label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                     <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
@@ -6543,18 +6685,18 @@ function SettingsWorkspace({
                         <div className="text-sm font-bold text-[#233329]">Sales Returns Account / حساب مردودات المبيعات</div>
                       </td>
                       <td className="px-6 py-4 text-end align-middle">
-                        <select
+                        <SearchableSelect
                           value={localAccountMappings.salesReturnsAccountId}
-                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesReturnsAccountId: e.target.value } : prev)}
-                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
-                        >
-                          <option value="">غير محدد / Not mapped</option>
-                          {accountOptions.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.code} - {account.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setLocalAccountMappings(prev => prev ? { ...prev, salesReturnsAccountId: val } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none h-[42px]"
+                          options={[
+                            { value: "", label: "غير محدد / Not mapped" },
+                            ...accountOptions.map((account) => ({
+                              value: account.id,
+                              label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                            }))
+                          ]}
+                        />
                       </td>
                     </tr>
                   </>
@@ -6610,11 +6752,27 @@ function SettingsWorkspace({
               </thead>
               <tbody>
                 {Object.entries(groups).map(([groupKey, group]) => {
-                  const matchingKeys = group.keys.filter(k => k.toLowerCase().includes(searchTerm.toLowerCase()));
+                  const matchingKeys = group.keys.filter(k => {
+                    const search = searchTerm.toLowerCase().trim();
+                    if (!search) return true;
+                    if (k.toLowerCase().includes(search)) return true;
+                    const labelObj = PERMISSION_LABELS[k];
+                    if (labelObj) {
+                      if (labelObj.en.toLowerCase().includes(search)) return true;
+                      if (labelObj.ar.toLowerCase().includes(search)) return true;
+                    }
+                    return false;
+                  });
                   if (matchingKeys.length === 0) return null;
                   
                   const isExpanded = expandedGroups[groupKey];
                   const Icon = group.icon;
+
+                  const getPermissionLabel = (key: string) => {
+                    const labelObj = PERMISSION_LABELS[key];
+                    if (!labelObj) return key;
+                    return isArabic ? labelObj.ar : labelObj.en;
+                  };
 
                   return (
                     <React.Fragment key={groupKey}>
@@ -6636,7 +6794,12 @@ function SettingsWorkspace({
                       {isExpanded && matchingKeys.map(key => (
                         <tr key={key} className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
                           <td className="px-6 py-4 font-medium text-[#445149]">
-                            {highlightText(key)}
+                            <div className="font-semibold text-[#233329]">
+                              {highlightText(getPermissionLabel(key))}
+                            </div>
+                            <div className="text-[11px] font-mono text-[#8f9b94] mt-0.5">
+                              {key}
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-end">
                             <Switch 
@@ -6670,6 +6833,8 @@ function PosPaymentMappingField({
   options: BankCashAccount[];
   onChange: (value: string) => void;
 }) {
+  const { language } = useTranslation();
+  const isArabic = language === "ar";
   return (
     <div className="rounded-[22px] border border-[#e1e7e2] bg-[#fbfcfb] p-4">
       <div className="text-sm font-black text-[#233329] arabic-auto">{label}</div>
@@ -6682,7 +6847,7 @@ function PosPaymentMappingField({
         <option value="">غير محدد / Not mapped</option>
         {options.map((account) => (
           <option key={account.id} value={account.account.id}>
-            {account.name} - {account.account.code}
+            {isArabic ? (account.account.nameAr || account.name) : account.name} - {account.account.code}
           </option>
         ))}
       </select>
@@ -6703,6 +6868,8 @@ function PosAccountSelectorField({
   options: AccountOption[];
   onChange: (value: string) => void;
 }) {
+  const { language } = useTranslation();
+  const isArabic = language === "ar";
   return (
     <div className="rounded-[22px] border border-[#e1e7e2] bg-[#fbfcfb] p-4">
       <div className="text-sm font-black text-[#233329] arabic-auto">{label}</div>
@@ -6715,7 +6882,7 @@ function PosAccountSelectorField({
         <option value="">غير محدد / Not mapped</option>
         {options.map((account) => (
           <option key={account.id} value={account.id}>
-            {account.code} - {account.name}
+            {account.code} - {isArabic ? (account.nameAr || account.name) : account.name}
           </option>
         ))}
       </select>
