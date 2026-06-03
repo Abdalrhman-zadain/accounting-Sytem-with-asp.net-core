@@ -15,6 +15,12 @@ describe("PosService restaurant operations", () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    account: {
+      findUnique: jest.fn(),
+    },
+    bankCashAccount: {
+      findFirst: jest.fn(),
+    },
     posPayment: {
       update: jest.fn(),
     },
@@ -26,6 +32,7 @@ describe("PosService restaurant operations", () => {
     },
     deliveryCompany: {
       findUnique: jest.fn(),
+      update: jest.fn(),
     },
     deliveryDriver: {
       findUnique: jest.fn(),
@@ -68,6 +75,13 @@ describe("PosService restaurant operations", () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: "u1" });
     prismaMock.$queryRaw.mockResolvedValue([]);
     prismaMock.posRuntimeSetting.findMany.mockResolvedValue([]);
+    prismaMock.account.findUnique.mockResolvedValue({
+      id: "acc-1",
+      code: "1110001",
+      isActive: true,
+      isPosting: true,
+    });
+    prismaMock.bankCashAccount.findFirst.mockResolvedValue({ id: "bc-1" });
     prismaMock.$executeRaw.mockResolvedValue(1);
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock as never),
@@ -206,6 +220,51 @@ describe("PosService restaurant operations", () => {
       expect.objectContaining({
         postingMode: "BY_INVOICE",
         cogsPostingEnabled: true,
+      }),
+    );
+  });
+
+  it("updates POS account mappings and delivery receivable mappings", async () => {
+    prismaMock.posRuntimeSetting.findMany.mockResolvedValueOnce([
+      { key: "POS_MAPPING_CASH_ACCOUNT_ID", value: "cash-account" },
+      { key: "POS_MAPPING_CARD_ACCOUNT_ID", value: "card-clearing-account" },
+      { key: "POS_MAPPING_SALES_REVENUE_ACCOUNT_ID", value: "sales-revenue" },
+      { key: "POS_MAPPING_OUTPUT_VAT_ACCOUNT_ID", value: "vat-output" },
+      { key: "POS_MAPPING_SALES_DISCOUNT_ACCOUNT_ID", value: "sales-discount" },
+      { key: "POS_MAPPING_SALES_RETURNS_ACCOUNT_ID", value: "sales-returns" },
+      {
+        key: "POS_MAPPING_DELIVERY_COMPANIES",
+        value: JSON.stringify([{ id: "dc1", receivableAccountId: "talabat-rec" }]),
+      },
+    ] as any);
+
+    const result = await service.updateSettings(
+      {
+        cashAccountId: "cash-account",
+        cardAccountId: "card-clearing-account",
+        salesRevenueAccountId: "sales-revenue",
+        outputVatAccountId: "vat-output",
+        salesDiscountAccountId: "sales-discount",
+        salesReturnsAccountId: "sales-returns",
+        deliveryCompanies: [{ id: "dc1", receivableAccountId: "talabat-rec" }],
+      },
+      authorizedUser,
+    );
+
+    expect(prismaMock.$executeRaw).toHaveBeenCalled();
+    expect(prismaMock.deliveryCompany.update).toHaveBeenCalledWith({
+      where: { id: "dc1" },
+      data: { receivableAccountId: "talabat-rec" },
+    });
+    expect(result.accounts).toEqual(
+      expect.objectContaining({
+        cashAccountId: "cash-account",
+        cardAccountId: "card-clearing-account",
+        salesRevenueAccountId: "sales-revenue",
+        outputVatAccountId: "vat-output",
+        salesDiscountAccountId: "sales-discount",
+        salesReturnsAccountId: "sales-returns",
+        deliveryCompanies: [{ id: "dc1", receivableAccountId: "talabat-rec" }],
       }),
     );
   });

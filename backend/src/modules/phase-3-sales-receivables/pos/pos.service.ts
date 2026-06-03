@@ -4557,8 +4557,8 @@ export class PosService {
 
   private async upsertPosRuntimeSetting(db: PosDb, key: string, value: string) {
     await db.$executeRaw(Prisma.sql`
-      INSERT INTO "PosRuntimeSetting" ("key", "value")
-      VALUES (${key}, ${value})
+      INSERT INTO "PosRuntimeSetting" ("key", "value", "createdAt", "updatedAt")
+      VALUES (${key}, ${value}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT ("key")
       DO UPDATE SET
         "value" = EXCLUDED."value",

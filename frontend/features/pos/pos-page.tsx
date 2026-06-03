@@ -918,6 +918,10 @@ export function PosPage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.posReview(token),
       });
+      pushMessage(getLocalizedText("POS settings saved successfully / تم حفظ إعدادات نقاط البيع بنجاح", language));
+    },
+    onError: (error) => {
+      pushError(getErrorMessage(error, "Failed to save POS settings."));
     },
   });
 
@@ -6149,6 +6153,7 @@ function SettingsWorkspace({
       salesReturnsAccountId: string;
       deliveryCompanies: Array<{ id: string; receivableAccountId: string }>;
     } | null>(null);
+    const lastSettingsSeedRef = useRef<string | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
       Session: false,
       Cart: false,
@@ -6170,45 +6175,48 @@ function SettingsWorkspace({
     }, [settings, localPermissions]);
 
     useEffect(() => {
-      if (settings) {
-        setLocalRuntime({
+      if (!settings) {
+        return;
+      }
+
+      const nextAccountMappings = {
+        cashAccountId: settings.accounts.cashAccountId ?? "",
+        cardAccountId: settings.accounts.cardAccountId ?? "",
+        cliqAccountId: settings.accounts.cliqAccountId ?? "",
+        walletAccountId: settings.accounts.walletAccountId ?? "",
+        bankTransferAccountId: settings.accounts.bankTransferAccountId ?? "",
+        salesRevenueAccountId: settings.accounts.salesRevenueAccountId ?? "",
+        outputVatAccountId: settings.accounts.outputVatAccountId ?? "",
+        salesDiscountAccountId: settings.accounts.salesDiscountAccountId ?? "",
+        salesReturnsAccountId: settings.accounts.salesReturnsAccountId ?? "",
+        deliveryCompanies: deliveryCompanies.map((company) => ({
+          id: company.id,
+          receivableAccountId:
+            settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
+            company.receivableAccountId ??
+            "",
+        })),
+      };
+
+      const nextSeed = JSON.stringify({
+        runtime: {
           postingMode: settings.runtime.postingMode,
           cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
-        });
-        setLocalAccountMappings({
-          cashAccountId: settings.accounts.cashAccountId ?? "",
-          cardAccountId: settings.accounts.cardAccountId ?? "",
-          cliqAccountId: settings.accounts.cliqAccountId ?? "",
-          walletAccountId: settings.accounts.walletAccountId ?? "",
-          bankTransferAccountId: settings.accounts.bankTransferAccountId ?? "",
-          salesRevenueAccountId: settings.accounts.salesRevenueAccountId ?? "",
-          outputVatAccountId: settings.accounts.outputVatAccountId ?? "",
-          salesDiscountAccountId: settings.accounts.salesDiscountAccountId ?? "",
-          salesReturnsAccountId: settings.accounts.salesReturnsAccountId ?? "",
-          deliveryCompanies: deliveryCompanies.map((company) => ({
-            id: company.id,
-            receivableAccountId:
-              settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
-              company.receivableAccountId ??
-              "",
-          })),
-        });
+        },
+        accounts: nextAccountMappings,
+      });
+
+      if (lastSettingsSeedRef.current === nextSeed) {
+        return;
       }
-    }, [
-      deliveryCompanies,
-      settings?.accounts.bankTransferAccountId,
-      settings?.accounts.cardAccountId,
-      settings?.accounts.cashAccountId,
-      settings?.accounts.cliqAccountId,
-      settings?.accounts.deliveryCompanies,
-      settings?.accounts.outputVatAccountId,
-      settings?.accounts.salesDiscountAccountId,
-      settings?.accounts.salesRevenueAccountId,
-      settings?.accounts.salesReturnsAccountId,
-      settings?.accounts.walletAccountId,
-      settings?.runtime.cogsPostingEnabled,
-      settings?.runtime.postingMode,
-    ]);
+
+      lastSettingsSeedRef.current = nextSeed;
+      setLocalRuntime({
+        postingMode: settings.runtime.postingMode,
+        cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
+      });
+      setLocalAccountMappings(nextAccountMappings);
+    }, [deliveryCompanies, settings]);
 
     if (!settings || !localPermissions || !localRuntime || !localAccountMappings) {
       return (
