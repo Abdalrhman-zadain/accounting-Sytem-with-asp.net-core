@@ -228,6 +228,7 @@ export function PosReviewWorkspace({
   const [selectedSession, setSelectedSession] = useState<PosSession | null>(null);
   const [activeTab, setActiveTab] = useState<ReviewTab>("overview");
   const [activeInvoiceDetail, setActiveInvoiceDetail] = useState<PosSale | null>(null);
+  const [isJournalDetailOpen, setIsJournalDetailOpen] = useState(false);
 
   useEffect(() => {
     if (!activeInvoiceDetail) {
@@ -248,6 +249,22 @@ export function PosReviewWorkspace({
       setActiveInvoiceDetail(refreshedSale);
     }
   }, [activeInvoiceDetail, reviewSessionGroups]);
+
+  const activeJournalEntry = useMemo(() => {
+    if (!activeInvoiceDetail) {
+      return null;
+    }
+
+    const journalId = isSessionPosting
+      ? report?.sessionJournalEntry?.id ?? null
+      : activeInvoiceDetail.journalEntry?.id ?? null;
+
+    if (!journalId) {
+      return null;
+    }
+
+    return journalEntries.find((entry) => entry.id === journalId) ?? null;
+  }, [activeInvoiceDetail, isSessionPosting, journalEntries, report?.sessionJournalEntry?.id]);
 
   const isDifferenceAccepted = (session: PosSession) =>
     Number(session.difference || 0) === 0 || session.differenceStatus === "ACCEPTED_DIFFERENCE";
@@ -287,6 +304,10 @@ export function PosReviewWorkspace({
       return fallback;
     }
   };
+
+  const activeJournalEntryLabel = isSessionPosting
+    ? getTranslation("pos.review.sessionGroupedEntry", "قيد مجمع للوردية")
+    : getTranslation("pos.review.headerReference", "مرجع الفاتورة");
 
   const localizeDisplayText = (value?: string | null, emptyFallback = "—") => {
     if (!value) return emptyFallback;
@@ -1448,9 +1469,18 @@ export function PosReviewWorkspace({
 
               {/* Individual Actions */}
               <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+                {activeJournalEntry ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsJournalDetailOpen(true)}
+                    className="me-auto rounded-full border border-[#d9e4db] bg-[#f7fbf8] px-5 py-2.5 text-sm font-bold text-[#355240] hover:bg-[#edf6ef] transition"
+                  >
+                    {getTranslation("pos.review.viewJournalEntry", "عرض القيد المحاسبي")}
+                  </button>
+                ) : null}
                 {isSessionPosting ? (
                   <>
-                    <div className="me-auto text-xs font-semibold text-[#5f6d66]">
+                    <div className={cn("text-xs font-semibold text-[#5f6d66]", activeJournalEntry ? "" : "me-auto")}>
                       {getTranslation(
                         "pos.review.sessionPostingOnly",
                         "يتم ترحيل محاسبة نقاط البيع على مستوى الوردية فقط.",
@@ -1533,6 +1563,105 @@ export function PosReviewWorkspace({
               </div>
             </div>
           )}
+        </Modal>
+
+        <Modal
+          isOpen={isJournalDetailOpen && activeJournalEntry !== null}
+          onClose={() => setIsJournalDetailOpen(false)}
+          title={`${getTranslation("pos.review.viewJournalEntry", "عرض القيد المحاسبي")}: ${
+            activeJournalEntry?.reference ?? ""
+          }`}
+          size="3xl"
+        >
+          {activeJournalEntry ? (
+            <div className="space-y-5 text-start" dir={pageDir}>
+              <div className="grid grid-cols-2 gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm md:grid-cols-4">
+                <div>
+                  <span className="mb-0.5 block text-[10px] font-bold uppercase text-gray-400">
+                    {getTranslation("pos.review.headerReference", "المرجع")}
+                  </span>
+                  <span className="font-bold text-gray-900">{activeJournalEntry.reference}</span>
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-[10px] font-bold uppercase text-gray-400">
+                    {getTranslation("pos.review.headerDate", "التاريخ")}
+                  </span>
+                  <span className="font-bold text-gray-900">{formatDate(activeJournalEntry.entryDate)}</span>
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-[10px] font-bold uppercase text-gray-400">
+                    {getTranslation("pos.review.status", "الحالة")}
+                  </span>
+                  <span className="font-bold text-gray-900">{activeJournalEntry.status}</span>
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-[10px] font-bold uppercase text-gray-400">
+                    {activeJournalEntryLabel}
+                  </span>
+                  <span className="font-bold text-gray-900">
+                    {isSessionPosting
+                      ? report?.sessionJournalEntry?.sourceNumber || selectedSession?.sessionNumber || "—"
+                      : activeInvoiceDetail?.reference || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {activeJournalEntry.description ? (
+                <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700">
+                  {activeJournalEntry.description}
+                </div>
+              ) : null}
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50 text-gray-500">
+                      <th className="px-4 py-3 text-start font-bold">
+                        {getTranslation("pos.review.account", "الحساب")}
+                      </th>
+                      <th className="px-4 py-3 text-start font-bold">
+                        {getTranslation("pos.review.description", "الوصف")}
+                      </th>
+                      <th className="px-4 py-3 text-end font-bold">
+                        {getTranslation("pos.review.debit", "مدين")}
+                      </th>
+                      <th className="px-4 py-3 text-end font-bold">
+                        {getTranslation("pos.review.credit", "دائن")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {activeJournalEntry.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td className="px-4 py-3 font-semibold text-gray-900">
+                          {localizeDisplayText(
+                            isArabic ? line.accountNameAr || line.accountName : line.accountName,
+                            line.accountCode || "—",
+                          )}
+                          {line.accountCode ? (
+                            <div className="mt-1 text-xs font-medium text-gray-500">{line.accountCode}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{line.description || "—"}</td>
+                        <td className="px-4 py-3 text-end font-bold text-[#0f8f67]">{line.debitAmount}</td>
+                        <td className="px-4 py-3 text-end font-bold text-[#b42318]">{line.creditAmount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsJournalDetailOpen(false)}
+                  className="rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition"
+                >
+                  {getTranslation("common.close", "إغلاق")}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </Modal>
 
         {/* Correct Order Type Modal (unchanged business logic) */}
