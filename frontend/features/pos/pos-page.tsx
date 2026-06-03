@@ -6015,6 +6015,11 @@ function SettingsWorkspace({
       Accounting: false,
       General: false
     });
+    const [expandedMappingGroups, setExpandedMappingGroups] = useState<Record<string, boolean>>({
+      payments: true,
+      delivery: true,
+      posting: true
+    });
 
     useEffect(() => {
       if (settings && !localPermissions) {
@@ -6269,152 +6274,293 @@ function SettingsWorkspace({
           />
         </div>
 
-        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-          <div className="mb-6">
-            <div className="text-2xl font-black text-[#233329] arabic-heading">
-              إعدادات حسابات الدفع POS
-            </div>
-            <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-              POS Payment Account Mapping
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <PosPaymentMappingField
-              label="Cash / النقد"
-              hint="Cash Register Account / حساب الصندوق"
-              value={localAccountMappings.cashAccountId}
-              options={paymentAccounts}
-              onChange={(value) =>
-                setLocalAccountMappings((prev) =>
-                  prev ? { ...prev, cashAccountId: value } : prev,
-                )
-              }
-            />
-            <PosPaymentMappingField
-              label="Card / Visa"
-              hint="Card Clearing Account / حساب وسيط البطاقات"
-              value={localAccountMappings.cardAccountId}
-              options={paymentAccounts}
-              onChange={(value) =>
-                setLocalAccountMappings((prev) =>
-                  prev ? { ...prev, cardAccountId: value } : prev,
-                )
-              }
-            />
-            <PosPaymentMappingField
-              label="CliQ / كليك"
-              hint="CliQ Clearing Account / حساب وسيط كليك"
-              value={localAccountMappings.cliqAccountId}
-              options={paymentAccounts}
-              onChange={(value) =>
-                setLocalAccountMappings((prev) =>
-                  prev ? { ...prev, cliqAccountId: value } : prev,
-                )
-              }
-            />
-            <PosPaymentMappingField
-              label="Wallet / محفظة"
-              hint="Wallet Clearing Account / حساب وسيط المحفظة"
-              value={localAccountMappings.walletAccountId}
-              options={paymentAccounts}
-              onChange={(value) =>
-                setLocalAccountMappings((prev) =>
-                  prev ? { ...prev, walletAccountId: value } : prev,
-                )
-              }
-            />
-            <PosPaymentMappingField
-              label="Bank Transfer / تحويل بنكي"
-              hint="Bank Account / حساب البنك"
-              value={localAccountMappings.bankTransferAccountId}
-              options={paymentAccounts}
-              onChange={(value) =>
-                setLocalAccountMappings((prev) =>
-                  prev ? { ...prev, bankTransferAccountId: value } : prev,
-                )
-              }
-            />
-          </div>
-
-          <div className="mt-8 border-t border-[#e1e7e2] pt-6">
-            <div className="text-lg font-black text-[#233329] arabic-heading">
-              Delivery Companies / شركات التوصيل
-            </div>
-            <div className="mt-4 grid gap-4">
-              {deliveryCompanies.map((company) => (
-                <PosAccountSelectorField
-                  key={company.id}
-                  label={company.arabicName?.trim() || company.name}
-                  hint={`${company.name} Receivable / ذمم ${company.arabicName?.trim() || company.name}`}
-                  value={
-                    localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)
-                      ?.receivableAccountId ?? ""
-                  }
-                  options={accountOptions}
-                  onChange={(value) =>
-                    setLocalAccountMappings((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            deliveryCompanies: prev.deliveryCompanies.map((row) =>
-                              row.id === company.id ? { ...row, receivableAccountId: value } : row,
-                            ),
-                          }
-                        : prev,
-                    )
-                  }
-                />
-              ))}
+        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-0 overflow-hidden">
+          <div className="flex flex-col gap-4 border-b border-[#e1e7e2] p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-2xl font-black text-[#233329] arabic-heading">
+                إعدادات حسابات الدفع POS
+              </div>
+              <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+                POS Payment Account Mapping
+              </p>
             </div>
           </div>
 
-          <div className="mt-8 border-t border-[#e1e7e2] pt-6">
-            <div className="text-lg font-black text-[#233329] arabic-heading">
-              Sales Posting Accounts / حسابات ترحيل المبيعات
-            </div>
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <PosAccountSelectorField
-                label="Sales Revenue Account / حساب إيرادات المبيعات"
-                value={localAccountMappings.salesRevenueAccountId}
-                options={accountOptions}
-                onChange={(value) =>
-                  setLocalAccountMappings((prev) =>
-                    prev ? { ...prev, salesRevenueAccountId: value } : prev,
-                  )
-                }
-              />
-              <PosAccountSelectorField
-                label="Output VAT Account / حساب ضريبة المخرجات"
-                value={localAccountMappings.outputVatAccountId}
-                options={accountOptions}
-                onChange={(value) =>
-                  setLocalAccountMappings((prev) =>
-                    prev ? { ...prev, outputVatAccountId: value } : prev,
-                  )
-                }
-              />
-              <PosAccountSelectorField
-                label="Sales Discount Account / حساب خصم المبيعات"
-                value={localAccountMappings.salesDiscountAccountId}
-                options={accountOptions}
-                onChange={(value) =>
-                  setLocalAccountMappings((prev) =>
-                    prev ? { ...prev, salesDiscountAccountId: value } : prev,
-                  )
-                }
-              />
-              <PosAccountSelectorField
-                label="Sales Returns Account / حساب مردودات المبيعات"
-                value={localAccountMappings.salesReturnsAccountId}
-                options={accountOptions}
-                onChange={(value) =>
-                  setLocalAccountMappings((prev) =>
-                    prev ? { ...prev, salesReturnsAccountId: value } : prev,
-                  )
-                }
-              />
-            </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-base">
+              <thead className="bg-[#f8faf8] border-b border-[#e1e7e2]">
+                <tr className="text-start text-[#6d7b73]">
+                  <th className="px-6 py-4 font-bold text-start">الحساب المحاسبي / Account Option</th>
+                  <th className="px-6 py-4 font-bold text-end w-[380px]">الحساب المحاسبي المربوط / Mapped Account</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Group 1: طرق الدفع — Payment Methods */}
+                <tr 
+                  className="cursor-pointer bg-[#fbfcfb] transition-colors hover:bg-[#f6f7f8]"
+                  onClick={() => setExpandedMappingGroups(p => ({ ...p, payments: !p.payments }))}
+                >
+                  <td colSpan={2} className="border-b border-[#e1e7e2] px-6 py-4 border-t border-[#e1e7e2]">
+                    <div className="flex items-center gap-3 font-bold text-[#233329]">
+                      {expandedMappingGroups.payments ? <LuChevronDown className="h-5 w-5" /> : <LuChevronRight className="h-5 w-5" />}
+                      <LuWallet className="h-5 w-5 text-[#46644b]" />
+                      طرق الدفع — Payment Methods
+                    </div>
+                  </td>
+                </tr>
+                {expandedMappingGroups.payments && (
+                  <>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Cash / النقد</div>
+                        <div className="mt-1 text-xs text-[#6b7b72]">Cash Register Account / حساب الصندوق</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.cashAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cashAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.account.id}>
+                              {account.name} - {account.account.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Card / Visa</div>
+                        <div className="mt-1 text-xs text-[#6b7b72]">Card Clearing Account / حساب وسيط البطاقات</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.cardAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cardAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.account.id}>
+                              {account.name} - {account.account.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">CliQ / كليك</div>
+                        <div className="mt-1 text-xs text-[#6b7b72]">CliQ Clearing Account / حساب وسيط كليك</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.cliqAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, cliqAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.account.id}>
+                              {account.name} - {account.account.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Wallet / محفظة</div>
+                        <div className="mt-1 text-xs text-[#6b7b72]">Wallet Clearing Account / حساب وسيط المحفظة</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.walletAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, walletAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.account.id}>
+                              {account.name} - {account.account.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Bank Transfer / تحويل بنكي</div>
+                        <div className="mt-1 text-xs text-[#6b7b72]">Bank Account / حساب البنك</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.bankTransferAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, bankTransferAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.account.id}>
+                              {account.name} - {account.account.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  </>
+                )}
+
+                {/* Group 2: شركات التوصيل — Delivery Companies */}
+                <tr 
+                  className="cursor-pointer bg-[#fbfcfb] transition-colors hover:bg-[#f6f7f8]"
+                  onClick={() => setExpandedMappingGroups(p => ({ ...p, delivery: !p.delivery }))}
+                >
+                  <td colSpan={2} className="border-b border-[#e1e7e2] px-6 py-4 border-t border-[#e1e7e2]">
+                    <div className="flex items-center gap-3 font-bold text-[#233329]">
+                      {expandedMappingGroups.delivery ? <LuChevronDown className="h-5 w-5" /> : <LuChevronRight className="h-5 w-5" />}
+                      <LuPackage className="h-5 w-5 text-[#46644b]" />
+                      شركات التوصيل — Delivery Companies
+                    </div>
+                  </td>
+                </tr>
+                {expandedMappingGroups.delivery && (
+                  <>
+                    {deliveryCompanies.map((company) => (
+                      <tr key={company.id} className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                        <td className="px-6 py-4 align-middle text-start">
+                          <div className="text-sm font-bold text-[#233329]">{company.arabicName?.trim() || company.name}</div>
+                          <div className="mt-1 text-xs text-[#6b7b72]">
+                            {`${company.name} Receivable / ذمم ${company.arabicName?.trim() || company.name}`}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-end align-middle">
+                          <select
+                            value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ?? ""}
+                            onChange={(e) =>
+                              setLocalAccountMappings((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      deliveryCompanies: prev.deliveryCompanies.map((row) =>
+                                        row.id === company.id ? { ...row, receivableAccountId: e.target.value } : row,
+                                      ),
+                                    }
+                                  : prev,
+                              )
+                            }
+                            className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                          >
+                            <option value="">غير محدد / Not mapped</option>
+                            {accountOptions.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.code} - {account.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+
+                {/* Group 3: حسابات ترحيل المبيعات — Posting Accounts */}
+                <tr 
+                  className="cursor-pointer bg-[#fbfcfb] transition-colors hover:bg-[#f6f7f8]"
+                  onClick={() => setExpandedMappingGroups(p => ({ ...p, posting: !p.posting }))}
+                >
+                  <td colSpan={2} className="border-b border-[#e1e7e2] px-6 py-4 border-t border-[#e1e7e2]">
+                    <div className="flex items-center gap-3 font-bold text-[#233329]">
+                      {expandedMappingGroups.posting ? <LuChevronDown className="h-5 w-5" /> : <LuChevronRight className="h-5 w-5" />}
+                      <LuReceipt className="h-5 w-5 text-[#46644b]" />
+                      حسابات ترحيل المبيعات — Sales Posting Accounts
+                    </div>
+                  </td>
+                </tr>
+                {expandedMappingGroups.posting && (
+                  <>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Sales Revenue Account / حساب إيرادات المبيعات</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.salesRevenueAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesRevenueAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {accountOptions.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} - {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Output VAT Account / حساب ضريبة المخرجات</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.outputVatAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, outputVatAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {accountOptions.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} - {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Sales Discount Account / حساب خصم المبيعات</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.salesDiscountAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesDiscountAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {accountOptions.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} - {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#f0f3f0] transition-colors hover:bg-[#fbfcfb]">
+                      <td className="px-6 py-4 align-middle text-start">
+                        <div className="text-sm font-bold text-[#233329]">Sales Returns Account / حساب مردودات المبيعات</div>
+                      </td>
+                      <td className="px-6 py-4 text-end align-middle">
+                        <select
+                          value={localAccountMappings.salesReturnsAccountId}
+                          onChange={(e) => setLocalAccountMappings(prev => prev ? { ...prev, salesReturnsAccountId: e.target.value } : prev)}
+                          className="w-full max-w-[360px] inline-block rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] focus:border-[#46644b] outline-none"
+                        >
+                          <option value="">غير محدد / Not mapped</option>
+                          {accountOptions.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} - {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
           </div>
         </Card>
 
