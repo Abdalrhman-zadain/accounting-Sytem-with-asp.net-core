@@ -85,8 +85,9 @@ export class ClosePosSessionDto {
 }
 
 export class PosPaymentDto {
+  @IsOptional()
   @IsString()
-  bankCashAccountId!: string;
+  bankCashAccountId?: string;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -97,7 +98,12 @@ export class PosPaymentDto {
   @IsString()
   @Length(0, 120)
   reference?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }
+
 
 class PosSaleBaseDto {
   @IsString()
@@ -204,6 +210,14 @@ export class SetPosFavoriteItemsDto {
   itemIds!: string[];
 }
 
+export class DeliveryCompanyMappingDto {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  receivableAccountId!: string;
+}
+
 export class UpdatePosSettingsDto {
   @IsOptional()
   @IsIn(["BY_INVOICE", "BY_SESSION"])
@@ -212,6 +226,48 @@ export class UpdatePosSettingsDto {
   @IsOptional()
   @IsBoolean()
   cogsPostingEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  cashAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  cardAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  cliqAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  walletAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  bankTransferAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  salesRevenueAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  outputVatAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  salesDiscountAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  salesReturnsAccountId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DeliveryCompanyMappingDto)
+  deliveryCompanies?: DeliveryCompanyMappingDto[];
 }
 
 export class VoidPosSaleDto {

@@ -61,6 +61,18 @@ import {
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
 const POS_WALK_IN_CUSTOMER_NAME = "POS Walk-in Customer";
 type PosDb = Prisma.TransactionClient | PrismaService;
+type PosAccountMappings = {
+  cashAccountId: string | null;
+  cardAccountId: string | null;
+  cliqAccountId: string | null;
+  walletAccountId: string | null;
+  bankTransferAccountId: string | null;
+  salesRevenueAccountId: string | null;
+  outputVatAccountId: string | null;
+  salesDiscountAccountId: string | null;
+  salesReturnsAccountId: string | null;
+  deliveryCompanies: Array<{ id: string; receivableAccountId: string }>;
+};
 
 @Injectable()
 export class PosService {
@@ -87,8 +99,55 @@ export class PosService {
     return session ? this.mapSession(session) : null;
   }
 
+  async getPosAccountMappings(db: PosDb = this.prisma): Promise<PosAccountMappings> {
+    const settings = await db.posRuntimeSetting.findMany({
+      where: {
+        key: {
+          in: [
+            "POS_MAPPING_CASH_ACCOUNT_ID",
+            "POS_MAPPING_CARD_ACCOUNT_ID",
+            "POS_MAPPING_CLIQ_ACCOUNT_ID",
+            "POS_MAPPING_WALLET_ACCOUNT_ID",
+            "POS_MAPPING_BANK_TRANSFER_ACCOUNT_ID",
+            "POS_MAPPING_SALES_REVENUE_ACCOUNT_ID",
+            "POS_MAPPING_OUTPUT_VAT_ACCOUNT_ID",
+            "POS_MAPPING_SALES_DISCOUNT_ACCOUNT_ID",
+            "POS_MAPPING_SALES_RETURNS_ACCOUNT_ID",
+            "POS_MAPPING_DELIVERY_COMPANIES",
+          ],
+        },
+      },
+    });
+
+    const settingsMap = new Map(settings.map((s) => [s.key, s.value]));
+
+    let deliveryCompanies: Array<{ id: string; receivableAccountId: string }> = [];
+    const delVal = settingsMap.get("POS_MAPPING_DELIVERY_COMPANIES");
+    if (delVal) {
+      try {
+        deliveryCompanies = JSON.parse(delVal);
+      } catch (e) {
+        deliveryCompanies = [];
+      }
+    }
+
+    return {
+      cashAccountId: settingsMap.get("POS_MAPPING_CASH_ACCOUNT_ID") || null,
+      cardAccountId: settingsMap.get("POS_MAPPING_CARD_ACCOUNT_ID") || null,
+      cliqAccountId: settingsMap.get("POS_MAPPING_CLIQ_ACCOUNT_ID") || null,
+      walletAccountId: settingsMap.get("POS_MAPPING_WALLET_ACCOUNT_ID") || null,
+      bankTransferAccountId: settingsMap.get("POS_MAPPING_BANK_TRANSFER_ACCOUNT_ID") || null,
+      salesRevenueAccountId: settingsMap.get("POS_MAPPING_SALES_REVENUE_ACCOUNT_ID") || null,
+      outputVatAccountId: settingsMap.get("POS_MAPPING_OUTPUT_VAT_ACCOUNT_ID") || null,
+      salesDiscountAccountId: settingsMap.get("POS_MAPPING_SALES_DISCOUNT_ACCOUNT_ID") || null,
+      salesReturnsAccountId: settingsMap.get("POS_MAPPING_SALES_RETURNS_ACCOUNT_ID") || null,
+      deliveryCompanies,
+    };
+  }
+
   async getSettings(user?: AuthorizedUser) {
     const runtimeConfig = await this.getPosRuntimeConfig();
+    const accountMappings = await this.getPosAccountMappings();
     return {
       runtime: {
         autoPost: this.parseBoolean(process.env.POS_AUTO_POST, false),
@@ -104,6 +163,7 @@ export class PosService {
           this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user),
         cashierDiscountLimitPercent: Number(process.env.POS_MAX_CASHIER_DISCOUNT_PERCENT ?? "15"),
       },
+      accounts: accountMappings,
       permissions: Object.fromEntries(
         this.listKnownPermissionCodes().map((permissionCode) => [
           permissionCode,
@@ -125,6 +185,58 @@ export class PosService {
           "POS_COGS_POSTING_ENABLED",
           dto.cogsPostingEnabled ? "true" : "false",
         );
+      }
+      if (dto.cashAccountId !== undefined) {
+        await this.ensurePosPaymentMappingAccount(dto.cashAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_CASH_ACCOUNT_ID", dto.cashAccountId || "");
+      }
+      if (dto.cardAccountId !== undefined) {
+        await this.ensurePosPaymentMappingAccount(dto.cardAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_CARD_ACCOUNT_ID", dto.cardAccountId || "");
+      }
+      if (dto.cliqAccountId !== undefined) {
+        await this.ensurePosPaymentMappingAccount(dto.cliqAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_CLIQ_ACCOUNT_ID", dto.cliqAccountId || "");
+      }
+      if (dto.walletAccountId !== undefined) {
+        await this.ensurePosPaymentMappingAccount(dto.walletAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_WALLET_ACCOUNT_ID", dto.walletAccountId || "");
+      }
+      if (dto.bankTransferAccountId !== undefined) {
+        await this.ensurePosPaymentMappingAccount(dto.bankTransferAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_BANK_TRANSFER_ACCOUNT_ID", dto.bankTransferAccountId || "");
+      }
+      if (dto.salesRevenueAccountId !== undefined) {
+        await this.ensureActivePostingAccount(dto.salesRevenueAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_SALES_REVENUE_ACCOUNT_ID", dto.salesRevenueAccountId || "");
+      }
+      if (dto.outputVatAccountId !== undefined) {
+        await this.ensureActivePostingAccount(dto.outputVatAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_OUTPUT_VAT_ACCOUNT_ID", dto.outputVatAccountId || "");
+      }
+      if (dto.salesDiscountAccountId !== undefined) {
+        await this.ensureActivePostingAccount(dto.salesDiscountAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_SALES_DISCOUNT_ACCOUNT_ID", dto.salesDiscountAccountId || "");
+      }
+      if (dto.salesReturnsAccountId !== undefined) {
+        await this.ensureActivePostingAccount(dto.salesReturnsAccountId, tx);
+        await this.upsertPosRuntimeSetting(tx, "POS_MAPPING_SALES_RETURNS_ACCOUNT_ID", dto.salesReturnsAccountId || "");
+      }
+      if (dto.deliveryCompanies !== undefined) {
+        await this.upsertPosRuntimeSetting(
+          tx,
+          "POS_MAPPING_DELIVERY_COMPANIES",
+          JSON.stringify(dto.deliveryCompanies || []),
+        );
+        if (dto.deliveryCompanies) {
+          for (const item of dto.deliveryCompanies) {
+            await this.ensureActivePostingAccount(item.receivableAccountId, tx);
+            await tx.deliveryCompany.update({
+              where: { id: item.id },
+              data: { receivableAccountId: item.receivableAccountId },
+            });
+          }
+        }
       }
     });
     return this.getSettings(user);
@@ -616,6 +728,10 @@ export class PosService {
     const deliveryFee = dto.deliveryFeeAmount ?? 0;
     totals.totalAmount += serviceCharge + deliveryFee;
 
+    const accountMappings = await this.getPosAccountMappings();
+    if (dto.payments?.length) {
+      await this.resolvePaymentDtoAccounts(dto.payments, accountMappings, this.prisma, session.cashAccountId);
+    }
     const holdPaymentAccountMap = dto.payments?.length
       ? await this.resolvePaymentAccounts(dto.payments)
       : null;
@@ -736,9 +852,11 @@ export class PosService {
         await tx.posPayment.createMany({
           data: dto.payments.map((payment) => ({
             salesInvoiceId: invoice.id,
-            bankCashAccountId: payment.bankCashAccountId,
-            paymentMethod: this.mapPaymentMethod(
-              holdPaymentAccountMap?.get(payment.bankCashAccountId)?.type ?? "",
+            bankCashAccountId: payment.bankCashAccountId!,
+            paymentMethod: this.resolvePosPaymentMethod(
+              payment.paymentMethod ??
+                holdPaymentAccountMap?.get(payment.bankCashAccountId!)?.type ??
+                "",
             ),
             amount: this.toAmount(payment.amount),
             tenderedAmount: this.toAmount(payment.amount),
@@ -808,8 +926,14 @@ export class PosService {
       throw new BadRequestException("POS sale total must be greater than zero.");
     }
 
+    const accountMappings = await this.getPosAccountMappings();
+
+    if (dto.payments?.length) {
+      await this.resolvePaymentDtoAccounts(dto.payments, accountMappings, this.prisma, session.cashAccountId);
+    }
+
     const bankCashIds = Array.from(
-      new Set(dto.payments.map((payment) => payment.bankCashAccountId.trim())),
+      new Set(dto.payments.map((payment) => payment.bankCashAccountId!.trim())),
     );
     const bankCashAccounts = await this.prisma.bankCashAccount.findMany({
       where: { id: { in: bankCashIds }, isActive: true },
@@ -993,8 +1117,8 @@ export class PosService {
       await tx.posPayment.createMany({
         data: normalizedPayments.payments.map((payment) => ({
           salesInvoiceId: invoice.id,
-          bankCashAccountId: payment.bankCashAccountId,
-          paymentMethod: payment.paymentMethod,
+          bankCashAccountId: payment.bankCashAccountId!,
+          paymentMethod: payment.paymentMethod as PosPaymentMethod,
           amount: this.toAmount(payment.appliedAmount),
           tenderedAmount: this.toAmount(payment.amount),
           reference: payment.reference?.trim() || null,
@@ -1053,13 +1177,14 @@ export class PosService {
         const description = invoiceWithDetails.description
           ? `${invoiceWithDetails.reference} - ${invoiceWithDetails.description}`
           : invoiceWithDetails.reference;
-        const salesCredits = await this.salesReceivablesService.buildSalesInvoiceCreditJournalLines(
+
+        const { creditLines, debitLines } = await this.buildSaleAccountingCredits(
           tx,
           {
             id: invoiceWithDetails.id,
             reference: invoiceWithDetails.reference,
-            customerId: invoiceWithDetails.customerId,
-            customer: { receivableAccountId: invoiceWithDetails.customer.receivableAccountId },
+            serviceChargeAmount: invoiceWithDetails.serviceChargeAmount,
+            deliveryFeeAmount: invoiceWithDetails.deliveryFeeAmount,
             lines: invoiceWithDetails.lines.map((line) => ({
               lineNumber: line.lineNumber,
               description: line.description,
@@ -1067,35 +1192,12 @@ export class PosService {
               taxId: line.taxId,
               taxAmount: line.taxAmount,
               lineSubtotalAmount: line.lineSubtotalAmount,
+              discountAmount: line.discountAmount,
             })),
-            totalAmount: invoiceWithDetails.totalAmount,
           },
+          accountMappings,
           description,
         );
-
-        const salesRevenueAccount = await tx.account.findUniqueOrThrow({
-          where: { code: "4110001" },
-        });
-
-        const serviceChargeVal = Number(invoiceWithDetails.serviceChargeAmount);
-        if (serviceChargeVal > 0) {
-          salesCredits.push({
-            accountId: salesRevenueAccount.id,
-            description: `${description} - Service Charge`,
-            debitAmount: 0,
-            creditAmount: serviceChargeVal,
-          });
-        }
-
-        const deliveryFeeVal = Number(invoiceWithDetails.deliveryFeeAmount);
-        if (deliveryFeeVal > 0) {
-          salesCredits.push({
-            accountId: salesRevenueAccount.id,
-            description: `${description} - Delivery Fee`,
-            debitAmount: 0,
-            creditAmount: deliveryFeeVal,
-          });
-        }
 
         let receivableAccountId = invoiceWithDetails.customer.receivableAccountId;
         if (invoiceWithDetails.deliveryCompanyId) {
@@ -1123,7 +1225,8 @@ export class PosService {
         const journalLines = [
           ...paymentDebits,
           ...receivableDebits,
-          ...salesCredits,
+          ...debitLines,
+          ...creditLines,
           ...(cogsPostingEnabled ? inventoryPosting.accountingLines : []),
         ];
         this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
@@ -2804,6 +2907,69 @@ export class PosService {
       throw new BadRequestException("At least one refund method is required.");
     }
 
+    const accountMappings = await this.getPosAccountMappings(tx);
+
+    for (const payment of payments) {
+      if (payment.refundMethod === PosRefundMethod.STORE_CREDIT) {
+        continue;
+      }
+      if (!payment.bankCashAccountId) {
+        let mappedAccountId: string | null = null;
+        const method = payment.refundMethod;
+        if (method === PosRefundMethod.CASH) {
+          mappedAccountId = accountMappings.cashAccountId;
+        } else if (method === PosRefundMethod.CARD) {
+          mappedAccountId = accountMappings.cardAccountId;
+        } else if (method === PosRefundMethod.CLIQ) {
+          mappedAccountId = accountMappings.cliqAccountId;
+        } else if (method === PosRefundMethod.WALLET) {
+          mappedAccountId = accountMappings.walletAccountId;
+        } else if (method === PosRefundMethod.BANK_TRANSFER) {
+          mappedAccountId = accountMappings.bankTransferAccountId;
+        }
+
+        if (!mappedAccountId) {
+          throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
+        }
+
+        const bankCashAcc = await tx.bankCashAccount.findFirst({
+          where: { accountId: mappedAccountId, isActive: true },
+          select: { id: true },
+        });
+
+        if (!bankCashAcc) {
+          throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
+        }
+
+        payment.bankCashAccountId = bankCashAcc.id;
+      } else {
+        const bankCashAcc = await tx.bankCashAccount.findUnique({
+          where: { id: payment.bankCashAccountId },
+          select: { type: true, accountId: true },
+        });
+        if (!bankCashAcc) {
+          throw new BadRequestException(`Refund account ${payment.bankCashAccountId} was not found or is inactive.`);
+        }
+        const method = bankCashAcc.type.toUpperCase();
+        let mappedAccountId: string | null = null;
+        if (method.includes("CASH")) {
+          mappedAccountId = accountMappings.cashAccountId;
+        } else if (method.includes("CARD")) {
+          mappedAccountId = accountMappings.cardAccountId;
+        } else if (method.includes("CLIQ")) {
+          mappedAccountId = accountMappings.cliqAccountId;
+        } else if (method.includes("WALLET")) {
+          mappedAccountId = accountMappings.walletAccountId;
+        } else if (method.includes("BANK")) {
+          mappedAccountId = accountMappings.bankTransferAccountId;
+        }
+
+        if (!mappedAccountId) {
+          throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
+        }
+      }
+    }
+
     const accountIds = Array.from(
       new Set(
         payments
@@ -2980,6 +3146,8 @@ export class PosService {
       },
     });
 
+    const accountMappings = await this.getPosAccountMappings(tx);
+
     const description = posReturn.reason
       ? `${posReturn.reference} - ${posReturn.reason}`
       : posReturn.reference;
@@ -2991,7 +3159,7 @@ export class PosService {
     }> = [];
 
     for (const line of posReturn.lines) {
-      const salesReturnAccountId = line.revenueAccountId;
+      const salesReturnAccountId = accountMappings.salesReturnsAccountId || line.revenueAccountId;
       journalLines.push({
         accountId: salesReturnAccountId,
         description,
@@ -3000,7 +3168,7 @@ export class PosService {
       });
 
       if (Number(line.taxAmount) > 0) {
-        const taxAccountId = line.tax?.taxAccountId;
+        const taxAccountId = accountMappings.outputVatAccountId || line.tax?.taxAccountId;
         if (!taxAccountId) {
           throw new BadRequestException(
             `Tax account mapping is missing for POS return line ${line.lineNumber}.`,
@@ -3047,6 +3215,266 @@ export class PosService {
     }
 
     return journalLines;
+  }
+
+  private async buildSaleAccountingCredits(
+    tx: Prisma.TransactionClient,
+    sale: {
+      id: string;
+      reference: string;
+      serviceChargeAmount: Prisma.Decimal | number | null;
+      deliveryFeeAmount: Prisma.Decimal | number | null;
+      lines: Array<{
+        lineNumber: number;
+        description: string | null;
+        revenueAccountId: string;
+        taxId: string | null;
+        taxAmount: Prisma.Decimal | number;
+        lineSubtotalAmount: Prisma.Decimal | number;
+        discountAmount: Prisma.Decimal | number;
+      }>;
+    },
+    accountMappings: any,
+    description: string,
+  ) {
+    const taxIds = Array.from(
+      new Set(sale.lines.map((line) => line.taxId).filter(Boolean)),
+    ) as string[];
+    const taxes = taxIds.length
+      ? await tx.tax.findMany({
+          where: { id: { in: taxIds }, isActive: true },
+          select: {
+            id: true,
+            taxName: true,
+            taxAccountId: true,
+            taxAccount: {
+              select: {
+                id: true,
+                isActive: true,
+                isPosting: true,
+                allowManualPosting: true,
+              },
+            },
+          },
+        })
+      : [];
+    const taxMap = new Map(taxes.map((tax) => [tax.id, tax]));
+    const fallbackTaxAccountId = accountMappings.outputVatAccountId || await this.getPosSalesTaxAccountId(tx);
+
+    const revenueByAccount = new Map<string, number>();
+    const discountByAccount = new Map<string, number>();
+    const taxByAccount = new Map<string, number>();
+
+    const salesRevenueAccountId = accountMappings.salesRevenueAccountId || (await tx.account.findFirst({
+      where: { code: "4110001" },
+      select: { id: true },
+    }))?.id;
+
+    if (!salesRevenueAccountId) {
+      throw new BadRequestException("Sales revenue account is not configured.");
+    }
+
+    for (const line of sale.lines) {
+      const discountAmount = Number(line.discountAmount ?? 0);
+      const subtotal = Number(line.lineSubtotalAmount ?? 0);
+      const revenueAccountId = accountMappings.salesRevenueAccountId || line.revenueAccountId;
+
+      if (discountAmount > 0 && accountMappings.salesDiscountAccountId) {
+        const currentRev = revenueByAccount.get(revenueAccountId) ?? 0;
+        revenueByAccount.set(
+          revenueAccountId,
+          Number((currentRev + subtotal + discountAmount).toFixed(2)),
+        );
+
+        const currentDisc = discountByAccount.get(accountMappings.salesDiscountAccountId) ?? 0;
+        discountByAccount.set(
+          accountMappings.salesDiscountAccountId,
+          Number((currentDisc + discountAmount).toFixed(2)),
+        );
+      } else {
+        const currentRev = revenueByAccount.get(revenueAccountId) ?? 0;
+        revenueByAccount.set(
+          revenueAccountId,
+          Number((currentRev + subtotal).toFixed(2)),
+        );
+      }
+
+      const taxAmount = Number(line.taxAmount);
+      if (taxAmount <= 0) {
+        continue;
+      }
+
+      const taxAccountId = accountMappings.outputVatAccountId || (line.taxId ? taxMap.get(line.taxId)?.taxAccountId : null) || fallbackTaxAccountId;
+      if (!taxAccountId) {
+        throw new BadRequestException("Output VAT account is required because tax is applied.");
+      }
+      const currentTax = taxByAccount.get(taxAccountId) ?? 0;
+      taxByAccount.set(
+        taxAccountId,
+        Number((currentTax + taxAmount).toFixed(2)),
+      );
+    }
+
+    const serviceChargeVal = Number(sale.serviceChargeAmount ?? 0);
+    if (serviceChargeVal > 0) {
+      const currentRev = revenueByAccount.get(salesRevenueAccountId) ?? 0;
+      revenueByAccount.set(salesRevenueAccountId, Number((currentRev + serviceChargeVal).toFixed(2)));
+    }
+
+    const deliveryFeeVal = Number(sale.deliveryFeeAmount ?? 0);
+    if (deliveryFeeVal > 0) {
+      const currentRev = revenueByAccount.get(salesRevenueAccountId) ?? 0;
+      revenueByAccount.set(salesRevenueAccountId, Number((currentRev + deliveryFeeVal).toFixed(2)));
+    }
+
+    const creditLines = [
+      ...Array.from(revenueByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description,
+        debitAmount: 0,
+        creditAmount: amount,
+      })),
+      ...Array.from(taxByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description: `${description} tax`,
+        debitAmount: 0,
+        creditAmount: amount,
+      })),
+    ];
+
+    const debitLines = [
+      ...Array.from(discountByAccount.entries()).map(([accountId, amount]) => ({
+        accountId,
+        description: `${description} discount`,
+        debitAmount: amount,
+        creditAmount: 0,
+      })),
+    ];
+
+    return { creditLines, debitLines };
+  }
+
+  private resolvePosPaymentMethod(raw: string) {
+    const normalized = raw.trim().toUpperCase();
+    if (normalized === PosPaymentMethod.DELIVERY) return PosPaymentMethod.DELIVERY;
+    if (normalized.includes("CARD") || normalized.includes("VISA") || normalized.includes("MASTER")) {
+      return PosPaymentMethod.CARD;
+    }
+    if (normalized.includes("CLIQ")) return PosPaymentMethod.CLIQ;
+    if (normalized.includes("WALLET")) return PosPaymentMethod.WALLET;
+    if (normalized.includes("BANK")) return PosPaymentMethod.BANK_TRANSFER;
+    return PosPaymentMethod.CASH;
+  }
+
+  private getMappedAccountIdForPaymentMethod(
+    paymentMethod: PosPaymentMethod,
+    accountMappings: PosAccountMappings,
+  ) {
+    if (paymentMethod === PosPaymentMethod.CARD) return accountMappings.cardAccountId;
+    if (paymentMethod === PosPaymentMethod.CLIQ) return accountMappings.cliqAccountId;
+    if (paymentMethod === PosPaymentMethod.WALLET) return accountMappings.walletAccountId;
+    if (paymentMethod === PosPaymentMethod.BANK_TRANSFER) return accountMappings.bankTransferAccountId;
+    return accountMappings.cashAccountId;
+  }
+
+  private async ensureActivePostingAccount(accountId: string | undefined, db: PosDb = this.prisma) {
+    const normalizedAccountId = accountId?.trim();
+    if (!normalizedAccountId) {
+      return;
+    }
+    const account = await db.account.findUnique({
+      where: { id: normalizedAccountId },
+      select: {
+        id: true,
+        code: true,
+        isActive: true,
+        isPosting: true,
+      },
+    });
+    if (!account || !account.isActive || !account.isPosting) {
+      throw new BadRequestException(`Account ${normalizedAccountId} must be an active posting account.`);
+    }
+  }
+
+  private async ensurePosPaymentMappingAccount(accountId: string | undefined, db: PosDb = this.prisma) {
+    const normalizedAccountId = accountId?.trim();
+    if (!normalizedAccountId) {
+      return;
+    }
+    await this.ensureActivePostingAccount(normalizedAccountId, db);
+    const bankCashAccount = await db.bankCashAccount.findFirst({
+      where: { accountId: normalizedAccountId, isActive: true },
+      select: { id: true },
+    });
+    if (!bankCashAccount) {
+      throw new BadRequestException(
+        `POS payment mapping account ${normalizedAccountId} must be linked to an active bank/cash account.`,
+      );
+    }
+  }
+
+  private async resolveMappedBankCashAccountId(
+    db: PosDb,
+    paymentMethod: PosPaymentMethod,
+    accountMappings: PosAccountMappings,
+    sessionCashAccountId?: string | null,
+  ) {
+    if (paymentMethod === PosPaymentMethod.DELIVERY) {
+      return sessionCashAccountId?.trim() || null;
+    }
+    if (paymentMethod === PosPaymentMethod.CASH && sessionCashAccountId?.trim()) {
+      return sessionCashAccountId.trim();
+    }
+
+    const mappedAccountId = this.getMappedAccountIdForPaymentMethod(paymentMethod, accountMappings)?.trim();
+    if (!mappedAccountId) {
+      return null;
+    }
+
+    const bankCashAccount = await db.bankCashAccount.findFirst({
+      where: { accountId: mappedAccountId, isActive: true },
+      select: { id: true },
+    });
+    return bankCashAccount?.id ?? null;
+  }
+
+  private async resolvePaymentDtoAccounts(
+    payments: PosPaymentDto[],
+    accountMappings: PosAccountMappings,
+    db: PosDb = this.prisma,
+    sessionCashAccountId?: string | null,
+  ) {
+    for (const payment of payments) {
+      let paymentMethod: PosPaymentMethod | null = null;
+      if (payment.paymentMethod?.trim()) {
+        paymentMethod = this.resolvePosPaymentMethod(payment.paymentMethod);
+      } else if (payment.bankCashAccountId?.trim()) {
+        const existingBankCashAcc = await db.bankCashAccount.findUnique({
+          where: { id: payment.bankCashAccountId.trim() },
+          select: { type: true },
+        });
+        if (!existingBankCashAcc) {
+          throw new BadRequestException("Every POS payment must use an active bank/cash account.");
+        }
+        paymentMethod = this.resolvePosPaymentMethod(existingBankCashAcc.type);
+      }
+
+      if (!paymentMethod) {
+        throw new BadRequestException("Payment method is required.");
+      }
+
+      const mappedBankCashAccountId = await this.resolveMappedBankCashAccountId(
+        db,
+        paymentMethod,
+        accountMappings,
+        sessionCashAccountId,
+      );
+      if (!mappedBankCashAccountId) {
+        throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
+      }
+      payment.paymentMethod = paymentMethod;
+      payment.bankCashAccountId = mappedBankCashAccountId;
+    }
   }
 
   private async refreshOriginalSaleReturnStatus(tx: Prisma.TransactionClient, salesInvoiceId: string) {
@@ -3151,7 +3579,7 @@ export class PosService {
     }
 
     const normalized = payments.map((payment) => {
-      const account = accountMap.get(payment.bankCashAccountId);
+      const account = accountMap.get(payment.bankCashAccountId!);
       if (!account) {
         throw new BadRequestException("Payment account is missing or inactive.");
       }
@@ -3161,10 +3589,10 @@ export class PosService {
         );
       }
       return {
-        bankCashAccountId: payment.bankCashAccountId,
+        bankCashAccountId: payment.bankCashAccountId!,
         amount: Number(payment.amount.toFixed(2)),
         reference: payment.reference,
-        paymentMethod: this.mapPaymentMethod(account.type),
+        paymentMethod: payment.paymentMethod || this.mapPaymentMethod(account.type),
         accountId: account.accountId,
       };
     });
@@ -3235,7 +3663,7 @@ export class PosService {
 
   private async resolvePaymentAccounts(payments: PosPaymentDto[]) {
     const ids = Array.from(
-      new Set(payments.map((payment) => payment.bankCashAccountId.trim())),
+      new Set(payments.map((payment) => payment.bankCashAccountId!.trim())),
     );
     const accounts = await this.prisma.bankCashAccount.findMany({
       where: { id: { in: ids }, isActive: true },
@@ -3303,41 +3731,17 @@ export class PosService {
     },
     paymentMethod: PosPaymentMethod,
   ) {
-    if (paymentMethod === PosPaymentMethod.DELIVERY) {
-      return invoice.posSession?.cashAccountId || currentPayment.bankCashAccountId;
-    }
-
-    if (paymentMethod === PosPaymentMethod.CASH && invoice.posSession?.cashAccountId) {
-      return invoice.posSession.cashAccountId;
-    }
-
-    if (this.mapPaymentMethod(currentPayment.bankCashAccount.type) === paymentMethod) {
-      return currentPayment.bankCashAccountId;
-    }
-
-    const fallbackAccount = await tx.bankCashAccount.findFirst({
-      where: { isActive: true },
-      select: { id: true, type: true },
-      orderBy: [{ name: "asc" }],
-    });
-
-    if (
-      fallbackAccount &&
-      this.mapPaymentMethod(fallbackAccount.type) === paymentMethod
-    ) {
-      return fallbackAccount.id;
-    }
-
-    const accounts = await tx.bankCashAccount.findMany({
-      where: { isActive: true },
-      select: { id: true, type: true },
-      orderBy: [{ name: "asc" }],
-    });
-    const resolved = accounts.find((account) => this.mapPaymentMethod(account.type) === paymentMethod);
+    const accountMappings = await this.getPosAccountMappings(tx);
+    const resolved = await this.resolveMappedBankCashAccountId(
+      tx,
+      paymentMethod,
+      accountMappings,
+      invoice.posSession?.cashAccountId,
+    );
     if (!resolved) {
-      throw new BadRequestException(`No active bank/cash account is configured for ${paymentMethod}.`);
+      throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
     }
-    return resolved.id;
+    return resolved;
   }
 
   private async recomputeSessionExpectedCash(
@@ -3724,45 +4128,23 @@ export class PosService {
     sessionNumber: string,
   ) {
     const debitByAccount = new Map<string, number>();
-    const revenueByAccount = new Map<string, number>();
-    const taxByAccount = new Map<string, number>();
+    const creditByAccount = new Map<string, number>();
 
     const addAmount = (bucket: Map<string, number>, accountId: string, amount: number) => {
       const current = bucket.get(accountId) ?? 0;
       bucket.set(accountId, Number((current + amount).toFixed(2)));
     };
 
-    const taxIds = Array.from(
-      new Set(
-        sales.flatMap((sale) =>
-          sale.lines.map((line: { taxId?: string | null }) => line.taxId).filter(Boolean),
-        ),
-      ),
-    ) as string[];
+    const accountMappings = await this.getPosAccountMappings(tx);
 
-    const taxes = taxIds.length
-      ? await tx.tax.findMany({
-          where: { id: { in: taxIds }, isActive: true },
-          select: {
-            id: true,
-            taxAccountId: true,
-            taxAccount: {
-              select: {
-                id: true,
-                isActive: true,
-                isPosting: true,
-                allowManualPosting: true,
-              },
-            },
-          },
-        })
-      : [];
-    const taxMap = new Map(taxes.map((tax) => [tax.id, tax]));
-    const fallbackTaxAccountId = await this.getPosSalesTaxAccountId(tx);
-    const salesRevenueAccount = await tx.account.findUniqueOrThrow({
+    const salesRevenueAccountId = accountMappings.salesRevenueAccountId || (await tx.account.findFirst({
       where: { code: "4110001" },
       select: { id: true },
-    });
+    }))?.id;
+
+    if (!salesRevenueAccountId) {
+      throw new BadRequestException("Sales revenue account is not configured.");
+    }
 
     for (const sale of sales) {
       for (const payment of sale.posPayments) {
@@ -3778,6 +4160,12 @@ export class PosService {
           payment.deliveryCompanyId === sale.deliveryCompany.id
         ) {
           debitAccountId = payment.deliveryCompany.receivableAccountId;
+        } else if (payment.paymentMethod !== PosPaymentMethod.CASH) {
+          debitAccountId =
+            this.getMappedAccountIdForPaymentMethod(payment.paymentMethod, accountMappings) || "";
+        }
+        if (!debitAccountId) {
+          throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
         }
         addAmount(debitByAccount, debitAccountId, amount);
       }
@@ -3804,41 +4192,18 @@ export class PosService {
         addAmount(debitByAccount, receivableAccountId, outstandingAmount);
       }
 
-      for (const line of sale.lines) {
-        addAmount(
-          revenueByAccount,
-          line.revenueAccountId,
-          Number(line.lineSubtotalAmount),
-        );
+      const { creditLines, debitLines } = await this.buildSaleAccountingCredits(
+        tx,
+        sale,
+        accountMappings,
+        "",
+      );
 
-        const taxAmount = Number(line.taxAmount);
-        if (taxAmount <= 0) {
-          continue;
-        }
-
-        if (!line.taxId) {
-          if (!fallbackTaxAccountId) {
-            throw new BadRequestException("Output VAT account is required because tax is applied.");
-          }
-          addAmount(taxByAccount, fallbackTaxAccountId, taxAmount);
-          continue;
-        }
-
-        const tax = taxMap.get(line.taxId);
-        if (!tax?.taxAccountId || !tax.taxAccount?.isActive || !tax.taxAccount.isPosting || !tax.taxAccount.allowManualPosting) {
-          throw new BadRequestException("Output VAT account is required because tax is applied.");
-        }
-        addAmount(taxByAccount, tax.taxAccountId, taxAmount);
+      for (const line of creditLines) {
+        addAmount(creditByAccount, line.accountId, line.creditAmount);
       }
-
-      const serviceChargeVal = Number(sale.serviceChargeAmount ?? 0);
-      if (serviceChargeVal > 0) {
-        addAmount(revenueByAccount, salesRevenueAccount.id, serviceChargeVal);
-      }
-
-      const deliveryFeeVal = Number(sale.deliveryFeeAmount ?? 0);
-      if (deliveryFeeVal > 0) {
-        addAmount(revenueByAccount, salesRevenueAccount.id, deliveryFeeVal);
+      for (const line of debitLines) {
+        addAmount(debitByAccount, line.accountId, line.debitAmount);
       }
     }
 
@@ -3850,15 +4215,9 @@ export class PosService {
         debitAmount: Number(amount.toFixed(2)),
         creditAmount: 0,
       })),
-      ...Array.from(revenueByAccount.entries()).map(([accountId, amount]) => ({
+      ...Array.from(creditByAccount.entries()).map(([accountId, amount]) => ({
         accountId,
         description,
-        debitAmount: 0,
-        creditAmount: Number(amount.toFixed(2)),
-      })),
-      ...Array.from(taxByAccount.entries()).map(([accountId, amount]) => ({
-        accountId,
-        description: `${description} tax`,
         debitAmount: 0,
         creditAmount: Number(amount.toFixed(2)),
       })),
@@ -3866,7 +4225,7 @@ export class PosService {
 
     return this.applySmallBalancingAdjustment(
       journalLines,
-      salesRevenueAccount.id,
+      salesRevenueAccountId,
       `${description} rounding adjustment`,
     );
   }
@@ -4075,12 +4434,7 @@ export class PosService {
   }
 
   private mapPaymentMethod(raw: string) {
-    const normalized = raw.trim().toUpperCase();
-    if (normalized.includes("CARD")) return PosPaymentMethod.CARD;
-    if (normalized.includes("CLIQ")) return PosPaymentMethod.CLIQ;
-    if (normalized.includes("WALLET")) return PosPaymentMethod.WALLET;
-    if (normalized.includes("BANK")) return PosPaymentMethod.BANK_TRANSFER;
-    return PosPaymentMethod.CASH;
+    return this.resolvePosPaymentMethod(raw);
   }
 
   private async generateSessionNumber() {

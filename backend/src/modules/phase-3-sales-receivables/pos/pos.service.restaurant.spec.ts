@@ -30,6 +30,9 @@ describe("PosService restaurant operations", () => {
     deliveryDriver: {
       findUnique: jest.fn(),
     },
+    posRuntimeSetting: {
+      findMany: jest.fn(),
+    },
     posTable: {
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -64,6 +67,7 @@ describe("PosService restaurant operations", () => {
     jest.clearAllMocks();
     prismaMock.user.findUnique.mockResolvedValue({ id: "u1" });
     prismaMock.$queryRaw.mockResolvedValue([]);
+    prismaMock.posRuntimeSetting.findMany.mockResolvedValue([]);
     prismaMock.$executeRaw.mockResolvedValue(1);
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock as never),

@@ -82,6 +82,7 @@ import {
   getPosReportsOverview,
   getPosReturns,
   getPosSessions,
+  getAccountOptions,
   holdPosSale,
   openPosSession,
   rejectPosAccounting,
@@ -132,6 +133,7 @@ import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
 import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
+  AccountOption,
   BankCashAccount,
   Customer,
   InventoryItem,
@@ -200,6 +202,7 @@ type CartLine = {
 
 type PaymentEntry = {
   id: string;
+  paymentMethod: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET";
   bankCashAccountId: string;
   amount: string;
   reference: string;
@@ -375,6 +378,12 @@ function getPaymentMethodLabel(
   }
 }
 
+function paymentMethodNeedsReference(
+  method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
+) {
+  return method === "CARD" || method === "CLIQ" || method === "BANK_TRANSFER" || method === "WALLET";
+}
+
 function parseAmount(value: string | number | null | undefined) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -496,6 +505,10 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     cartLines,
     paymentEntries: sale.payments.map((payment) => ({
       id: payment.id,
+      paymentMethod:
+        payment.paymentMethod === "DELIVERY"
+          ? "BANK_TRANSFER"
+          : (payment.paymentMethod as PaymentEntry["paymentMethod"]),
       bankCashAccountId: payment.bankCashAccount.id,
       amount: payment.tenderedAmount ?? payment.amount,
       reference: payment.reference ?? "",
@@ -700,7 +713,7 @@ export function PosPage() {
   const [flashNotice, setFlashNotice] = useState<FlashNotice | null>(null);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedPayMethod, setSelectedPayMethod] = useState<
-    "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "MIXED"
+    "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" | "MIXED"
   >("CASH");
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
   const messageTimeoutRef = useRef<number | null>(null);
@@ -839,6 +852,12 @@ export function PosPage() {
     enabled: Boolean(token),
   });
 
+  const accountOptionsQuery = useQuery({
+    queryKey: queryKeys.accounts(token, { isActive: "true", isPosting: "true", view: "selector" }),
+    queryFn: () => getAccountOptions({ isActive: "true", isPosting: "true" }, token),
+    enabled: Boolean(token && workspace === "settings"),
+  });
+
   const activeSessionQuery = useQuery({
     queryKey: queryKeys.posActiveSession(token),
     queryFn: () => getActivePosSession(token),
@@ -880,6 +899,16 @@ export function PosPage() {
     mutationFn: (payload: {
       postingMode?: "BY_INVOICE" | "BY_SESSION";
       cogsPostingEnabled?: boolean;
+      cashAccountId?: string;
+      cardAccountId?: string;
+      cliqAccountId?: string;
+      walletAccountId?: string;
+      bankTransferAccountId?: string;
+      salesRevenueAccountId?: string;
+      outputVatAccountId?: string;
+      salesDiscountAccountId?: string;
+      salesReturnsAccountId?: string;
+      deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
     }) => updatePosSettings(payload, token),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -1734,20 +1763,17 @@ export function PosPage() {
 
   useEffect(() => {
     if (paymentEntries.length === 0 && paymentAccounts.length > 0) {
-      const defaultCash =
-        paymentAccounts.find((account) =>
-          account.type.toUpperCase().includes("CASH"),
-        ) ?? paymentAccounts[0];
       setPaymentEntries([
         {
           id: createLocalId(),
-          bankCashAccountId: defaultCash.id,
+          paymentMethod: "CASH",
+          bankCashAccountId: resolveMappedBankCashAccountId("CASH"),
           amount: "",
           reference: "",
         },
       ]);
     }
-  }, [paymentAccounts, paymentEntries.length]);
+  }, [paymentAccounts, paymentEntries.length, activeSession?.cashAccount?.id, posSettings?.accounts.cashAccountId]);
 
   useEffect(() => {
     if (!selectedReturnSaleId && completedSales.length > 0) {
@@ -1836,29 +1862,42 @@ export function PosPage() {
     [paymentAccounts, paymentEntries],
   );
 
-  const getAccountsForMethod = (
+  const resolveMappedBankCashAccountId = (
     method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
-  ) =>
-    paymentAccounts.filter(
-      (account) => normalizePaymentAccountMethod(account) === method,
+  ) => {
+    if (method === "CASH" && activeSession?.cashAccount?.id) {
+      return activeSession.cashAccount.id;
+    }
+
+    const mappedAccountId =
+      method === "CASH"
+        ? posSettings?.accounts.cashAccountId
+        : method === "CARD"
+          ? posSettings?.accounts.cardAccountId
+          : method === "CLIQ"
+            ? posSettings?.accounts.cliqAccountId
+            : method === "WALLET"
+              ? posSettings?.accounts.walletAccountId
+              : posSettings?.accounts.bankTransferAccountId;
+
+    if (!mappedAccountId) {
+      return "";
+    }
+
+    return (
+      paymentAccounts.find((account) => account.account.id === mappedAccountId)?.id ?? ""
     );
+  };
 
   const inferSelectedPayMethod = () => {
     if (paymentEntriesResolved.length > 1) {
       return "MIXED" as const;
     }
     const firstEntry = paymentEntriesResolved[0];
-    if (!firstEntry?.account) {
+    if (!firstEntry) {
       return "CASH" as const;
     }
-    const inferred = normalizePaymentAccountMethod(firstEntry.account);
-    if (inferred === "BANK_TRANSFER") {
-      return "BANK_TRANSFER" as const;
-    }
-    if (inferred === "WALLET") {
-      return "MIXED" as const;
-    }
-    return inferred as "CASH" | "CARD" | "CLIQ";
+    return firstEntry.paymentMethod;
   };
 
   const currencyCode =
@@ -2025,6 +2064,7 @@ export function PosPage() {
       .filter((entry) => entry.bankCashAccountId && entry.amountValue > 0)
       .map((entry) => ({
         bankCashAccountId: entry.bankCashAccountId,
+        paymentMethod: entry.paymentMethod,
         amount: Number(entry.amountValue.toFixed(2)),
         reference: entry.reference || undefined,
       }));
@@ -2054,21 +2094,14 @@ export function PosPage() {
   const setSinglePaymentMethod = (
     method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
   ) => {
-    const matchingAccounts = getAccountsForMethod(method);
-    const fallbackAccount = matchingAccounts[0] ?? paymentAccounts[0];
-    if (!fallbackAccount) {
-      return;
-    }
-
     setPaymentEntries((current) => {
       const firstEntry = current[0];
       const currentAmount = firstEntry?.amount?.trim();
       return [
         {
           id: firstEntry?.id ?? createLocalId(),
-          bankCashAccountId:
-            matchingAccounts.find((account) => account.id === firstEntry?.bankCashAccountId)?.id ??
-            fallbackAccount.id,
+          paymentMethod: method,
+          bankCashAccountId: resolveMappedBankCashAccountId(method),
           amount: currentAmount || cartMetrics.total.toFixed(2),
           reference: firstEntry?.reference ?? "",
         },
@@ -2080,13 +2113,12 @@ export function PosPage() {
     entryId: string,
     method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
   ) => {
-    const matchingAccounts = getAccountsForMethod(method);
-    const fallbackAccount = matchingAccounts[0] ?? paymentAccounts[0];
-    if (!fallbackAccount) {
-      return;
-    }
     updatePaymentEntry(entryId, {
-      bankCashAccountId: fallbackAccount.id,
+      paymentMethod: method,
+      bankCashAccountId: resolveMappedBankCashAccountId(method),
+      reference: paymentMethodNeedsReference(method)
+        ? paymentEntries.find((entry) => entry.id === entryId)?.reference ?? ""
+        : "",
     });
   };
 
@@ -2145,7 +2177,8 @@ export function PosPage() {
         ? [
           {
             id: createLocalId(),
-            bankCashAccountId: defaultCash.id,
+            paymentMethod: "CASH",
+            bankCashAccountId: resolveMappedBankCashAccountId("CASH"),
             amount: "",
             reference: "",
           },
@@ -2299,13 +2332,12 @@ export function PosPage() {
   };
 
   const addPaymentEntry = () => {
-    const fallbackAccount = paymentAccounts[0];
-    if (!fallbackAccount) return;
     setPaymentEntries((current) => [
       ...current,
       {
         id: createLocalId(),
-        bankCashAccountId: fallbackAccount.id,
+        paymentMethod: "CASH",
+        bankCashAccountId: resolveMappedBankCashAccountId("CASH"),
         amount: "",
         reference: "",
       },
@@ -2510,6 +2542,30 @@ export function PosPage() {
       return;
     }
 
+    const unmappedPayment = paymentEntriesResolved.find(
+      (entry) => entry.amountValue > 0 && !entry.bankCashAccountId,
+    );
+    if (unmappedPayment) {
+      pushError("طريقة الدفع غير مربوطة بحساب محاسبي");
+      return;
+    }
+
+    const missingReference = paymentEntriesResolved.find(
+      (entry) =>
+        entry.amountValue > 0 &&
+        paymentMethodNeedsReference(entry.paymentMethod) &&
+        !entry.reference.trim(),
+    );
+    if (missingReference) {
+      pushError(
+        getLocalizedText(
+          "Reference number is required for the selected payment method / رقم المرجع مطلوب لطريقة الدفع المختارة",
+          language,
+        ),
+      );
+      return;
+    }
+
     if (cartMetrics.paid < cartMetrics.total && !posSettings?.runtime.allowCreditSale) {
       pushMessage(t("pos.sales.alert.insufficientPayment"));
       return;
@@ -2637,12 +2693,6 @@ export function PosPage() {
   const renderSalesWorkspace = () => {
     const cashierLabel = user?.name?.trim() || user?.email || "Cashier";
     const singlePaymentEntry = paymentEntriesResolved[0] ?? null;
-    const singleMethodAccounts =
-      selectedPayMethod === "MIXED"
-        ? []
-        : getAccountsForMethod(selectedPayMethod).length > 0
-          ? getAccountsForMethod(selectedPayMethod)
-          : paymentAccounts;
 
     if (!sessionState.isOpen || !activeSession) {
       return (
@@ -2696,11 +2746,18 @@ export function PosPage() {
     const hasValidPayments = paymentEntriesResolved.some(
       (entry) => entry.bankCashAccountId && entry.amountValue > 0,
     );
+    const hasMissingReference = paymentEntriesResolved.some(
+      (entry) =>
+        entry.amountValue > 0 &&
+        paymentMethodNeedsReference(entry.paymentMethod) &&
+        !entry.reference.trim(),
+    );
     const canCompleteThisSale =
       hasPermission(user, "POS_COMPLETE_SALE") &&
       hasPermission(user, "POS_SELECT_PAYMENT_METHOD") &&
       !payCannotCompleteCredit &&
-      hasValidPayments;
+      hasValidPayments &&
+      !hasMissingReference;
 
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-[#f6f7f8]">
@@ -3373,13 +3430,7 @@ export function PosPage() {
                     </button>
                   </div>
                   {paymentEntriesResolved.map((entry) => {
-                    const entryMethod = entry.account
-                      ? normalizePaymentAccountMethod(entry.account)
-                      : "CASH";
-                    const methodAccounts =
-                      getAccountsForMethod(entryMethod).length > 0
-                        ? getAccountsForMethod(entryMethod)
-                        : paymentAccounts;
+                    const entryMethod = entry.paymentMethod;
                     return (
                       <div
                         key={entry.id}
@@ -3407,21 +3458,6 @@ export function PosPage() {
                             <option value="BANK_TRANSFER">Bank / بنك</option>
                             <option value="WALLET">Wallet / محفظة</option>
                           </select>
-                          <select
-                            value={entry.bankCashAccountId}
-                            onChange={(event) =>
-                              updatePaymentEntry(entry.id, {
-                                bankCashAccountId: event.target.value,
-                              })
-                            }
-                            className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                          >
-                            {methodAccounts.map((account) => (
-                              <option key={account.id} value={account.id}>
-                                {account.name}
-                              </option>
-                            ))}
-                          </select>
                           <Input
                             type="number"
                             min="0"
@@ -3433,7 +3469,22 @@ export function PosPage() {
                             placeholder={getLocalizedText("Amount / المبلغ", language)}
                             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                           />
+                          {paymentMethodNeedsReference(entryMethod) ? (
+                            <Input
+                              value={entry.reference}
+                              onChange={(event) =>
+                                updatePaymentEntry(entry.id, { reference: event.target.value })
+                              }
+                              placeholder={getLocalizedText("Reference number / رقم المرجع", language)}
+                              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                            />
+                          ) : null}
                         </div>
+                        {!entry.bankCashAccountId ? (
+                          <div className="rounded-[14px] border border-[#f2c9c1] bg-[#fff4f1] px-4 py-3 text-xs font-bold text-[#9a4338] arabic-auto">
+                            طريقة الدفع غير مربوطة بحساب محاسبي
+                          </div>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => removePaymentEntry(entry.id)}
@@ -3448,25 +3499,11 @@ export function PosPage() {
                 </div>
               ) : (
                 <div className="space-y-4 rounded-[22px] border border-[#e2eae4] bg-[#fbfdfb] p-4">
-                  <Field label={t("pos.sales.accountLabel")} className="mb-0">
-                    <select
-                      value={singlePaymentEntry?.bankCashAccountId ?? ""}
-                      onChange={(event) =>
-                        singlePaymentEntry
-                          ? updatePaymentEntry(singlePaymentEntry.id, {
-                            bankCashAccountId: event.target.value,
-                          })
-                          : undefined
-                      }
-                      className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
-                    >
-                      {singleMethodAccounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                  {!singlePaymentEntry?.bankCashAccountId ? (
+                    <div className="rounded-[16px] border border-[#f2c9c1] bg-[#fff4f1] px-4 py-3 text-xs font-bold text-[#9a4338] arabic-auto">
+                      طريقة الدفع غير مربوطة بحساب محاسبي
+                    </div>
+                  ) : null}
                   <Field label={t("pos.sales.tenderedAmountLabel")} className="mb-0">
                     <Input
                       type="number"
@@ -3483,6 +3520,21 @@ export function PosPage() {
                       className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                     />
                   </Field>
+                  {singlePaymentEntry && paymentMethodNeedsReference(singlePaymentEntry.paymentMethod) ? (
+                    <Field label={getLocalizedText("Reference number / رقم المرجع", language)} className="mb-0">
+                      <Input
+                        value={singlePaymentEntry?.reference ?? ""}
+                        onChange={(event) =>
+                          singlePaymentEntry
+                            ? updatePaymentEntry(singlePaymentEntry.id, {
+                              reference: event.target.value,
+                            })
+                            : undefined
+                        }
+                        className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                      />
+                    </Field>
+                  ) : null}
                 </div>
               )}
 
@@ -5297,6 +5349,9 @@ export function PosPage() {
       return (
         <SettingsWorkspace
           posSettings={posSettings}
+          paymentAccounts={paymentAccounts}
+          accountOptions={accountOptionsQuery.data ?? []}
+          deliveryCompanies={deliveryCompanies}
           t={t}
           isSavingRuntimeSettings={updatePosSettingsMutation.isPending}
           onSaveRuntimeSettings={(payload) => updatePosSettingsMutation.mutate(payload)}
@@ -5906,16 +5961,32 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: () => void 
 
 function SettingsWorkspace({
   posSettings,
+  paymentAccounts,
+  accountOptions,
+  deliveryCompanies,
   t,
   isSavingRuntimeSettings,
   onSaveRuntimeSettings,
 }: {
   posSettings: PosSettings | null | undefined;
+  paymentAccounts: BankCashAccount[];
+  accountOptions: AccountOption[];
+  deliveryCompanies: DeliveryCompany[];
   t: (key: string) => string;
   isSavingRuntimeSettings: boolean;
   onSaveRuntimeSettings: (payload: {
     postingMode?: "BY_INVOICE" | "BY_SESSION";
     cogsPostingEnabled?: boolean;
+    cashAccountId?: string;
+    cardAccountId?: string;
+    cliqAccountId?: string;
+    walletAccountId?: string;
+    bankTransferAccountId?: string;
+    salesRevenueAccountId?: string;
+    outputVatAccountId?: string;
+    salesDiscountAccountId?: string;
+    salesReturnsAccountId?: string;
+    deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
   }) => void;
 }) {
     const settings = posSettings;
@@ -5925,6 +5996,18 @@ function SettingsWorkspace({
     const [localRuntime, setLocalRuntime] = useState<{
       postingMode: "BY_INVOICE" | "BY_SESSION";
       cogsPostingEnabled: boolean;
+    } | null>(null);
+    const [localAccountMappings, setLocalAccountMappings] = useState<{
+      cashAccountId: string;
+      cardAccountId: string;
+      cliqAccountId: string;
+      walletAccountId: string;
+      bankTransferAccountId: string;
+      salesRevenueAccountId: string;
+      outputVatAccountId: string;
+      salesDiscountAccountId: string;
+      salesReturnsAccountId: string;
+      deliveryCompanies: Array<{ id: string; receivableAccountId: string }>;
     } | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
       Session: false,
@@ -5945,10 +6028,42 @@ function SettingsWorkspace({
           postingMode: settings.runtime.postingMode,
           cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
         });
+        setLocalAccountMappings({
+          cashAccountId: settings.accounts.cashAccountId ?? "",
+          cardAccountId: settings.accounts.cardAccountId ?? "",
+          cliqAccountId: settings.accounts.cliqAccountId ?? "",
+          walletAccountId: settings.accounts.walletAccountId ?? "",
+          bankTransferAccountId: settings.accounts.bankTransferAccountId ?? "",
+          salesRevenueAccountId: settings.accounts.salesRevenueAccountId ?? "",
+          outputVatAccountId: settings.accounts.outputVatAccountId ?? "",
+          salesDiscountAccountId: settings.accounts.salesDiscountAccountId ?? "",
+          salesReturnsAccountId: settings.accounts.salesReturnsAccountId ?? "",
+          deliveryCompanies: deliveryCompanies.map((company) => ({
+            id: company.id,
+            receivableAccountId:
+              settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
+              company.receivableAccountId ??
+              "",
+          })),
+        });
       }
-    }, [settings?.runtime.cogsPostingEnabled, settings?.runtime.postingMode]);
+    }, [
+      deliveryCompanies,
+      settings?.accounts.bankTransferAccountId,
+      settings?.accounts.cardAccountId,
+      settings?.accounts.cashAccountId,
+      settings?.accounts.cliqAccountId,
+      settings?.accounts.deliveryCompanies,
+      settings?.accounts.outputVatAccountId,
+      settings?.accounts.salesDiscountAccountId,
+      settings?.accounts.salesRevenueAccountId,
+      settings?.accounts.salesReturnsAccountId,
+      settings?.accounts.walletAccountId,
+      settings?.runtime.cogsPostingEnabled,
+      settings?.runtime.postingMode,
+    ]);
 
-    if (!settings || !localPermissions || !localRuntime) {
+    if (!settings || !localPermissions || !localRuntime || !localAccountMappings) {
       return (
         <div className="space-y-6">
           <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 text-sm text-[#64736b]">
@@ -5968,6 +6083,26 @@ function SettingsWorkspace({
     const runtimeDirty =
       localRuntime.postingMode !== settings.runtime.postingMode ||
       localRuntime.cogsPostingEnabled !== settings.runtime.cogsPostingEnabled;
+    const accountMappingsDirty =
+      localAccountMappings.cashAccountId !== (settings.accounts.cashAccountId ?? "") ||
+      localAccountMappings.cardAccountId !== (settings.accounts.cardAccountId ?? "") ||
+      localAccountMappings.cliqAccountId !== (settings.accounts.cliqAccountId ?? "") ||
+      localAccountMappings.walletAccountId !== (settings.accounts.walletAccountId ?? "") ||
+      localAccountMappings.bankTransferAccountId !== (settings.accounts.bankTransferAccountId ?? "") ||
+      localAccountMappings.salesRevenueAccountId !== (settings.accounts.salesRevenueAccountId ?? "") ||
+      localAccountMappings.outputVatAccountId !== (settings.accounts.outputVatAccountId ?? "") ||
+      localAccountMappings.salesDiscountAccountId !== (settings.accounts.salesDiscountAccountId ?? "") ||
+      localAccountMappings.salesReturnsAccountId !== (settings.accounts.salesReturnsAccountId ?? "") ||
+      JSON.stringify(localAccountMappings.deliveryCompanies) !==
+        JSON.stringify(
+          deliveryCompanies.map((company) => ({
+            id: company.id,
+            receivableAccountId:
+              settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
+              company.receivableAccountId ??
+              "",
+          })),
+        );
 
     const handleRoleChange = (newRole: string) => {
       setRole(newRole);
@@ -6037,13 +6172,25 @@ function SettingsWorkspace({
                 {t("pos.settings.description")}
               </p>
             </div>
-            {runtimeDirty && (
+            {(runtimeDirty || accountMappingsDirty) && (
               <button
                 type="button"
                 onClick={() =>
                   onSaveRuntimeSettings({
                     postingMode: localRuntime.postingMode,
                     cogsPostingEnabled: localRuntime.cogsPostingEnabled,
+                    cashAccountId: localAccountMappings.cashAccountId,
+                    cardAccountId: localAccountMappings.cardAccountId,
+                    cliqAccountId: localAccountMappings.cliqAccountId,
+                    walletAccountId: localAccountMappings.walletAccountId,
+                    bankTransferAccountId: localAccountMappings.bankTransferAccountId,
+                    salesRevenueAccountId: localAccountMappings.salesRevenueAccountId,
+                    outputVatAccountId: localAccountMappings.outputVatAccountId,
+                    salesDiscountAccountId: localAccountMappings.salesDiscountAccountId,
+                    salesReturnsAccountId: localAccountMappings.salesReturnsAccountId,
+                    deliveryCompanies: localAccountMappings.deliveryCompanies.filter(
+                      (row) => row.receivableAccountId.trim().length > 0,
+                    ),
                   })
                 }
                 disabled={isSavingRuntimeSettings}
@@ -6121,6 +6268,155 @@ function SettingsWorkspace({
             isToggle={false}
           />
         </div>
+
+        <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+          <div className="mb-6">
+            <div className="text-2xl font-black text-[#233329] arabic-heading">
+              إعدادات حسابات الدفع POS
+            </div>
+            <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+              POS Payment Account Mapping
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PosPaymentMappingField
+              label="Cash / النقد"
+              hint="Cash Register Account / حساب الصندوق"
+              value={localAccountMappings.cashAccountId}
+              options={paymentAccounts}
+              onChange={(value) =>
+                setLocalAccountMappings((prev) =>
+                  prev ? { ...prev, cashAccountId: value } : prev,
+                )
+              }
+            />
+            <PosPaymentMappingField
+              label="Card / Visa"
+              hint="Card Clearing Account / حساب وسيط البطاقات"
+              value={localAccountMappings.cardAccountId}
+              options={paymentAccounts}
+              onChange={(value) =>
+                setLocalAccountMappings((prev) =>
+                  prev ? { ...prev, cardAccountId: value } : prev,
+                )
+              }
+            />
+            <PosPaymentMappingField
+              label="CliQ / كليك"
+              hint="CliQ Clearing Account / حساب وسيط كليك"
+              value={localAccountMappings.cliqAccountId}
+              options={paymentAccounts}
+              onChange={(value) =>
+                setLocalAccountMappings((prev) =>
+                  prev ? { ...prev, cliqAccountId: value } : prev,
+                )
+              }
+            />
+            <PosPaymentMappingField
+              label="Wallet / محفظة"
+              hint="Wallet Clearing Account / حساب وسيط المحفظة"
+              value={localAccountMappings.walletAccountId}
+              options={paymentAccounts}
+              onChange={(value) =>
+                setLocalAccountMappings((prev) =>
+                  prev ? { ...prev, walletAccountId: value } : prev,
+                )
+              }
+            />
+            <PosPaymentMappingField
+              label="Bank Transfer / تحويل بنكي"
+              hint="Bank Account / حساب البنك"
+              value={localAccountMappings.bankTransferAccountId}
+              options={paymentAccounts}
+              onChange={(value) =>
+                setLocalAccountMappings((prev) =>
+                  prev ? { ...prev, bankTransferAccountId: value } : prev,
+                )
+              }
+            />
+          </div>
+
+          <div className="mt-8 border-t border-[#e1e7e2] pt-6">
+            <div className="text-lg font-black text-[#233329] arabic-heading">
+              Delivery Companies / شركات التوصيل
+            </div>
+            <div className="mt-4 grid gap-4">
+              {deliveryCompanies.map((company) => (
+                <PosAccountSelectorField
+                  key={company.id}
+                  label={company.arabicName?.trim() || company.name}
+                  hint={`${company.name} Receivable / ذمم ${company.arabicName?.trim() || company.name}`}
+                  value={
+                    localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)
+                      ?.receivableAccountId ?? ""
+                  }
+                  options={accountOptions}
+                  onChange={(value) =>
+                    setLocalAccountMappings((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            deliveryCompanies: prev.deliveryCompanies.map((row) =>
+                              row.id === company.id ? { ...row, receivableAccountId: value } : row,
+                            ),
+                          }
+                        : prev,
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-[#e1e7e2] pt-6">
+            <div className="text-lg font-black text-[#233329] arabic-heading">
+              Sales Posting Accounts / حسابات ترحيل المبيعات
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <PosAccountSelectorField
+                label="Sales Revenue Account / حساب إيرادات المبيعات"
+                value={localAccountMappings.salesRevenueAccountId}
+                options={accountOptions}
+                onChange={(value) =>
+                  setLocalAccountMappings((prev) =>
+                    prev ? { ...prev, salesRevenueAccountId: value } : prev,
+                  )
+                }
+              />
+              <PosAccountSelectorField
+                label="Output VAT Account / حساب ضريبة المخرجات"
+                value={localAccountMappings.outputVatAccountId}
+                options={accountOptions}
+                onChange={(value) =>
+                  setLocalAccountMappings((prev) =>
+                    prev ? { ...prev, outputVatAccountId: value } : prev,
+                  )
+                }
+              />
+              <PosAccountSelectorField
+                label="Sales Discount Account / حساب خصم المبيعات"
+                value={localAccountMappings.salesDiscountAccountId}
+                options={accountOptions}
+                onChange={(value) =>
+                  setLocalAccountMappings((prev) =>
+                    prev ? { ...prev, salesDiscountAccountId: value } : prev,
+                  )
+                }
+              />
+              <PosAccountSelectorField
+                label="Sales Returns Account / حساب مردودات المبيعات"
+                value={localAccountMappings.salesReturnsAccountId}
+                options={accountOptions}
+                onChange={(value) =>
+                  setLocalAccountMappings((prev) =>
+                    prev ? { ...prev, salesReturnsAccountId: value } : prev,
+                  )
+                }
+              />
+            </div>
+          </div>
+        </Card>
 
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-0 overflow-hidden">
           <div className="flex flex-col gap-4 border-b border-[#e1e7e2] p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -6213,4 +6509,70 @@ function SettingsWorkspace({
         </Card>
       </div>
     );
+}
+
+function PosPaymentMappingField({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  options: BankCashAccount[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-[22px] border border-[#e1e7e2] bg-[#fbfcfb] p-4">
+      <div className="text-sm font-black text-[#233329] arabic-auto">{label}</div>
+      <div className="mt-1 text-xs font-semibold text-[#6b7b72] arabic-auto">{hint}</div>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+      >
+        <option value="">غير محدد / Not mapped</option>
+        {options.map((account) => (
+          <option key={account.id} value={account.account.id}>
+            {account.name} - {account.account.code}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function PosAccountSelectorField({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  options: AccountOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-[22px] border border-[#e1e7e2] bg-[#fbfcfb] p-4">
+      <div className="text-sm font-black text-[#233329] arabic-auto">{label}</div>
+      {hint ? <div className="mt-1 text-xs font-semibold text-[#6b7b72] arabic-auto">{hint}</div> : null}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
+      >
+        <option value="">غير محدد / Not mapped</option>
+        {options.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.code} - {account.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }

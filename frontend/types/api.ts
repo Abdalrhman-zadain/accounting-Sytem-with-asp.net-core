@@ -3566,6 +3566,21 @@ export type PosSettings = {
     negativeStockAllowed: boolean;
     cashierDiscountLimitPercent: number;
   };
+  accounts: {
+    cashAccountId?: string | null;
+    cardAccountId?: string | null;
+    cliqAccountId?: string | null;
+    walletAccountId?: string | null;
+    bankTransferAccountId?: string | null;
+    salesRevenueAccountId?: string | null;
+    outputVatAccountId?: string | null;
+    salesDiscountAccountId?: string | null;
+    salesReturnsAccountId?: string | null;
+    deliveryCompanies: Array<{
+      id: string;
+      receivableAccountId: string;
+    }>;
+  };
   permissions: Record<string, boolean>;
 };
 

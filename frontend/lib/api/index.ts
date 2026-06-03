@@ -2418,6 +2418,16 @@ export async function updatePosSettings(
   payload: {
     postingMode?: "BY_INVOICE" | "BY_SESSION";
     cogsPostingEnabled?: boolean;
+    cashAccountId?: string;
+    cardAccountId?: string;
+    cliqAccountId?: string;
+    walletAccountId?: string;
+    bankTransferAccountId?: string;
+    salesRevenueAccountId?: string;
+    outputVatAccountId?: string;
+    salesDiscountAccountId?: string;
+    salesReturnsAccountId?: string;
+    deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
   },
   token?: string | null,
 ) {

@@ -236,6 +236,30 @@ Checks to run:
 - backend build
 - frontend typecheck
 
+## Add Or Change POS Payment Account Mapping
+
+Where to edit:
+
+- frontend `features/pos`
+- backend `phase-3-sales-receivables/pos`
+- `frontend/lib/api` and `frontend/types/api.ts` when the settings payload changes
+- `docs/data-model.md` and `docs/README.md` when posting or cashier behavior changes
+
+What else to check:
+
+- cashier payment UI must not expose manual accounting-account selection; keep it limited to payment method, paid amount, and reference when required
+- POS settings should store payment method mappings in `PosRuntimeSetting` and delivery-company receivables on the linked `DeliveryCompany`
+- payment-method mappings for `CARD`, `CLIQ`, `WALLET`, and `BANK_TRANSFER` should point to active bank/cash registry rows through their linked posting accounts so `PosPayment.bankCashAccountId` can still be stored
+- card/Visa should normally map to a clearing account, not directly to the bank
+- grouped session posting and any invoice-level POS posting path must block unmapped methods with the clear message `طريقة الدفع غير مربوطة بحساب محاسبي`
+- payment-method correction must keep using the configured mappings; accountant correction may change the method, but should not become a manual account picker
+
+Checks to run:
+
+- backend tests for POS settings/payment correction paths
+- backend build
+- frontend typecheck
+
 ## Start Or Extend Phase 4 Purchases
 
 Where to edit:
