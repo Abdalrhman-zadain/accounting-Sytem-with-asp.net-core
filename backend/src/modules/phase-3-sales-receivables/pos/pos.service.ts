@@ -2629,6 +2629,20 @@ export class PosService {
     );
   }
 
+  private async resolveExistingUserId(userId?: string | null) {
+    const normalizedUserId = userId?.trim();
+    if (!normalizedUserId) {
+      return null;
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: normalizedUserId },
+      select: { id: true },
+    });
+
+    return existingUser?.id ?? null;
+  }
+
   private ensureDiscountPermission(lines: ResolvedSalesLine[], user?: AuthorizedUser) {
     const gross = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
     const discounts = lines.reduce((sum, line) => sum + line.discountAmount, 0);
@@ -3406,6 +3420,7 @@ export class PosService {
     invoice: {
       reference: string;
       description?: string | null;
+      totalAmount: Prisma.Decimal | number | string;
       outstandingAmount: Prisma.Decimal | number | string;
       customer: { receivableAccountId: string };
       deliveryCompany?: { id: string; receivableAccountId: string | null } | null;
@@ -3443,7 +3458,13 @@ export class PosService {
       addAmount(accountId, amount);
     }
 
-    const outstandingAmount = Number(invoice.outstandingAmount ?? 0);
+    const totalApplied = Number(
+      invoice.posPayments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2),
+    );
+    const outstandingAmount = Math.max(
+      0,
+      Number((Number(invoice.totalAmount ?? invoice.outstandingAmount ?? 0) - totalApplied).toFixed(2)),
+    );
     if (outstandingAmount > 0) {
       const receivableAccountId =
         invoice.deliveryCompany?.receivableAccountId || invoice.customer.receivableAccountId;
@@ -3761,7 +3782,17 @@ export class PosService {
         addAmount(debitByAccount, debitAccountId, amount);
       }
 
-      const outstandingAmount = Number(sale.outstandingAmount ?? 0);
+      const totalApplied = Number(
+        sale.posPayments.reduce(
+          (sum: number, payment: { amount: Prisma.Decimal | number | string }) =>
+            sum + Number(payment.amount),
+          0,
+        ).toFixed(2),
+      );
+      const outstandingAmount = Math.max(
+        0,
+        Number((Number(sale.totalAmount ?? sale.outstandingAmount ?? 0) - totalApplied).toFixed(2)),
+      );
       if (outstandingAmount > 0) {
         const receivableAccountId =
           sale.deliveryCompany?.receivableAccountId || sale.customer?.receivableAccountId;
@@ -3812,7 +3843,7 @@ export class PosService {
     }
 
     const description = `POS session ${sessionNumber} grouped posting`;
-    return [
+    const journalLines = [
       ...Array.from(debitByAccount.entries()).map(([accountId, amount]) => ({
         accountId,
         description,
@@ -3831,6 +3862,50 @@ export class PosService {
         debitAmount: 0,
         creditAmount: Number(amount.toFixed(2)),
       })),
+    ];
+
+    return this.applySmallBalancingAdjustment(
+      journalLines,
+      salesRevenueAccount.id,
+      `${description} rounding adjustment`,
+    );
+  }
+
+  private applySmallBalancingAdjustment(
+    lines: Array<{
+      accountId: string;
+      description: string;
+      debitAmount: number;
+      creditAmount: number;
+    }>,
+    balancingAccountId: string,
+    description: string,
+  ) {
+    const totalDebit = Number(
+      lines.reduce((sum, line) => sum + Number(line.debitAmount), 0).toFixed(2),
+    );
+    const totalCredit = Number(
+      lines.reduce((sum, line) => sum + Number(line.creditAmount), 0).toFixed(2),
+    );
+    const delta = Number((totalDebit - totalCredit).toFixed(2));
+
+    if (delta === 0) {
+      return lines;
+    }
+
+    // Allow only tiny balancing drift caused by persisted line/header rounding.
+    if (Math.abs(delta) > 0.05) {
+      return lines;
+    }
+
+    return [
+      ...lines,
+      {
+        accountId: balancingAccountId,
+        description,
+        debitAmount: delta < 0 ? Number(Math.abs(delta).toFixed(2)) : 0,
+        creditAmount: delta > 0 ? Number(delta.toFixed(2)) : 0,
+      },
     ];
   }
 
@@ -5171,6 +5246,13 @@ export class PosService {
     }
     const invoice = await this.prisma.salesInvoice.findUnique({
       where: { id },
+      include: {
+        posPayments: {
+          select: {
+            amount: true,
+          },
+        },
+      },
     });
     if (!invoice) {
       throw new BadRequestException(`Invoice ${id} was not found.`);
@@ -5208,6 +5290,8 @@ export class PosService {
       driverId = driver.id;
     }
 
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
+
     await this.prisma.$transaction(async (tx) => {
       const serviceCharge = new Prisma.Decimal(dto.serviceChargeAmount ?? invoice.serviceChargeAmount ?? 0);
       const deliveryFee = new Prisma.Decimal(dto.deliveryFeeAmount ?? invoice.deliveryFeeAmount ?? 0);
@@ -5215,6 +5299,16 @@ export class PosService {
       const subtotal = new Prisma.Decimal(invoice.subtotalAmount);
       const tax = new Prisma.Decimal(invoice.taxAmount);
       const total = subtotal.add(tax).add(serviceCharge).add(deliveryFee);
+      const appliedPaymentTotal = Number(
+        invoice.posPayments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2),
+      );
+      const nextTotal = Number(total.toFixed(2));
+      if (appliedPaymentTotal > nextTotal) {
+        throw new BadRequestException(
+          "Corrected order total cannot be lower than the already applied POS payments.",
+        );
+      }
+      const nextOutstandingAmount = Number((nextTotal - appliedPaymentTotal).toFixed(2));
 
       const nextTableId = dto.orderType === OrderType.DINE_IN ? dto.tableId?.trim() || null : null;
       if (originalTableId && originalTableId !== nextTableId) {
@@ -5254,12 +5348,21 @@ export class PosService {
           deliveryFeeAmount: deliveryFee,
           deliveryStatus: dto.orderType === OrderType.DELIVERY ? DeliveryStatus.PENDING : null,
           totalAmount: total,
-          outstandingAmount: total,
+          allocatedAmount: this.toAmount(appliedPaymentTotal),
+          outstandingAmount: this.toAmount(nextOutstandingAmount),
+          allocationStatus:
+            nextOutstandingAmount > 0
+              ? AllocationStatus.PARTIAL
+              : AllocationStatus.FULLY_ALLOCATED,
+          status:
+            nextOutstandingAmount > 0
+              ? SalesInvoiceStatus.PARTIALLY_PAID
+              : SalesInvoiceStatus.FULLY_PAID,
           originalOrderType: originalOrderType,
           correctionReason: dto.reason,
           isCorrected: true,
           correctedAt: new Date(),
-          correctedByUserId: user?.userId || null,
+          correctedByUserId: actorUserId,
         },
       });
 
@@ -5408,6 +5511,8 @@ export class PosService {
       }
     }
 
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
+
     const bankCashAccountId = await this.prisma.$transaction(async (tx) => {
       const nextBankCashAccountId = await this.resolveCorrectionBankCashAccountId(
         tx,
@@ -5439,7 +5544,7 @@ export class PosService {
           correctionReason: dto.reason.trim(),
           isCorrected: true,
           correctedAt: new Date(),
-          correctedByUserId: user?.userId || null,
+          correctedByUserId: actorUserId,
         },
       });
 

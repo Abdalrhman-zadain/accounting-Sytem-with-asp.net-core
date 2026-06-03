@@ -229,6 +229,26 @@ export function PosReviewWorkspace({
   const [activeTab, setActiveTab] = useState<ReviewTab>("overview");
   const [activeInvoiceDetail, setActiveInvoiceDetail] = useState<PosSale | null>(null);
 
+  useEffect(() => {
+    if (!activeInvoiceDetail) {
+      return;
+    }
+
+    const refreshedSale =
+      reviewSessionGroups
+        .flatMap((group) => group.sales)
+        .find((sale) => sale.id === activeInvoiceDetail.id) ?? null;
+
+    if (!refreshedSale) {
+      setActiveInvoiceDetail(null);
+      return;
+    }
+
+    if (refreshedSale !== activeInvoiceDetail) {
+      setActiveInvoiceDetail(refreshedSale);
+    }
+  }, [activeInvoiceDetail, reviewSessionGroups]);
+
   const isDifferenceAccepted = (session: PosSession) =>
     Number(session.difference || 0) === 0 || session.differenceStatus === "ACCEPTED_DIFFERENCE";
 
