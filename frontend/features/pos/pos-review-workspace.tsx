@@ -575,7 +575,6 @@ export function PosReviewWorkspace({
       entry: JournalEntry;
       sourceReference: string;
       sourceType: string;
-      includedReferences?: string[];
     }> = [];
 
     if (isSessionPosting && report?.sessionJournalEntry?.id) {
@@ -585,7 +584,6 @@ export function PosReviewWorkspace({
           entry: sessionEntry,
           sourceReference: report.sessionJournalEntry.sourceNumber || report.sessionNumber,
           sourceType: getTranslation("pos.review.sessionGroupedEntry", "قيد مجمع للوردية"),
-          includedReferences: (report.sales || []).map((sale) => sale.reference),
         });
       }
     }
@@ -616,7 +614,6 @@ export function PosReviewWorkspace({
           entry: JournalEntry;
           sourceReference: string;
           sourceType: string;
-          includedReferences?: string[];
         } => Boolean(item),
       ),
     );
@@ -1179,7 +1176,7 @@ export function PosReviewWorkspace({
                     {getTranslation("pos.review.noJournals", "لا توجد قيود محاسبية مسودة مرتبطة بالوردية المختارة.")}
                   </div>
                 ) : (
-                  orderedJournalEntries.map(({ entry, sourceReference, sourceType, includedReferences }) => (
+                  orderedJournalEntries.map(({ entry, sourceReference, sourceType }) => (
                     <div
                       key={`${entry.id}-${sourceReference}`}
                       className="rounded-[20px] border border-[#dbe2dd] bg-[#f8faf8] p-4 text-xs"
@@ -1192,12 +1189,6 @@ export function PosReviewWorkspace({
                             {" · "}
                             {sourceType}
                           </div>
-                          {includedReferences?.length ? (
-                            <div className="text-[11px] text-[#5f6d66]">
-                              {getTranslation("pos.sessions.invoices", "الفواتير")}:{" "}
-                              {includedReferences.join("، ")}
-                            </div>
-                          ) : null}
                         </div>
                         <div className="font-bold text-[#5f6d66]">{entry.status}</div>
                       </div>
