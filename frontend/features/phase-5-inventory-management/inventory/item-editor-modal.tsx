@@ -760,19 +760,19 @@ export function ItemEditorModal({
             ) : null}
 
             {/* Pinned Section: البيانات الأساسية */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 transition-all duration-200 hover:shadow-md">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                  <FileText className="h-5 w-5" />
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+              <div className="mb-4 flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                  <FileText className="h-4.5 w-4.5" />
                 </div>
                 <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
+                  <div className="text-base font-bold text-slate-950 arabic-ui-heading">
                     {isArabic ? "البيانات الأساسية" : "Basic Information"}
                   </div>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 <div className="sm:col-span-2">
                   <Field id="item-field-name" label={isArabic ? "اسم المادة" : "Item Name"} required error={localErrors.name} labelAlign={isArabic ? "end" : "start"}>
                     <Input
@@ -913,58 +913,6 @@ export function ItemEditorModal({
                       </button>
                       <span className="text-sm font-semibold text-slate-700">
                         {editor.isActive ? (isArabic ? "نشط" : "Active") : (isArabic ? "غير نشط" : "Inactive")}
-                      </span>
-                    </div>
-                  </Field>
-                </div>
-
-                {/* Sellable Switch */}
-                <div>
-                  <Field label={isArabic ? "قابل للبيع" : "Sellable"} labelAlign={isArabic ? "end" : "start"}>
-                    <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
-                      <button
-                        type="button"
-                        onClick={() => updateEditor((current) => ({ ...current, sellable: !current.sellable }))}
-                        className={cn(
-                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
-                          editor.sellable ? "bg-emerald-600" : "bg-slate-200"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            editor.sellable ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
-                          )}
-                        />
-                      </button>
-                      <span className="text-sm font-semibold text-slate-700">
-                        {editor.sellable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
-                      </span>
-                    </div>
-                  </Field>
-                </div>
-
-                {/* Purchasable Switch */}
-                <div>
-                  <Field label={isArabic ? "قابل للشراء" : "Purchasable"} labelAlign={isArabic ? "end" : "start"}>
-                    <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
-                      <button
-                        type="button"
-                        onClick={() => updateEditor((current) => ({ ...current, purchasable: !current.purchasable }))}
-                        className={cn(
-                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
-                          editor.purchasable ? "bg-emerald-600" : "bg-slate-200"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            editor.purchasable ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
-                          )}
-                        />
-                      </button>
-                      <span className="text-sm font-semibold text-slate-700">
-                        {editor.purchasable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
                       </span>
                     </div>
                   </Field>
