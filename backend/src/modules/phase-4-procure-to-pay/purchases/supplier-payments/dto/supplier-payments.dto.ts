@@ -7,9 +7,11 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../../common/validation/decimal-limits';
 
 export class SupplierPaymentAllocationDto {
   @IsString()
@@ -18,6 +20,7 @@ export class SupplierPaymentAllocationDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 }
 
@@ -36,6 +39,7 @@ export class CreateSupplierPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsString()
@@ -71,6 +75,7 @@ export class UpdateSupplierPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount?: number;
 
   @IsOptional()

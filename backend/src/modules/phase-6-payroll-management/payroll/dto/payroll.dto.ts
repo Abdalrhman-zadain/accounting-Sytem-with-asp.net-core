@@ -9,9 +9,17 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
+
+import {
+  MAX_AMOUNT,
+  MAX_PERCENTAGE,
+  MAX_QUANTITY,
+  MAX_RATE,
+} from "../../../../common/validation/decimal-limits";
 
 import {
   EmployeePaymentMethod,
@@ -159,10 +167,12 @@ export class CreatePayrollComponentDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   defaultAmount?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_PERCENTAGE)
   defaultPercentage?: number;
 
   @IsOptional()
@@ -202,6 +212,7 @@ export class UpdatePayrollComponentDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   defaultAmount?: number;
 
   @IsOptional()
@@ -235,18 +246,22 @@ export class AssignEmployeeComponentDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   amount?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_PERCENTAGE)
   percentage?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_QUANTITY)
   quantity?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   installmentAmount?: number;
 
   @IsOptional()
@@ -263,6 +278,7 @@ export class AssignEmployeeComponentDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   outstandingBalance?: number;
 }
 
@@ -328,10 +344,12 @@ export class UpdatePayrollRuleDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   amount?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_PERCENTAGE)
   percentage?: number;
 
   @IsOptional()
@@ -437,13 +455,16 @@ export class PayslipLineInputDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_QUANTITY)
   quantity?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_RATE)
   rate?: number;
 
   @IsNumber()
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()
@@ -477,6 +498,7 @@ export class PayrollPaymentAllocationDto {
 
   @IsNumber()
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 }
 
@@ -500,6 +522,7 @@ export class CreatePayrollPaymentDto {
 
   @IsNumber()
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()
@@ -529,6 +552,7 @@ export class UpdatePayrollPaymentDto {
   @IsOptional()
   @IsNumber()
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount?: number;
 
   @IsOptional()

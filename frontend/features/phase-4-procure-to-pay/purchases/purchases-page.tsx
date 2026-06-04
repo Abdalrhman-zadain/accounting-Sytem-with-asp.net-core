@@ -1621,7 +1621,7 @@ export function PurchasesPage() {
                   {supplierEditor.id ? t("purchases.dialog.editSupplier") : t("purchases.dialog.newSupplier")}
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  أدخل بيانات المورد واحفظها ليظهر في جدول الموردين.
+                  {t("purchases.suppliers.editorDescription")}
                 </p>
               </div>
 
@@ -1692,7 +1692,7 @@ export function PurchasesPage() {
                 {!supplierEditor.id ? (
                   <Field label={t("purchases.field.payableAccount")} required>
                     <div className="mb-2 text-sm font-semibold text-gray-900">
-                      طريقة ربط حساب الدائن <span className="text-base leading-none text-red-500">*</span>
+                      {t("common.accountLink.title")} <span className="text-base leading-none text-red-500">*</span>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <button
@@ -1711,7 +1711,7 @@ export function PurchasesPage() {
                           }))
                         }
                       >
-                        إنشاء حساب تلقائي
+                        {t("common.accountLink.auto")}
                       </button>
                       <button
                         type="button"
@@ -1728,7 +1728,7 @@ export function PurchasesPage() {
                           }))
                         }
                       >
-                        اختيار حساب موجود
+                        {t("common.accountLink.existing")}
                       </button>
                     </div>
                   </Field>
@@ -1736,7 +1736,7 @@ export function PurchasesPage() {
 
                 {!supplierEditor.id && supplierEditor.payableAccountLinkMode === "AUTO" ? (
                   <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
-                    سيتم إنشاء حساب دائن جديد باسم المورد تحت حساب الذمم الدائنة.
+                    {t("common.accountLink.supplierHelp")}
                   </div>
                 ) : null}
 
@@ -1797,7 +1797,7 @@ export function PurchasesPage() {
               <Input
                 value={supplierSearch}
                 onChange={(event) => setSupplierSearch(event.target.value)}
-                placeholder="ابحث بالرمز أو اسم المورد..."
+                placeholder={t("purchases.filters.searchPlaceholder")}
                 className="w-full text-base py-5 rounded-lg border-gray-300 shadow-sm"
               />
               <div className="flex items-center justify-between">
@@ -1868,7 +1868,7 @@ export function PurchasesPage() {
                           </td>
                           <td className="px-4 py-3 align-middle text-center border-s border-gray-200">
                             <div className="text-gray-900" dir="ltr">{row.phone || row.contactInfo || "---"}</div>
-                            <div className="text-[11px] text-gray-500 mt-0.5">3 يود رقم هاتف</div>
+                            {!row.phone && <div className="text-[11px] text-gray-500 mt-0.5">{t("purchases.suppliers.noPhone")}</div>}
                           </td>
                           <td className="px-4 py-3 text-center align-middle font-medium text-gray-900 border-s border-gray-200">{row.defaultCurrency}</td>
                           <td className="px-4 py-3 text-start align-middle font-medium tabular-nums text-gray-900 border-s border-gray-200" dir="ltr">
@@ -1876,7 +1876,7 @@ export function PurchasesPage() {
                           </td>
                           <td className="px-4 py-3 text-center align-middle border-s border-gray-200">
                             <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-100">
-                              {row.isActive ? "نشط" : "غير نشط"}
+                              {row.isActive ? t("common.status.active") : t("common.status.inactive")}
                             </div>
                           </td>
                         </tr>
@@ -1894,9 +1894,7 @@ export function PurchasesPage() {
                     <Button variant="secondary" className="w-8 h-8 min-w-0 p-0 bg-white border-gray-200 rounded text-gray-500 hover:bg-gray-50 hover:text-gray-900 flex items-center justify-center text-lg">&rsaquo;</Button>
                   </div>
                   <div className="text-[13px] text-gray-600 flex items-center gap-1">
-                    <span>عرض 1–10 من</span>
-                    <br />
-                    <span>40</span>
+                    {t("purchases.pagination.summary", { from: 1, to: 10, total: 40 })}
                   </div>
                 </div>
               </div>

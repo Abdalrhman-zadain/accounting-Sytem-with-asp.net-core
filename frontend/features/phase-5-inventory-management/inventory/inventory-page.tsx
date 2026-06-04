@@ -405,6 +405,7 @@ function createEmptyAdjustmentEditor(): AdjustmentEditorState {
 
 export function InventoryPage() {
   const { t, language } = useTranslation();
+  const isArabic = language === "ar";
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<InventoryWorkspace>("items");
@@ -1125,7 +1126,6 @@ export function InventoryPage() {
   const activeUnitsOfMeasure = activeUnitsQuery.data ?? unitsOfMeasure.filter((row) => row.isActive);
   const activeTaxes = activeTaxesQuery.data ?? [];
   const itemEditorCategories = activeItemCategories.filter((row) => row.itemGroupId === itemEditor.itemGroupId);
-  const isArabic = language === "ar";
   const inventorySettingsDisabled = itemEditor.type === "SERVICE" || !itemEditor.trackInventory;
   useEffect(() => {
     if (itemEditor.type !== "SERVICE") {
@@ -1564,13 +1564,13 @@ export function InventoryPage() {
                     let badgeText = "";
                     let badgeBg = "";
                     if (isService) {
-                      badgeText = "خدمة";
+                      badgeText = isArabic ? "خدمة" : "Service";
                       badgeBg = "bg-blue-50/10 text-blue-400 border-blue-500/20";
                     } else if (item.code?.startsWith("OFFER-") || item.name?.includes("Bundle") || item.name?.includes("مجموعة") || item.type === "MANUFACTURED_ITEM") {
-                      badgeText = "مجموعة";
+                      badgeText = isArabic ? "مجموعة" : "Bundle";
                       badgeBg = "bg-amber-50/10 text-amber-400 border-amber-500/20";
                     } else {
-                      badgeText = "للبيع";
+                      badgeText = isArabic ? "للبيع" : "For Sale";
                       badgeBg = "bg-teal-50/10 text-teal-400 border-teal-500/20";
                     }
 
@@ -1668,7 +1668,7 @@ export function InventoryPage() {
 
                   {/* Section 1: معلومات أساسية */}
                   <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">معلومات أساسية</div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "معلومات أساسية" : "Basic Information"}</div>
                     <div className="divide-y divide-gray-100/50">
                       <div className="flex items-center justify-between py-2.5">
                         <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.unit")}</span>
@@ -1687,11 +1687,11 @@ export function InventoryPage() {
                         <span className="text-[12px] font-medium text-gray-900">{selectedItem.itemGroup?.name ?? t("inventory.emptyValue")}</span>
                       </div>
                       <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">الباركود</span>
+                        <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "الباركود" : "Barcode"}</span>
                         <span className="text-[12px] font-medium text-gray-900">{selectedItem.barcode || t("inventory.emptyValue")}</span>
                       </div>
                       <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">رمز QR</span>
+                        <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "رمز QR" : "QR Code"}</span>
                         <span className="text-[12px] font-medium text-gray-900">{selectedItem.qrCodeValue || t("inventory.emptyValue")}</span>
                       </div>
                     </div>
@@ -1701,7 +1701,7 @@ export function InventoryPage() {
 
                   {/* Section 2: التسعير والمخزون */}
                   <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">التسعير والمخزون</div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "التسعير والمخزون" : "Pricing & Stock"}</div>
                     <div className="divide-y divide-gray-100/50">
                       <div className="flex items-center justify-between py-2.5">
                         <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.valuation")}</span>
@@ -1726,7 +1726,7 @@ export function InventoryPage() {
 
                   {/* Section 3: الحسابات */}
                   <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">الحسابات</div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "الحسابات" : "Accounts"}</div>
                     <div className="divide-y divide-gray-100/50">
                       <div className="flex items-center justify-between py-2.5">
                         <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.inventoryAccount")}</span>
@@ -1783,7 +1783,7 @@ export function InventoryPage() {
 
                     return (
                       <div className="space-y-1">
-                        <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">الموقع</div>
+                        <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "الموقع" : "Location"}</div>
                         <div className="divide-y divide-gray-100/50">
                           <div className="flex items-center justify-between py-2.5">
                             <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.preferredWarehouse")}</span>
@@ -1794,7 +1794,7 @@ export function InventoryPage() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between py-2.5">
-                            <span className="text-[12px] text-gray-500 font-normal">الفرع</span>
+                            <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "الفرع" : "Branch"}</span>
                             <span className="text-[12px] font-medium text-gray-900">{branchDisplay || t("inventory.emptyValue")}</span>
                           </div>
                         </div>
@@ -1813,7 +1813,7 @@ export function InventoryPage() {
                     <div className="grid gap-4 lg:grid-cols-2 pt-2">
                       {selectedItem.barcode ? (
                         <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">الباركود</div>
+                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "الباركود" : "Barcode"}</div>
                           <div
                             className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
                             style={{ minHeight: "80px" }}
@@ -1824,7 +1824,7 @@ export function InventoryPage() {
                       ) : null}
                       {selectedItem.qrCodeValue ? (
                         <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">رمز QR</div>
+                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "رمز QR" : "QR Code"}</div>
                           <div
                             className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
                             style={{ minHeight: "80px" }}
@@ -3127,7 +3127,12 @@ export function InventoryPage() {
                 <Input value={receiptEditor.reference} onChange={(event) => setReceiptEditor((current) => ({ ...current, reference: event.target.value }))} />
               </Field>
               <Field label={t("inventory.receipts.field.date")}>
-                <Input type="date" value={receiptEditor.receiptDate} onChange={(event) => setReceiptEditor((current) => ({ ...current, receiptDate: event.target.value }))} />
+                <Input
+                  type="date"
+                  min="1900-01-01"
+                  value={receiptEditor.receiptDate}
+                  onChange={(event) => setReceiptEditor((current) => ({ ...current, receiptDate: event.target.value }))}
+                />
               </Field>
               <Field label={t("inventory.receipts.field.warehouse")}>
                 <WarehouseSelect
@@ -3239,7 +3244,12 @@ export function InventoryPage() {
                 <Input value={issueEditor.reference} onChange={(event) => setIssueEditor((current) => ({ ...current, reference: event.target.value }))} />
               </Field>
               <Field label={t("inventory.issues.field.date")}>
-                <Input type="date" value={issueEditor.issueDate} onChange={(event) => setIssueEditor((current) => ({ ...current, issueDate: event.target.value }))} />
+                <Input
+                  type="date"
+                  min="1900-01-01"
+                  value={issueEditor.issueDate}
+                  onChange={(event) => setIssueEditor((current) => ({ ...current, issueDate: event.target.value }))}
+                />
               </Field>
               <Field label={t("inventory.issues.field.warehouse")}>
                 <WarehouseSelect
@@ -3365,6 +3375,7 @@ export function InventoryPage() {
               <Field label={t("inventory.transfers.field.date")}>
                 <Input
                   type="date"
+                  min="1900-01-01"
                   value={transferEditor.transferDate}
                   onChange={(event) => setTransferEditor((current) => ({ ...current, transferDate: event.target.value }))}
                 />
@@ -3481,6 +3492,7 @@ export function InventoryPage() {
               <Field label={t("inventory.adjustments.field.date")}>
                 <Input
                   type="date"
+                  min="1900-01-01"
                   value={adjustmentEditor.adjustmentDate}
                   onChange={(event) => setAdjustmentEditor((current) => ({ ...current, adjustmentDate: event.target.value }))}
                 />
@@ -4967,6 +4979,10 @@ function getWarehouseFormError(editor: WarehouseEditorState) {
 
 function getReceiptFormError(editor: ReceiptEditorState) {
   if (!editor.receiptDate) return "Receipt date is required. تاريخ الاستلام مطلوب.";
+  const receiptYear = new Date(editor.receiptDate).getFullYear();
+  if (Number.isNaN(receiptYear) || receiptYear < 1900) {
+    return "Receipt date must be at least year 1900. يجب أن يكون تاريخ الاستلام في عام 1900 أو بعده.";
+  }
   if (!editor.warehouseId) return "Warehouse is required. المستودع مطلوب.";
   if (editor.lines.length === 0) return "At least one receipt line is required. يجب إدخال سطر استلام واحد على الأقل.";
 
@@ -4987,6 +5003,10 @@ function getReceiptFormError(editor: ReceiptEditorState) {
 
 function getIssueFormError(editor: IssueEditorState) {
   if (!editor.issueDate) return "Issue date is required. تاريخ الصرف مطلوب.";
+  const issueYear = new Date(editor.issueDate).getFullYear();
+  if (Number.isNaN(issueYear) || issueYear < 1900) {
+    return "Issue date must be at least year 1900. يجب أن يكون تاريخ الصرف في عام 1900 أو بعده.";
+  }
   if (!editor.warehouseId) return "Warehouse is required. المستودع مطلوب.";
   if (editor.lines.length === 0) return "At least one issue line is required. يجب إدخال سطر صرف واحد على الأقل.";
 
@@ -5004,6 +5024,10 @@ function getIssueFormError(editor: IssueEditorState) {
 
 function getTransferFormError(editor: TransferEditorState) {
   if (!editor.transferDate) return "Transfer date is required. تاريخ التحويل مطلوب.";
+  const transferYear = new Date(editor.transferDate).getFullYear();
+  if (Number.isNaN(transferYear) || transferYear < 1900) {
+    return "Transfer date must be at least year 1900. يجب أن يكون تاريخ التحويل في عام 1900 أو بعده.";
+  }
   if (!editor.sourceWarehouseId) return "Source warehouse is required. مستودع المصدر مطلوب.";
   if (!editor.destinationWarehouseId) return "Destination warehouse is required. مستودع الوجهة مطلوب.";
   if (editor.sourceWarehouseId && editor.destinationWarehouseId && editor.sourceWarehouseId === editor.destinationWarehouseId) {
@@ -5027,6 +5051,10 @@ function getTransferFormError(editor: TransferEditorState) {
 
 function getAdjustmentFormError(editor: AdjustmentEditorState) {
   if (!editor.adjustmentDate) return "Adjustment date is required. تاريخ التسوية مطلوب.";
+  const adjustmentYear = new Date(editor.adjustmentDate).getFullYear();
+  if (Number.isNaN(adjustmentYear) || adjustmentYear < 1900) {
+    return "Adjustment date must be at least year 1900. يجب أن يكون تاريخ التسوية في عام 1900 أو بعده.";
+  }
   if (!editor.warehouseId) return "Warehouse is required. المستودع مطلوب.";
   if (!editor.reason.trim()) return "Adjustment reason is required. سبب التسوية مطلوب.";
   if (editor.lines.length === 0) return "At least one adjustment line is required. يجب إدخال سطر تسوية واحد على الأقل.";

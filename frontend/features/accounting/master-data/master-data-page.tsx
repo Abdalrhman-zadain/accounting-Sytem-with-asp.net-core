@@ -151,15 +151,35 @@ const emptySupplierDebitNoteTypeEditor: SupplierDebitNoteTypeEditorState = {
     isActive: true,
 };
 
-function describeCreditNoteEffect(effect: CreditNoteTypeEffect) {
+function describeCreditNoteEffect(effect: CreditNoteTypeEffect, t: any) {
     switch (effect) {
         case "FINANCIAL_INVENTORY":
-            return "مالي + مخزون";
+            return t("master.creditNoteEffect.financialInventory");
         case "TAX_ONLY":
-            return "ضريبة فقط";
+            return t("master.creditNoteEffect.taxOnly");
         default:
-            return "مالي فقط";
+            return t("master.creditNoteEffect.financialOnly");
     }
+}
+
+function translateSegmentName(name: string, t: any): string {
+    const lowerName = name.toLowerCase().trim();
+    if (lowerName === "الشركات" || lowerName === "company" || lowerName === "companies") {
+        return t("common.segment.companies");
+    }
+    if (lowerName === "الفروع" || lowerName === "branch" || lowerName === "branches") {
+        return t("common.segment.branches");
+    }
+    if (lowerName === "الأقسام" || lowerName === "department" || lowerName === "departments") {
+        return t("common.segment.departments");
+    }
+    if (lowerName === "المشاريع" || lowerName === "project" || lowerName === "projects") {
+        return t("common.segment.projects");
+    }
+    if (lowerName === "الحسابات الطبيعية" || lowerName === "natural account" || lowerName === "natural accounts") {
+        return t("common.segment.naturalAccounts");
+    }
+    return name;
 }
 
 export function MasterDataPage() {
@@ -551,34 +571,38 @@ export function MasterDataPage() {
 
     const getActiveCategoryTitle = () => {
         if (!active) return "";
-        if (active.kind === "segment") return active.def?.name || "";
+        if (active.kind === "segment") return translateSegmentName(active.def?.name || "", t);
         if (active.kind === "account-subtypes") return t("master.tab.accountSubtypes");
         if (active.kind === "journal-entry-types") return t("master.tab.journalEntryTypes");
         if (active.kind === "payment-method-types") return t("master.tab.paymentMethodTypes");
         if (active.kind === "payment-terms") return t("master.tab.paymentTerms");
         if (active.kind === "currencies") return t("master.tab.currencies");
         if (active.kind === "taxes") return t("master.tab.taxes");
-        if (active.kind === "credit-note-types") return "أنواع إشعار الدائن";
-        if (active.kind === "supplier-debit-note-types") return "أنواع إشعار مدين للمورد";
+        if (active.kind === "credit-note-types") return t("master.tab.creditNoteTypes");
+        if (active.kind === "supplier-debit-note-types") return t("master.tab.supplierDebitNoteTypes");
         return "";
     };
 
     const getActiveCategoryAddButtonLabel = () => {
-        if (!active) return "إضافة";
-        if (active.kind === "segment" && active.def?.name === "الشركات") return "إضافة شركة";
-        if (active.kind === "segment" && active.def?.name === "الفروع") return "إضافة فرع";
-        if (active.kind === "segment" && active.def?.name === "الأقسام") return "إضافة قسم";
-        if (active.kind === "segment" && active.def?.name === "المشاريع") return "إضافة مشروع";
-        if (active.kind === "segment" && active.def?.name === "الحسابات الطبيعية") return "إضافة حساب طبيعي";
-        if (active.kind === "account-subtypes") return "إضافة تصنيف حساب";
-        if (active.kind === "journal-entry-types") return "إضافة نوع قيد يومية";
-        if (active.kind === "payment-method-types") return "إضافة نوع حساب دفع";
-        if (active.kind === "payment-terms") return "إضافة شرط دفع";
-        if (active.kind === "currencies") return "إضافة عملة";
-        if (active.kind === "taxes") return "إضافة ضريبة";
-        if (active.kind === "credit-note-types") return "إضافة نوع إشعار دائن";
-        if (active.kind === "supplier-debit-note-types") return "إضافة نوع إشعار مدين للمورد";
-        return `إضافة ${getActiveCategoryTitle()}`;
+        if (!active) return t("master.action.add");
+        if (active.kind === "segment") {
+            const name = active.def?.name || "";
+            const lowerName = name.toLowerCase().trim();
+            if (lowerName === "الشركات" || lowerName === "company" || lowerName === "companies") return t("master.action.addCompany");
+            if (lowerName === "الفروع" || lowerName === "branch" || lowerName === "branches") return t("master.action.addBranch");
+            if (lowerName === "الأقسام" || lowerName === "department" || lowerName === "departments") return t("master.action.addDepartment");
+            if (lowerName === "المشاريع" || lowerName === "project" || lowerName === "projects") return t("master.action.addProject");
+            if (lowerName === "الحسابات الطبيعية" || lowerName === "natural account" || lowerName === "natural accounts") return t("master.action.addNaturalAccount");
+        }
+        if (active.kind === "account-subtypes") return t("master.action.addAccountSubtype");
+        if (active.kind === "journal-entry-types") return t("master.action.addJournalEntryType");
+        if (active.kind === "payment-method-types") return t("master.action.addPaymentMethodType");
+        if (active.kind === "payment-terms") return t("master.action.addPaymentTerm");
+        if (active.kind === "currencies") return t("master.action.addCurrency");
+        if (active.kind === "taxes") return t("master.action.addTax");
+        if (active.kind === "credit-note-types") return t("master.action.addCreditNoteType");
+        if (active.kind === "supplier-debit-note-types") return t("master.action.addSupplierDebitNoteType");
+        return `${t("master.action.add")} ${getActiveCategoryTitle()}`;
     };
 
     const handleAddClick = () => {
@@ -597,17 +621,17 @@ export function MasterDataPage() {
             {/* Page Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900">تهيئة البيانات الأساسية</h1>
+                    <h1 className="text-2xl font-black text-gray-900">{t("master.title.setup")}</h1>
                     <p className="mt-1 text-sm text-gray-500 max-w-2xl">
-                        تعريف وإدارة الهيكل المحاسبي للنظام: الشركات، الفروع، الأقسام، المشاريع، الحسابات، الضرائب، شروط الدفع وأنواع قيود اليومية.
+                        {t("master.description.setup")}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" className="hidden sm:flex bg-white">
-                        <Upload className="ml-2 h-4 w-4" /> استيراد
+                        <Upload className="ml-2 h-4 w-4" /> {t("master.action.import")}
                     </Button>
                     <Button variant="secondary" className="hidden sm:flex bg-white">
-                        <Download className="ml-2 h-4 w-4" /> تصدير
+                        <Download className="ml-2 h-4 w-4" /> {t("master.action.export")}
                     </Button>
                     <Button onClick={handleAddClick} className="bg-green-600 hover:bg-green-700 text-white border-transparent">
                         <Plus className="ml-2 h-4 w-4" /> {getActiveCategoryAddButtonLabel()}
@@ -632,7 +656,7 @@ export function MasterDataPage() {
                     const def = tab.def as SegmentDefinition | null;
                     const Icon = isSubtypeTab ? BookMarked : isTypeTab ? FolderKanban : isPaymentMethodTypeTab ? Wallet : isPaymentTermsTab ? LuCreditCard : isCurrenciesTab ? LuCoins : isTaxTab ? Percent : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? LuBadgePercent : (SEGMENT_ICONS[i] ?? Building2);
                     
-                    let title = def?.name ?? "";
+                    let title = def ? translateSegmentName(def.name, t) : "";
                     let count = def?.values?.length ?? 0;
                     
                     if (isSubtypeTab) { title = t("master.tab.accountSubtypes"); count = accountSubtypes.length; }
@@ -641,8 +665,8 @@ export function MasterDataPage() {
                     if (isPaymentTermsTab) { title = t("master.tab.paymentTerms"); count = paymentTerms.length; }
                     if (isCurrenciesTab) { title = t("master.tab.currencies"); count = currencies.length; }
                     if (isTaxTab) { title = t("master.tab.taxes"); count = taxes.length; }
-                    if (isCreditNoteTypeTab) { title = "أنواع إشعار الدائن"; count = creditNoteTypes.length; }
-                    if (isSupplierDebitNoteTypeTab) { title = "أنواع إشعار مدين للمورد"; count = supplierDebitNoteTypes.length; }
+                    if (isCreditNoteTypeTab) { title = t("master.tab.creditNoteTypes"); count = creditNoteTypes.length; }
+                    if (isSupplierDebitNoteTypeTab) { title = t("master.tab.supplierDebitNoteTypes"); count = supplierDebitNoteTypes.length; }
 
                     const iconColorClass = activeTab === i ? "text-green-600" : (isSubtypeTab ? "text-emerald-500" : isTypeTab ? "text-indigo-500" : isPaymentMethodTypeTab ? "text-cyan-500" : isPaymentTermsTab ? "text-purple-500" : isCurrenciesTab ? "text-blue-500" : isTaxTab ? "text-green-500" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "text-amber-500" : "text-gray-500");
                     const iconBgClass = activeTab === i ? "bg-green-100" : (isSubtypeTab ? "bg-emerald-50" : isTypeTab ? "bg-indigo-50" : isPaymentMethodTypeTab ? "bg-cyan-50" : isPaymentTermsTab ? "bg-purple-50" : isCurrenciesTab ? "bg-blue-50" : isTaxTab ? "bg-green-50" : isCreditNoteTypeTab || isSupplierDebitNoteTypeTab ? "bg-amber-50" : "bg-gray-100");
@@ -685,14 +709,14 @@ export function MasterDataPage() {
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
-                            <h2 className="text-base font-bold text-gray-900">{activeDef.name}</h2>
+                            <h2 className="text-base font-bold text-gray-900">{translateSegmentName(activeDef.name, t)}</h2>
                             <p className="text-xs text-gray-500 mt-0.5">
-                                {activeDef.description || t("master.segmentValues.manage", { name: activeDef.name })}
+                                {activeDef.description || t("master.segmentValues.manage", { name: translateSegmentName(activeDef.name, t) })}
                             </p>
                         </div>
                     </div>
                     
-                    <MasterDataTableToolbar searchPlaceholder="بحث بالاسم أو الكود..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     {/* Add Row */}
                     {showAddSegmentValue && (
@@ -736,7 +760,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {activeDef.values.length === 0 ? (
-                                <tr><td colSpan={4} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
+                                <tr><td colSpan={4} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : activeDef.values.map((val: SegmentValue) => (
                                 <tr key={val.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -797,7 +821,7 @@ export function MasterDataPage() {
                         </div>
                     </div>
 
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     {showAddSubtype && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-emerald-500/5">
@@ -837,7 +861,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {accountSubtypes.length === 0 ? (
-                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : accountSubtypes.map((row: AccountSubtype) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -906,7 +930,7 @@ export function MasterDataPage() {
                         </div>
                     </div>
 
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     {showAddType && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-indigo-500/5">
@@ -946,7 +970,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {journalEntryTypes.length === 0 ? (
-                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : journalEntryTypes.map((row: JournalEntryType) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -1015,7 +1039,7 @@ export function MasterDataPage() {
                         </div>
                     </div>
 
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     {showAddPaymentMethodType && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-cyan-500/5">
@@ -1055,7 +1079,7 @@ export function MasterDataPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {paymentMethodTypes.length === 0 ? (
-                                <tr><td colSpan={3} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
+                                <tr><td colSpan={3} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} /></td></tr>
                             ) : paymentMethodTypes.map((row: PaymentMethodType) => (
                                 <tr key={row.id} className="group hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
@@ -1121,45 +1145,45 @@ export function MasterDataPage() {
                 <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
-                            <h2 className="text-base font-bold text-gray-900">أنواع إشعار الدائن</h2>
+                            <h2 className="text-base font-bold text-gray-900">{t("master.tab.creditNoteTypes")}</h2>
                             <p className="mt-0.5 text-xs text-gray-500">
-                                إدارة أنواع إشعار الدائن المستخدمة في نماذج الخصومات والمرتجعات والتسويات.
+                                {t("master.section.creditNoteTypes.description")}
                             </p>
                         </div>
                     </div>
                     
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
                     
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="border-b border-gray-200 bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الرمز</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الاسم</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">التأثير</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يحتاج فاتورة مرتبطة؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يؤثر على المخزون؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يسمح بتعديل الضريبة؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الحساب الافتراضي</th>
-                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">الحالة</th>
-                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">الإجراءات</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.code")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.name")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.effect")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.requiresInvoice")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.affectsInventory")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.allowsTaxAdjustment")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.defaultAccount")}</th>
+                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.status")}</th>
+                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {creditNoteTypes.length === 0 ? (
                                     <tr>
                                         <td colSpan={9} className="p-0">
-                                            <EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
+                                            <EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
                                         </td>
                                     </tr>
                                 ) : creditNoteTypes.map((row) => (
                                     <tr key={row.id} className="group transition-colors hover:bg-gray-50">
                                         <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-amber-700">{row.code}</span></td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect)}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? "نعم" : "اختياري"}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? "نعم" : "لا"}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect, t)}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? t("common.yes") : t("common.optional")}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? t("common.yes") : t("common.no")}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? t("common.yes") : t("common.no")}</td>
                                         <td className="px-6 py-4 text-sm text-gray-700">{accountLabel(row.defaultAccount)}</td>
                                         <td className="px-6 py-4 text-center">
                                             <StatusPill label={row.isActive ? t("common.status.active") : t("common.status.inactive")} tone={row.isActive ? "positive" : "neutral"} />
@@ -1187,45 +1211,45 @@ export function MasterDataPage() {
                 <Card className="p-0 border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
                         <div>
-                            <h2 className="text-base font-bold text-gray-900">أنواع إشعار مدين للمورد</h2>
+                            <h2 className="text-base font-bold text-gray-900">{t("master.tab.supplierDebitNoteTypes")}</h2>
                             <p className="mt-0.5 text-xs text-gray-500">
-                                إدارة أنواع إشعار مدين المورد المستخدمة في إشعارات الخصم ومرتجعات الشراء وتسويات الموردين.
+                                {t("master.section.supplierDebitNoteTypes.description")}
                             </p>
                         </div>
                     </div>
                     
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="border-b border-gray-200 bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الرمز</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الاسم</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">التأثير</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يحتاج فاتورة شراء مرتبطة؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يؤثر على المخزون؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">يسمح بتعديل الضريبة؟</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">الحساب الافتراضي</th>
-                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">الحالة</th>
-                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">الإجراءات</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.code")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.name")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.effect")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.requiresSupplierInvoice")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.affectsInventory")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.allowsTaxAdjustment")}</th>
+                                    <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("master.column.defaultAccount")}</th>
+                                    <th className="px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.status")}</th>
+                                    <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("common.table.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {supplierDebitNoteTypes.length === 0 ? (
                                     <tr>
                                         <td colSpan={9} className="p-0">
-                                            <EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
+                                            <EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={getActiveCategoryAddButtonLabel()} onAction={handleAddClick} />
                                         </td>
                                     </tr>
                                 ) : supplierDebitNoteTypes.map((row) => (
                                     <tr key={row.id} className="group transition-colors hover:bg-gray-50">
                                         <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-amber-700">{row.code}</span></td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect)}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? "نعم" : "اختياري"}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? "نعم" : "لا"}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? "نعم" : "لا"}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{describeCreditNoteEffect(row.effect, t)}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.linkedInvoiceRequirement === "REQUIRED" ? t("common.yes") : t("common.optional")}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.affectsInventory ? t("common.yes") : t("common.no")}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">{row.allowsTaxAdjustment ? t("common.yes") : t("common.no")}</td>
                                         <td className="px-6 py-4 text-sm text-gray-700">{accountLabel(row.defaultAccount)}</td>
                                         <td className="px-6 py-4 text-center">
                                             <StatusPill label={row.isActive ? t("common.status.active") : t("common.status.inactive")} tone={row.isActive ? "positive" : "neutral"} />
@@ -1304,7 +1328,7 @@ export function MasterDataPage() {
                         </div>
                     )}
 
-                    <MasterDataTableToolbar searchPlaceholder="بحث..." />
+                    <MasterDataTableToolbar searchPlaceholder={t("master.toolbar.search")} />
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -1323,7 +1347,7 @@ export function MasterDataPage() {
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {taxes.length === 0 ? (
-                                            <tr><td colSpan={7} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={t("master.section.taxes.add")} onAction={() => openTaxEditor()} /></td></tr>
+                                            <tr><td colSpan={7} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={t("master.section.taxes.add")} onAction={() => openTaxEditor()} /></td></tr>
                                         ) : taxes.map((tax) => (
                                             <tr key={tax.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-green-600">{tax.taxCode}</span></td>
@@ -1372,7 +1396,7 @@ export function MasterDataPage() {
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {taxTreatments.length === 0 ? (
-                                            <tr><td colSpan={6} className="p-0"><EmptyState title="لا توجد بيانات بعد" description="ابدأ بإضافة أول سجل لهذا القسم حتى تتمكن من استخدامه داخل القيود والفواتير." actionLabel={t("master.section.taxTreatments.add")} onAction={() => openTaxTreatmentEditor()} /></td></tr>
+                                            <tr><td colSpan={6} className="p-0"><EmptyState title={t("master.empty.title")} description={t("master.empty.description")} actionLabel={t("master.section.taxTreatments.add")} onAction={() => openTaxTreatmentEditor()} /></td></tr>
                                         ) : taxTreatments.map((treatment) => (
                                             <tr key={treatment.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4"><span className="font-mono text-xs font-bold text-green-600">{treatment.code}</span></td>
@@ -1574,55 +1598,55 @@ export function MasterDataPage() {
                     <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl">
                         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                             <h3 className="text-base font-bold text-gray-900">
-                                {creditNoteTypeEditor.id ? "تعديل نوع إشعار الدائن" : "إضافة نوع إشعار دائن"}
+                                {creditNoteTypeEditor.id ? t("master.creditNoteType.editTitle") : t("master.creditNoteType.createTitle")}
                             </h3>
                             <button onClick={() => setCreditNoteTypeEditor(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
                         <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
-                            <Field label="الرمز">
+                            <Field label={t("common.table.code")}>
                                 <input
                                     value={creditNoteTypeEditor.code}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, code: event.target.value.toUpperCase() }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 />
                             </Field>
-                            <Field label="الاسم">
+                            <Field label={t("common.table.name")}>
                                 <input
                                     value={creditNoteTypeEditor.name}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, name: event.target.value }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 />
                             </Field>
-                            <Field label="التأثير">
+                            <Field label={t("master.column.effect")}>
                                 <select
                                     value={creditNoteTypeEditor.effect}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, effect: event.target.value as CreditNoteTypeEffect }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="FINANCIAL_ONLY">مالي فقط</option>
-                                    <option value="FINANCIAL_INVENTORY">مالي + مخزون</option>
-                                    <option value="TAX_ONLY">ضريبة فقط</option>
+                                    <option value="FINANCIAL_ONLY">{t("master.creditNoteEffect.financialOnly")}</option>
+                                    <option value="FINANCIAL_INVENTORY">{t("master.creditNoteEffect.financialInventory")}</option>
+                                    <option value="TAX_ONLY">{t("master.creditNoteEffect.taxOnly")}</option>
                                 </select>
                             </Field>
-                            <Field label="الفاتورة المرتبطة">
+                            <Field label={t("master.column.requiresInvoice")}>
                                 <select
                                     value={creditNoteTypeEditor.linkedInvoiceRequirement}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, linkedInvoiceRequirement: event.target.value as CreditNoteLinkedInvoiceRequirement }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="REQUIRED">إلزامية</option>
-                                    <option value="OPTIONAL">اختيارية</option>
+                                    <option value="REQUIRED">{t("master.invoiceRequirement.required")}</option>
+                                    <option value="OPTIONAL">{t("master.invoiceRequirement.optional")}</option>
                                 </select>
                             </Field>
-                            <Field label="الحساب الافتراضي">
+                            <Field label={t("master.column.defaultAccount")}>
                                 <select
                                     value={creditNoteTypeEditor.defaultAccountId}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, defaultAccountId: event.target.value }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="">اختر حسابًا افتراضيًا</option>
+                                    <option value="">{t("master.column.selectDefaultAccount")}</option>
                                     {creditNoteDefaultAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>{accountLabel(account)}</option>
                                     ))}
@@ -1644,7 +1668,7 @@ export function MasterDataPage() {
                                     checked={creditNoteTypeEditor.affectsInventory}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, affectsInventory: event.target.checked }))}
                                 />
-                                يؤثر على المخزون
+                                {t("master.checkbox.affectsInventory")}
                             </label>
                             <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
                                 <input
@@ -1652,10 +1676,10 @@ export function MasterDataPage() {
                                     checked={creditNoteTypeEditor.allowsTaxAdjustment}
                                     onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, allowsTaxAdjustment: event.target.checked }))}
                                 />
-                                يسمح بتعديل الضريبة
+                                {t("master.checkbox.allowsTaxAdjustment")}
                             </label>
                             <div className="sm:col-span-2">
-                                <Field label="النص الإرشادي">
+                                <Field label={t("master.column.helperText")}>
                                     <textarea
                                         value={creditNoteTypeEditor.helperText}
                                         onChange={(event) => setCreditNoteTypeEditor((current) => current && ({ ...current, helperText: event.target.value }))}
@@ -1666,7 +1690,7 @@ export function MasterDataPage() {
                         </div>
                         {saveCreditNoteTypeMutation.isError && (
                             <div className="mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                {(saveCreditNoteTypeMutation.error as Error).message || "تعذر حفظ نوع إشعار الدائن."}
+                                {(saveCreditNoteTypeMutation.error as Error).message || t("master.creditNoteType.saveError")}
                             </div>
                         )}
                         <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
@@ -1684,55 +1708,55 @@ export function MasterDataPage() {
                     <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl">
                         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                             <h3 className="text-base font-bold text-gray-900">
-                                {supplierDebitNoteTypeEditor.id ? "تعديل نوع إشعار مدين للمورد" : "إضافة نوع إشعار مدين للمورد"}
+                                {supplierDebitNoteTypeEditor.id ? t("master.supplierDebitNoteType.editTitle") : t("master.supplierDebitNoteType.createTitle")}
                             </h3>
                             <button onClick={() => setSupplierDebitNoteTypeEditor(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
                         <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
-                            <Field label="الرمز">
+                            <Field label={t("common.table.code")}>
                                 <input
                                     value={supplierDebitNoteTypeEditor.code}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, code: event.target.value.toUpperCase() }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 />
                             </Field>
-                            <Field label="الاسم">
+                            <Field label={t("common.table.name")}>
                                 <input
                                     value={supplierDebitNoteTypeEditor.name}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, name: event.target.value }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 />
                             </Field>
-                            <Field label="التأثير">
+                            <Field label={t("master.column.effect")}>
                                 <select
                                     value={supplierDebitNoteTypeEditor.effect}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, effect: event.target.value as CreditNoteTypeEffect }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="FINANCIAL_ONLY">مالي فقط</option>
-                                    <option value="FINANCIAL_INVENTORY">مالي + مخزون</option>
-                                    <option value="TAX_ONLY">ضريبة فقط</option>
+                                    <option value="FINANCIAL_ONLY">{t("master.creditNoteEffect.financialOnly")}</option>
+                                    <option value="FINANCIAL_INVENTORY">{t("master.creditNoteEffect.financialInventory")}</option>
+                                    <option value="TAX_ONLY">{t("master.creditNoteEffect.taxOnly")}</option>
                                 </select>
                             </Field>
-                            <Field label="فاتورة الشراء المرتبطة">
+                            <Field label={t("master.column.requiresSupplierInvoice")}>
                                 <select
                                     value={supplierDebitNoteTypeEditor.linkedInvoiceRequirement}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, linkedInvoiceRequirement: event.target.value as CreditNoteLinkedInvoiceRequirement }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="REQUIRED">إلزامية</option>
-                                    <option value="OPTIONAL">اختيارية</option>
+                                    <option value="REQUIRED">{t("master.invoiceRequirement.required")}</option>
+                                    <option value="OPTIONAL">{t("master.invoiceRequirement.optional")}</option>
                                 </select>
                             </Field>
-                            <Field label="الحساب الافتراضي">
+                            <Field label={t("master.column.defaultAccount")}>
                                 <select
                                     value={supplierDebitNoteTypeEditor.defaultAccountId}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, defaultAccountId: event.target.value }))}
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/40"
                                 >
-                                    <option value="">اختر حسابًا افتراضيًا</option>
+                                    <option value="">{t("master.column.selectDefaultAccount")}</option>
                                     {creditNoteDefaultAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>{accountLabel(account)}</option>
                                     ))}
@@ -1754,7 +1778,7 @@ export function MasterDataPage() {
                                     checked={supplierDebitNoteTypeEditor.affectsInventory}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, affectsInventory: event.target.checked }))}
                                 />
-                                يؤثر على المخزون
+                                {t("master.checkbox.affectsInventory")}
                             </label>
                             <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700">
                                 <input
@@ -1762,10 +1786,10 @@ export function MasterDataPage() {
                                     checked={supplierDebitNoteTypeEditor.allowsTaxAdjustment}
                                     onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, allowsTaxAdjustment: event.target.checked }))}
                                 />
-                                يسمح بتعديل الضريبة
+                                {t("master.checkbox.allowsTaxAdjustment")}
                             </label>
                             <div className="sm:col-span-2">
-                                <Field label="النص الإرشادي">
+                                <Field label={t("master.column.helperText")}>
                                     <textarea
                                         value={supplierDebitNoteTypeEditor.helperText}
                                         onChange={(event) => setSupplierDebitNoteTypeEditor((current) => current && ({ ...current, helperText: event.target.value }))}
@@ -1776,7 +1800,7 @@ export function MasterDataPage() {
                         </div>
                         {saveSupplierDebitNoteTypeMutation.isError && (
                             <div className="mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                {(saveSupplierDebitNoteTypeMutation.error as Error).message || "تعذر حفظ نوع إشعار مدين للمورد."}
+                                {(saveSupplierDebitNoteTypeMutation.error as Error).message || t("master.supplierDebitNoteType.saveError")}
                             </div>
                         )}
                         <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">

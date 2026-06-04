@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { IconType } from "react-icons/lib";
 import { LuArrowLeft } from "react-icons/lu";
+import { useTranslation } from "@/lib/i18n";
 
 interface MasterDataCardProps {
     title: string;
@@ -23,6 +24,8 @@ export function MasterDataCard({
     iconColorClass = "text-gray-500",
     iconBgClass = "bg-gray-100",
 }: MasterDataCardProps) {
+    const { t } = useTranslation();
+
     return (
         <button
             onClick={onClick}
@@ -50,14 +53,14 @@ export function MasterDataCard({
                         ? "bg-amber-100 text-amber-700"
                         : "bg-green-100 text-green-700"
                 )}>
-                    {needsReview ? "تحتاج مراجعة" : "جميعها نشطة"}
+                    {needsReview ? t("master.card.needsReview") : t("master.card.allActive")}
                 </div>
                 
                 <span className={cn(
                     "flex items-center text-xs font-bold transition-colors",
                     isActive ? "text-green-700" : "text-gray-500 group-hover:text-green-600"
                 )}>
-                    إدارة {title.split(" ")[0]}
+                    {t("master.card.manage", { name: title })}
                     <LuArrowLeft className="ml-1 h-3 w-3" />
                 </span>
             </div>

@@ -1,14 +1,17 @@
 import { Button } from "@/components/ui";
 import { LuClock, LuCircleAlert, LuBuilding2, LuWallet, LuMapPin } from "react-icons/lu";
+import { useTranslation } from "@/lib/i18n";
 
 export function HelperPanels() {
+    const { t } = useTranslation();
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
             {/* Panel 1: Recent Changes */}
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-6">
                     <LuClock className="h-5 w-5 text-gray-500" />
-                    <h3 className="text-base font-bold text-gray-900">آخر التعديلات</h3>
+                    <h3 className="text-base font-bold text-gray-900">{t("master.helper.recentChanges")}</h3>
                 </div>
                 <div className="space-y-4">
                     <div className="flex items-start gap-4">
@@ -16,11 +19,11 @@ export function HelperPanels() {
                             <LuBuilding2 className="h-4 w-4" />
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">تمت إضافة شركة جديدة</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.newCompanyAdded")}</p>
                             <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                                 <span>Genius Admin</span>
                                 <span>•</span>
-                                <span>قبل ساعتين</span>
+                                <span>{t("master.helper.twoHoursAgo")}</span>
                             </div>
                         </div>
                     </div>
@@ -29,11 +32,11 @@ export function HelperPanels() {
                             <LuWallet className="h-4 w-4" />
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">تم تحديث حساب طبيعي</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.naturalAccountUpdated")}</p>
                             <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                                 <span>Genius Admin</span>
                                 <span>•</span>
-                                <span>اليوم، 10:30 ص</span>
+                                <span>{t("master.helper.today1030am")}</span>
                             </div>
                         </div>
                     </div>
@@ -42,11 +45,11 @@ export function HelperPanels() {
                             <LuMapPin className="h-4 w-4" />
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">تم إنشاء فرع جديد</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.newBranchCreated")}</p>
                             <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                                 <span>Genius Admin</span>
                                 <span>•</span>
-                                <span>أمس، 04:15 م</span>
+                                <span>{t("master.helper.yesterday0415pm")}</span>
                             </div>
                         </div>
                     </div>
@@ -57,34 +60,34 @@ export function HelperPanels() {
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-6">
                     <LuCircleAlert className="h-5 w-5 text-amber-500" />
-                    <h3 className="text-base font-bold text-gray-900">عناصر تحتاج مراجعة</h3>
+                    <h3 className="text-base font-bold text-gray-900">{t("master.helper.itemsNeedReview")}</h3>
                 </div>
                 <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-100 bg-gray-50/50">
                         <div className="flex items-center gap-3">
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
-                            <p className="text-sm font-medium text-gray-900">إضافة المزيد من الحسابات الطبيعية</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.addMoreNaturalAccounts")}</p>
                         </div>
                         <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
-                            مراجعة
+                            {t("master.helper.review")}
                         </Button>
                     </div>
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-100 bg-gray-50/50">
                         <div className="flex items-center gap-3">
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
-                            <p className="text-sm font-medium text-gray-900">تكوين أنواع الضرائب</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.configureTaxes")}</p>
                         </div>
                         <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
-                            مراجعة
+                            {t("master.helper.review")}
                         </Button>
                     </div>
                     <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-100 bg-gray-50/50">
                         <div className="flex items-center gap-3">
                             <div className="h-2 w-2 rounded-full bg-amber-500" />
-                            <p className="text-sm font-medium text-gray-900">إعداد المزيد من شروط الدفع</p>
+                            <p className="text-sm font-medium text-gray-900">{t("master.helper.setupMorePaymentTerms")}</p>
                         </div>
                         <Button variant="secondary" size="sm" className="h-7 text-xs px-3">
-                            مراجعة
+                            {t("master.helper.review")}
                         </Button>
                     </div>
                 </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useSettings } from "@/providers/settings-provider";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import arTranslations from "./ar";
 
 const enTranslations: Record<string, string> = {
   "app.title": "Genius ERP",
@@ -385,6 +386,20 @@ const enTranslations: Record<string, string> = {
   "fiscal.action.reopen": "Re-open",
   "fiscal.confirm.close": 'Close "{name}"? This will prevent new postings.',
   "fiscal.confirm.reopen": 'Re-open "{name}"?',
+  "fiscal.status.open": "Open",
+  "fiscal.status.closed": "Closed",
+  "fiscal.status.locked": "Under Review",
+  "fiscal.summary.title": "Fiscal Year",
+  "fiscal.summary.totalPeriods": "Total Periods",
+  "fiscal.summary.openPeriods": "Open Periods",
+  "fiscal.summary.closedPeriods": "Closed Periods",
+  "fiscal.summary.lastClosed": "Last Closed",
+  "fiscal.summary.none": "None",
+  "fiscal.table.startDate": "Start Date",
+  "fiscal.table.endDate": "End Date",
+  "fiscal.table.pendingEntries": "Pending Entries",
+  "fiscal.action.reviewAndClose": "Review & Close",
+  "fiscal.action.openPeriod": "Open Period",
 
   "audit.title": "Audit Trail",
   "audit.description":
@@ -599,12 +614,110 @@ const enTranslations: Record<string, string> = {
     "When enabled, users can debit/credit this account directly in Journal Entries. Disable for system-controlled accounts (e.g. retained earnings, tax payable).",
   "accounts.form.allowManual.disabledNote":
     "Manual posting is disabled. This account can only be updated via automated system rules.",
+  "common.accountLink.title": "Account Link Mode",
+  "common.accountLink.auto": "Create Account Automatically",
+  "common.accountLink.existing": "Select Existing Account",
+  "common.accountLink.customerHelp": "A new receivable account will be created under Accounts Receivable under the customer's name.",
+  "common.accountLink.supplierHelp": "A new payable account will be created under Accounts Payable under the supplier's name.",
   "common.none": "None",
   "common.back": "Back",
   "accounts.form.validation.nameRequired": "Name is required.",
   "accounts.form.validation.typeRequired": "Type is required.",
   "master.segmentValues.manage": "Manage {name} master values",
   "master.segmentValues.add": "Add {name}",
+
+  // Segment Translations
+  "common.segment.companies": "Companies",
+  "common.segment.branches": "Branches",
+  "common.segment.departments": "Departments",
+  "common.segment.projects": "Projects",
+  "common.segment.naturalAccounts": "Natural Accounts",
+
+  // Master Data Page Main Header
+  "master.title.setup": "Master Data Setup",
+  "master.description.setup": "Define and manage the system's accounting structure: Companies, Branches, Departments, Projects, Accounts, Taxes, Payment Terms, and Journal Entry Types.",
+  "master.action.import": "Import",
+  "master.action.export": "Export",
+
+  // Category & Modal Titles
+  "master.tab.creditNoteTypes": "Credit Note Types",
+  "master.tab.supplierDebitNoteTypes": "Supplier Debit Note Types",
+  "master.action.add": "Add",
+  "master.action.addCompany": "Add Company",
+  "master.action.addBranch": "Add Branch",
+  "master.action.addDepartment": "Add Department",
+  "master.action.addProject": "Add Project",
+  "master.action.addNaturalAccount": "Add Natural Account",
+  "master.action.addAccountSubtype": "Add Account Class",
+  "master.action.addJournalEntryType": "Add Journal Entry Type",
+  "master.action.addPaymentMethodType": "Add Payment Method",
+  "master.action.addPaymentTerm": "Add Payment Term",
+  "master.action.addCurrency": "Add Currency",
+  "master.action.addTax": "Add Tax",
+  "master.action.addCreditNoteType": "Add Credit Note Type",
+  "master.action.addSupplierDebitNoteType": "Add Supplier Debit Note Type",
+
+  // Master Cards & Helper Panels
+  "master.card.needsReview": "Needs Review",
+  "master.card.allActive": "All Active",
+  "master.card.manage": "Manage {name}",
+  "master.helper.recentChanges": "Recent Changes",
+  "master.helper.newCompanyAdded": "New company added",
+  "master.helper.twoHoursAgo": "2 hours ago",
+  "master.helper.naturalAccountUpdated": "Natural account updated",
+  "master.helper.today1030am": "Today, 10:30 AM",
+  "master.helper.newBranchCreated": "New branch created",
+  "master.helper.yesterday0415pm": "Yesterday, 04:15 PM",
+  "master.helper.itemsNeedReview": "Items Needing Review",
+  "master.helper.addMoreNaturalAccounts": "Add more natural accounts",
+  "master.helper.review": "Review",
+  "master.helper.configureTaxes": "Configure tax types",
+  "master.helper.setupMorePaymentTerms": "Set up more payment terms",
+
+  // Setup Progress Card
+  "master.progress.title": "Setup Progress: 65%",
+  "master.progress.description": "Complete setup for companies, branches, accounts, and taxes before starting with entries and invoices.",
+  "master.progress.viewDetails": "View Details",
+
+  // Toolbar & Table Statuses
+  "master.toolbar.allStatuses": "All Statuses",
+  "master.toolbar.columns": "Columns",
+  "master.toolbar.export": "Export",
+  "master.toolbar.search": "Search...",
+  "master.currencies.baseCurrency": "Base Currency",
+  "master.empty.title": "No data yet",
+  "master.empty.description": "Start by adding the first record for this section to use it in entries and invoices.",
+
+  // Credit/Debit Note Columns & Form
+  "master.column.effect": "Effect",
+  "master.column.requiresInvoice": "Requires Linked Invoice?",
+  "master.column.requiresSupplierInvoice": "Requires Linked Purchase Invoice?",
+  "master.column.affectsInventory": "Affects Inventory?",
+  "master.column.allowsTaxAdjustment": "Allows Tax Adjustment?",
+  "master.column.defaultAccount": "Default Account",
+  "master.column.selectDefaultAccount": "Select default account",
+  "master.column.helperText": "Helper Text",
+  "master.checkbox.affectsInventory": "Affects Inventory",
+  "master.checkbox.allowsTaxAdjustment": "Allows Tax Adjustment",
+  "master.invoiceRequirement.required": "Required",
+  "master.invoiceRequirement.optional": "Optional",
+  "common.yes": "Yes",
+  "common.no": "No",
+
+  // Credit/Debit Note Effects
+  "master.creditNoteEffect.financialInventory": "Financial + Inventory",
+  "master.creditNoteEffect.taxOnly": "Tax Only",
+  "master.creditNoteEffect.financialOnly": "Financial Only",
+
+  // Credit/Debit Note Editor Titles & Errors
+  "master.creditNoteType.editTitle": "Edit Credit Note Type",
+  "master.creditNoteType.createTitle": "Add Credit Note Type",
+  "master.creditNoteType.saveError": "Failed to save credit note type.",
+  "master.supplierDebitNoteType.editTitle": "Edit Supplier Debit Note Type",
+  "master.supplierDebitNoteType.createTitle": "Add Supplier Debit Note Type",
+  "master.supplierDebitNoteType.saveError": "Failed to save supplier debit note type.",
+
+  "salesReceivables.salesReps.placeholder.select": "Select Sales Rep",
 };
 
 Object.assign(enTranslations, {
@@ -678,11 +791,43 @@ Object.assign(enTranslations, {
     "Prevent duplicate references, over-allocation, posting against deactivated suppliers, and preserve document lifecycle audit history.",
   "purchases.submodule.validationAndControl.nextStep":
     "Centralize cross-document checks so draft-save, post, cancel, and reverse rules stay consistent.",
+  "salesReceivables.breadcrumb.sales": "Sales",
+  "salesReceivables.breadcrumb.newOrder": "New Sales Order",
+  "salesReceivables.breadcrumb.newInvoice": "New Invoice",
   "salesReceivables.title": "Sales & Receivables",
+  "salesReceivables.filters.bySalesRep": "By Sales Rep",
   "salesReceivables.description":
     "Manage customer masters, draft and post invoices or credit notes, allocate receipts, and review balances and aging in one place.",
   "salesReceivables.tab.customers": "Customers",
   "salesReceivables.tab.salesReps": "Sales Reps",
+  "salesReceivables.salesReps.metric.count": "Sales Reps",
+  "salesReceivables.salesReps.metric.countHint": "Current list",
+  "salesReceivables.salesReps.metric.active": "Active Sales Reps",
+  "salesReceivables.salesReps.metric.activeHint": "Available to link to customers",
+  "salesReceivables.salesReps.metric.linkedCustomers": "Linked Customers",
+  "salesReceivables.salesReps.metric.linkedCustomersHint": "Based on current customer links",
+  "salesReceivables.salesReps.metric.salesByRep": "Sales by Sales Rep",
+  "salesReceivables.salesReps.metric.salesByRepValue": "Under construction",
+  "salesReceivables.salesReps.metric.salesByRepHint": "Ready for sales reports later",
+  "salesReceivables.salesReps.placeholder.search": "Search by code, sales rep name, or contact info...",
+  "salesReceivables.salesReps.button.new": "New Sales Rep",
+  "salesReceivables.salesReps.section.title": "Sales Representatives Table",
+  "salesReceivables.salesReps.section.description": "Manage sales reps for tracking, commissions, and reporting, without changing the customer's account.",
+  "salesReceivables.salesReps.field.code": "Code",
+  "salesReceivables.salesReps.field.name": "Sales Rep Name",
+  "salesReceivables.salesReps.field.contact": "Contact Info",
+  "salesReceivables.salesReps.field.commissionRate": "Commission Rate",
+  "salesReceivables.salesReps.field.customersCount": "Customers Count",
+  "salesReceivables.salesReps.field.employeeAccount": "Employee Account: {code}",
+  "salesReceivables.salesReps.field.noEmployeeAccount": "No employee account linked",
+  "salesReceivables.salesReps.field.noPhone": "No phone",
+  "salesReceivables.salesReps.field.noEmail": "No email",
+  "salesReceivables.salesReps.action.edit": "Edit",
+  "salesReceivables.salesReps.action.deactivate": "Deactivate",
+  "salesReceivables.salesReps.action.deactivateConfirm": "Deactivate sales rep {name}?",
+  "salesReceivables.salesReps.status.active": "Active",
+  "salesReceivables.salesReps.status.inactive": "Inactive",
+  "salesReceivables.salesReps.empty": "No sales representatives yet.",
   "salesReceivables.tab.quotations": "Quotations",
   "salesReceivables.tab.orders": "Sales Orders",
   "salesReceivables.tab.invoices": "Invoices",
@@ -1085,6 +1230,10 @@ Object.assign(enTranslations, {
   "purchases.workspace.requests": "Purchase Requests",
   "purchases.summary.totalSuppliers": "Suppliers",
   "purchases.summary.totalSuppliersHint": "Current filtered list",
+  "purchases.suppliers.noPhone": "No phone number",
+  "purchases.suppliers.noEmail": "No email address",
+  "purchases.suppliers.editorDescription": "Enter the supplier details and save to add them to the master list.",
+  "purchases.pagination.summary": "Showing {from}-{to} of {total}",
   "purchases.summary.activeSuppliers": "Active Suppliers",
   "purchases.summary.activeSuppliersHint":
     "Available for new purchase transactions",
@@ -2979,59 +3128,20 @@ Object.assign(enTranslations, {
 
 export type TranslationKey = string;
 
-let cachedArabicTranslations: Record<string, string> | null = null;
-
 export function useTranslation() {
   const { language } = useSettings();
-  const [translations, setTranslations] =
-    useState<Record<string, string>>(enTranslations);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    if (language === "ar") {
-      if (cachedArabicTranslations) {
-        setTranslations(cachedArabicTranslations);
-        return () => {
-          isCancelled = true;
-        };
-      }
-
-      void import("./ar")
-        .then((module) => {
-          if (isCancelled) {
-            return;
-          }
-
-          cachedArabicTranslations = module.default;
-          setTranslations(module.default);
-        })
-        .catch(() => {
-          if (isCancelled) {
-            return;
-          }
-
-          setTranslations(enTranslations);
-        });
-    } else {
-      setTranslations(enTranslations);
-    }
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [language]);
 
   const t = useMemo(
     () =>
       (key: TranslationKey, vars?: Record<string, string | number>): string => {
+        const translations = language === "ar" ? arTranslations : enTranslations;
         const template = translations[key] || enTranslations[key] || key;
         if (!vars) return template;
         return template.replace(/\{(\w+)\}/g, (_, name) =>
           String(vars[name] ?? `{${name}}`),
         );
       },
-    [translations],
+    [language],
   );
 
   return { t, language };

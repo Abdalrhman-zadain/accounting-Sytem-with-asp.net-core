@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsNumber, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../common/validation/decimal-limits';
 
 export class CreateBankReconciliationDto {
   @IsString()
@@ -10,6 +11,7 @@ export class CreateBankReconciliationDto {
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Max(MAX_AMOUNT)
   statementEndingBalance!: number;
 
   @IsOptional()
@@ -35,11 +37,13 @@ export class CreateBankStatementLineDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   debitAmount!: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   creditAmount!: number;
 }
 

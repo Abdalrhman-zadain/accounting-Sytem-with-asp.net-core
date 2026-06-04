@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsNumber, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../../common/validation/decimal-limits';
 
 export class JournalEntryLineDto {
   @IsString()
@@ -13,11 +14,13 @@ export class JournalEntryLineDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   debitAmount!: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   creditAmount!: number;
 }
 

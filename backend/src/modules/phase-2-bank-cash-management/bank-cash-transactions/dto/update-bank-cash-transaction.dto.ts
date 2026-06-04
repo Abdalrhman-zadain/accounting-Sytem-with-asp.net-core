@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../common/validation/decimal-limits';
 
 export class UpdateBankCashTransactionDto {
   @IsOptional()
@@ -15,6 +16,7 @@ export class UpdateBankCashTransactionDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount?: number;
 
   @IsOptional()

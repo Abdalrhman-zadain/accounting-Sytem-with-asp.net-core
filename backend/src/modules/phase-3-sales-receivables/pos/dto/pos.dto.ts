@@ -9,9 +9,14 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
+import {
+  MAX_AMOUNT,
+  MAX_QUANTITY,
+} from '../../../../common/validation/decimal-limits';
 
 import {
   PosPaymentMethod,
@@ -64,6 +69,7 @@ export class OpenPosSessionDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   openingCash!: number;
 
   @IsOptional()
@@ -76,6 +82,7 @@ export class ClosePosSessionDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   actualCash!: number;
 
   @IsOptional()
@@ -92,6 +99,7 @@ export class PosPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()
@@ -152,12 +160,14 @@ class PosSaleBaseDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   serviceChargeAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   deliveryFeeAmount?: number;
 
   @IsOptional()
@@ -310,6 +320,7 @@ export class PosReturnLineDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
+  @Max(MAX_QUANTITY)
   quantity!: number;
 }
 
@@ -324,6 +335,7 @@ export class PosReturnPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()
@@ -404,6 +416,7 @@ export class SplitTableLineDto {
 
   @IsNumber()
   @Min(0.0001)
+  @Max(MAX_QUANTITY)
   quantity!: number;
 }
 
@@ -436,11 +449,13 @@ export class CorrectOrderTypeDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   serviceChargeAmount?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   deliveryFeeAmount?: number;
 
   @IsString()

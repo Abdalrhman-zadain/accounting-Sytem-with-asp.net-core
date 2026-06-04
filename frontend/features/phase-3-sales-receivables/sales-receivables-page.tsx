@@ -95,15 +95,15 @@ import { SalesOrderEditorModal } from "./components/sales-order-editor-modal";
 
 type SalesTab = "customers" | "sales-reps" | "quotations" | "orders" | "invoices" | "receipts" | "credit-notes" | "aging";
 
-const SALES_TAB_BREADCRUMB_LABELS: Record<SalesTab, string> = {
-  customers: "العملاء",
-  "sales-reps": "مندوبي المبيعات",
-  quotations: "عروض الأسعار",
-  orders: "أوامر البيع",
-  invoices: "الفواتير",
-  receipts: "المقبوضات",
-  "credit-notes": "الإشعارات الدائنة",
-  aging: "أعمار الذمم",
+const SALES_TAB_BREADCRUMB_KEYS: Record<SalesTab, string> = {
+  customers: "salesReceivables.tab.customers",
+  "sales-reps": "salesReceivables.tab.salesReps",
+  quotations: "salesReceivables.tab.quotations",
+  orders: "salesReceivables.tab.orders",
+  invoices: "salesReceivables.tab.invoices",
+  receipts: "salesReceivables.tab.receipts",
+  "credit-notes": "salesReceivables.tab.creditNotes",
+  aging: "salesReceivables.tab.aging",
 };
 
 type CustomerEditorState = {
@@ -534,7 +534,7 @@ export function SalesReceivablesPage() {
             customerEditor.salesRepresentative ||
             undefined,
           paymentTerms: customerEditor.paymentTerms || undefined,
-          creditLimit: Number(customerEditor.creditLimit || 0),
+          creditLimit: Math.round(Number(customerEditor.creditLimit || 0) * 100) / 100,
           receivableAccountLinkMode: customerEditor.receivableAccountLinkMode as "AUTO" | "EXISTING",
           receivableAccountId:
             customerEditor.receivableAccountLinkMode === "EXISTING"
@@ -566,7 +566,7 @@ export function SalesReceivablesPage() {
             customerEditor.salesRepresentative ||
             "",
           paymentTerms: customerEditor.paymentTerms || "",
-          creditLimit: Number(customerEditor.creditLimit || 0),
+          creditLimit: Math.round(Number(customerEditor.creditLimit || 0) * 100) / 100,
           receivableAccountId: customerEditor.receivableAccountId,
         },
         token,
@@ -1553,11 +1553,7 @@ export function SalesReceivablesPage() {
 
   const currentError =
     inventoryItemsQuery.error ??
-    createCustomerMutation.error ??
-    updateCustomerMutation.error ??
     deactivateCustomerMutation.error ??
-    createSalesRepMutation.error ??
-    updateSalesRepMutation.error ??
     deactivateSalesRepMutation.error ??
     createQuotationMutation.error ??
     updateQuotationMutation.error ??
@@ -1675,13 +1671,13 @@ export function SalesReceivablesPage() {
     createCreditNoteMutation.mutate();
   };
 
-  const activeTabBreadcrumbLabel = SALES_TAB_BREADCRUMB_LABELS[activeTab];
+  const activeTabBreadcrumbLabel = t(SALES_TAB_BREADCRUMB_KEYS[activeTab]);
 
   return (
     <PageShell className={cn(isInlineDocumentWorkspace ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
       <div className={cn(isInlineDocumentWorkspace ? "space-y-4" : "space-y-8")}>
         <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
-          <span className="text-gray-700">المبيعات</span>
+          <span className="text-gray-700">{t("salesReceivables.breadcrumb.sales")}</span>
           <span className="mx-2 text-gray-300">/</span>
           <span className={cn((activeTab === "invoices" && !isInlineInvoiceWorkspace) || (activeTab === "orders" && !isInlineOrderWorkspace) ? "text-teal-700" : "text-gray-700")}>
             {activeTabBreadcrumbLabel}
@@ -1689,13 +1685,13 @@ export function SalesReceivablesPage() {
           {isInlineOrderWorkspace ? (
             <>
               <span className="mx-2 text-gray-300">/</span>
-              <span className="text-teal-700">أمر بيع</span>
+              <span className="text-teal-700">{t("salesReceivables.breadcrumb.newOrder")}</span>
             </>
           ) : null}
           {isInlineInvoiceWorkspace ? (
             <>
               <span className="mx-2 text-gray-300">/</span>
-              <span className="text-teal-700">فاتورة جديدة</span>
+              <span className="text-teal-700">{t("salesReceivables.breadcrumb.newInvoice")}</span>
             </>
           ) : null}
         </div>
@@ -1723,7 +1719,7 @@ export function SalesReceivablesPage() {
                 <option value="false">{t("salesReceivables.filters.inactiveOnly")}</option>
               </Select>
               <Select value={customerSalesRepFilter} onChange={(event) => setCustomerSalesRepFilter(event.target.value)}>
-                <option value="">حسب مندوب المبيعات</option>
+                <option value="">{t("salesReceivables.filters.bySalesRep")}</option>
                 {activeSalesReps.map((rep) => (
                   <option key={rep.id} value={rep.id}>
                     {rep.code} - {rep.name}
@@ -1733,6 +1729,8 @@ export function SalesReceivablesPage() {
               <Button className="gap-2" onClick={() => {
                 setCustomerEditor(EMPTY_CUSTOMER_EDITOR);
                 setCustomerEditorClientError(null);
+                createCustomerMutation.reset();
+                updateCustomerMutation.reset();
                 setIsCustomerEditorOpen(true);
               }}>
                 <CirclePlus className="h-4 w-4 shrink-0" />
@@ -1770,7 +1768,7 @@ export function SalesReceivablesPage() {
                       <TableHead>{t("common.table.name")}</TableHead>
                       <TableHead>{t("salesReceivables.field.terms")}</TableHead>
                       <TableHead className="text-end">{t("salesReceivables.metric.creditLimit")}</TableHead>
-                      <TableHead>مندوب المبيعات</TableHead>
+                      <TableHead>{t("salesReceivables.field.salesRepresentative")}</TableHead>
                       <TableHead className="text-center">{t("common.table.status")}</TableHead>
                       <TableHead className="text-center">{t("common.table.actions")}</TableHead>
                     </tr>
@@ -1838,6 +1836,8 @@ export function SalesReceivablesPage() {
                                         receivableAccountId: row.receivableAccount.id,
                                       });
                                       setCustomerEditorClientError(null);
+                                      createCustomerMutation.reset();
+                                      updateCustomerMutation.reset();
                                       setIsCustomerEditorOpen(true);
                                     }}
                                   >
@@ -1872,35 +1872,37 @@ export function SalesReceivablesPage() {
       {activeTab === "sales-reps" ? (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard label="عدد المندوبين" value={salesReps.length} hint="القائمة الحالية" />
-            <SummaryCard label="المندوبون النشطون" value={salesReps.filter((row) => row.status === "ACTIVE").length} hint="متاحون للربط بالعملاء" />
-            <SummaryCard label="إجمالي العملاء المرتبطين" value={salesReps.reduce((sum, row) => sum + (row._count?.customers ?? 0), 0)} hint="حسب ربط العملاء الحالي" />
-            <SummaryCard label="إجمالي المبيعات حسب المندوب" value="قيد التجهيز" hint="جاهز لتقارير المبيعات لاحقًا" />
+            <SummaryCard label={t("salesReceivables.salesReps.metric.count")} value={salesReps.length} hint={t("salesReceivables.salesReps.metric.countHint")} />
+            <SummaryCard label={t("salesReceivables.salesReps.metric.active")} value={salesReps.filter((row) => row.status === "ACTIVE").length} hint={t("salesReceivables.salesReps.metric.activeHint")} />
+            <SummaryCard label={t("salesReceivables.salesReps.metric.linkedCustomers")} value={salesReps.reduce((sum, row) => sum + (row._count?.customers ?? 0), 0)} hint={t("salesReceivables.salesReps.metric.linkedCustomersHint")} />
+            <SummaryCard label={t("salesReceivables.salesReps.metric.salesByRep")} value={t("salesReceivables.salesReps.metric.salesByRepValue")} hint={t("salesReceivables.salesReps.metric.salesByRepHint")} />
           </div>
 
           <Card className="p-5">
             <div className="grid gap-4 lg:grid-cols-[1.2fr_0.5fr_auto]">
-              <Input value={salesRepSearch} onChange={(event) => setSalesRepSearch(event.target.value)} placeholder="ابحث بالرمز أو اسم المندوب أو بيانات التواصل..." />
+              <Input value={salesRepSearch} onChange={(event) => setSalesRepSearch(event.target.value)} placeholder={t("salesReceivables.salesReps.placeholder.search")} />
               <Select value={salesRepStatusFilter} onChange={(event) => setSalesRepStatusFilter(event.target.value as "ACTIVE" | "INACTIVE" | "")}>
-                <option value="">كل الحالات</option>
-                <option value="ACTIVE">نشط</option>
-                <option value="INACTIVE">غير نشط</option>
+                <option value="">{t("salesReceivables.filters.allStatuses")}</option>
+                <option value="ACTIVE">{t("salesReceivables.salesReps.status.active")}</option>
+                <option value="INACTIVE">{t("salesReceivables.salesReps.status.inactive")}</option>
               </Select>
               <Button className="gap-2" onClick={() => {
                 setSalesRepEditor(EMPTY_SALES_REP_EDITOR);
                 setSalesRepEditorClientError(null);
+                createSalesRepMutation.reset();
+                updateSalesRepMutation.reset();
                 setIsSalesRepEditorOpen(true);
               }}>
                 <CirclePlus className="h-4 w-4 shrink-0" />
-                مندوب جديد
+                {t("salesReceivables.salesReps.button.new")}
               </Button>
             </div>
           </Card>
 
           <Card className="overflow-hidden p-0">
             <div className="border-b border-gray-200 px-6 py-4">
-              <div className="text-sm font-bold text-gray-900">جدول مندوبي المبيعات</div>
-              <div className="text-xs text-gray-500">إدارة المندوبين لأغراض المتابعة والعمولات والتقارير، بدون تغيير حساب ذمم العميل.</div>
+              <div className="text-sm font-bold text-gray-900">{t("salesReceivables.salesReps.section.title")}</div>
+              <div className="text-xs text-gray-500">{t("salesReceivables.salesReps.section.description")}</div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1080px] table-fixed text-sm">
@@ -1915,20 +1917,20 @@ export function SalesReceivablesPage() {
                 </colgroup>
                 <thead className="bg-gray-50">
                   <tr>
-                    <TableHead className="text-center">الرمز</TableHead>
-                    <TableHead>اسم المندوب</TableHead>
-                    <TableHead>بيانات التواصل</TableHead>
-                    <TableHead className="text-end">نسبة العمولة</TableHead>
-                    <TableHead className="text-center">عدد العملاء</TableHead>
-                    <TableHead className="text-center">الحالة</TableHead>
-                    <TableHead className="text-center">الإجراءات</TableHead>
+                    <TableHead className="text-center">{t("salesReceivables.salesReps.field.code")}</TableHead>
+                    <TableHead>{t("salesReceivables.salesReps.field.name")}</TableHead>
+                    <TableHead>{t("salesReceivables.salesReps.field.contact")}</TableHead>
+                    <TableHead className="text-end">{t("salesReceivables.salesReps.field.commissionRate")}</TableHead>
+                    <TableHead className="text-center">{t("salesReceivables.salesReps.field.customersCount")}</TableHead>
+                    <TableHead className="text-center">{t("common.table.status")}</TableHead>
+                    <TableHead className="text-center">{t("common.table.actions")}</TableHead>
                   </tr>
                 </thead>
                 <tbody>
                   {salesReps.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">
-                        لا يوجد مندوبي مبيعات بعد.
+                        {t("salesReceivables.salesReps.empty")}
                       </td>
                     </tr>
                   ) : (
@@ -1942,17 +1944,22 @@ export function SalesReceivablesPage() {
                         <td className="px-6 py-4 align-top text-start">
                           <div className="font-semibold text-gray-900">{row.name}</div>
                           <div className="text-xs text-gray-500">
-                            {row.employeeReceivableAccount ? `حساب موظف: ${row.employeeReceivableAccount.code}` : "لا يوجد حساب ذمم موظف"}
+                            {row.employeeReceivableAccount
+                              ? t("salesReceivables.salesReps.field.employeeAccount", { code: row.employeeReceivableAccount.code })
+                              : t("salesReceivables.salesReps.field.noEmployeeAccount")}
                           </div>
                         </td>
                         <td className="px-6 py-4 align-top text-start text-gray-700">
-                          <div>{row.phone || "لا يوجد هاتف"}</div>
-                          <div className="text-xs text-gray-500">{row.email || "لا يوجد بريد إلكتروني"}</div>
+                          <div>{row.phone || t("salesReceivables.salesReps.field.noPhone")}</div>
+                          <div className="text-xs text-gray-500">{row.email || t("salesReceivables.salesReps.field.noEmail")}</div>
                         </td>
                         <td className="px-6 py-4 text-end align-top font-mono font-bold tabular-nums text-gray-900">{Number(row.defaultCommissionRate).toFixed(2)}%</td>
                         <td className="px-6 py-4 text-center align-top font-mono font-bold tabular-nums text-gray-900">{row._count?.customers ?? 0}</td>
                         <td className="px-6 py-4 text-center align-top">
-                          <StatusPill label={row.status === "ACTIVE" ? "نشط" : "غير نشط"} tone={row.status === "ACTIVE" ? "positive" : "neutral"} />
+                          <StatusPill
+                            label={row.status === "ACTIVE" ? t("salesReceivables.salesReps.status.active") : t("salesReceivables.salesReps.status.inactive")}
+                            tone={row.status === "ACTIVE" ? "positive" : "neutral"}
+                          />
                         </td>
                         <td className="px-4 py-4 align-top">
                           <div className="flex flex-wrap justify-center gap-2">
@@ -1972,22 +1979,24 @@ export function SalesReceivablesPage() {
                                   status: row.status,
                                 });
                                 setSalesRepEditorClientError(null);
+                                createSalesRepMutation.reset();
+                                updateSalesRepMutation.reset();
                                 setIsSalesRepEditorOpen(true);
                               }}
                             >
-                              تعديل
+                              {t("salesReceivables.salesReps.action.edit")}
                             </button>
                             {row.status === "ACTIVE" ? (
                               <button
                                 type="button"
                                 className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
                                 onClick={() => {
-                                  if (window.confirm(`تعطيل المندوب ${row.name}؟`)) {
+                                  if (window.confirm(t("salesReceivables.salesReps.action.deactivateConfirm", { name: row.name }))) {
                                     deactivateSalesRepMutation.mutate(row.id);
                                   }
                                 }}
                               >
-                                تعطيل
+                                {t("salesReceivables.salesReps.action.deactivate")}
                               </button>
                             ) : null}
                           </div>
@@ -2953,14 +2962,18 @@ export function SalesReceivablesPage() {
         isOpen={isSalesRepEditorOpen}
         onClose={() => {
           setSalesRepEditorClientError(null);
+          createSalesRepMutation.reset();
+          updateSalesRepMutation.reset();
           setIsSalesRepEditorOpen(false);
         }}
         title={salesRepEditor.id ? "تعديل مندوب مبيعات" : "مندوب جديد"}
       >
         <div className="space-y-5">
-          {salesRepEditorClientError ? (
+          {(salesRepEditorClientError || createSalesRepMutation.error || updateSalesRepMutation.error) ? (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              {salesRepEditorClientError}
+              {salesRepEditorClientError ||
+                (createSalesRepMutation.error instanceof Error ? createSalesRepMutation.error.message : null) ||
+                (updateSalesRepMutation.error instanceof Error ? updateSalesRepMutation.error.message : null)}
             </div>
           ) : null}
 
@@ -3088,6 +3101,8 @@ export function SalesReceivablesPage() {
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => {
               setSalesRepEditorClientError(null);
+              createSalesRepMutation.reset();
+              updateSalesRepMutation.reset();
               setIsSalesRepEditorOpen(false);
             }}>
               إلغاء
@@ -3103,14 +3118,18 @@ export function SalesReceivablesPage() {
         isOpen={isCustomerEditorOpen}
         onClose={() => {
           setCustomerEditorClientError(null);
+          createCustomerMutation.reset();
+          updateCustomerMutation.reset();
           setIsCustomerEditorOpen(false);
         }}
         title={customerEditor.id ? t("salesReceivables.dialog.editCustomer") : t("salesReceivables.dialog.newCustomer")}
       >
         <div className="space-y-5">
-          {customerEditorClientError ? (
+          {(customerEditorClientError || createCustomerMutation.error || updateCustomerMutation.error) ? (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              {customerEditorClientError}
+              {customerEditorClientError ||
+                (createCustomerMutation.error instanceof Error ? createCustomerMutation.error.message : null) ||
+                (updateCustomerMutation.error instanceof Error ? updateCustomerMutation.error.message : null)}
             </div>
           ) : null}
 
@@ -3164,7 +3183,7 @@ export function SalesReceivablesPage() {
                   }));
                 }}
               >
-                <option value="">اختر مندوب المبيعات</option>
+                <option value="">{t("salesReceivables.salesReps.placeholder.select")}</option>
                 {activeSalesReps.map((rep) => (
                   <option key={rep.id} value={rep.id}>
                     {rep.code} - {rep.name}
@@ -3174,9 +3193,9 @@ export function SalesReceivablesPage() {
             </Field>
           </div>
 
-          <Field label="حساب ذمم العميل" required>
+          <Field label={t("salesReceivables.field.receivableAccount")} required>
             <div className="mb-2 text-sm font-semibold text-gray-900">
-              طريقة ربط حساب الذمم <span className="text-base leading-none text-red-500">*</span>
+              {t("common.accountLink.title")} <span className="text-base leading-none text-red-500">*</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
@@ -3196,7 +3215,7 @@ export function SalesReceivablesPage() {
                   }));
                 }}
               >
-                إنشاء حساب تلقائي
+                {t("common.accountLink.auto")}
               </button>
               <button
                 type="button"
@@ -3214,19 +3233,19 @@ export function SalesReceivablesPage() {
                   }));
                 }}
               >
-                اختيار حساب موجود
+                {t("common.accountLink.existing")}
               </button>
             </div>
           </Field>
 
           {customerEditor.receivableAccountLinkMode === "AUTO" ? (
             <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
-              سيتم إنشاء حساب ذمم جديد باسم العميل تحت حساب ذمم عملاء.
+              {t("common.accountLink.customerHelp")}
             </div>
           ) : null}
 
           {customerEditor.receivableAccountLinkMode === "EXISTING" ? (
-            <Field label="حساب ذمم العميل" required>
+            <Field label={t("salesReceivables.field.receivableAccount")} required>
               <Select value={customerEditor.receivableAccountId} onChange={(event) => {
                 setCustomerEditorClientError(null);
                 setCustomerEditor((current) => ({ ...current, receivableAccountId: event.target.value }));
@@ -3244,6 +3263,8 @@ export function SalesReceivablesPage() {
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => {
               setCustomerEditorClientError(null);
+              createCustomerMutation.reset();
+              updateCustomerMutation.reset();
               setIsCustomerEditorOpen(false);
             }}>
               {t("salesReceivables.action.cancel")}

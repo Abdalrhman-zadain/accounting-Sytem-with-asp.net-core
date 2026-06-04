@@ -7,9 +7,14 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_AMOUNT,
+  MAX_QUANTITY,
+} from '../../../../../common/validation/decimal-limits';
 
 export class DebitNoteLineDto {
   @IsOptional()
@@ -31,17 +36,20 @@ export class DebitNoteLineDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0.0001)
+  @Max(MAX_QUANTITY)
   quantity!: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   unitPrice?: number;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()
@@ -51,6 +59,7 @@ export class DebitNoteLineDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   taxAmount!: number;
 
   @IsOptional()
@@ -61,24 +70,28 @@ export class DebitNoteLineDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   correctedUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalTaxAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   correctedTaxAmount?: number;
 
   @IsOptional()

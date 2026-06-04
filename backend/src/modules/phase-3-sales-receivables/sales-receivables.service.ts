@@ -193,23 +193,25 @@ export class SalesReceivablesService {
 
   private async generateSequentialCustomerCode(tx?: any) {
     const prisma = tx || this.prisma;
-    const lastCustomer = await prisma.customer.findFirst({
+    const customers = await prisma.customer.findMany({
       where: { code: { startsWith: "CUS-" } },
-      orderBy: { code: "desc" },
       select: { code: true },
     });
 
-    if (!lastCustomer) {
-      return "CUS-000001";
+    let maxSequence = 0;
+    for (const customer of customers) {
+      const match = /^CUS-(\d+)$/.exec(customer.code);
+      if (!match) {
+        continue;
+      }
+
+      const sequence = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isFinite(sequence) && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
     }
 
-    const lastNumberStr = lastCustomer.code.replace("CUS-", "");
-    const lastNumber = parseInt(lastNumberStr, 10);
-    if (isNaN(lastNumber)) {
-      return "CUS-000001";
-    }
-
-    const nextNumber = lastNumber + 1;
+    const nextNumber = maxSequence + 1;
     return `CUS-${nextNumber.toString().padStart(6, "0")}`;
   }
 

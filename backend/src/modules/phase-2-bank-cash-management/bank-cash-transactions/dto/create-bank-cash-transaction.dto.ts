@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../common/validation/decimal-limits';
 
 export class CreateReceiptDto {
   @IsOptional()
@@ -13,6 +14,7 @@ export class CreateReceiptDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsString()
@@ -50,6 +52,7 @@ export class CreateTransferDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsString()

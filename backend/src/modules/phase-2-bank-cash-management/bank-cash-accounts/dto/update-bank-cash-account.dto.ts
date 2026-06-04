@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { MAX_AMOUNT } from '../../../../common/validation/decimal-limits';
 
 export class UpdateBankCashAccountDto {
   @IsOptional()
@@ -35,6 +36,7 @@ export class UpdateBankCashAccountDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   openingBalance?: number;
 
   @IsOptional()

@@ -134,7 +134,7 @@ export function CurrenciesTab() {
                                     <td className="px-6 py-4 text-sm text-gray-700">{curr.symbol || "-"}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700">{curr.decimalPlaces}</td>
                                     <td className="px-6 py-4 text-center">
-                                        {curr.isBase && <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">العملة الأساسية</span>}
+                                        {curr.isBase && <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">{t("master.currencies.baseCurrency")}</span>}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <StatusPill label={curr.isActive ? t("common.status.active") : t("common.status.inactive")} tone={curr.isActive ? "positive" : "neutral"} />

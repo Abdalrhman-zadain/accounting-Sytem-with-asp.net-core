@@ -6,8 +6,11 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
 } from "class-validator";
+
+import { MAX_AMOUNT } from "../../../../common/validation/decimal-limits";
 
 import {
   FixedAssetDepreciationMethod,
@@ -111,6 +114,7 @@ export class CreateFixedAssetDto {
 
   @IsNumber()
   @Min(1)
+  @Max(MAX_AMOUNT)
   usefulLifeMonths!: number;
 
   @IsEnum(FixedAssetDepreciationMethod)
@@ -118,6 +122,7 @@ export class CreateFixedAssetDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   residualValue?: number;
 
   @IsOptional()
@@ -162,6 +167,7 @@ export class UpdateFixedAssetDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Max(MAX_AMOUNT)
   usefulLifeMonths?: number;
 
   @IsOptional()
@@ -170,6 +176,7 @@ export class UpdateFixedAssetDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   residualValue?: number;
 
   @IsOptional()
@@ -210,10 +217,12 @@ export class CreateFixedAssetAcquisitionDto {
 
   @IsNumber()
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   acquisitionCost!: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   capitalizedCost?: number;
 
   @IsOptional()
@@ -276,10 +285,12 @@ export class CreateFixedAssetDisposalDto {
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   proceedsAmount?: number;
 
   @IsOptional()
   @IsNumber()
+  @Max(MAX_AMOUNT)
   disposalExpense?: number;
 
   @IsOptional()

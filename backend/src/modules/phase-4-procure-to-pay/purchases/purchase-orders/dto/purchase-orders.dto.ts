@@ -7,9 +7,14 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_AMOUNT,
+  MAX_QUANTITY,
+} from '../../../../../common/validation/decimal-limits';
 
 export class PurchaseOrderLineDto {
   @IsOptional()
@@ -28,16 +33,19 @@ export class PurchaseOrderLineDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0.0001)
+  @Max(MAX_QUANTITY)
   quantity!: number;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   unitPrice!: number;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   taxAmount!: number;
 
   @IsOptional()

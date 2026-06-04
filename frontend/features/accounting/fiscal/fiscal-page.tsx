@@ -19,13 +19,14 @@ import { useTranslation } from "@/lib/i18n";
 import { PeriodCloseModal } from "./components/period-close-modal";
 
 const PeriodStatusBadge = ({ status }: { status: PeriodStatus }) => {
+    const { t } = useTranslation();
     switch (status) {
         case "OPEN":
-            return <div className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200/50"><span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>مفتوحة</div>;
+            return <div className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200/50"><span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>{t("fiscal.status.open")}</div>;
         case "CLOSED":
-            return <div className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-200"><span className="h-1.5 w-1.5 rounded-full bg-gray-400"></span>مغلقة</div>;
+            return <div className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-200"><span className="h-1.5 w-1.5 rounded-full bg-gray-400"></span>{t("fiscal.status.closed")}</div>;
         case "LOCKED":
-            return <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200/50"><span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>قيد المراجعة</div>;
+            return <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200/50"><span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>{t("fiscal.status.locked")}</div>;
         default:
             return null;
     }
@@ -34,7 +35,7 @@ const PeriodStatusBadge = ({ status }: { status: PeriodStatus }) => {
 export function FiscalPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const [expandedYear, setExpandedYear] = useState<string | null>(null);
     const [newYear, setNewYear] = useState("");
     const [showAdd, setShowAdd] = useState(false);
@@ -79,8 +80,8 @@ export function FiscalPage() {
                 title={t("fiscal.title")}
                 description={t("fiscal.description")}
                 action={
-                    <Button onClick={() => setShowAdd(!showAdd)} className="bg-green-600 hover:bg-green-700 text-white font-bold">
-                        <Plus className="h-4 w-4 ml-2" /> سنة مالية جديدة
+                    <Button onClick={() => setShowAdd((show) => !show)} className="bg-green-600 hover:bg-green-700 text-white font-bold">
+                        <Plus className="h-4 w-4 ml-2" /> {t("fiscal.button.newYear")}
                     </Button>
                 }
             />
@@ -96,7 +97,7 @@ export function FiscalPage() {
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm col-span-1 md:col-span-1">
                             <div className="flex items-center gap-3 mb-2 text-gray-500">
-                                <h3 className="text-sm font-medium">السنة المالية</h3>
+                                <h3 className="text-sm font-medium">{t("fiscal.summary.title")}</h3>
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="text-3xl font-black text-gray-900">{currentYear.year}</span>
@@ -113,7 +114,7 @@ export function FiscalPage() {
                                 <Calendar className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">عدد الفترات</h3>
+                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">{t("fiscal.summary.totalPeriods")}</h3>
                                 <p className="text-2xl font-bold text-gray-900">{totalPeriods}</p>
                             </div>
                         </div>
@@ -123,7 +124,7 @@ export function FiscalPage() {
                                 <Unlock className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">الفترات المفتوحة</h3>
+                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">{t("fiscal.summary.openPeriods")}</h3>
                                 <p className="text-2xl font-bold text-gray-900">{openPeriods}</p>
                             </div>
                         </div>
@@ -133,7 +134,7 @@ export function FiscalPage() {
                                 <Lock className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">الفترات المغلقة</h3>
+                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">{t("fiscal.summary.closedPeriods")}</h3>
                                 <p className="text-2xl font-bold text-gray-900">{closedPeriods}</p>
                             </div>
                         </div>
@@ -143,8 +144,8 @@ export function FiscalPage() {
                                 <Clock className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">آخر إغلاق</h3>
-                                <p className="text-lg font-bold text-gray-900 mt-1">لا يوجد</p>
+                                <h3 className="text-sm font-medium text-gray-500 mb-0.5">{t("fiscal.summary.lastClosed")}</h3>
+                                <p className="text-lg font-bold text-gray-900 mt-1">{t("fiscal.summary.none")}</p>
                             </div>
                         </div>
                     </div>
@@ -213,16 +214,16 @@ export function FiscalPage() {
 
                             {isExpanded && (
                                 <div className="border-t border-gray-100">
-                                    <table className="w-full text-sm text-right" dir="rtl">
+                                    <table className={cn("w-full text-sm", language === "ar" ? "text-right" : "text-left")} dir={language === "ar" ? "rtl" : "ltr"}>
                                         <thead className="bg-white border-b border-gray-100">
                                             <tr>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500 w-16 text-center">#</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">الفترة</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">من تاريخ</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">إلى تاريخ</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">الحالة</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500 text-center">القيود المعلقة</th>
-                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500 text-left">الإجراء</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500 w-16 text-center">{t("fiscal.table.number")}</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">{t("fiscal.table.period")}</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">{t("fiscal.table.startDate")}</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">{t("fiscal.table.endDate")}</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500">{t("fiscal.table.status")}</th>
+                                                <th className="px-6 py-4 text-[11px] font-bold text-gray-500 text-center">{t("fiscal.table.pendingEntries")}</th>
+                                                <th className={cn("px-6 py-4 text-[11px] font-bold text-gray-500", language === "ar" ? "text-left" : "text-right")}>{t("fiscal.table.action")}</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50/50">
@@ -245,13 +246,13 @@ export function FiscalPage() {
                                                         <td className="px-6 py-4 text-center">
                                                             <span className="text-sm font-medium text-gray-600">{pendingEntries}</span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-left">
+                                                        <td className={cn("px-6 py-4", language === "ar" ? "text-left" : "text-right")}>
                                                             {period.status === "OPEN" && (
                                                                 <button
                                                                     onClick={() => setClosingPeriod(period)}
                                                                     className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:text-green-600 hover:border-green-600/30 hover:bg-green-50 transition-all shadow-sm group-hover:border-green-600/20"
                                                                 >
-                                                                    مراجعة وإغلاق <Lock className="h-3.5 w-3.5" />
+                                                                    {t("fiscal.action.reviewAndClose")} <Lock className="h-3.5 w-3.5" />
                                                                 </button>
                                                             )}
                                                             {period.status === "CLOSED" && (
@@ -259,7 +260,7 @@ export function FiscalPage() {
                                                                     onClick={() => { if (confirm(t("fiscal.confirm.reopen", { name: period.name }))) openMutation.mutate(period.id); }}
                                                                     className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-teal-600 hover:bg-teal-50 transition-all shadow-sm"
                                                                 >
-                                                                    فتح الفترة <Unlock className="h-3.5 w-3.5" />
+                                                                    {t("fiscal.action.openPeriod")} <Unlock className="h-3.5 w-3.5" />
                                                                 </button>
                                                             )}
                                                         </td>

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -9,9 +9,15 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_AMOUNT,
+  MAX_QUANTITY,
+  MAX_RATE,
+} from '../../../common/validation/decimal-limits';
 
 export class CreateSalesRepresentativeDto {
   @IsOptional()
@@ -37,6 +43,7 @@ export class CreateSalesRepresentativeDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_RATE)
   defaultCommissionRate?: number;
 
   @IsOptional()
@@ -73,6 +80,7 @@ export class UpdateSalesRepresentativeDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_RATE)
   defaultCommissionRate?: number;
 
   @IsOptional()
@@ -123,8 +131,14 @@ export class CreateCustomerDto {
   paymentTerms?: string;
 
   @Type(() => Number)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return value;
+    const num = Number(value);
+    return isNaN(num) ? value : Math.round(num * 100) / 100;
+  })
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   creditLimit!: number;
 
   @IsString()
@@ -167,8 +181,14 @@ export class UpdateCustomerDto {
 
   @IsOptional()
   @Type(() => Number)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return value;
+    const num = Number(value);
+    return isNaN(num) ? value : Math.round(num * 100) / 100;
+  })
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   creditLimit?: number;
 
   @IsOptional()
@@ -202,48 +222,56 @@ export class SalesLineDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
+  @Max(MAX_QUANTITY)
   quantity?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   unitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   discountAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   taxAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   correctedUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalTaxAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT)
   correctedTaxAmount?: number;
 
   @IsOptional()
@@ -254,6 +282,7 @@ export class SalesLineDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   lineAmount?: number;
 
   @IsOptional()
@@ -551,6 +580,7 @@ export class CreateCustomerReceiptDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsString()
@@ -574,6 +604,7 @@ export class CreateCustomerReceiptDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   allocationAmount?: number;
 
   @IsOptional()
@@ -592,5 +623,6 @@ export class AllocateReceiptDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(MAX_AMOUNT)
   amount!: number;
 }
