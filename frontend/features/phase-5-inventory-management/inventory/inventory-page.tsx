@@ -1517,9 +1517,9 @@ export function InventoryPage() {
               getQrPreviewSvg={getQrPreviewSvg}
             />
           ) : selectedItemId && selectedItem ? (
-            <div className="space-y-6 text-start">
+            <div className="space-y-5 text-start">
               {/* Back Button and status bar */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setSelectedItemId(null)}
@@ -1539,41 +1539,24 @@ export function InventoryPage() {
                 >
                   {selectedItem.isActive ? (isArabic ? "نشط" : "Active") : (isArabic ? "غير نشط" : "Inactive")}
                 </span>
-              </div>
-
-              {/* Header card with actions */}
-              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h1 className="text-2xl font-black text-[#233329] arabic-heading">
-                      {formatItemServiceLabel(selectedItem.code, selectedItem.name)}
-                    </h1>
-                    <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-                      {t(`inventory.type.${selectedItem.type}`)}
-                      {selectedItem.itemGroup ? ` · ${selectedItem.itemGroup.name}` : ""}
-                      {selectedItem.itemCategory ? ` · ${selectedItem.itemCategory.name}` : selectedItem.category ? ` · ${selectedItem.category}` : ""}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <Button
-                      onClick={() => openEditItem(selectedItem)}
-                      className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md flex items-center gap-1.5"
-                    >
-                      <LuPencil size={13} />
-                      <span>{isArabic ? "تعديل بطاقة المادة" : "Edit Item"}</span>
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => confirmDeactivateItem(selectedItem.id)}
-                      disabled={!selectedItem.isActive || deactivateItemMutation.isPending}
-                      className="rounded-full px-5 py-2 text-xs font-bold"
-                    >
-                      {t("inventory.button.deactivate")}
-                    </Button>
-                  </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Button
+                    onClick={() => openEditItem(selectedItem)}
+                    className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-sm flex items-center gap-1.5"
+                  >
+                    <LuPencil size={13} />
+                    <span>{isArabic ? "تعديل بطاقة المادة" : "Edit Item"}</span>
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => confirmDeactivateItem(selectedItem.id)}
+                    disabled={!selectedItem.isActive || deactivateItemMutation.isPending}
+                    className="rounded-full px-4 py-2 text-xs font-bold"
+                  >
+                    {t("inventory.button.deactivate")}
+                  </Button>
                 </div>
-              </Card>
+              </div>
 
               {/* Grid of details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1952,7 +1935,7 @@ export function InventoryPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 font-bold text-gray-900">
-                              {formatItemServiceLabel(item.code, item.name)}
+                              {item.name}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
                               {t(`inventory.type.${item.type}`)}
