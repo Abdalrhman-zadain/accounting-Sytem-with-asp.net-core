@@ -77,6 +77,7 @@ export type ItemEditorState = {
 
 type ItemEditorModalProps = {
   isOpen: boolean;
+  presentation?: "modal" | "inline";
   title: string;
   editor: ItemEditorState;
   onClose: () => void;
@@ -177,6 +178,7 @@ export function createUnitConversionEditor(
 
 export function ItemEditorModal({
   isOpen,
+  presentation = "modal",
   title,
   editor,
   onClose,
@@ -207,6 +209,8 @@ export function ItemEditorModal({
   const isArabic = language === "ar";
 
   if (!isOpen) return null;
+
+  const isInline = presentation === "inline";
 
   const updateEditor = (updater: (current: ItemEditorState) => ItemEditorState) => {
     onChange(updater);
@@ -240,49 +244,80 @@ export function ItemEditorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 p-3 sm:p-6">
-      <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} />
+    <div className={cn(isInline ? "relative" : "fixed inset-0 z-50 p-3 sm:p-6")}>
+      {!isInline ? <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} /> : null}
       <div
         dir={isArabic ? "rtl" : "ltr"}
         className={cn(
-          "relative mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
+          "relative mx-auto flex flex-col overflow-hidden",
+          isInline
+            ? "min-h-[calc(100vh-220px)] w-full bg-transparent"
+            : "h-full max-h-full max-w-[1480px] rounded-lg border border-slate-200 bg-[#fcfcfb] shadow-[0_18px_42px_rgba(15,23,42,0.12)]",
           isArabic && "arabic-ui",
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
+        {isInline && (
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            className="absolute end-3 top-3 z-30 rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           >
             <span className="sr-only">{t("inventory.button.cancel")}</span>
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-3">
-            <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
-              <div className="text-3xl font-black tracking-tight text-slate-900 arabic-ui-heading">
-                {title}
+        )}
+
+        {/* Header */}
+        {!isInline ? (
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <span className="sr-only">{t("inventory.button.cancel")}</span>
+              <X className="h-6 w-6" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
+                <div className="text-3xl font-black tracking-tight text-slate-900 arabic-ui-heading">
+                  {title}
+                </div>
+                <div className="text-sm text-slate-500">{t("inventory.description.items")}</div>
               </div>
-              <div className="text-sm text-slate-500">{t("inventory.description.items")}</div>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-              <Package2 className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <Package2 className="h-6 w-6" />
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)] px-4 py-4 sm:px-8 sm:py-6">
+        <div className={cn(
+          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+          isInline ? "px-0 py-4" : "px-4 py-4 sm:px-8 sm:py-6"
+        )}>
           <div className="space-y-5">
+            {isInline ? (
+              <div className={cn("mb-5 flex items-center gap-3 border-b border-slate-200 pb-4", isArabic ? "justify-end text-right" : "justify-start text-left")}>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <Package2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
+                  <p className="text-xs text-slate-500">{t("inventory.description.items")}</p>
+                </div>
+              </div>
+            ) : null}
+
             {validationError ? (
-              <div className={cn("rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-[0_10px_24px_rgba(239,68,68,0.08)]", isArabic ? "text-right" : "text-left")}>
+              <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
                 {validationError}
               </div>
             ) : null}
 
             {/* Section 1: البيانات الأساسية */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -389,7 +424,7 @@ export function ItemEditorModal({
             </section>
 
             {/* Section 2: الوحدات والأسعار */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -401,7 +436,7 @@ export function ItemEditorModal({
                 </div>
               </div>
 
-              <div className="mb-8 rounded-[1.5rem] border border-slate-100 bg-slate-50/45 p-5">
+              <div className="mb-8 rounded-md border border-slate-100 bg-slate-50/45 p-5">
                 <div className={cn("mb-4 text-sm font-bold text-slate-900", isArabic ? "text-right" : "text-left")}>
                   {isArabic ? "الأسعار الافتراضية" : "Default Prices"}
                 </div>
@@ -416,7 +451,7 @@ export function ItemEditorModal({
                     <Input value={editor.currencyCode} onChange={(e) => updateEditor((current) => ({ ...current, currencyCode: e.target.value.toUpperCase() }))} className={cn("bg-white uppercase", isArabic ? "text-right" : "text-left")} maxLength={3} />
                   </Field>
                   <Field label={isArabic ? "خاضع للضريبة" : "Taxable"} labelAlign={isArabic ? "end" : "start"}>
-                    <label className={cn("flex h-[42px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800", isArabic ? "justify-end text-right" : "justify-start text-left")}>
+                    <label className={cn("flex h-[42px] items-center gap-3 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800", isArabic ? "justify-end text-right" : "justify-start text-left")}>
                       <span>{isArabic ? "نعم" : "Yes"}</span>
                       <input
                         type="checkbox"
@@ -568,7 +603,7 @@ export function ItemEditorModal({
             </section>
 
             {/* Section 3: الرموز والملصقات */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -645,7 +680,7 @@ export function ItemEditorModal({
             </section>
 
             {/* Section 4: إعدادات المخزون */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -711,7 +746,7 @@ export function ItemEditorModal({
             </section>
 
             {/* Section 5: الحسابات المحاسبية */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -808,7 +843,7 @@ export function ItemEditorModal({
             </section>
 
             {/* Section 6: الوصف والملاحظات */}
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
                   <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
@@ -872,12 +907,12 @@ export function ItemEditorModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-8">
+        <div className={cn("border-t border-slate-200 bg-white px-5 py-4 sm:px-8", isInline && "rounded-b-lg")}>
           <div className={cn("flex flex-col gap-3", isArabic ? "sm:flex-row-reverse" : "sm:flex-row")}>
             <Button
               onClick={() => onSave("saveAndClose")}
               disabled={isSaving}
-              className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
+              className="rounded-md bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
             >
               <Save className="h-4 w-4" />
               {isArabic ? "حفظ وإغلاق" : "Save & Close"}
@@ -886,12 +921,12 @@ export function ItemEditorModal({
               variant="secondary"
               onClick={() => onSave("save")}
               disabled={isSaving}
-              className="rounded-2xl border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
+              className="rounded-md border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
             >
               <Save className="h-4 w-4" />
               {isArabic ? "حفظ" : "Save"}
             </Button>
-            <Button variant="secondary" onClick={onClose} className={cn("rounded-2xl px-6 font-bold", isArabic ? "mr-auto sm:mr-0" : "ml-auto sm:ml-0")}>
+            <Button variant="secondary" onClick={onClose} className={cn("rounded-md px-6 font-bold", isArabic ? "mr-auto sm:mr-0" : "ml-auto sm:ml-0")}>
               {isArabic ? "إلغاء" : "Cancel"}
             </Button>
           </div>

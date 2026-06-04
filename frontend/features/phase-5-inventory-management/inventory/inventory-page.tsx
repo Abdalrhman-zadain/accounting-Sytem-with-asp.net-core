@@ -1258,55 +1258,71 @@ export function InventoryPage() {
   const postedTransfers = transfers.filter((row) => row.status === "POSTED").length;
   const postedAdjustments = adjustments.filter((row) => row.status === "POSTED").length;
 
+  const isInlineItemEditorActive = workspace === "items" && isItemEditorOpen;
+
   return (
-    <PageShell>
-      <div className="space-y-10">
-        <SectionHeading title={t("inventory.title")} description={t("inventory.description")} />
-
-        <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
-          <MetricCard label={t("inventory.metrics.total")} value={String(itemTotal)} />
-          <MetricCard label={t("inventory.metrics.active")} value={String(activeItems)} />
-          <MetricCard label={t("inventory.metrics.itemGroups")} value={String(itemGroups.length)} />
-          <MetricCard label={t("inventory.metrics.itemCategories")} value={String(itemCategories.length)} />
-          <MetricCard label={t("inventory.metrics.unitsOfMeasure")} value={String(unitsOfMeasure.length)} />
-          <MetricCard label={t("inventory.metrics.warehouses")} value={String(warehouses.length)} />
-          <MetricCard label={t("inventory.metrics.activeWarehouses")} value={String(activeWarehouses)} />
-          <MetricCard label={t("inventory.metrics.receipts")} value={String(receiptsTotal)} />
-          <MetricCard label={t("inventory.metrics.postedReceipts")} value={String(postedReceipts)} />
-          <MetricCard label={t("inventory.metrics.issues")} value={String(issuesTotal)} />
-          <MetricCard label={t("inventory.metrics.postedIssues")} value={String(postedIssues)} />
-          <MetricCard label={t("inventory.metrics.transfers")} value={String(transfersTotal)} />
-          <MetricCard label={t("inventory.metrics.postedTransfers")} value={String(postedTransfers)} />
-          <MetricCard label={t("inventory.metrics.adjustments")} value={String(adjustmentsTotal)} />
-          <MetricCard label={t("inventory.metrics.postedAdjustments")} value={String(postedAdjustments)} />
-          <MetricCard label={t("inventory.metrics.stockMovements")} value={String(stockMovementsTotal)} />
-        </div>
-
-        <section className="space-y-4">
-          <SectionHeading title={t("inventory.workspace.title")} description={t("inventory.workspace.description")} />
-          <div className="flex flex-wrap gap-3">
-            {INVENTORY_WORKSPACE_TABS.map((tab) => {
-              const active = workspace === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setWorkspace(tab.id)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 py-2 text-[13px] font-bold transition-colors",
-                    active
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {t(tab.labelKey)}
-                </button>
-              );
-            })}
+    <PageShell className={cn(isInlineItemEditorActive ? "max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4" : "")}>
+      <div className={cn(isInlineItemEditorActive ? "space-y-4" : "space-y-10")}>
+        {isInlineItemEditorActive ? (
+          <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
+            <span className="text-gray-700">{t("inventory.title")}</span>
+            <span className="mx-2 text-gray-300">/</span>
+            <span className="text-gray-700">{t("inventory.items.title")}</span>
+            <span className="mx-2 text-gray-300">/</span>
+            <span className="text-teal-700">
+              {itemEditor.id ? t("inventory.editor.editTitle") : t("inventory.editor.createTitle")}
+            </span>
           </div>
-        </section>
+        ) : (
+          <>
+            <SectionHeading title={t("inventory.title")} description={t("inventory.description")} />
+
+            <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
+              <MetricCard label={t("inventory.metrics.total")} value={String(itemTotal)} />
+              <MetricCard label={t("inventory.metrics.active")} value={String(activeItems)} />
+              <MetricCard label={t("inventory.metrics.itemGroups")} value={String(itemGroups.length)} />
+              <MetricCard label={t("inventory.metrics.itemCategories")} value={String(itemCategories.length)} />
+              <MetricCard label={t("inventory.metrics.unitsOfMeasure")} value={String(unitsOfMeasure.length)} />
+              <MetricCard label={t("inventory.metrics.warehouses")} value={String(warehouses.length)} />
+              <MetricCard label={t("inventory.metrics.activeWarehouses")} value={String(activeWarehouses)} />
+              <MetricCard label={t("inventory.metrics.receipts")} value={String(receiptsTotal)} />
+              <MetricCard label={t("inventory.metrics.postedReceipts")} value={String(postedReceipts)} />
+              <MetricCard label={t("inventory.metrics.issues")} value={String(issuesTotal)} />
+              <MetricCard label={t("inventory.metrics.postedIssues")} value={String(postedIssues)} />
+              <MetricCard label={t("inventory.metrics.transfers")} value={String(transfersTotal)} />
+              <MetricCard label={t("inventory.metrics.postedTransfers")} value={String(postedTransfers)} />
+              <MetricCard label={t("inventory.metrics.adjustments")} value={String(adjustmentsTotal)} />
+              <MetricCard label={t("inventory.metrics.postedAdjustments")} value={String(postedAdjustments)} />
+              <MetricCard label={t("inventory.metrics.stockMovements")} value={String(stockMovementsTotal)} />
+            </div>
+
+            <section className="space-y-4">
+              <SectionHeading title={t("inventory.workspace.title")} description={t("inventory.workspace.description")} />
+              <div className="flex flex-wrap gap-3">
+                {INVENTORY_WORKSPACE_TABS.map((tab) => {
+                  const active = workspace === tab.id;
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setWorkspace(tab.id)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 py-2 text-[13px] font-bold transition-colors",
+                        active
+                          ? "border-gray-900 bg-gray-900 text-white"
+                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      {t(tab.labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </>
+        )}
 
         <section id="inventory-policy-section" className={`space-y-5 ${workspace === "policy" ? "" : "hidden"}`}>
           <SectionHeading title={t("inventory.policy.title")} description={t("inventory.policy.description")} />
@@ -1491,13 +1507,45 @@ export function InventoryPage() {
         </section>
 
         <section id="inventory-items-section" className={`space-y-5 ${workspace === "items" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.items.title")}
-            description={t("inventory.items.description")}
-            action={<Button onClick={() => openNewItem()}>{t("inventory.button.newItem")}</Button>}
-          />
+          {isItemEditorOpen ? (
+            <ItemEditorModal
+              presentation="inline"
+              isOpen={isItemEditorOpen}
+              onClose={closeItemEditor}
+              title={itemEditor.id ? t("inventory.editor.editTitle") : t("inventory.editor.createTitle")}
+              editor={itemEditor}
+              onChange={setItemEditor}
+              onSave={submitItemEditor}
+              isSaving={createItemMutation.isPending || updateItemMutation.isPending}
+              validationError={itemFormError || itemMutationError}
+              activeItemGroups={activeItemGroups}
+              activeItemCategories={activeItemCategories}
+              activeUnitsOfMeasure={activeUnitsOfMeasure}
+              activeTaxes={activeTaxes}
+              warehouses={warehouses}
+              inventoryAccounts={inventoryAccountsQuery.data ?? []}
+              expenseAccounts={cogsAccountsQuery.data ?? []}
+              salesAccounts={salesAccountsQuery.data ?? []}
+              cogsAccounts={cogsAccountsQuery.data ?? []}
+              adjustmentAccounts={adjustmentAccountsQuery.data ?? []}
+              generateBarcode={() => void generateBarcodeMutation.mutate()}
+              isGeneratingBarcode={generateBarcodeMutation.isPending}
+              generateQr={generateQrForItemEditor}
+              previewCodes={previewItemCodes}
+              printLabel={printItemLabel}
+              showCodePreview={showItemCodePreview}
+              getBarcodePreviewSvg={getBarcodePreviewSvg}
+              getQrPreviewSvg={getQrPreviewSvg}
+            />
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.items.title")}
+                description={t("inventory.items.description")}
+                action={<Button onClick={() => openNewItem()}>{t("inventory.button.newItem")}</Button>}
+              />
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+              <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
             <Card className="space-y-5">
               <div className="flex flex-col gap-4 lg:flex-row">
                 <Input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder={t("inventory.filters.search")} />
@@ -1854,6 +1902,8 @@ export function InventoryPage() {
               )}
             </Card>
           </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-issues-section" className={`space-y-5 ${workspace === "issues" ? "" : "hidden"}`}>
@@ -2874,34 +2924,7 @@ export function InventoryPage() {
           </Card>
         </section>
 
-        <ItemEditorModal
-          isOpen={isItemEditorOpen}
-          onClose={closeItemEditor}
-          title={itemEditor.id ? t("inventory.editor.editTitle") : t("inventory.editor.createTitle")}
-          editor={itemEditor}
-          onChange={setItemEditor}
-          onSave={submitItemEditor}
-          isSaving={createItemMutation.isPending || updateItemMutation.isPending}
-          validationError={itemFormError || itemMutationError}
-          activeItemGroups={activeItemGroups}
-          activeItemCategories={activeItemCategories}
-          activeUnitsOfMeasure={activeUnitsOfMeasure}
-          activeTaxes={activeTaxes}
-          warehouses={warehouses}
-          inventoryAccounts={inventoryAccountsQuery.data ?? []}
-          expenseAccounts={cogsAccountsQuery.data ?? []}
-          salesAccounts={salesAccountsQuery.data ?? []}
-          cogsAccounts={cogsAccountsQuery.data ?? []}
-          adjustmentAccounts={adjustmentAccountsQuery.data ?? []}
-          generateBarcode={() => void generateBarcodeMutation.mutate()}
-          isGeneratingBarcode={generateBarcodeMutation.isPending}
-          generateQr={generateQrForItemEditor}
-          previewCodes={previewItemCodes}
-          printLabel={printItemLabel}
-          showCodePreview={showItemCodePreview}
-          getBarcodePreviewSvg={getBarcodePreviewSvg}
-          getQrPreviewSvg={getQrPreviewSvg}
-        />
+
         {/* Old item editor SidePanel removed */}
         <SidePanel
           isOpen={isItemGroupEditorOpen}
