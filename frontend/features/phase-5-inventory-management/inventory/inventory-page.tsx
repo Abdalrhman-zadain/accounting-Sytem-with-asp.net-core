@@ -5,6 +5,8 @@ import type { ComponentType, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
   LuArrowLeftRight as ArrowLeftRight,
+  LuArrowLeft,
+  LuArrowRight,
   LuBoxes as Boxes,
   LuChartNoAxesColumn as ChartNoAxesColumn,
   LuChevronLeft,
@@ -1179,19 +1181,14 @@ export function InventoryPage() {
       : Math.min(stockLedgerPage * INVENTORY_STOCK_LEDGER_PAGE_SIZE, stockMovementsTotal);
 
   const selectedItem = selectedItemId ? (items.find((row) => row.id === selectedItemId) ?? null) : null;
-  const selectedItemGroup =
-    itemGroups.find((row) => row.id === (selectedItemGroupId ?? itemGroups[0]?.id)) ?? itemGroups[0] ?? null;
-  const selectedItemCategory =
-    itemCategories.find((row) => row.id === (selectedItemCategoryId ?? itemCategories[0]?.id)) ?? itemCategories[0] ?? null;
-  const selectedUnit = unitsOfMeasure.find((row) => row.id === (selectedUnitId ?? unitsOfMeasure[0]?.id)) ?? unitsOfMeasure[0] ?? null;
-  const selectedWarehouse =
-    warehouses.find((row) => row.id === (selectedWarehouseId ?? warehouses[0]?.id)) ?? warehouses[0] ?? null;
-  const selectedReceipt = receipts.find((row) => row.id === (selectedReceiptId ?? receipts[0]?.id)) ?? receipts[0] ?? null;
-  const selectedIssue = issues.find((row) => row.id === (selectedIssueId ?? issues[0]?.id)) ?? issues[0] ?? null;
-  const selectedTransfer =
-    transfers.find((row) => row.id === (selectedTransferId ?? transfers[0]?.id)) ?? transfers[0] ?? null;
-  const selectedAdjustment =
-    adjustments.find((row) => row.id === (selectedAdjustmentId ?? adjustments[0]?.id)) ?? adjustments[0] ?? null;
+  const selectedItemGroup = selectedItemGroupId ? (itemGroups.find((row) => row.id === selectedItemGroupId) ?? null) : null;
+  const selectedItemCategory = selectedItemCategoryId ? (itemCategories.find((row) => row.id === selectedItemCategoryId) ?? null) : null;
+  const selectedUnit = selectedUnitId ? (unitsOfMeasure.find((row) => row.id === selectedUnitId) ?? null) : null;
+  const selectedWarehouse = selectedWarehouseId ? (warehouses.find((row) => row.id === selectedWarehouseId) ?? null) : null;
+  const selectedReceipt = selectedReceiptId ? (receipts.find((row) => row.id === selectedReceiptId) ?? null) : null;
+  const selectedIssue = selectedIssueId ? (issues.find((row) => row.id === selectedIssueId) ?? null) : null;
+  const selectedTransfer = selectedTransferId ? (transfers.find((row) => row.id === selectedTransferId) ?? null) : null;
+  const selectedAdjustment = selectedAdjustmentId ? (adjustments.find((row) => row.id === selectedAdjustmentId) ?? null) : null;
 
   const itemGroupFormError = getItemGroupFormError(itemGroupEditor);
   const itemCategoryFormError = getItemCategoryFormError(itemCategoryEditor);
@@ -1286,7 +1283,18 @@ export function InventoryPage() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setWorkspace(tab.id)}
+                    onClick={() => {
+                      setWorkspace(tab.id);
+                      setSelectedItemId(null);
+                      setSelectedItemGroupId(null);
+                      setSelectedItemCategoryId(null);
+                      setSelectedUnitId(null);
+                      setSelectedWarehouseId(null);
+                      setSelectedReceiptId(null);
+                      setSelectedIssueId(null);
+                      setSelectedTransferId(null);
+                      setSelectedAdjustmentId(null);
+                    }}
                     className={cn(
                       "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 py-2 text-[13px] font-bold transition-colors",
                       active
@@ -1329,52 +1337,194 @@ export function InventoryPage() {
         </section>
 
         <section id="inventory-item-groups-section" className={`space-y-5 ${workspace === "itemGroups" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.itemGroups.title")}
-            description={t("inventory.itemGroups.description")}
-            action={<Button onClick={() => openNewItemGroup()}>{t("inventory.button.newItemGroup")}</Button>}
-          />
-          <MasterDataGrid
-            search={itemGroupSearch}
-            onSearch={setItemGroupSearch}
-            status={itemGroupStatusFilter}
-            onStatus={(value) => setItemGroupStatusFilter(value)}
-            searchPlaceholder={t("inventory.itemGroups.filters.search")}
-            loading={itemGroupsQuery.isLoading}
-            empty={t("inventory.itemGroups.empty")}
-            rows={itemGroups}
-            selectedId={selectedItemGroup?.id ?? null}
-            onSelect={setSelectedItemGroupId}
-            renderMeta={(group) =>
-              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
-                {group.parentGroup ? <span>{formatCodeName(group.parentGroup.code, group.parentGroup.name, isArabic)}</span> : null}
-                <span>{t("inventory.itemGroups.categoryCount", { count: group.categoryCount })}</span>
-                <span>{t("inventory.itemGroups.itemCount", { count: group.itemCount })}</span>
+          {selectedItemGroup ? (
+            <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => setSelectedItemGroupId(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-sm font-bold text-[#46644b] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]"
+              >
+                {isArabic ? <LuArrowRight className="h-4 w-4" /> : <LuArrowLeft className="h-4 w-4" />}
+                {isArabic ? "العودة إلى مجموعات المواد" : "Back to Item Groups"}
+              </button>
+
+              <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "عدد الفئات" : "Categories"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedItemGroup.categoryCount}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "عدد الأصناف" : "Items"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedItemGroup.itemCount}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "المجموعة الأب" : "Parent Group"}</span>
+                      <span className="text-sm font-bold text-[#233329]">
+                        {selectedItemGroup.parentGroup
+                          ? formatCodeName(selectedItemGroup.parentGroup.code, selectedItemGroup.parentGroup.name, isArabic)
+                          : t("inventory.emptyValue")}
+                      </span>
+                    </Card>
+                  </div>
+
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-6 shadow-sm">
+                    <div className="flex items-start justify-between border-b border-[#f0f3f0] pb-4">
+                      <div>
+                        <span className="text-xs font-mono tracking-wider text-[#7d8c83]">{selectedItemGroup.code}</span>
+                        <h2 className="mt-1 text-xl font-black text-[#233329]">{selectedItemGroup.name}</h2>
+                      </div>
+                      <StatusPill
+                        label={selectedItemGroup.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                        tone={selectedItemGroup.isActive ? "positive" : "warning"}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DetailCard
+                        label={t("inventory.itemGroups.field.parentGroup")}
+                        value={selectedItemGroup.parentGroup ? formatCodeName(selectedItemGroup.parentGroup.code, selectedItemGroup.parentGroup.name, isArabic) : t("inventory.emptyValue")}
+                      />
+                      <DetailCard
+                        label={t("inventory.itemGroups.detail.categoryCount")}
+                        value={String(selectedItemGroup.categoryCount)}
+                      />
+                      <DetailCard
+                        label={t("inventory.itemGroups.detail.itemCount")}
+                        value={String(selectedItemGroup.itemCount)}
+                      />
+                    </div>
+
+                    {selectedItemGroup.description && (
+                      <div className="border-t border-[#f0f3f0] pt-4">
+                        <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "الوصف" : "Description"}</span>
+                        <p className="whitespace-pre-wrap text-sm text-gray-700">{selectedItemGroup.description}</p>
+                      </div>
+                    )}
+                  </Card>
+                </div>
+
+                <div>
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4 shadow-sm">
+                    <h3 className="border-b border-[#f0f3f0] pb-2 text-sm font-black text-[#233329]">
+                      {isArabic ? "العمليات" : "Actions"}
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        variant="secondary"
+                        onClick={() => openEditItemGroup(selectedItemGroup)}
+                        disabled={!selectedItemGroup.isActive}
+                        className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]"
+                      >
+                        {t("inventory.button.editItemGroup")}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => confirmDeactivateItemGroup(selectedItemGroup.id)}
+                        disabled={!selectedItemGroup.isActive || deactivateItemGroupMutation.isPending}
+                        className="rounded-full px-4 py-2 font-bold"
+                      >
+                        {t("inventory.button.deactivate")}
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
               </div>
-            }
-            detail={
-              selectedItemGroup ? (
-                <MasterDataDetail
-                  code={selectedItemGroup.code}
-                  name={selectedItemGroup.name}
-                  isActive={selectedItemGroup.isActive}
-                  description={selectedItemGroup.description}
-                  rows={[
-                    [t("inventory.itemGroups.field.parentGroup"), selectedItemGroup.parentGroup ? formatCodeName(selectedItemGroup.parentGroup.code, selectedItemGroup.parentGroup.name, isArabic) : t("inventory.emptyValue")],
-                    [t("inventory.itemGroups.detail.categoryCount"), String(selectedItemGroup.categoryCount)],
-                    [t("inventory.itemGroups.detail.itemCount"), String(selectedItemGroup.itemCount)],
-                  ]}
-                  onEdit={() => openEditItemGroup(selectedItemGroup)}
-                  onDeactivate={() => confirmDeactivateItemGroup(selectedItemGroup.id)}
-                  editLabel={t("inventory.button.editItemGroup")}
-                  deactivateLabel={t("inventory.button.deactivate")}
-                  disableActions={!selectedItemGroup.isActive || deactivateItemGroupMutation.isPending}
-                />
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.itemGroups.details.empty")}</div>
-              )
-            }
-          />
+            </div>
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.itemGroups.title")}
+                description={t("inventory.itemGroups.description")}
+                action={
+                  <Button onClick={() => openNewItemGroup()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">
+                    {t("inventory.button.newItemGroup")}
+                  </Button>
+                }
+              />
+
+              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-5 shadow-sm">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="relative">
+                    <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                      <LuSearch size={16} />
+                    </span>
+                    <input
+                      type="text"
+                      value={itemGroupSearch}
+                      onChange={(event) => setItemGroupSearch(event.target.value)}
+                      placeholder={t("inventory.itemGroups.filters.search")}
+                      className={cn(
+                        "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                        isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                      )}
+                    />
+                  </div>
+
+                  <select
+                    value={itemGroupStatusFilter}
+                    onChange={(event) => setItemGroupStatusFilter(event.target.value as "" | "true" | "false")}
+                    className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  >
+                    <option value="">{t("inventory.filters.allStatuses")}</option>
+                    <option value="true">{t("inventory.filters.activeOnly")}</option>
+                    <option value="false">{t("inventory.filters.inactiveOnly")}</option>
+                  </select>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {itemGroupsQuery.isLoading ? (
+                    <div className="rounded-2xl border border-[#e7ece8] bg-[#fafcfb] py-6 text-sm text-gray-500">{t("inventory.loading")}</div>
+                  ) : itemGroups.length === 0 ? (
+                    <EmptyState message={t("inventory.itemGroups.empty")} />
+                  ) : (
+                    <table className="min-w-full text-xs text-start">
+                      <thead>
+                        <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الرمز" : "Code"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الاسم" : "Name"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "المجموعة الأب" : "Parent Group"}</th>
+                          <th className="px-4 py-3 text-end font-black">{isArabic ? "عدد الفئات" : "Categories"}</th>
+                          <th className="px-4 py-3 text-end font-black">{isArabic ? "عدد الأصناف" : "Items"}</th>
+                          <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#f0f3f0]">
+                        {itemGroups
+                          .filter((group) => {
+                            const searchMatch = !itemGroupSearch || group.name.toLowerCase().includes(itemGroupSearch.toLowerCase()) || group.code.toLowerCase().includes(itemGroupSearch.toLowerCase());
+                            const statusMatch = !itemGroupStatusFilter || String(group.isActive) === itemGroupStatusFilter;
+                            return searchMatch && statusMatch;
+                          })
+                          .map((group) => (
+                            <tr
+                              key={group.id}
+                              onClick={() => setSelectedItemGroupId(group.id)}
+                              className="cursor-pointer text-[12px] transition hover:bg-[#f7faf7]"
+                            >
+                              <td className="px-4 py-3 font-bold text-gray-900 font-mono tracking-wider">{group.code}</td>
+                              <td className="px-4 py-3 font-bold text-gray-900">{group.name}</td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {group.parentGroup ? formatCodeName(group.parentGroup.code, group.parentGroup.name, isArabic) : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-end text-gray-600 font-medium">{group.categoryCount}</td>
+                              <td className="px-4 py-3 text-end text-gray-600 font-medium">{group.itemCount}</td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusPill
+                                  label={group.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                                  tone={group.isActive ? "positive" : "warning"}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
         </section>
 
         <section id="inventory-item-categories-section" className={`space-y-5 ${workspace === "itemCategories" ? "" : "hidden"}`}>
@@ -4214,7 +4364,7 @@ function MetricCard({ label, value, suffix }: { label: string; value: string; su
   );
 }
 
-function DetailCard({ label, value }: { label: string; value: string }) {
+function DetailCard({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-2xl border border-gray-200 px-4 py-3 bg-white">
       <div className="text-[12px] font-normal uppercase tracking-[0.08em] text-gray-500">{label}</div>
