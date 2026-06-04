@@ -7,12 +7,16 @@ import {
   LuArrowLeftRight as ArrowLeftRight,
   LuBoxes as Boxes,
   LuChartNoAxesColumn as ChartNoAxesColumn,
+  LuChevronLeft,
+  LuChevronRight,
   LuFileText as FileText,
   LuFolderTree as FolderTree,
   LuPackage as Package,
   LuPackage2 as Package2,
+  LuPencil,
   LuRuler as Ruler,
   LuSave as Save,
+  LuSearch,
   LuSettings2 as Settings2,
   LuTags as Tags,
   LuWarehouse as Warehouse,
@@ -1174,7 +1178,7 @@ export function InventoryPage() {
       ? 0
       : Math.min(stockLedgerPage * INVENTORY_STOCK_LEDGER_PAGE_SIZE, stockMovementsTotal);
 
-  const selectedItem = items.find((row) => row.id === (selectedItemId ?? items[0]?.id)) ?? items[0] ?? null;
+  const selectedItem = selectedItemId ? (items.find((row) => row.id === selectedItemId) ?? null) : null;
   const selectedItemGroup =
     itemGroups.find((row) => row.id === (selectedItemGroupId ?? itemGroups[0]?.id)) ?? itemGroups[0] ?? null;
   const selectedItemCategory =
@@ -1536,6 +1540,302 @@ export function InventoryPage() {
               getBarcodePreviewSvg={getBarcodePreviewSvg}
               getQrPreviewSvg={getQrPreviewSvg}
             />
+          ) : selectedItemId && selectedItem ? (
+            <div className="space-y-6 text-start">
+              {/* Back Button and status bar */}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setSelectedItemId(null)}
+                  className="flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-xs font-bold text-[#46644b] hover:bg-gray-50 transition shadow-sm"
+                >
+                  {isArabic ? <LuChevronRight size={14} className="ml-1" /> : <LuChevronLeft size={14} className="mr-1" />}
+                  <span>{isArabic ? "العودة إلى قائمة الأصناف" : "Back to Items List"}</span>
+                </button>
+                
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border",
+                    selectedItem.isActive
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-slate-50 text-slate-800 border-slate-200"
+                  )}
+                >
+                  {selectedItem.isActive ? (isArabic ? "نشط" : "Active") : (isArabic ? "غير نشط" : "Inactive")}
+                </span>
+              </div>
+
+              {/* Header card with actions */}
+              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-[#233329] arabic-heading">
+                      {formatItemServiceLabel(selectedItem.code, selectedItem.name)}
+                    </h1>
+                    <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+                      {t(`inventory.type.${selectedItem.type}`)}
+                      {selectedItem.itemGroup ? ` · ${selectedItem.itemGroup.name}` : ""}
+                      {selectedItem.itemCategory ? ` · ${selectedItem.itemCategory.name}` : selectedItem.category ? ` · ${selectedItem.category}` : ""}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Button
+                      onClick={() => openEditItem(selectedItem)}
+                      className="rounded-full bg-[#46644b] px-5 py-2 text-xs font-bold text-white hover:bg-[#39523d] transition shadow-md flex items-center gap-1.5"
+                    >
+                      <LuPencil size={13} />
+                      <span>{isArabic ? "تعديل بطاقة المادة" : "Edit Item"}</span>
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => confirmDeactivateItem(selectedItem.id)}
+                      disabled={!selectedItem.isActive || deactivateItemMutation.isPending}
+                      className="rounded-full px-5 py-2 text-xs font-bold"
+                    >
+                      {t("inventory.button.deactivate")}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Grid of details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Basic & Stock Info */}
+                <div className="md:col-span-2 space-y-6">
+                  {/* Stocks Overview Card */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{isArabic ? "الكمية المتوفرة" : "On Hand Qty"}</span>
+                      <span className="text-lg font-bold text-[#233329]">
+                        {selectedItem.onHandQuantity} {selectedItem.unitOfMeasure}
+                      </span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{isArabic ? "قيمة المخزون" : "Valuation Amount"}</span>
+                      <span className="text-lg font-bold text-[#233329]">
+                        {selectedItem.valuationAmount} {selectedItem.currencyCode || "JOD"}
+                      </span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="block text-xs font-semibold text-gray-500 mb-1">{isArabic ? "مستوى إعادة الطلب" : "Reorder Level"}</span>
+                      <span className="text-lg font-bold text-[#233329]">
+                        {selectedItem.reorderLevel || "0.00"}
+                      </span>
+                    </Card>
+                  </div>
+
+                  {/* Main Details Card */}
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-6">
+                    <h2 className="text-lg font-black text-[#233329] border-b border-[#f0f3f0] pb-3">
+                      {isArabic ? "تفاصيل المادة" : "Item Information"}
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "الرمز (SKU)" : "Code (SKU)"}</span>
+                        <span className="font-bold text-gray-900">{selectedItem.code}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "الاسم" : "Name"}</span>
+                        <span className="font-bold text-gray-900">{selectedItem.name}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "النوع" : "Type"}</span>
+                        <span className="font-bold text-gray-900">{t(`inventory.type.${selectedItem.type}`)}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "وحدة القياس" : "Unit of Measure"}</span>
+                        <span className="font-bold text-gray-900">{selectedItem.unitOfMeasure}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "مجموعة المواد" : "Item Group"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.itemGroup ? selectedItem.itemGroup.name : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "الفئة" : "Category"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.itemCategory ? selectedItem.itemCategory.name : selectedItem.category || "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "سعر البيع الافتراضي" : "Default Sales Price"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.defaultSalesPrice} {selectedItem.currencyCode || "JOD"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "سعر الشراء الافتراضي" : "Default Purchase Price"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.defaultPurchasePrice} {selectedItem.currencyCode || "JOD"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "خاضع للضريبة" : "Taxable"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.taxable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "الضريبة الافتراضية" : "Default Tax"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.defaultTax ? `${selectedItem.defaultTax.taxName} (${selectedItem.defaultTax.rate}%)` : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedItem.description && (
+                      <div className="pt-4 border-t border-[#f0f3f0] space-y-2">
+                        <span className="text-xs font-semibold text-gray-500 block">{isArabic ? "الوصف" : "Description"}</span>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedItem.description}</p>
+                      </div>
+                    )}
+                    {selectedItem.internalNotes && (
+                      <div className="pt-4 border-t border-[#f0f3f0] space-y-2">
+                        <span className="text-xs font-semibold text-gray-500 block">{isArabic ? "ملاحظات داخلية" : "Internal Notes"}</span>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedItem.internalNotes}</p>
+                      </div>
+                    )}
+                  </Card>
+
+                  {/* Unit Conversions Table Card */}
+                  {selectedItem.unitConversions && selectedItem.unitConversions.length > 0 && (
+                    <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
+                      <h2 className="text-lg font-black text-[#233329] border-b border-[#f0f3f0] pb-3">
+                        {isArabic ? "تحويلات الوحدات" : "Unit Conversions"}
+                      </h2>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-[#e1e7e2] text-[#6d7b73]">
+                              <th className="px-4 py-2 text-start font-black">{isArabic ? "الوحدة" : "Unit"}</th>
+                              <th className="px-4 py-2 text-center font-black">{isArabic ? "معامل التحويل" : "Conversion Factor"}</th>
+                              <th className="px-4 py-2 text-start font-black">{isArabic ? "سعر البيع" : "Sales Price"}</th>
+                              <th className="px-4 py-2 text-start font-black">{isArabic ? "سعر الشراء" : "Purchase Price"}</th>
+                              <th className="px-4 py-2 text-start font-black">{isArabic ? "الباركود" : "Barcode"}</th>
+                              <th className="px-4 py-2 text-center font-black">{isArabic ? "الوحدة الأساسية" : "Base Unit"}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#f0f3f0]">
+                            {selectedItem.unitConversions.map((conv) => (
+                              <tr key={conv.id} className="hover:bg-gray-50/50 transition">
+                                <td className="px-4 py-2.5 font-bold text-gray-900">{conv.unit?.name || conv.unit?.code}</td>
+                                <td className="px-4 py-2.5 text-center text-gray-700">{conv.conversionFactorToBaseUnit}</td>
+                                <td className="px-4 py-2.5 text-gray-700">{conv.defaultSalesPrice}</td>
+                                <td className="px-4 py-2.5 text-gray-700">{conv.defaultPurchasePrice}</td>
+                                <td className="px-4 py-2.5 text-gray-500 font-mono">{conv.barcode || "—"}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  {conv.isBaseUnit ? (
+                                    <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-xs font-bold">
+                                      {isArabic ? "أساسية" : "Base"}
+                                    </span>
+                                  ) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Sidebar Info: Barcode / QR / Accounts / Location */}
+                <div className="space-y-6">
+                  {/* Barcode & QR Code Card */}
+                  {(selectedItem.barcode || selectedItem.qrCodeValue) && (
+                    <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
+                      <h2 className="text-sm font-black text-[#233329] border-b border-[#f0f3f0] pb-2">
+                        {isArabic ? "الرموز والملصقات" : "Barcodes & QR"}
+                      </h2>
+                      <div className="space-y-4">
+                        {selectedItem.barcode && (
+                          <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
+                            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "الباركود" : "Barcode"}</div>
+                            <div
+                              className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full"
+                              style={{ minHeight: "80px" }}
+                              dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(selectedItem.barcode) }}
+                            />
+                            <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider font-mono">{selectedItem.barcode}</div>
+                          </div>
+                        )}
+                        {selectedItem.qrCodeValue && (
+                          <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
+                            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "رمز QR" : "QR Code"}</div>
+                            <div
+                              className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full"
+                              style={{ minHeight: "80px" }}
+                              dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(selectedItem.qrCodeValue) }}
+                            />
+                            <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider font-mono">{selectedItem.qrCodeValue}</div>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Financial Accounts Card */}
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
+                    <h2 className="text-sm font-black text-[#233329] border-b border-[#f0f3f0] pb-2">
+                      {isArabic ? "الحسابات المالية" : "Financial Accounts"}
+                    </h2>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between py-1 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "حساب المخزون" : "Inventory Account"}</span>
+                        <span className="font-bold text-gray-900 text-end">
+                          {selectedItem.inventoryAccount
+                            ? `${selectedItem.inventoryAccount.code} · ${isArabic ? selectedItem.inventoryAccount.nameAr || selectedItem.inventoryAccount.name : selectedItem.inventoryAccount.name}`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "حساب تكلفة المبيعات" : "COGS Account"}</span>
+                        <span className="font-bold text-gray-900 text-end">
+                          {selectedItem.cogsAccount
+                            ? `${selectedItem.cogsAccount.code} · ${isArabic ? selectedItem.cogsAccount.nameAr || selectedItem.cogsAccount.name : selectedItem.cogsAccount.name}`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "حساب المبيعات" : "Sales Account"}</span>
+                        <span className="font-bold text-gray-900 text-end">
+                          {selectedItem.salesAccount
+                            ? `${selectedItem.salesAccount.code} · ${isArabic ? selectedItem.salesAccount.nameAr || selectedItem.salesAccount.name : selectedItem.salesAccount.name}`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-gray-500">{isArabic ? "حساب التعديل" : "Adjustment Account"}</span>
+                        <span className="font-bold text-gray-900 text-end">
+                          {selectedItem.adjustmentAccount
+                            ? `${selectedItem.adjustmentAccount.code} · ${isArabic ? (selectedItem.adjustmentAccount as any).nameAr || selectedItem.adjustmentAccount.name : selectedItem.adjustmentAccount.name}`
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Location & Preferred Warehouse Card */}
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
+                    <h2 className="text-sm font-black text-[#233329] border-b border-[#f0f3f0] pb-2">
+                      {isArabic ? "المستودع المفضل" : "Preferred Warehouse"}
+                    </h2>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between py-1 border-b border-gray-50">
+                        <span className="text-gray-500">{isArabic ? "المستودع" : "Warehouse"}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedItem.preferredWarehouse
+                            ? `${selectedItem.preferredWarehouse.code} · ${selectedItem.preferredWarehouse.name}`
+                            : selectedItem.preferredWarehouseCode || "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               <SectionHeading
@@ -1544,7 +1844,7 @@ export function InventoryPage() {
                 action={<Button onClick={() => openNewItem()}>{t("inventory.button.newItem")}</Button>}
               />
 
-              <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+              <div className="w-full">
             <Card className="space-y-5">
               <div className="flex flex-col gap-4 lg:flex-row">
                 <Input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder={t("inventory.filters.search")} />
@@ -1587,87 +1887,96 @@ export function InventoryPage() {
                 </Select>
               </div>
 
-              <div className="space-y-3">
+              <div className="overflow-x-auto">
                 {inventoryItemsQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.loading")}</div>
+                  <div className="text-sm text-gray-500 py-4">{t("inventory.loading")}</div>
                 ) : items.length === 0 ? (
                   <EmptyState message={t("inventory.empty")} />
                 ) : (
-                  items.map((item, index) => {
-                    const isSelected = selectedItem?.id === item.id;
-                    const isEven = index % 2 === 1;
+                  <table className="min-w-full text-xs text-start">
+                    <thead>
+                      <tr className="border-b border-[#e1e7e2] text-[#6d7b73] text-[11px] uppercase tracking-wider">
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "الرمز" : "Code"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "الاسم" : "Name"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "النوع" : "Type"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "الوحدة" : "Unit"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المجموعة" : "Group"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "سعر البيع" : "Sales Price"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية المتوفرة" : "On Hand"}</th>
+                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f3f0]">
+                      {items.map((item) => {
+                        const isSelected = selectedItemId === item.id;
 
-                    // Derive dot color
-                    const isDrink = item.code?.startsWith("POS-DRK") || item.category?.includes("Drinks") || item.category?.includes("مشروبات");
-                    const isService = item.type === "SERVICE" || item.code?.startsWith("POS-SRV");
-                    let dotColor = "#1D9E75"; // active sellable
-                    if (isService) {
-                      dotColor = "#9CA3AF"; // service
-                    } else if (isDrink) {
-                      dotColor = "#3B82F6"; // drinks/variants
-                    }
+                        // Derive dot color
+                        const isDrink = item.code?.startsWith("POS-DRK") || item.category?.includes("Drinks") || item.category?.includes("مشروبات");
+                        const isService = item.type === "SERVICE" || item.code?.startsWith("POS-SRV");
+                        let dotColor = "#1D9E75"; // active sellable
+                        if (isService) {
+                          dotColor = "#9CA3AF"; // service
+                        } else if (isDrink) {
+                          dotColor = "#3B82F6"; // drinks/variants
+                        }
 
-                    // Derive badge info
-                    let badgeText = "";
-                    let badgeBg = "";
-                    if (isService) {
-                      badgeText = isArabic ? "خدمة" : "Service";
-                      badgeBg = "bg-blue-50/10 text-blue-400 border-blue-500/20";
-                    } else if (item.code?.startsWith("OFFER-") || item.name?.includes("Bundle") || item.name?.includes("مجموعة") || item.type === "MANUFACTURED_ITEM") {
-                      badgeText = isArabic ? "مجموعة" : "Bundle";
-                      badgeBg = "bg-amber-50/10 text-amber-400 border-amber-500/20";
-                    } else {
-                      badgeText = isArabic ? "للبيع" : "For Sale";
-                      badgeBg = "bg-teal-50/10 text-teal-400 border-teal-500/20";
-                    }
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedItemId(item.id)}
-                        className={`w-full rounded-2xl border px-6 py-5 transition flex items-center gap-4 ${
-                          isSelected
-                            ? "border-teal-200 bg-teal-50/60"
-                            : isEven
-                              ? "border-gray-200 bg-slate-50/60 hover:border-gray-300 hover:bg-gray-100/70"
-                              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        {/* 1. Status Dot */}
-                        <div className="shrink-0 flex items-center justify-center">
-                          <span
-                            className="inline-block rounded-full"
-                            style={{
-                              width: "7px",
-                              height: "7px",
-                              backgroundColor: dotColor,
-                            }}
-                          />
-                        </div>
-
-                        {/* 2. Main Content */}
-                        <div className="flex-1 min-w-0 text-start">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{item.code}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">{formatItemServiceLabel(item.code, item.name)}</div>
-                            <div className="text-sm text-gray-600">
-                              {t(`inventory.type.${item.type}`)} · {item.unitOfMeasure}
-                              {item.itemGroup ? ` · ${item.itemGroup.name}` : ""}
-                              {item.itemCategory ? ` · ${item.itemCategory.name}` : item.category ? ` · ${item.category}` : ""}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 3. Badge */}
-                        <div className="shrink-0 flex items-center justify-end">
-                          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold shadow-sm", badgeBg)}>
-                            {badgeText}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })
+                        return (
+                          <tr
+                            key={item.id}
+                            onClick={() => setSelectedItemId(item.id)}
+                            className={cn(
+                              "hover:bg-gray-50/70 transition cursor-pointer text-[12px]",
+                              isSelected ? "bg-teal-50/50 font-semibold" : ""
+                            )}
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block rounded-full shrink-0"
+                                  style={{
+                                    width: "6px",
+                                    height: "6px",
+                                    backgroundColor: dotColor,
+                                  }}
+                                />
+                                <span className="font-mono tracking-wider">{item.code}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {formatItemServiceLabel(item.code, item.name)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {t(`inventory.type.${item.type}`)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 font-medium">
+                              {item.unitOfMeasure}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {item.itemGroup ? item.itemGroup.name : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-end font-bold text-gray-900">
+                              {item.defaultSalesPrice} {item.currencyCode || "JOD"}
+                            </td>
+                            <td className="px-4 py-3 text-end font-bold text-[#46644b]">
+                              {item.onHandQuantity}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border",
+                                  item.isActive
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : "bg-slate-50 text-slate-800 border-slate-200"
+                                )}
+                              >
+                                {item.isActive ? (isArabic ? "نشط" : "Active") : (isArabic ? "غير نشط" : "Inactive")}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
 
@@ -1695,210 +2004,6 @@ export function InventoryPage() {
                   </Button>
                 </div>
               </div>
-            </Card>
-
-            <Card className="space-y-6">
-              {selectedItem ? (
-                <>
-                  <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
-                    <div className="space-y-1">
-                      <div className="text-[10px] font-medium uppercase tracking-widest text-gray-400">{selectedItem.code}</div>
-                      <h2 className="text-[16px] font-medium tracking-tight text-gray-900">
-                        {formatItemServiceLabel(selectedItem.code, selectedItem.name)}
-                      </h2>
-                    </div>
-                    <StatusPill
-                      label={selectedItem.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
-                      tone={selectedItem.isActive ? "positive" : "warning"}
-                    />
-                  </div>
-
-                  {/* Section 1: معلومات أساسية */}
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "معلومات أساسية" : "Basic Information"}</div>
-                    <div className="divide-y divide-gray-100/50">
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.unit")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.unitOfMeasure}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.type")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{t(`inventory.type.${selectedItem.type}`)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.itemCategory")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.itemCategory?.name ?? selectedItem.category ?? t("inventory.emptyValue")}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.itemGroup")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.itemGroup?.name ?? t("inventory.emptyValue")}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "الباركود" : "Barcode"}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.barcode || t("inventory.emptyValue")}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "رمز QR" : "QR Code"}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.qrCodeValue || t("inventory.emptyValue")}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <hr className="border-gray-200/50 my-4" />
-
-                  {/* Section 2: التسعير والمخزون */}
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "التسعير والمخزون" : "Pricing & Stock"}</div>
-                    <div className="divide-y divide-gray-100/50">
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.valuation")}</span>
-                        <span className="text-[12px] font-medium text-[#1D9E75]">{selectedItem.valuationAmount}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.onHand")}</span>
-                        <span className="text-[12px] font-medium text-[#1D9E75]">{selectedItem.onHandQuantity}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.reorderQuantity")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.reorderQuantity}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.reorderLevel")}</span>
-                        <span className="text-[12px] font-medium text-gray-900">{selectedItem.reorderLevel}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <hr className="border-gray-200/50 my-4" />
-
-                  {/* Section 3: الحسابات */}
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "الحسابات" : "Accounts"}</div>
-                    <div className="divide-y divide-gray-100/50">
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.inventoryAccount")}</span>
-                        <span className="text-[12px] font-medium text-gray-900 text-left">
-                          {selectedItem.inventoryAccount
-                            ? `${selectedItem.inventoryAccount.code} · ${(selectedItem.inventoryAccount as any).nameAr || selectedItem.inventoryAccount.name}`
-                            : t("inventory.emptyValue")}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.cogsAccount")}</span>
-                        <span className="text-[12px] font-medium text-gray-900 text-left">
-                          {selectedItem.cogsAccount
-                            ? `${selectedItem.cogsAccount.code} · ${(selectedItem.cogsAccount as any).nameAr || selectedItem.cogsAccount.name}`
-                            : t("inventory.emptyValue")}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.salesAccount")}</span>
-                        <span className="text-[12px] font-medium text-gray-900 text-left">
-                          {selectedItem.salesAccount
-                            ? `${selectedItem.salesAccount.code} · ${(selectedItem.salesAccount as any).nameAr || selectedItem.salesAccount.name}`
-                            : t("inventory.emptyValue")}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.adjustmentAccount")}</span>
-                        <span className="text-[12px] font-medium text-gray-900 text-left">
-                          {selectedItem.adjustmentAccount
-                            ? `${selectedItem.adjustmentAccount.code} · ${(selectedItem.adjustmentAccount as any).nameAr || selectedItem.adjustmentAccount.name}`
-                            : t("inventory.emptyValue")}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <hr className="border-gray-200/50 my-4" />
-
-                  {/* Section 4: الموقع */}
-                  {(() => {
-                    const rawWarehouseName = selectedItem.preferredWarehouse?.name || "";
-                    let warehouseDisplay = rawWarehouseName;
-                    let branchDisplay = "";
-
-                    if (rawWarehouseName.includes(" — ")) {
-                      const parts = rawWarehouseName.split(" — ");
-                      warehouseDisplay = parts[0];
-                      branchDisplay = parts[1]?.replace(" / ", " · ") || "";
-                    } else if (rawWarehouseName.includes(" - ")) {
-                      const parts = rawWarehouseName.split(" - ");
-                      warehouseDisplay = parts[0];
-                      branchDisplay = parts[1]?.replace(" / ", " · ") || "";
-                    }
-
-                    return (
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-gray-400 uppercase tracking-widest font-medium mb-2">{isArabic ? "الموقع" : "Location"}</div>
-                        <div className="divide-y divide-gray-100/50">
-                          <div className="flex items-center justify-between py-2.5">
-                            <span className="text-[12px] text-gray-500 font-normal">{t("inventory.detail.preferredWarehouse")}</span>
-                            <span className="text-[12px] font-medium text-gray-900">
-                              {selectedItem.preferredWarehouse
-                                ? `${selectedItem.preferredWarehouse.code} · ${warehouseDisplay}`
-                                : selectedItem.preferredWarehouseCode || t("inventory.emptyValue")}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between py-2.5">
-                            <span className="text-[12px] text-gray-500 font-normal">{isArabic ? "الفرع" : "Branch"}</span>
-                            <span className="text-[12px] font-medium text-gray-900">{branchDisplay || t("inventory.emptyValue")}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {selectedItem.description ? (
-                    <>
-                      <hr className="border-gray-200/50 my-4" />
-                      <p className="text-sm leading-7 text-gray-600 font-normal">{selectedItem.description}</p>
-                    </>
-                  ) : null}
-
-                  {selectedItem.barcode || selectedItem.qrCodeValue ? (
-                    <div className="grid gap-4 lg:grid-cols-2 pt-2">
-                      {selectedItem.barcode ? (
-                        <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "الباركود" : "Barcode"}</div>
-                          <div
-                            className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
-                            style={{ minHeight: "80px" }}
-                            dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(selectedItem.barcode) }}
-                          />
-                          <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider">{selectedItem.barcode}</div>
-                        </div>
-                      ) : null}
-                      {selectedItem.qrCodeValue ? (
-                        <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                          <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "رمز QR" : "QR Code"}</div>
-                          <div
-                            className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center"
-                            style={{ minHeight: "80px" }}
-                            dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(selectedItem.qrCodeValue) }}
-                          />
-                          <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider">{selectedItem.qrCodeValue}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <Button variant="secondary" onClick={() => openEditItem(selectedItem)} disabled={!selectedItem.isActive}>
-                      {t("inventory.button.edit")}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => confirmDeactivateItem(selectedItem.id)}
-                      disabled={!selectedItem.isActive || deactivateItemMutation.isPending}
-                    >
-                      {t("inventory.button.deactivate")}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.details.empty")}</div>
-              )}
             </Card>
           </div>
             </>
