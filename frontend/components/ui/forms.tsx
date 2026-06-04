@@ -3,6 +3,7 @@ import { forwardRef, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, Texta
 import { cn } from "@/lib/utils";
 
 export function Field({
+  id,
   label,
   required,
   error,
@@ -19,10 +20,11 @@ export function Field({
   className?: string;
   labelClassName?: string;
   labelAlign?: "start" | "end";
+  id?: string;
   children: ReactNode;
 }) {
   return (
-    <label className={cn("block", className)}>
+    <label id={id} className={cn("block", className)}>
       <span
         className={cn(
           "mb-2 flex w-full items-center gap-1 text-sm font-semibold tracking-wide text-gray-900",
@@ -37,7 +39,7 @@ export function Field({
       </span>
       {children}
       {error ? (
-        <span className="mt-2 block text-sm font-medium text-red-400 arabic-auto">{error}</span>
+        <span className="mt-2 block text-sm font-medium text-red-600 arabic-auto">{error}</span>
       ) : hint ? (
         <span className="mt-2 block text-[13px] font-medium text-gray-500 arabic-muted">{hint}</span>
       ) : null}
@@ -122,4 +124,3 @@ export const CurrencyAmountInput = forwardRef<
   );
 });
 CurrencyAmountInput.displayName = "CurrencyAmountInput";
-

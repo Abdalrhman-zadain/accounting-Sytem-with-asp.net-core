@@ -237,6 +237,117 @@ export function createUnitConversionEditor(
   };
 }
 
+export interface FormErrors {
+  name?: string;
+  itemGroupId?: string;
+  itemCategoryId?: string;
+  unitOfMeasureId?: string;
+  unitConversions?: string;
+  defaultSalesPrice?: string;
+  defaultPurchasePrice?: string;
+  barcode?: string;
+  reorderLevel?: string;
+  reorderQuantity?: string;
+  minStockLevel?: string;
+  maxStockLevel?: string;
+  salesAccountId?: string;
+  defaultTaxId?: string;
+}
+
+const FIELD_TAB_MAP: Partial<Record<keyof FormErrors, string>> = {
+  defaultSalesPrice: "pricing_units",
+  defaultPurchasePrice: "pricing_units",
+  barcode: "pricing_units",
+  unitConversions: "pricing_units",
+  reorderLevel: "inventory",
+  reorderQuantity: "inventory",
+  minStockLevel: "inventory",
+  maxStockLevel: "inventory",
+  salesAccountId: "accounts",
+  defaultTaxId: "tax",
+};
+
+const GENERAL_ERROR_PATTERNS = [
+  "server error",
+  "internal server error",
+  "permission denied",
+  "forbidden",
+  "network error",
+  "failed to fetch",
+  "unexpected error",
+  "unexpected",
+  "unauthorized",
+  "timeout",
+];
+
+function focusField(field: keyof FormErrors) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const wrapper = document.querySelector(`[id="item-field-${field}"]`) as HTMLElement | null;
+  if (!wrapper) {
+    return;
+  }
+
+  wrapper.scrollIntoView({ behavior: "smooth", block: "center" });
+  const input = wrapper.querySelector("input, select, textarea, button") as HTMLElement | null;
+  input?.focus({ preventScroll: true });
+}
+
+type BackendFieldErrors = Partial<FormErrors> & { _general?: string };
+
+function parseBackendErrors(errorMsg: string | null | undefined, isArabic: boolean): BackendFieldErrors {
+  if (!errorMsg) return {};
+  
+  const result: BackendFieldErrors = {};
+  const messages = errorMsg.split(",").map(m => m.trim());
+  
+  for (const msg of messages) {
+    const lower = msg.toLowerCase();
+    
+    if (lower.includes("name")) {
+      result.name = isArabic ? "اسم المادة مطلوب" : "Material name is required";
+    } else if (lower.includes("itemgroupid") || lower.includes("item group")) {
+      result.itemGroupId = isArabic ? "مجموعة الأصناف مطلوبة" : "Item group is required";
+    } else if (lower.includes("itemcategoryid") || lower.includes("category")) {
+      result.itemCategoryId = isArabic ? "تصنيف الصنف مطلوب" : "Item category is required";
+    } else if (lower.includes("unitofmeasureid") || lower.includes("unit of measure") || lower.includes("baseunitofmeasureid")) {
+      result.unitOfMeasureId = isArabic ? "وحدة القياس الأساسية مطلوبة" : "Base unit of measure is required";
+    } else if (lower.includes("base unit conversion row") || lower.includes("base unit row") || lower.includes("conversion factor") || lower.includes("duplicate units") || lower.includes("each conversion row")) {
+      result.unitConversions = isArabic ? "تحقق من جدول الوحدات والتحويلات وتأكد من اكتمال صف الوحدة الأساسية وعدم تكرار الوحدات." : "Check the unit conversions table and ensure the base unit row is complete with no duplicate units.";
+    } else if (lower.includes("defaultsalesprice") || lower.includes("sales price")) {
+      result.defaultSalesPrice = isArabic ? "سعر البيع الافتراضي غير صالح أو مطلوب" : "Default sales price must be numeric and is required if sellable";
+    } else if (lower.includes("defaultpurchaseprice") || lower.includes("purchase price")) {
+      result.defaultPurchasePrice = isArabic ? "سعر الشراء الافتراضي غير صالح" : msg;
+    } else if (lower.includes("barcode")) {
+      result.barcode = isArabic ? "الباركود غير صالح أو طويل جداً" : msg;
+    } else if (lower.includes("reorderlevel") || lower.includes("reorder level")) {
+      result.reorderLevel = isArabic ? "حد إعادة الطلب غير صالح" : msg;
+    } else if (lower.includes("reorderquantity") || lower.includes("reorder quantity")) {
+      result.reorderQuantity = isArabic ? "كمية إعادة الطلب غير صالحة" : msg;
+    } else if (lower.includes("minstocklevel") || lower.includes("minimum stock")) {
+      result.minStockLevel = isArabic ? "الحد الأدنى للمخزون غير صالح" : msg;
+    } else if (lower.includes("maxstocklevel") || lower.includes("maximum stock")) {
+      result.maxStockLevel = isArabic ? "الحد الأقصى للمخزون غير صالح" : msg;
+    } else if (lower.includes("salesaccount") || lower.includes("revenue account")) {
+      result.salesAccountId = isArabic ? "حساب المبيعات مطلوب عند تحديد المادة كقابلة للبيع" : "Sales revenue account is required when item is sellable";
+    } else if (lower.includes("defaulttaxid") || lower.includes("tax")) {
+      result.defaultTaxId = isArabic ? "فئة الضريبة مطلوبة عند تفعيل خاضع للضريبة" : "Tax category is required when taxable";
+    } else {
+      if (GENERAL_ERROR_PATTERNS.some((pattern) => lower.includes(pattern))) {
+        result._general = result._general ? `${result._general}, ${msg}` : msg;
+      } else if (!result._general) {
+        result._general = msg;
+      } else {
+        result._general += `, ${msg}`;
+      }
+    }
+  }
+
+  return result;
+}
+
 export function ItemEditorModal({
   isOpen,
   presentation = "modal",
@@ -272,6 +383,209 @@ export function ItemEditorModal({
 
   const [activeTab, setActiveTab] = useState<string>("pricing_units");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [localErrors, setLocalErrors] = useState<FormErrors>({});
+  const [pendingFocusField, setPendingFocusField] = useState<keyof FormErrors | null>(null);
+
+  const clearFieldError = (field: keyof FormErrors) => {
+    if (localErrors[field]) {
+      setLocalErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
+  const validateForm = (editorState: ItemEditorState): FormErrors => {
+    const errors: FormErrors = {};
+    const isService = editorState.type === "SERVICE";
+
+    // Item Name
+    if (!editorState.name.trim()) {
+      errors.name = isArabic ? "اسم المادة مطلوب" : "Material name is required";
+    }
+
+    // Item Group
+    if (!editorState.itemGroupId) {
+      errors.itemGroupId = isArabic ? "مجموعة الأصناف مطلوبة" : "Item group is required";
+    }
+
+    // Item Category
+    if (!editorState.itemCategoryId) {
+      errors.itemCategoryId = isArabic ? "فئة الصنف مطلوبة" : "Item category is required";
+    }
+
+    // Base Unit of Measure (required unless it is a Service item)
+    if (!isService && !editorState.unitOfMeasureId) {
+      errors.unitOfMeasureId = isArabic ? "وحدة القياس الأساسية مطلوبة" : "Base unit of measure is required";
+    }
+
+    if (!isService) {
+      if (!editorState.unitOfMeasure.trim()) {
+        errors.unitOfMeasureId = isArabic ? "وحدة القياس الأساسية مطلوبة" : "Base unit of measure is required";
+      }
+      if (!editorState.unitConversions.length) {
+        errors.unitConversions = isArabic
+          ? "يجب وجود صف للوحدة الأساسية داخل جدول التحويلات."
+          : "A base unit conversion row is required.";
+      }
+    }
+
+    // Pricing & Units Tab
+    if (editorState.defaultSalesPrice.trim() && Number.isNaN(Number(editorState.defaultSalesPrice))) {
+      errors.defaultSalesPrice = isArabic ? "سعر البيع الافتراضي يجب أن يكون رقمياً" : "Default sales price must be numeric";
+    }
+    if (editorState.defaultPurchasePrice.trim() && Number.isNaN(Number(editorState.defaultPurchasePrice))) {
+      errors.defaultPurchasePrice = isArabic ? "سعر الشراء الافتراضي يجب أن يكون رقمياً" : "Default purchase price must be numeric";
+    }
+    if (editorState.barcode.trim().length > 120) {
+      errors.barcode = isArabic ? "الباركود طويل جداً" : "Barcode is too long";
+    }
+
+    // Sellable fields check
+    if (editorState.sellable) {
+      if (!editorState.defaultSalesPrice.trim()) {
+        errors.defaultSalesPrice = isArabic ? "سعر البيع مطلوب عند تحديد المادة كقابلة للبيع" : "Sales price is required when the item is sellable";
+      } else if (Number.isNaN(Number(editorState.defaultSalesPrice))) {
+        errors.defaultSalesPrice = isArabic ? "يجب أن يكون سعر البيع رقمياً" : "Sales price must be numeric";
+      }
+
+      // Accounts tab check
+      const selectedGroup = activeItemGroups?.find((g) => g.id === editorState.itemGroupId);
+      const hasSalesAccount = !!(editorState.salesAccountId || selectedGroup?.salesAccount);
+      if (!hasSalesAccount) {
+        errors.salesAccountId = isArabic ? "حساب المبيعات مطلوب عند تحديد المادة كقابلة للبيع" : "Sales revenue account is required when item is sellable";
+      }
+    }
+
+    // Tax Category
+    if (editorState.taxable && !editorState.defaultTaxId) {
+      errors.defaultTaxId = isArabic ? "فئة الضريبة مطلوبة عند تفعيل خاضع للضريبة" : "Tax category is required when the item is taxable";
+    }
+
+    // Inventory Tab
+    if (editorState.reorderLevel.trim() && Number.isNaN(Number(editorState.reorderLevel))) {
+      errors.reorderLevel = isArabic ? "حد إعادة الطلب يجب أن يكون رقمياً" : "Reorder level must be numeric";
+    }
+    if (editorState.reorderQuantity.trim() && Number.isNaN(Number(editorState.reorderQuantity))) {
+      errors.reorderQuantity = isArabic ? "كمية إعادة الطلب يجب أن تكون رقمية" : "Reorder quantity must be numeric";
+    }
+    if (!isService) {
+      if (editorState.minStockLevel && (Number.isNaN(Number(editorState.minStockLevel)) || Number(editorState.minStockLevel) < 0)) {
+        errors.minStockLevel = isArabic ? "الحد الأدنى للمخزون يجب أن يكون رقماً غير سالب" : "Minimum stock level must be a non-negative number";
+      }
+      if (editorState.maxStockLevel && (Number.isNaN(Number(editorState.maxStockLevel)) || Number(editorState.maxStockLevel) < 0)) {
+        errors.maxStockLevel = isArabic ? "الحد الأقصى للمخزون يجب أن يكون رقماً غير سالب" : "Maximum stock level must be a non-negative number";
+      }
+    }
+
+    const unitIds = new Set<string>();
+    let hasBaseUnit = false;
+    for (const row of editorState.unitConversions) {
+      if (!row.unitId) {
+        errors.unitConversions = isArabic ? "يجب اختيار وحدة لكل صف تحويل." : "Each conversion row must include a unit.";
+        break;
+      }
+      if (unitIds.has(row.unitId)) {
+        errors.unitConversions = isArabic ? "لا يمكن تكرار نفس الوحدة أكثر من مرة." : "Duplicate units are not allowed.";
+        break;
+      }
+      unitIds.add(row.unitId);
+
+      const factor = Number(row.conversionFactorToBaseUnit);
+      if (!row.conversionFactorToBaseUnit.trim() || Number.isNaN(factor) || factor <= 0) {
+        errors.unitConversions = isArabic
+          ? "معامل التحويل إلى الوحدة الأساسية يجب أن يكون أكبر من صفر."
+          : "Conversion factor must be greater than zero.";
+        break;
+      }
+
+      if (!isService && row.unitId === editorState.unitOfMeasureId) {
+        hasBaseUnit = true;
+        if (factor !== 1) {
+          errors.unitConversions = isArabic
+            ? "يجب أن يكون معامل تحويل الوحدة الأساسية مساوياً لـ 1."
+            : "Base unit conversion factor must be 1.";
+          break;
+        }
+      }
+    }
+
+    if (!isService && editorState.unitOfMeasureId && !hasBaseUnit && !errors.unitConversions) {
+      errors.unitConversions = isArabic ? "يجب أن يكون صف الوحدة الأساسية موجوداً دائماً." : "The base unit row must always exist.";
+    }
+
+    return errors;
+  };
+
+  const revealFirstError = (errors: FormErrors) => {
+    const firstErrorField = Object.keys(errors)[0] as keyof FormErrors | undefined;
+    if (!firstErrorField) {
+      return;
+    }
+
+    const targetTab = FIELD_TAB_MAP[firstErrorField];
+    setPendingFocusField(firstErrorField);
+    if (targetTab && activeTab !== targetTab) {
+      setActiveTab(targetTab);
+      return;
+    }
+    focusField(firstErrorField);
+    setPendingFocusField(null);
+  };
+
+  const handleSaveClick = (mode: "save" | "saveAndClose") => {
+    const errors = validateForm(editor);
+    
+    if (Object.keys(errors).length > 0) {
+      setLocalErrors(errors);
+      revealFirstError(errors);
+      return;
+    }
+    
+    setLocalErrors({});
+    onSave(mode);
+  };
+
+  const generalError = useMemo(() => {
+    if (!validationError) return null;
+    const parsed = parseBackendErrors(validationError, isArabic);
+    return parsed._general || null;
+  }, [validationError, isArabic]);
+
+  // Handle backend validation error updates
+  useEffect(() => {
+    if (validationError) {
+      const parsed = parseBackendErrors(validationError, isArabic);
+      const { _general: _ignoredGeneral, ...fieldErrors } = parsed;
+      
+      if (Object.keys(fieldErrors).length > 0) {
+        setLocalErrors((prev) => ({
+          ...prev,
+          ...fieldErrors,
+        }));
+        revealFirstError(fieldErrors);
+      }
+    }
+  }, [validationError, isArabic]);
+
+  useEffect(() => {
+    if (!pendingFocusField) {
+      return;
+    }
+
+    const targetTab = FIELD_TAB_MAP[pendingFocusField];
+    if (targetTab && activeTab !== targetTab) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      focusField(pendingFocusField);
+      setPendingFocusField(null);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, pendingFocusField]);
 
   useEffect(() => {
     if (token) {
@@ -288,6 +602,32 @@ export function ItemEditorModal({
     }
   }, [editor.type, activeTab]);
 
+  useEffect(() => {
+    setLocalErrors((prev) => {
+      const next = { ...prev };
+
+      if (editor.type === "SERVICE") {
+        delete next.unitOfMeasureId;
+        delete next.unitConversions;
+        delete next.reorderLevel;
+        delete next.reorderQuantity;
+        delete next.minStockLevel;
+        delete next.maxStockLevel;
+      }
+
+      if (!editor.sellable) {
+        delete next.defaultSalesPrice;
+        delete next.salesAccountId;
+      }
+
+      if (!editor.taxable) {
+        delete next.defaultTaxId;
+      }
+
+      return next;
+    });
+  }, [editor.sellable, editor.taxable, editor.type]);
+
   if (!isOpen) return null;
 
   const isInline = presentation === "inline";
@@ -299,6 +639,7 @@ export function ItemEditorModal({
   const itemEditorCategories = activeItemCategories.filter((row) => row.itemGroupId === editor.itemGroupId);
 
   const addUnitConversionRow = () => {
+    clearFieldError("unitConversions");
     updateEditor((current) => ({
       ...current,
       unitConversions: [...current.unitConversions, createUnitConversionEditor()],
@@ -306,6 +647,7 @@ export function ItemEditorModal({
   };
 
   const removeUnitConversionRow = (key: string) => {
+    clearFieldError("unitConversions");
     updateEditor((current) => ({
       ...current,
       unitConversions: current.unitConversions.filter((row) => row.key !== key),
@@ -316,6 +658,7 @@ export function ItemEditorModal({
     key: string,
     updater: (row: ItemUnitConversionEditorState) => ItemUnitConversionEditorState,
   ) => {
+    clearFieldError("unitConversions");
     updateEditor((current) => ({
       ...current,
       unitConversions: current.unitConversions.map((row) => (row.key === key ? updater(row) : row)),
@@ -369,7 +712,7 @@ export function ItemEditorModal({
 
         {/* Header */}
         {!isInline ? (
-          <div className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
             <button
               type="button"
               onClick={onClose}
@@ -378,12 +721,12 @@ export function ItemEditorModal({
               <span className="sr-only">{t("inventory.button.cancel")}</span>
               <X className="h-6 w-6" />
             </button>
-            <div className="flex items-center gap-3">
-              <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className={cn("min-w-0 space-y-1", isArabic ? "text-right" : "text-left")}>
                 <div className="text-3xl font-black tracking-tight text-slate-900 arabic-ui-heading">
                   {title}
                 </div>
-                <div className="text-sm text-slate-500">{t("inventory.description.items")}</div>
+                <div className="truncate text-sm text-slate-500">{t("inventory.items.description")}</div>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                 <Package2 className="h-6 w-6" />
@@ -403,16 +746,16 @@ export function ItemEditorModal({
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                   <Package2 className="h-5 w-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h1 className="text-xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
-                  <p className="text-xs text-slate-500">{t("inventory.description.items")}</p>
+                  <p className="truncate text-xs text-slate-500">{t("inventory.items.description")}</p>
                 </div>
               </div>
             ) : null}
 
-            {validationError ? (
+            {generalError ? (
               <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
-                {validationError}
+                {generalError}
               </div>
             ) : null}
 
@@ -431,11 +774,14 @@ export function ItemEditorModal({
 
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 <div className="sm:col-span-2">
-                  <Field label={isArabic ? "اسم المادة" : "Item Name"} required labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-name" label={isArabic ? "اسم المادة" : "Item Name"} required error={localErrors.name} labelAlign={isArabic ? "end" : "start"}>
                     <Input
                       value={editor.name}
-                      onChange={(e) => updateEditor((current) => ({ ...current, name: e.target.value }))}
-                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                      onChange={(e) => {
+                        updateEditor((current) => ({ ...current, name: e.target.value }));
+                        clearFieldError("name");
+                      }}
+                      className={cn("bg-slate-50/50", isArabic ? "text-right" : "text-left", localErrors.name ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                     />
                   </Field>
                 </div>
@@ -485,11 +831,14 @@ export function ItemEditorModal({
                   </Field>
                 </div>
                 <div>
-                  <Field label={isArabic ? "مجموعة المواد" : "Item Group"} required labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-itemGroupId" label={isArabic ? "مجموعة المواد" : "Item Group"} required error={localErrors.itemGroupId} labelAlign={isArabic ? "end" : "start"}>
                     <Select
                       value={editor.itemGroupId}
-                      onChange={(e) => updateEditor((current) => ({ ...current, itemGroupId: e.target.value, itemCategoryId: "" }))}
-                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                      onChange={(e) => {
+                        updateEditor((current) => ({ ...current, itemGroupId: e.target.value, itemCategoryId: "" }));
+                        clearFieldError("itemGroupId");
+                      }}
+                      className={cn("bg-slate-50/50", isArabic ? "text-right" : "text-left", localErrors.itemGroupId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                     >
                       <option value="">{t("inventory.placeholder.selectItemGroup")}</option>
                       {activeItemGroups.map((g) => (
@@ -499,7 +848,7 @@ export function ItemEditorModal({
                   </Field>
                 </div>
                 <div>
-                  <Field label={isArabic ? "فئة المادة" : "Item Category"} required labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-itemCategoryId" label={isArabic ? "فئة المادة" : "Item Category"} required error={localErrors.itemCategoryId} labelAlign={isArabic ? "end" : "start"}>
                     <Select
                       value={editor.itemCategoryId}
                       onChange={(e) => {
@@ -509,8 +858,9 @@ export function ItemEditorModal({
                           itemCategoryId: e.target.value,
                           category: category?.name ?? current.category,
                         }));
+                        clearFieldError("itemCategoryId");
                       }}
-                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                      className={cn("bg-slate-50/50", isArabic ? "text-right" : "text-left", localErrors.itemCategoryId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                     >
                       <option value="">{t("inventory.placeholder.selectItemCategory")}</option>
                       {itemEditorCategories.map((cat) => (
@@ -520,7 +870,7 @@ export function ItemEditorModal({
                   </Field>
                 </div>
                 <div>
-                  <Field label={isArabic ? "وحدة القياس الأساسية" : "Base Unit of Measure"} required labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-unitOfMeasureId" label={isArabic ? "وحدة القياس الأساسية" : "Base Unit of Measure"} required={editor.type !== "SERVICE"} error={localErrors.unitOfMeasureId} labelAlign={isArabic ? "end" : "start"}>
                     <Select
                       value={editor.unitOfMeasureId}
                       onChange={(e) => {
@@ -530,8 +880,9 @@ export function ItemEditorModal({
                           unitOfMeasureId: e.target.value,
                           unitOfMeasure: unit?.code ?? current.unitOfMeasure,
                         }));
+                        clearFieldError("unitOfMeasureId");
                       }}
-                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                      className={cn("bg-slate-50/50", isArabic ? "text-right" : "text-left", localErrors.unitOfMeasureId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                     >
                       <option value="">{t("inventory.placeholder.selectUnit")}</option>
                       {activeUnitsOfMeasure.map((u) => (
@@ -658,19 +1009,25 @@ export function ItemEditorModal({
                         <h3 className="font-bold text-slate-900">{isArabic ? "الأسعار الافتراضية والوحدات" : "Default Prices & Units"}</h3>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label={isArabic ? "سعر البيع الافتراضي" : "Default Sales Price"} labelAlign={isArabic ? "end" : "start"}>
+                        <Field id="item-field-defaultSalesPrice" label={isArabic ? "سعر البيع الافتراضي" : "Default Sales Price"} required={editor.sellable} error={localErrors.defaultSalesPrice} labelAlign={isArabic ? "end" : "start"}>
                           <Input
                             value={editor.defaultSalesPrice}
-                            onChange={(e) => updateEditor((current) => ({ ...current, defaultSalesPrice: e.target.value }))}
-                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                            onChange={(e) => {
+                              updateEditor((current) => ({ ...current, defaultSalesPrice: e.target.value }));
+                              clearFieldError("defaultSalesPrice");
+                            }}
+                            className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.defaultSalesPrice ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                             inputMode="decimal"
                           />
                         </Field>
-                        <Field label={isArabic ? "سعر الشراء الافتراضي" : "Default Purchase Price"} labelAlign={isArabic ? "end" : "start"}>
+                        <Field id="item-field-defaultPurchasePrice" label={isArabic ? "سعر الشراء الافتراضي" : "Default Purchase Price"} error={localErrors.defaultPurchasePrice} labelAlign={isArabic ? "end" : "start"}>
                           <Input
                             value={editor.defaultPurchasePrice}
-                            onChange={(e) => updateEditor((current) => ({ ...current, defaultPurchasePrice: e.target.value }))}
-                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                            onChange={(e) => {
+                              updateEditor((current) => ({ ...current, defaultPurchasePrice: e.target.value }));
+                              clearFieldError("defaultPurchasePrice");
+                            }}
+                            className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.defaultPurchasePrice ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                             inputMode="decimal"
                           />
                         </Field>
@@ -740,11 +1097,14 @@ export function ItemEditorModal({
                       <div className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div>
-                            <Field label={isArabic ? "الباركود" : "Barcode"} labelAlign={isArabic ? "end" : "start"}>
+                            <Field id="item-field-barcode" label={isArabic ? "الباركود" : "Barcode"} error={localErrors.barcode} labelAlign={isArabic ? "end" : "start"}>
                               <Input
                                 value={editor.barcode}
-                                onChange={(e) => updateEditor((current) => ({ ...current, barcode: e.target.value }))}
-                                className={cn("border-slate-200 bg-white", isArabic ? "text-right" : "text-left")}
+                                onChange={(e) => {
+                                  updateEditor((current) => ({ ...current, barcode: e.target.value }));
+                                  clearFieldError("barcode");
+                                }}
+                                className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.barcode ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                                 placeholder={isArabic ? "أدخل الباركود أو امسحه" : "Enter or scan barcode"}
                               />
                             </Field>
@@ -797,7 +1157,13 @@ export function ItemEditorModal({
 
                   {/* Unit Conversions Table Card */}
                   {editor.type !== "SERVICE" && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div
+                      id="item-field-unitConversions"
+                      className={cn(
+                        "rounded-2xl border bg-white p-5 shadow-sm",
+                        localErrors.unitConversions ? "border-red-300" : "border-slate-200",
+                      )}
+                    >
                       <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
                         <div className="flex items-center gap-2">
                           <Calculator className="h-5 w-5 text-emerald-600" />
@@ -900,6 +1266,11 @@ export function ItemEditorModal({
                           ? "مثال: إذا كانت وحدة القياس الأساسية هي حبة، والكرتونة تحتوي على 24 حبة، فإن معامل تحويل الكرتونة هو 24."
                           : "Example: If the base unit of measure is Piece, and a Carton contains 24 pieces, the Carton conversion factor is 24."}
                       </div>
+                      {localErrors.unitConversions ? (
+                        <div className={cn("mt-3 text-sm font-medium text-red-600", isArabic ? "text-right" : "text-left")}>
+                          {localErrors.unitConversions}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -982,39 +1353,51 @@ export function ItemEditorModal({
                           ))}
                         </Select>
                       </Field>
-                      <Field label={isArabic ? "حد إعادة الطلب" : "Reorder Level"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-reorderLevel" label={isArabic ? "حد إعادة الطلب" : "Reorder Level"} error={localErrors.reorderLevel} labelAlign={isArabic ? "end" : "start"}>
                         <Input
                           value={editor.reorderLevel}
-                          onChange={(e) => updateEditor((current) => ({ ...current, reorderLevel: e.target.value }))}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, reorderLevel: e.target.value }));
+                            clearFieldError("reorderLevel");
+                          }}
                           disabled={!editor.trackInventory}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.reorderLevel ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                           inputMode="decimal"
                         />
                       </Field>
-                      <Field label={isArabic ? "كمية إعادة الطلب" : "Reorder Quantity"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-reorderQuantity" label={isArabic ? "كمية إعادة الطلب" : "Reorder Quantity"} error={localErrors.reorderQuantity} labelAlign={isArabic ? "end" : "start"}>
                         <Input
                           value={editor.reorderQuantity}
-                          onChange={(e) => updateEditor((current) => ({ ...current, reorderQuantity: e.target.value }))}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, reorderQuantity: e.target.value }));
+                            clearFieldError("reorderQuantity");
+                          }}
                           disabled={!editor.trackInventory}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.reorderQuantity ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                           inputMode="decimal"
                         />
                       </Field>
-                      <Field label={isArabic ? "الحد الأدنى للمخزون" : "Minimum Stock Level"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-minStockLevel" label={isArabic ? "الحد الأدنى للمخزون" : "Minimum Stock Level"} error={localErrors.minStockLevel} labelAlign={isArabic ? "end" : "start"}>
                         <Input
                           value={editor.minStockLevel}
-                          onChange={(e) => updateEditor((current) => ({ ...current, minStockLevel: e.target.value }))}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, minStockLevel: e.target.value }));
+                            clearFieldError("minStockLevel");
+                          }}
                           disabled={!editor.trackInventory}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.minStockLevel ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                           inputMode="decimal"
                         />
                       </Field>
-                      <Field label={isArabic ? "الحد الأقصى للمخزون" : "Maximum Stock Level"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-maxStockLevel" label={isArabic ? "الحد الأقصى للمخزون" : "Maximum Stock Level"} error={localErrors.maxStockLevel} labelAlign={isArabic ? "end" : "start"}>
                         <Input
                           value={editor.maxStockLevel}
-                          onChange={(e) => updateEditor((current) => ({ ...current, maxStockLevel: e.target.value }))}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, maxStockLevel: e.target.value }));
+                            clearFieldError("maxStockLevel");
+                          }}
                           disabled={!editor.trackInventory}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.maxStockLevel ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                           inputMode="decimal"
                         />
                       </Field>
@@ -1085,11 +1468,14 @@ export function ItemEditorModal({
                           ))}
                         </Select>
                       </Field>
-                      <Field label={isArabic ? "حساب المبيعات (الإيرادات)" : "Sales Revenue Account"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-salesAccountId" label={isArabic ? "حساب المبيعات (الإيرادات)" : "Sales Revenue Account"} required={editor.sellable} error={localErrors.salesAccountId} labelAlign={isArabic ? "end" : "start"}>
                         <Select
                           value={editor.salesAccountId}
-                          onChange={(e) => updateEditor((current) => ({ ...current, salesAccountId: e.target.value }))}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, salesAccountId: e.target.value }));
+                            clearFieldError("salesAccountId");
+                          }}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.salesAccountId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                         >
                           <option value="">{t("inventory.placeholder.selectAccount")}</option>
                           {salesAccounts.map((a) => (
@@ -1205,12 +1591,15 @@ export function ItemEditorModal({
                           </span>
                         </div>
                       </Field>
-                      <Field label={isArabic ? "فئة ضريبة المبيعات" : "Sales Tax Code"} labelAlign={isArabic ? "end" : "start"}>
+                      <Field id="item-field-defaultTaxId" label={isArabic ? "فئة ضريبة المبيعات" : "Sales Tax Code"} required={editor.taxable} error={localErrors.defaultTaxId} labelAlign={isArabic ? "end" : "start"}>
                         <Select
                           value={editor.defaultTaxId}
-                          onChange={(e) => updateEditor((current) => ({ ...current, defaultTaxId: e.target.value }))}
+                          onChange={(e) => {
+                            updateEditor((current) => ({ ...current, defaultTaxId: e.target.value }));
+                            clearFieldError("defaultTaxId");
+                          }}
                           disabled={!editor.taxable}
-                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          className={cn("bg-white", isArabic ? "text-right" : "text-left", localErrors.defaultTaxId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                         >
                           <option value="">{t("inventory.placeholder.selectTax")}</option>
                           {activeTaxes.map((tax) => (
@@ -1479,7 +1868,7 @@ export function ItemEditorModal({
         <div className={cn("border-t border-slate-200 bg-white px-5 py-4 sm:px-8", isInline && "rounded-b-lg shadow-md")}>
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
-              onClick={() => onSave("saveAndClose")}
+              onClick={() => handleSaveClick("saveAndClose")}
               disabled={isSaving}
               className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
             >
@@ -1488,7 +1877,7 @@ export function ItemEditorModal({
             </Button>
             <Button
               variant="secondary"
-              onClick={() => onSave("save")}
+              onClick={() => handleSaveClick("save")}
               disabled={isSaving}
               className="rounded-xl border-slate-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
             >

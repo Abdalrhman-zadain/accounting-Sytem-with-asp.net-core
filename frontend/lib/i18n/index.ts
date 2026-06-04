@@ -2767,6 +2767,7 @@ Object.assign(enTranslations, {
   "inventory.placeholder.selectOptionalItemGroup": "No parent group",
   "inventory.placeholder.selectItemCategory": "Select an active item category",
   "inventory.placeholder.selectUnit": "Select an active unit",
+  "inventory.placeholder.selectTax": "Select a tax code",
   "inventory.metrics.itemGroups": "Item Groups",
   "inventory.metrics.itemCategories": "Item Categories",
   "inventory.metrics.unitsOfMeasure": "Units",

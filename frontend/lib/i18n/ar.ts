@@ -2684,6 +2684,7 @@ Object.assign(arTranslations, {
   "inventory.placeholder.selectOptionalItemGroup": "بدون مجموعة أب",
   "inventory.placeholder.selectItemCategory": "اختر فئة مادة نشطة",
   "inventory.placeholder.selectUnit": "اختر وحدة قياس نشطة",
+  "inventory.placeholder.selectTax": "اختر فئة ضريبية",
   "inventory.metrics.itemGroups": "مجموعات المواد",
   "inventory.metrics.itemCategories": "فئات المواد",
   "inventory.metrics.unitsOfMeasure": "وحدات القياس",

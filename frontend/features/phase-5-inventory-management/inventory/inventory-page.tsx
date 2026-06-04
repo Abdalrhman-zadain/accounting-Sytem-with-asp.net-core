@@ -1189,7 +1189,6 @@ export function InventoryPage() {
   const selectedAdjustment =
     adjustments.find((row) => row.id === (selectedAdjustmentId ?? adjustments[0]?.id)) ?? adjustments[0] ?? null;
 
-  const itemFormError = getItemFormError(itemEditor, activeItemGroups);
   const itemGroupFormError = getItemGroupFormError(itemGroupEditor);
   const itemCategoryFormError = getItemCategoryFormError(itemCategoryEditor);
   const unitFormError = getUnitFormError(unitEditor);
@@ -1517,7 +1516,7 @@ export function InventoryPage() {
               onChange={setItemEditor}
               onSave={submitItemEditor}
               isSaving={createItemMutation.isPending || updateItemMutation.isPending}
-              validationError={itemFormError || itemMutationError}
+              validationError={itemMutationError}
               activeItemGroups={activeItemGroups}
               activeItemCategories={activeItemCategories}
               activeUnitsOfMeasure={activeUnitsOfMeasure}
@@ -3675,10 +3674,6 @@ export function InventoryPage() {
   }
 
   function submitItemEditor(mode: "save" | "saveAndClose") {
-    if (itemFormError) {
-      return;
-    }
-
     itemSaveModeRef.current = mode;
     if (itemEditor.id) {
       void updateItemMutation.mutate();
@@ -4936,90 +4931,6 @@ function mapAdjustmentEditorToPayload(editor: AdjustmentEditorState) {
       }),
     ),
   };
-}
-
-function getItemFormError(editor: ItemEditorState, itemGroups?: InventoryItemGroup[]) {
-  if (!editor.name.trim()) return "Material name is required. اسم المادة مطلوب.";
-  if (!editor.itemGroupId) return "Item group is required. مجموعة الأصناف مطلوبة.";
-  if (!editor.itemCategoryId) return "Item category is required. فئة الصنف / التصنيف مطلوبة.";
-
-  const isService = editor.type === "SERVICE";
-
-  if (!isService) {
-    if (!editor.unitOfMeasureId) return "Base unit of measure is required. وحدة القياس الأساسية مطلوبة.";
-    if (!editor.unitOfMeasure.trim()) return "Unit of measure is required. وحدة القياس مطلوبة.";
-    if (!editor.unitConversions.length) {
-      return "Base unit conversion row is required. يجب وجود صف للوحدة الأساسية داخل جدول التحويلات.";
-    }
-  }
-
-  if (editor.barcode.trim().length > 120) return "Barcode is too long. الباركود طويل جدًا.";
-  if (editor.defaultSalesPrice.trim() && Number.isNaN(Number(editor.defaultSalesPrice))) {
-    return "Default sales price must be numeric. يجب أن يكون سعر البيع الافتراضي رقمياً.";
-  }
-  if (editor.defaultPurchasePrice.trim() && Number.isNaN(Number(editor.defaultPurchasePrice))) {
-    return "Default purchase price must be numeric. يجب أن يكون سعر الشراء الافتراضي رقمياً.";
-  }
-  if (editor.taxable && !editor.defaultTaxId) {
-    return "Tax category is required when the item is taxable. فئة الضريبة مطلوبة عند تفعيل خاضع للضريبة.";
-  }
-  if (editor.reorderLevel.trim() && Number.isNaN(Number(editor.reorderLevel))) {
-    return "Reorder level must be numeric. يجب أن يكون حد إعادة الطلب رقميا.";
-  }
-  if (editor.reorderQuantity.trim() && Number.isNaN(Number(editor.reorderQuantity))) {
-    return "Reorder quantity must be numeric. يجب أن تكون كمية إعادة الطلب رقمية.";
-  }
-
-  if (!isService) {
-    if (editor.minStockLevel && (Number.isNaN(Number(editor.minStockLevel)) || Number(editor.minStockLevel) < 0)) {
-      return "Minimum stock level must be a non-negative number. يجب أن يكون الحد الأدنى للمخزون رقماً غير سالب.";
-    }
-    if (editor.maxStockLevel && (Number.isNaN(Number(editor.maxStockLevel)) || Number(editor.maxStockLevel) < 0)) {
-      return "Maximum stock level must be a non-negative number. يجب أن يكون الحد الأقصى للمخزون رقماً غير سالب.";
-    }
-  }
-
-  if (editor.sellable) {
-    if (!editor.defaultSalesPrice.trim() || Number.isNaN(Number(editor.defaultSalesPrice))) {
-      return "Sales price is required and must be numeric when the item is sellable. سعر البيع مطلوب عند تفعيل خيار قابل للبيع ويجب أن يكون رقمياً.";
-    }
-    const selectedGroup = itemGroups?.find((g) => g.id === editor.itemGroupId);
-    const hasSalesAccount = !!(editor.salesAccountId || selectedGroup?.salesAccount);
-    if (!hasSalesAccount) {
-      return "Sales revenue account or default group sales account must exist when item is sellable. حساب المبيعات مطلوب عند تحديد المادة كقابلة للبيع.";
-    }
-  }
-
-  const unitIds = new Set<string>();
-  let hasBaseUnit = false;
-
-  for (const row of editor.unitConversions) {
-    if (!row.unitId) {
-      return "Each conversion row must have a unit. يجب اختيار وحدة لكل صف تحويل.";
-    }
-    if (unitIds.has(row.unitId)) {
-      return "Duplicate units are not allowed. لا يمكن تكرار نفس الوحدة أكثر من مرة.";
-    }
-    unitIds.add(row.unitId);
-
-    const factor = Number(row.conversionFactorToBaseUnit);
-    if (!row.conversionFactorToBaseUnit.trim() || Number.isNaN(factor) || factor <= 0) {
-      return "Conversion factor must be greater than zero. معامل التحويل إلى الوحدة الأساسية يجب أن يكون أكبر من صفر.";
-    }
-
-    if (!isService && row.unitId === editor.unitOfMeasureId) {
-      hasBaseUnit = true;
-      if (factor !== 1) {
-        return "Base unit conversion factor must be 1. يجب أن يكون معامل تحويل الوحدة الأساسية مساوياً لـ 1.";
-      }
-    }
-  }
-
-  if (!isService && !hasBaseUnit && editor.unitOfMeasureId) {
-    return "Base unit row must always exist. يجب أن يكون صف الوحدة الأساسية موجوداً دائماً.";
-  }
-
-  return null;
 }
 
 function getItemGroupFormError(editor: ItemGroupEditorState) {
