@@ -1,6 +1,4 @@
-"use client";
-
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   LuFileText as FileText,
   LuPackage2 as Package2,
@@ -13,22 +11,29 @@ import {
   LuPaperclip as Paperclip,
   LuSettings as Settings,
   LuCalculator as Calculator,
+  LuPercent,
+  LuTruck,
+  LuNotebook,
+  LuDollarSign,
+  LuTriangleAlert,
 } from "react-icons/lu";
 
 import { Button } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import { getSuppliers } from "@/lib/api";
 import type {
   InventoryItem,
   InventoryItemCategory,
   InventoryItemGroup,
-  InventoryItemUnitConversion,
   InventoryItemType,
   InventoryUnitOfMeasure,
   InventoryWarehouse,
   AccountOption,
   Tax,
+  Supplier,
 } from "@/types/api";
 
 export type ItemUnitConversionEditorState = {
@@ -73,6 +78,34 @@ export type ItemEditorState = {
   reorderQuantity: string;
   preferredWarehouseId: string;
   unitConversions: ItemUnitConversionEditorState[];
+
+  // Extended ERP UI fields
+  isActive: boolean;
+  sellable: boolean;
+  purchasable: boolean;
+  onHandQuantity?: string;
+  valuationAmount?: string;
+  salesUnitId?: string;
+  purchaseUnitId?: string;
+  allowFractionalQuantity?: boolean;
+  minSalesQuantity?: string;
+  minStockLevel?: string;
+  maxStockLevel?: string;
+  allowNegativeStock?: boolean;
+  salesDiscountAccountId?: string;
+  defaultCostCenterId?: string;
+  purchaseTaxId?: string;
+  priceIncludesTax?: boolean;
+  specialTaxTreatment?: string;
+  defaultSupplierId?: string;
+  supplierItemCode?: string;
+  lastPurchasePrice?: string;
+  leadTime?: string;
+  minPurchaseQuantity?: string;
+  alternativeSuppliersText?: string;
+  datasheetUrl?: string;
+  purchaseNotes?: string;
+  inventoryNotes?: string;
 };
 
 type ItemEditorModalProps = {
@@ -158,6 +191,34 @@ export function createEmptyItemEditor(): ItemEditorState {
     reorderQuantity: "0",
     preferredWarehouseId: "",
     unitConversions: [],
+
+    // Extended UI fields defaults
+    isActive: true,
+    sellable: true,
+    purchasable: true,
+    onHandQuantity: "0",
+    valuationAmount: "0",
+    salesUnitId: "",
+    purchaseUnitId: "",
+    allowFractionalQuantity: false,
+    minSalesQuantity: "1",
+    minStockLevel: "0",
+    maxStockLevel: "0",
+    allowNegativeStock: false,
+    salesDiscountAccountId: "",
+    defaultCostCenterId: "",
+    purchaseTaxId: "",
+    priceIncludesTax: false,
+    specialTaxTreatment: "",
+    defaultSupplierId: "",
+    supplierItemCode: "",
+    lastPurchasePrice: "",
+    leadTime: "",
+    minPurchaseQuantity: "1",
+    alternativeSuppliersText: "",
+    datasheetUrl: "",
+    purchaseNotes: "",
+    inventoryNotes: "",
   };
 }
 
@@ -207,6 +268,25 @@ export function ItemEditorModal({
 }: ItemEditorModalProps) {
   const { t, language } = useTranslation();
   const isArabic = language === "ar";
+  const { token, user } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<string>("pricing_units");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  useEffect(() => {
+    if (token) {
+      getSuppliers({ isActive: "true" }, token)
+        .then((res) => setSuppliers(res || []))
+        .catch((err) => console.error("Failed to load suppliers in Item Editor", err));
+    }
+  }, [token]);
+
+  // Safeguard against active tab being hidden when type changes
+  useEffect(() => {
+    if (editor.type === "SERVICE" && activeTab === "inventory") {
+      setActiveTab("pricing_units");
+    }
+  }, [editor.type, activeTab]);
 
   if (!isOpen) return null;
 
@@ -217,7 +297,6 @@ export function ItemEditorModal({
   };
 
   const itemEditorCategories = activeItemCategories.filter((row) => row.itemGroupId === editor.itemGroupId);
-  const inventorySettingsDisabled = editor.type === "SERVICE" || !editor.trackInventory;
 
   const addUnitConversionRow = () => {
     updateEditor((current) => ({
@@ -242,6 +321,27 @@ export function ItemEditorModal({
       unitConversions: current.unitConversions.map((row) => (row.key === key ? updater(row) : row)),
     }));
   };
+
+  const isAccountantOrAdmin = user?.role === "ADMIN" || user?.role === "MANAGER" || user?.posRoles?.includes("ACCOUNTANT");
+
+  const averageCost = useMemo(() => {
+    const qty = parseFloat(editor.onHandQuantity || "0");
+    const val = parseFloat(editor.valuationAmount || "0");
+    return qty > 0 ? val / qty : 0;
+  }, [editor.onHandQuantity, editor.valuationAmount]);
+
+  const selectedTax = activeTaxes.find((t) => t.id === editor.defaultTaxId);
+  const taxRateDisplay = selectedTax ? `${parseFloat(selectedTax.rate).toFixed(2)}%` : "0.00%";
+
+  const tabs = [
+    { id: "pricing_units", labelAr: "التسعير والوحدات", labelEn: "Pricing & Units", icon: Calculator },
+    { id: "inventory", labelAr: "المخزون", labelEn: "Inventory", icon: Settings, hide: editor.type === "SERVICE" },
+    { id: "accounts", labelAr: "الحسابات", labelEn: "Accounts", icon: FileText, hide: !isAccountantOrAdmin },
+    { id: "tax", labelAr: "الضريبة", labelEn: "Tax", icon: LuPercent },
+    { id: "suppliers", labelAr: "الموردين", labelEn: "Suppliers", icon: LuTruck },
+    { id: "images_attachments", labelAr: "الصور والمرفقات", labelEn: "Images & Attachments", icon: ImageIcon },
+    { id: "notes", labelAr: "ملاحظات", labelEn: "Notes", icon: LuNotebook },
+  ];
 
   return (
     <div className={cn(isInline ? "relative" : "fixed inset-0 z-50 p-3 sm:p-6")}>
@@ -292,7 +392,7 @@ export function ItemEditorModal({
           </div>
         ) : null}
 
-        {/* Content */}
+        {/* Content Container */}
         <div className={cn(
           "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
           isInline ? "px-0 py-4" : "px-4 py-4 sm:px-8 sm:py-6"
@@ -316,603 +416,1072 @@ export function ItemEditorModal({
               </div>
             ) : null}
 
-            {/* Section 1: البيانات الأساسية */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
-                <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "1. البيانات الأساسية" : "1. Basic Information"}
-                  </div>
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+            {/* Pinned Section: البيانات الأساسية */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 transition-all duration-200 hover:shadow-md">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                   <FileText className="h-5 w-5" />
                 </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={isArabic ? "اسم المادة" : "Item Name"} required labelAlign={isArabic ? "end" : "start"}>
-                  <Input
-                    value={editor.name}
-                    onChange={(e) => updateEditor((current) => ({ ...current, name: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  />
-                </Field>
-                <Field label={isArabic ? "مجموعة المواد" : "Item Group"} required labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.itemGroupId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, itemGroupId: e.target.value, itemCategoryId: "" }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectItemGroup")}</option>
-                    {activeItemGroups.map((g) => (
-                      <option key={g.id} value={g.id}>{formatCodeName(g.code, g.name, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "فئة المادة" : "Item Category"} required labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.itemCategoryId}
-                    onChange={(e) => {
-                      const category = activeItemCategories.find((row) => row.id === e.target.value);
-                      updateEditor((current) => ({
-                        ...current,
-                        itemCategoryId: e.target.value,
-                        category: category?.name ?? current.category,
-                      }));
-                    }}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectItemCategory")}</option>
-                    {itemEditorCategories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{formatCodeName(cat.code, cat.name, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "نوع المادة" : "Item Type"} required labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.type}
-                    onChange={(e) => {
-                      const newType = e.target.value as InventoryItemType;
-                      updateEditor((current) => {
-                        let nextUnitOfMeasureId = current.unitOfMeasureId;
-                        let nextUnitOfMeasure = current.unitOfMeasure;
-
-                        if (newType === "SERVICE" && !nextUnitOfMeasureId) {
-                          const serviceUnit = activeUnitsOfMeasure.find((u) => u.name === "خدمة" || u.name === "Service");
-                          if (serviceUnit) {
-                            nextUnitOfMeasureId = serviceUnit.id;
-                            nextUnitOfMeasure = serviceUnit.code;
-                          }
-                        }
-
-                        return {
-                          ...current,
-                          type: newType,
-                          trackInventory: newType === "SERVICE" ? false : true,
-                          unitOfMeasureId: nextUnitOfMeasureId,
-                          unitOfMeasure: nextUnitOfMeasure,
-                        };
-                      });
-                    }}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    {ITEM_TYPE_OPTIONS.map((type) => (
-                      <option key={type.value} value={type.value}>{isArabic ? type.labelAr : type.labelEn}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "وحدة القياس الأساسية" : "Base Unit of Measure"} required labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.unitOfMeasureId}
-                    onChange={(e) => {
-                      const unit = activeUnitsOfMeasure.find((row) => row.id === e.target.value);
-                      updateEditor((current) => ({
-                        ...current,
-                        unitOfMeasureId: e.target.value,
-                        unitOfMeasure: unit?.code ?? current.unitOfMeasure,
-                      }));
-                    }}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectUnit")}</option>
-                    {activeUnitsOfMeasure.map((u) => (
-                      <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-            </section>
-
-            {/* Section 2: الوحدات والأسعار */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
                 <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "2. الوحدات والأسعار" : "2. Units & Prices"}
+                  <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
+                    {isArabic ? "البيانات الأساسية" : "Basic Information"}
                   </div>
                 </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                  <Calculator className="h-5 w-5" />
-                </div>
               </div>
 
-              <div className="mb-8 rounded-md border border-slate-100 bg-slate-50/45 p-5">
-                <div className={cn("mb-4 text-sm font-bold text-slate-900", isArabic ? "text-right" : "text-left")}>
-                  {isArabic ? "الأسعار الافتراضية" : "Default Prices"}
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                <div className="sm:col-span-2">
+                  <Field label={isArabic ? "اسم المادة" : "Item Name"} required labelAlign={isArabic ? "end" : "start"}>
+                    <Input
+                      value={editor.name}
+                      onChange={(e) => updateEditor((current) => ({ ...current, name: e.target.value }))}
+                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                    />
+                  </Field>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-                  <Field label={isArabic ? "سعر البيع الافتراضي" : "Default Sales Price"} labelAlign={isArabic ? "end" : "start"}>
-                    <Input value={editor.defaultSalesPrice} onChange={(e) => updateEditor((current) => ({ ...current, defaultSalesPrice: e.target.value }))} className={cn("bg-white", isArabic ? "text-right" : "text-left")} inputMode="decimal" />
+                <div>
+                  <Field label={isArabic ? "رمز المادة / SKU" : "Item Code / SKU"} labelAlign={isArabic ? "end" : "start"}>
+                    <Input
+                      value={editor.id ? editor.code : ""}
+                      disabled
+                      placeholder={isArabic ? "توليد تلقائي" : "Auto-generated"}
+                      className={cn("border-slate-200 bg-slate-100 font-mono text-slate-500 cursor-not-allowed", isArabic ? "text-right" : "text-left")}
+                    />
                   </Field>
-                  <Field label={isArabic ? "سعر الشراء الافتراضي" : "Default Purchase Price"} labelAlign={isArabic ? "end" : "start"}>
-                    <Input value={editor.defaultPurchasePrice} onChange={(e) => updateEditor((current) => ({ ...current, defaultPurchasePrice: e.target.value }))} className={cn("bg-white", isArabic ? "text-right" : "text-left")} inputMode="decimal" />
-                  </Field>
-                  <Field label={isArabic ? "العملة" : "Currency"} labelAlign={isArabic ? "end" : "start"}>
-                    <Input value={editor.currencyCode} onChange={(e) => updateEditor((current) => ({ ...current, currencyCode: e.target.value.toUpperCase() }))} className={cn("bg-white uppercase", isArabic ? "text-right" : "text-left")} maxLength={3} />
-                  </Field>
-                  <Field label={isArabic ? "خاضع للضريبة" : "Taxable"} labelAlign={isArabic ? "end" : "start"}>
-                    <label className={cn("flex h-[42px] items-center gap-3 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800", isArabic ? "justify-end text-right" : "justify-start text-left")}>
-                      <span>{isArabic ? "نعم" : "Yes"}</span>
-                      <input
-                        type="checkbox"
-                        checked={editor.taxable}
-                        onChange={(e) => updateEditor((current) => ({ ...current, taxable: e.target.checked, defaultTaxId: e.target.checked ? current.defaultTaxId : "" }))}
-                        className="h-4 w-4 accent-emerald-600"
-                      />
-                    </label>
-                  </Field>
-                  <Field label={isArabic ? "فئة الضريبة" : "Default Tax Category"} labelAlign={isArabic ? "end" : "start"}>
+                </div>
+                <div>
+                  <Field label={isArabic ? "نوع المادة" : "Item Type"} required labelAlign={isArabic ? "end" : "start"}>
                     <Select
-                      value={editor.defaultTaxId}
-                      onChange={(e) => updateEditor((current) => ({ ...current, defaultTaxId: e.target.value }))}
-                      disabled={!editor.taxable}
-                      className={cn("bg-white", isArabic ? "text-right" : "text-left")}
+                      value={editor.type}
+                      onChange={(e) => {
+                        const newType = e.target.value as InventoryItemType;
+                        updateEditor((current) => {
+                          let nextUnitOfMeasureId = current.unitOfMeasureId;
+                          let nextUnitOfMeasure = current.unitOfMeasure;
+
+                          if (newType === "SERVICE" && !nextUnitOfMeasureId) {
+                            const serviceUnit = activeUnitsOfMeasure.find((u) => u.name === "خدمة" || u.name === "Service");
+                            if (serviceUnit) {
+                              nextUnitOfMeasureId = serviceUnit.id;
+                              nextUnitOfMeasure = serviceUnit.code;
+                            }
+                          }
+
+                          return {
+                            ...current,
+                            type: newType,
+                            trackInventory: newType === "SERVICE" ? false : true,
+                            unitOfMeasureId: nextUnitOfMeasureId,
+                            unitOfMeasure: nextUnitOfMeasure,
+                          };
+                        });
+                      }}
+                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
                     >
-                      <option value="">{isArabic ? "اختر" : "Select"}</option>
-                      {activeTaxes.map((tax) => (
-                        <option key={tax.id} value={tax.id}>{tax.taxCode} · {tax.taxName}</option>
+                      {ITEM_TYPE_OPTIONS.map((type) => (
+                        <option key={type.value} value={type.value}>{isArabic ? type.labelAr : type.labelEn}</option>
                       ))}
                     </Select>
                   </Field>
                 </div>
-                <div className={cn("mt-3 text-sm font-medium text-slate-500", isArabic ? "text-right" : "text-left")}>
-                  {isArabic 
-                    ? "هذه الأسعار افتراضية فقط وتظهر كمقترح في الفواتير، ولا تمثل تكلفة المخزون الفعلية."
-                    : "These prices are defaults for invoice suggestions and do not represent actual inventory cost."}
+                <div>
+                  <Field label={isArabic ? "مجموعة المواد" : "Item Group"} required labelAlign={isArabic ? "end" : "start"}>
+                    <Select
+                      value={editor.itemGroupId}
+                      onChange={(e) => updateEditor((current) => ({ ...current, itemGroupId: e.target.value, itemCategoryId: "" }))}
+                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                    >
+                      <option value="">{t("inventory.placeholder.selectItemGroup")}</option>
+                      {activeItemGroups.map((g) => (
+                        <option key={g.id} value={g.id}>{formatCodeName(g.code, g.name, isArabic)}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div>
+                  <Field label={isArabic ? "فئة المادة" : "Item Category"} required labelAlign={isArabic ? "end" : "start"}>
+                    <Select
+                      value={editor.itemCategoryId}
+                      onChange={(e) => {
+                        const category = activeItemCategories.find((row) => row.id === e.target.value);
+                        updateEditor((current) => ({
+                          ...current,
+                          itemCategoryId: e.target.value,
+                          category: category?.name ?? current.category,
+                        }));
+                      }}
+                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                    >
+                      <option value="">{t("inventory.placeholder.selectItemCategory")}</option>
+                      {itemEditorCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{formatCodeName(cat.code, cat.name, isArabic)}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div>
+                  <Field label={isArabic ? "وحدة القياس الأساسية" : "Base Unit of Measure"} required labelAlign={isArabic ? "end" : "start"}>
+                    <Select
+                      value={editor.unitOfMeasureId}
+                      onChange={(e) => {
+                        const unit = activeUnitsOfMeasure.find((row) => row.id === e.target.value);
+                        updateEditor((current) => ({
+                          ...current,
+                          unitOfMeasureId: e.target.value,
+                          unitOfMeasure: unit?.code ?? current.unitOfMeasure,
+                        }));
+                      }}
+                      className={cn("border-slate-200 bg-slate-50/50", isArabic ? "text-right" : "text-left")}
+                    >
+                      <option value="">{t("inventory.placeholder.selectUnit")}</option>
+                      {activeUnitsOfMeasure.map((u) => (
+                        <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+
+                {/* Status Switch */}
+                <div>
+                  <Field label={isArabic ? "الحالة (نشط / معطل)" : "Status (Active / Inactive)"} labelAlign={isArabic ? "end" : "start"}>
+                    <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                      <button
+                        type="button"
+                        onClick={() => updateEditor((current) => ({ ...current, isActive: !current.isActive }))}
+                        className={cn(
+                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
+                          editor.isActive ? "bg-emerald-600" : "bg-slate-200"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            editor.isActive ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                          )}
+                        />
+                      </button>
+                      <span className="text-sm font-semibold text-slate-700">
+                        {editor.isActive ? (isArabic ? "نشط" : "Active") : (isArabic ? "غير نشط" : "Inactive")}
+                      </span>
+                    </div>
+                  </Field>
+                </div>
+
+                {/* Sellable Switch */}
+                <div>
+                  <Field label={isArabic ? "قابل للبيع" : "Sellable"} labelAlign={isArabic ? "end" : "start"}>
+                    <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                      <button
+                        type="button"
+                        onClick={() => updateEditor((current) => ({ ...current, sellable: !current.sellable }))}
+                        className={cn(
+                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
+                          editor.sellable ? "bg-emerald-600" : "bg-slate-200"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            editor.sellable ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                          )}
+                        />
+                      </button>
+                      <span className="text-sm font-semibold text-slate-700">
+                        {editor.sellable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                      </span>
+                    </div>
+                  </Field>
+                </div>
+
+                {/* Purchasable Switch */}
+                <div>
+                  <Field label={isArabic ? "قابل للشراء" : "Purchasable"} labelAlign={isArabic ? "end" : "start"}>
+                    <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                      <button
+                        type="button"
+                        onClick={() => updateEditor((current) => ({ ...current, purchasable: !current.purchasable }))}
+                        className={cn(
+                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
+                          editor.purchasable ? "bg-emerald-600" : "bg-slate-200"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            editor.purchasable ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                          )}
+                        />
+                      </button>
+                      <span className="text-sm font-semibold text-slate-700">
+                        {editor.purchasable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                      </span>
+                    </div>
+                  </Field>
                 </div>
               </div>
+            </section>
 
-              <div className="space-y-4">
-                <div className={cn("flex items-center justify-between gap-3", !isArabic && "flex-row-reverse")}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={addUnitConversionRow}
-                    className="rounded-2xl border-emerald-200 px-4 text-emerald-700 hover:bg-emerald-50"
+            {/* Redesigned Tab Navigation */}
+            <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-slate-100/50 p-1 rounded-xl shadow-inner">
+              {tabs.filter((tab) => !tab.hide).map((tab) => {
+                const IconComponent = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 outline-none",
+                      isActive
+                        ? "bg-white text-emerald-600 shadow-sm border border-slate-200/50 font-bold"
+                        : "text-slate-500 hover:bg-slate-200/50 hover:text-slate-800"
+                    )}
                   >
-                    {isArabic ? "+ إضافة وحدة" : "+ Add Unit"}
-                  </Button>
-                  <div className={isArabic ? "text-right" : "text-left"}>
-                    <div className="text-sm font-extrabold text-slate-900">{isArabic ? "الوحدات والتحويلات" : "Units and Conversions"}</div>
-                    <div className="text-xs text-slate-500">
-                      {isArabic
-                        ? "حدد الوحدات الإضافية للمادة ومعامل تحويل كل وحدة إلى وحدة القياس الأساسية."
-                        : "Define additional units for this item and their conversion factors to the base unit of measure."}
-                    </div>
-                  </div>
-                </div>
+                    <IconComponent className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-slate-400")} />
+                    <span>{isArabic ? tab.labelAr : tab.labelEn}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-                <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-slate-50/30 p-1">
-                  <table className="min-w-[1000px] w-full border-separate border-spacing-0 text-sm">
-                    <thead>
-                      <tr className={cn("text-slate-900", isArabic ? "text-right" : "text-left")}>
-                        <th className="px-4 py-3 font-bold">{isArabic ? "الوحدة" : "Unit"}</th>
-                        <th className="px-4 py-3 font-bold">
-                          {isArabic ? "معامل التحويل" : "Conversion Factor"}
-                          <span className="ms-1 text-slate-400 group relative inline-block">
-                            ⓘ
-                            <span className="invisible group-hover:visible absolute bottom-full right-0 w-64 p-2 bg-slate-800 text-white text-xs rounded shadow-lg mb-2 z-10 font-normal">
-                              {isArabic
-                                ? "كم تساوي هذه الوحدة من وحدة القياس الأساسية؟ مثال: إذا كانت الوحدة الأساسية حبة والكرتونة تحتوي 24 حبة، أدخل 24."
-                                : "How many base units does this unit contain? Example: if base unit is Piece and Carton contains 24 pieces, enter 24."}
-                            </span>
-                          </span>
-                        </th>
-                        <th className="px-4 py-3 font-bold">{isArabic ? "باركود الوحدة" : "Unit Barcode"}</th>
-                        <th className="px-4 py-3 font-bold">{isArabic ? "سعر البيع" : "Sales Price"}</th>
-                        <th className="px-4 py-3 font-bold">{isArabic ? "سعر الشراء" : "Purchase Price"}</th>
-                        <th className="px-4 py-3 font-bold text-center">{isArabic ? "الإجراءات" : "Actions"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editor.unitConversions.map((row) => (
-                        <tr key={row.key} className="group">
-                          <td className="px-2 py-2">
-                            <Select
-                              value={row.unitId}
-                              onChange={(e) => updateUnitConversionRow(row.key, (r) => ({
-                                ...r,
-                                unitId: e.target.value,
-                                isBaseUnit: e.target.value === editor.unitOfMeasureId,
-                                conversionFactorToBaseUnit: e.target.value === editor.unitOfMeasureId ? "1" : r.conversionFactorToBaseUnit,
-                              }))}
-                              className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
-                            >
-                              <option value="">{isArabic ? "اختر وحدة" : "Select unit"}</option>
-                              {activeUnitsOfMeasure.map((u) => (
-                                <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
-                              ))}
-                            </Select>
-                          </td>
-                          <td className="px-2 py-2">
-                            <Input
-                              value={row.conversionFactorToBaseUnit}
-                              onChange={(e) => updateUnitConversionRow(row.key, (r) => ({ ...r, conversionFactorToBaseUnit: e.target.value }))}
-                              disabled={row.isBaseUnit}
-                              className={cn("bg-white border-slate-200 disabled:bg-slate-50", isArabic ? "text-right" : "text-left")}
-                              inputMode="decimal"
-                              placeholder="1"
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <Input
-                              value={row.barcode}
-                              onChange={(e) => updateUnitConversionRow(row.key, (r) => ({ ...r, barcode: e.target.value }))}
-                              className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
-                              placeholder={isArabic ? "باركود الوحدة" : "Unit barcode"}
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <Input
-                              value={row.defaultSalesPrice}
-                              onChange={(e) => updateUnitConversionRow(row.key, (r) => ({ ...r, defaultSalesPrice: e.target.value }))}
-                              className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
-                              inputMode="decimal"
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <Input
-                              value={row.defaultPurchasePrice}
-                              onChange={(e) => updateUnitConversionRow(row.key, (r) => ({ ...r, defaultPurchasePrice: e.target.value }))}
-                              className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
-                              inputMode="decimal"
-                            />
-                          </td>
-                          <td className="px-2 py-2 text-center">
+            {/* Tab Workspace Panels */}
+            <div className="min-h-[450px]">
+              {/* Tab 1: pricing_units */}
+              {activeTab === "pricing_units" && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="grid gap-5 md:grid-cols-2">
+                    {/* Default Prices Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+                        <Calculator className="h-5 w-5 text-emerald-600" />
+                        <h3 className="font-bold text-slate-900">{isArabic ? "الأسعار الافتراضية والوحدات" : "Default Prices & Units"}</h3>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={isArabic ? "سعر البيع الافتراضي" : "Default Sales Price"} labelAlign={isArabic ? "end" : "start"}>
+                          <Input
+                            value={editor.defaultSalesPrice}
+                            onChange={(e) => updateEditor((current) => ({ ...current, defaultSalesPrice: e.target.value }))}
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                            inputMode="decimal"
+                          />
+                        </Field>
+                        <Field label={isArabic ? "سعر الشراء الافتراضي" : "Default Purchase Price"} labelAlign={isArabic ? "end" : "start"}>
+                          <Input
+                            value={editor.defaultPurchasePrice}
+                            onChange={(e) => updateEditor((current) => ({ ...current, defaultPurchasePrice: e.target.value }))}
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                            inputMode="decimal"
+                          />
+                        </Field>
+                        <Field label={isArabic ? "وحدة البيع" : "Sales Unit"} labelAlign={isArabic ? "end" : "start"}>
+                          <Select
+                            value={editor.salesUnitId || editor.unitOfMeasureId}
+                            onChange={(e) => updateEditor((current) => ({ ...current, salesUnitId: e.target.value }))}
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          >
+                            <option value="">{isArabic ? "الوحدة الأساسية" : "Base Unit"}</option>
+                            {activeUnitsOfMeasure.map((u) => (
+                              <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label={isArabic ? "وحدة الشراء" : "Purchase Unit"} labelAlign={isArabic ? "end" : "start"}>
+                          <Select
+                            value={editor.purchaseUnitId || editor.unitOfMeasureId}
+                            onChange={(e) => updateEditor((current) => ({ ...current, purchaseUnitId: e.target.value }))}
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          >
+                            <option value="">{isArabic ? "الوحدة الأساسية" : "Base Unit"}</option>
+                            {activeUnitsOfMeasure.map((u) => (
+                              <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label={isArabic ? "الحد الأدنى للمبيعات" : "Min Sales Qty"} labelAlign={isArabic ? "end" : "start"}>
+                          <Input
+                            value={editor.minSalesQuantity}
+                            onChange={(e) => updateEditor((current) => ({ ...current, minSalesQuantity: e.target.value }))}
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                            inputMode="numeric"
+                          />
+                        </Field>
+                        <Field label={isArabic ? "السماح بالكسور" : "Allow Fractional Qty"} labelAlign={isArabic ? "end" : "start"}>
+                          <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
                             <button
                               type="button"
-                              onClick={() => removeUnitConversionRow(row.key)}
-                              disabled={row.isBaseUnit}
-                              className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition disabled:opacity-20"
+                              onClick={() => updateEditor((current) => ({ ...current, allowFractionalQuantity: !current.allowFractionalQuantity }))}
+                              className={cn(
+                                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                                editor.allowFractionalQuantity ? "bg-emerald-600" : "bg-slate-200"
+                              )}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <span
+                                className={cn(
+                                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                  editor.allowFractionalQuantity ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                                )}
+                              />
                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className={cn("rounded-2xl bg-amber-50 px-5 py-4 text-sm text-amber-900", isArabic ? "text-right" : "text-left")}>
-                  <strong>{isArabic ? "مثال:" : "Example:"}</strong>{" "}
-                  {isArabic 
-                    ? "إذا كانت وحدة القياس الأساسية حبة، والكرتونة تحتوي 24 حبة، يكون معامل التحويل للكرتونة = 24."
-                    : "If the base unit of measure is Piece, and a Carton contains 24 pieces, the Carton conversion factor is 24."}
-                </div>
-              </div>
-            </section>
-
-            {/* Section 3: الرموز والملصقات */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
-                <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "3. الرموز والملصقات" : "3. Barcodes & Labels"}
-                  </div>
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                  <Barcode className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <Field label={isArabic ? "الباركود" : "Barcode"} labelAlign={isArabic ? "end" : "start"}>
-                    <div className="relative">
-                      <Input
-                        value={editor.barcode}
-                        onChange={(e) => updateEditor((current) => ({ ...current, barcode: e.target.value }))}
-                        className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                        placeholder={isArabic ? "أدخل الباركود أو امسحه" : "Enter or scan barcode"}
-                      />
+                            <span className="text-sm font-semibold text-slate-700">
+                              {editor.allowFractionalQuantity ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                            </span>
+                          </div>
+                        </Field>
+                      </div>
                     </div>
-                  </Field>
-                  <div className={cn("flex flex-wrap gap-2", isArabic ? "justify-end" : "justify-start")}>
-                    <Button variant="secondary" size="sm" className="rounded-xl" onClick={previewCodes}>{isArabic ? "معاينة الباركود" : "Preview Barcode"}</Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={generateBarcode}
-                      disabled={isGeneratingBarcode}
-                    >
-                      {isArabic ? "توليد باركود" : "Generate Barcode"}
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <Field label={isArabic ? "رمز QR" : "QR Code"} labelAlign={isArabic ? "end" : "start"}>
-                    <Input
-                      value={editor.qrCodeValue}
-                      readOnly
-                      className={cn("border-slate-200 bg-slate-100", isArabic ? "text-right" : "text-left")}
-                    />
-                  </Field>
-                  <div className={cn("flex flex-wrap gap-2", isArabic ? "justify-end" : "justify-start")}>
-                    <Button variant="secondary" size="sm" className="rounded-xl" onClick={printLabel}>{isArabic ? "طباعة الملصق" : "Print Label"}</Button>
-                    <Button variant="secondary" size="sm" className="rounded-xl" onClick={previewCodes}>{isArabic ? "معاينة QR" : "Preview QR"}</Button>
-                    <Button variant="secondary" size="sm" className="rounded-xl" onClick={generateQr}>{isArabic ? "توليد QR" : "Generate QR"}</Button>
-                  </div>
-                </div>
-              </div>
+                    {/* Barcodes & Labels Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+                        <Barcode className="h-5 w-5 text-indigo-600" />
+                        <h3 className="font-bold text-slate-900">{isArabic ? "الرموز والملصقات" : "Barcodes & Labels"}</h3>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <Field label={isArabic ? "الباركود" : "Barcode"} labelAlign={isArabic ? "end" : "start"}>
+                              <Input
+                                value={editor.barcode}
+                                onChange={(e) => updateEditor((current) => ({ ...current, barcode: e.target.value }))}
+                                className={cn("border-slate-200 bg-white", isArabic ? "text-right" : "text-left")}
+                                placeholder={isArabic ? "أدخل الباركود أو امسحه" : "Enter or scan barcode"}
+                              />
+                            </Field>
+                            <div className={cn("flex flex-wrap gap-2 mt-2", isArabic ? "justify-end" : "justify-start")}>
+                              <Button variant="secondary" size="sm" className="rounded-xl px-3 py-1 text-xs" onClick={previewCodes}>{isArabic ? "معاينة" : "Preview"}</Button>
+                              <Button variant="secondary" size="sm" className="rounded-xl px-3 py-1 text-xs" onClick={generateBarcode} disabled={isGeneratingBarcode}>
+                                {isArabic ? "توليد" : "Generate"}
+                              </Button>
+                            </div>
+                          </div>
+                          <div>
+                            <Field label={isArabic ? "رمز QR" : "QR Code"} labelAlign={isArabic ? "end" : "start"}>
+                              <Input
+                                value={editor.qrCodeValue}
+                                readOnly
+                                className={cn("border-slate-200 bg-slate-100 text-slate-500", isArabic ? "text-right" : "text-left")}
+                              />
+                            </Field>
+                            <div className={cn("flex flex-wrap gap-2 mt-2", isArabic ? "justify-end" : "justify-start")}>
+                              <Button variant="secondary" size="sm" className="rounded-xl px-3 py-1 text-xs" onClick={printLabel}>{isArabic ? "طباعة الملصق" : "Print Label"}</Button>
+                              <Button variant="secondary" size="sm" className="rounded-xl px-3 py-1 text-xs" onClick={previewCodes}>{isArabic ? "معاينة QR" : "Preview QR"}</Button>
+                              <Button variant="secondary" size="sm" className="rounded-xl px-3 py-1 text-xs" onClick={generateQr}>{isArabic ? "توليد QR" : "Generate QR"}</Button>
+                            </div>
+                          </div>
+                        </div>
 
-              {showCodePreview && (
-                <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/30 p-4 text-center">
-                    <div className="mb-3 text-sm font-bold text-slate-700">{isArabic ? "معاينة الباركود" : "Barcode Preview"}</div>
-                    {editor.barcode.trim() ? (
-                      <div className="mx-auto max-w-[300px] overflow-hidden rounded-xl border border-white bg-white p-4 shadow-sm" dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(editor.barcode.trim()) }} />
-                    ) : (
-                      <div className="py-8 text-sm text-slate-400">{isArabic ? "أدخل باركود للمعاينة" : "Enter barcode to preview"}</div>
-                    )}
+                        {showCodePreview && (
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2 border-t border-slate-100 pt-4">
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-center">
+                              <div className="mb-2 text-xs font-bold text-slate-500 uppercase">{isArabic ? "معاينة الباركود" : "Barcode Preview"}</div>
+                              {editor.barcode.trim() ? (
+                                <div className="mx-auto max-w-[200px] overflow-hidden rounded-xl border border-white bg-white p-3 shadow-sm" dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(editor.barcode.trim()) }} />
+                              ) : (
+                                <div className="py-4 text-xs text-slate-400">{isArabic ? "أدخل باركود للمعاينة" : "Enter barcode to preview"}</div>
+                              )}
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-center">
+                              <div className="mb-2 text-xs font-bold text-slate-500 uppercase">{isArabic ? "معاينة QR" : "QR Preview"}</div>
+                              {editor.qrCodeValue.trim() ? (
+                                <div className="mx-auto h-[120px] w-[120px] overflow-hidden rounded-xl border border-white bg-white p-3 shadow-sm" dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(editor.qrCodeValue.trim()) }} />
+                              ) : (
+                                <div className="py-4 text-xs text-slate-400">{isArabic ? "توليد QR للمعاينة" : "Generate QR to preview"}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/30 p-4 text-center">
-                    <div className="mb-3 text-sm font-bold text-slate-700">{isArabic ? "معاينة QR" : "QR Preview"}</div>
-                    {editor.qrCodeValue.trim() ? (
-                      <div className="mx-auto h-[160px] w-[160px] overflow-hidden rounded-xl border border-white bg-white p-4 shadow-sm" dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(editor.qrCodeValue.trim()) }} />
-                    ) : (
-                      <div className="py-8 text-sm text-slate-400">{isArabic ? "توليد QR للمعاينة" : "Generate QR to preview"}</div>
-                    )}
+
+                  {/* Unit Conversions Table Card */}
+                  {editor.type !== "SERVICE" && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <Calculator className="h-5 w-5 text-emerald-600" />
+                          <h3 className="font-bold text-slate-900">{isArabic ? "الوحدات والتحويلات الإضافية" : "Additional Units & Conversions"}</h3>
+                        </div>
+                        <Button type="button" variant="secondary" size="sm" onClick={addUnitConversionRow} className="rounded-xl text-xs">
+                          {isArabic ? "+ إضافة وحدة" : "+ Add Unit"}
+                        </Button>
+                      </div>
+
+                      {editor.unitConversions.length === 0 ? (
+                        <div className="py-8 text-center text-sm text-slate-400">
+                          {isArabic ? "لا توجد وحدات إضافية محددة. سيتم استخدام الوحدة الأساسية فقط." : "No additional unit conversions defined. Only the base unit will be available."}
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                          <table className="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead className="bg-slate-50/75">
+                              <tr>
+                                <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider", isArabic ? "text-right" : "text-left")}>{isArabic ? "الوحدة" : "Unit"}</th>
+                                <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider", isArabic ? "text-right" : "text-left")}>{isArabic ? "معامل التحويل للوحدة الأساسية" : "Conversion Factor to Base Unit"}</th>
+                                <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider", isArabic ? "text-right" : "text-left")}>{isArabic ? "باركود الوحدة" : "Unit Barcode"}</th>
+                                <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider", isArabic ? "text-right" : "text-left")}>{isArabic ? "سعر البيع" : "Sales Price"}</th>
+                                <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider", isArabic ? "text-right" : "text-left")}>{isArabic ? "سعر الشراء" : "Purchase Price"}</th>
+                                <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">{isArabic ? "إجراء" : "Action"}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {editor.unitConversions.map((row) => (
+                                <tr key={row.key}>
+                                  <td className="whitespace-nowrap px-4 py-2">
+                                    <Select
+                                      value={row.unitId}
+                                      disabled={row.isBaseUnit}
+                                      onChange={(e) => updateUnitConversionRow(row.key, (current) => ({ ...current, unitId: e.target.value }))}
+                                      className="h-9 rounded-lg border-slate-200 py-1 text-xs"
+                                    >
+                                      <option value="">{t("inventory.placeholder.selectUnit")}</option>
+                                      {activeUnitsOfMeasure.map((u) => (
+                                        <option key={u.id} value={u.id}>{formatCodeName(u.code, u.name, isArabic)}</option>
+                                      ))}
+                                    </Select>
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-2">
+                                    <Input
+                                      value={row.conversionFactorToBaseUnit}
+                                      disabled={row.isBaseUnit}
+                                      onChange={(e) => updateUnitConversionRow(row.key, (current) => ({ ...current, conversionFactorToBaseUnit: e.target.value }))}
+                                      className="h-9 rounded-lg border-slate-200 py-1 text-xs font-mono"
+                                      inputMode="decimal"
+                                      placeholder="1.0"
+                                    />
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-2">
+                                    <Input
+                                      value={row.barcode}
+                                      onChange={(e) => updateUnitConversionRow(row.key, (current) => ({ ...current, barcode: e.target.value }))}
+                                      className="h-9 rounded-lg border-slate-200 py-1 text-xs"
+                                      placeholder={isArabic ? "أدخل باركود الوحدة" : "Unit barcode"}
+                                    />
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-2">
+                                    <Input
+                                      value={row.defaultSalesPrice}
+                                      onChange={(e) => updateUnitConversionRow(row.key, (current) => ({ ...current, defaultSalesPrice: e.target.value }))}
+                                      className="h-9 rounded-lg border-slate-200 py-1 text-xs"
+                                      inputMode="decimal"
+                                      placeholder="0.00"
+                                    />
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-2">
+                                    <Input
+                                      value={row.defaultPurchasePrice}
+                                      onChange={(e) => updateUnitConversionRow(row.key, (current) => ({ ...current, defaultPurchasePrice: e.target.value }))}
+                                      className="h-9 rounded-lg border-slate-200 py-1 text-xs"
+                                      inputMode="decimal"
+                                      placeholder="0.00"
+                                    />
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-center">
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="sm"
+                                      disabled={row.isBaseUnit}
+                                      onClick={() => removeUnitConversionRow(row.key)}
+                                      className="h-8 w-8 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <div className={cn("mt-4 text-xs text-slate-500 leading-relaxed", isArabic ? "text-right" : "text-left")}>
+                        {isArabic
+                          ? "مثال: إذا كانت وحدة القياس الأساسية هي حبة، والكرتونة تحتوي على 24 حبة، فإن معامل تحويل الكرتونة هو 24."
+                          : "Example: If the base unit of measure is Piece, and a Carton contains 24 pieces, the Carton conversion factor is 24."}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: inventory */}
+              {activeTab === "inventory" && editor.type !== "SERVICE" && (
+                <div className="space-y-5 animate-fadeIn">
+                  {/* Visual Inventory Status Dashboard */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/20 p-4 flex items-center justify-between shadow-sm">
+                      <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {isArabic ? "الكمية المتوفرة حالياً" : "Current Quantity On-Hand"}
+                        </span>
+                        <div className="text-3xl font-black text-emerald-800 font-mono">
+                          {parseFloat(editor.onHandQuantity || "0").toFixed(3)}
+                        </div>
+                      </div>
+                      <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <Package2 className="h-6 w-6" />
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/20 p-4 flex items-center justify-between shadow-sm">
+                      <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {isArabic ? "متوسط تكلفة الوحدة" : "Average Unit Cost"}
+                        </span>
+                        <div className="text-3xl font-black text-blue-800 font-mono">
+                          {editor.currencyCode} {averageCost.toFixed(3)}
+                        </div>
+                      </div>
+                      <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                        <LuDollarSign className="h-6 w-6" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Settings Form Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Settings className="h-5 w-5 text-amber-500" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "إعدادات المستودعات والطلب" : "Warehouse & Reorder Settings"}</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                      <Field label={isArabic ? "تتبع المخزون" : "Track Inventory"} labelAlign={isArabic ? "end" : "start"}>
+                        <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                          <button
+                            type="button"
+                            onClick={() => updateEditor((current) => ({ ...current, trackInventory: !current.trackInventory }))}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              editor.trackInventory ? "bg-emerald-600" : "bg-slate-200"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                editor.trackInventory ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-semibold text-slate-700">
+                            {editor.trackInventory ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                          </span>
+                        </div>
+                      </Field>
+                      <Field label={isArabic ? "المستودع الافتراضي" : "Default Warehouse"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.preferredWarehouseId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, preferredWarehouseId: e.target.value }))}
+                          disabled={!editor.trackInventory}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectWarehouse")}</option>
+                          {warehouses.filter((w) => w.isActive).map((w) => (
+                            <option key={w.id} value={w.id}>{formatCodeName(w.code, w.name, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حد إعادة الطلب" : "Reorder Level"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.reorderLevel}
+                          onChange={(e) => updateEditor((current) => ({ ...current, reorderLevel: e.target.value }))}
+                          disabled={!editor.trackInventory}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="decimal"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "كمية إعادة الطلب" : "Reorder Quantity"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.reorderQuantity}
+                          onChange={(e) => updateEditor((current) => ({ ...current, reorderQuantity: e.target.value }))}
+                          disabled={!editor.trackInventory}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="decimal"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "الحد الأدنى للمخزون" : "Minimum Stock Level"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.minStockLevel}
+                          onChange={(e) => updateEditor((current) => ({ ...current, minStockLevel: e.target.value }))}
+                          disabled={!editor.trackInventory}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="decimal"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "الحد الأقصى للمخزون" : "Maximum Stock Level"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.maxStockLevel}
+                          onChange={(e) => updateEditor((current) => ({ ...current, maxStockLevel: e.target.value }))}
+                          disabled={!editor.trackInventory}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="decimal"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "السماح بالبيع بالسالب" : "Allow Negative Stock"} labelAlign={isArabic ? "end" : "start"}>
+                        <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                          <button
+                            type="button"
+                            onClick={() => updateEditor((current) => ({ ...current, allowNegativeStock: !current.allowNegativeStock }))}
+                            disabled={!editor.trackInventory}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50",
+                              editor.allowNegativeStock ? "bg-emerald-600" : "bg-slate-200"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                editor.allowNegativeStock ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-semibold text-slate-700">
+                            {editor.allowNegativeStock ? (isArabic ? "مسموح" : "Allowed") : (isArabic ? "غير مسموح" : "Not Allowed")}
+                          </span>
+                        </div>
+                      </Field>
+                      <Field label={isArabic ? "طريقة التقييم" : "Valuation Method"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={isArabic ? "المتوسط المرجح (WAC)" : "Weighted Average (WAC)"}
+                          disabled
+                          className={cn("border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                    </div>
                   </div>
                 </div>
               )}
-            </section>
 
-            {/* Section 4: إعدادات المخزون */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
-                <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "4. إعدادات المخزون" : "4. Inventory Settings"}
+              {/* Tab 3: accounts */}
+              {activeTab === "accounts" && isAccountantOrAdmin && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className={cn("rounded-xl border border-amber-200/50 bg-amber-50/30 p-4 flex items-start gap-3 shadow-sm", isArabic ? "flex-row-reverse" : "flex-row")}>
+                    <LuTriangleAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className={cn("text-xs leading-relaxed text-slate-700", isArabic ? "text-right" : "text-left")}>
+                      {isArabic
+                        ? "إذا لم يتم اختيار حسابات مخصصة هنا، سيقوم النظام تلقائياً باستخدام الحسابات الافتراضية المعرّفة في إعدادات مجموعة المواد."
+                        : "If custom accounts are not specified here, transactions will automatically fall back to the default accounts mapped at the Item Group level."}
+                    </div>
                   </div>
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                  <Settings className="h-5 w-5" />
-                </div>
-              </div>
 
-              {editor.type === "SERVICE" && (
-                <div className={cn("mb-5 rounded-2xl bg-slate-50 px-5 py-4 text-sm text-slate-500", isArabic ? "text-right" : "text-left")}>
-                  {isArabic ? "سيتم تعطيل إعدادات المخزون لأن نوع المادة خدمة." : "Inventory settings are disabled because the item is a Service."}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "الربط المحاسبي للمادة" : "General Ledger Account Mapping"}</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label={isArabic ? "حساب المخزون (الأصول)" : "Inventory Account (Assets)"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.inventoryAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, inventoryAccountId: e.target.value }))}
+                          disabled={editor.type === "SERVICE"}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {inventoryAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب المبيعات (الإيرادات)" : "Sales Revenue Account"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.salesAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, salesAccountId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {salesAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب مصروف الشراء" : "Purchase Expense Account"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.expenseAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, expenseAccountId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {expenseAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب تكلفة البضاعة المباعة (COGS)" : "Cost of Goods Sold (COGS)"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.cogsAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, cogsAccountId: e.target.value }))}
+                          disabled={editor.type === "SERVICE"}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {cogsAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب مردودات المبيعات" : "Sales Returns Account"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.salesReturnAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, salesReturnAccountId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {salesAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب تسويات فروقات المخزون" : "Inventory Adjustments Account"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.adjustmentAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, adjustmentAccountId: e.target.value }))}
+                          disabled={editor.type === "SERVICE"}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectAccount")}</option>
+                          {adjustmentAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "حساب خصومات المبيعات" : "Sales Discount Account"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.salesDiscountAccountId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, salesDiscountAccountId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{isArabic ? "اختر الحساب" : "Select Account"}</option>
+                          {salesAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "مركز التكلفة الافتراضي" : "Default Cost Center"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.defaultCostCenterId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, defaultCostCenterId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{isArabic ? "لا يوجد" : "None"}</option>
+                        </Select>
+                      </Field>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={isArabic ? "تتبع المخزون" : "Track Inventory"} labelAlign={isArabic ? "end" : "start"}>
-                  <label className={cn("flex h-[42px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-50", isArabic ? "justify-end text-right" : "justify-start text-left")}>
-                    <span>{isArabic ? "تتبع" : "Track"}</span>
-                    <input
-                      type="checkbox"
-                      checked={editor.trackInventory}
-                      onChange={(e) => updateEditor((current) => ({ ...current, trackInventory: e.target.checked }))}
-                      disabled={editor.type === "SERVICE"}
-                      className="h-4 w-4 accent-emerald-600"
-                    />
-                  </label>
-                </Field>
-                <Field label={isArabic ? "المستودع المفضل" : "Preferred Warehouse"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.preferredWarehouseId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, preferredWarehouseId: e.target.value }))}
-                    disabled={inventorySettingsDisabled}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectWarehouse")}</option>
-                    {warehouses.filter(w => w.isActive).map((w) => (
-                      <option key={w.id} value={w.id}>{formatCodeName(w.code, w.name, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حد إعادة الطلب" : "Reorder Level"} labelAlign={isArabic ? "end" : "start"}>
-                  <Input
-                    value={editor.reorderLevel}
-                    onChange={(e) => updateEditor((current) => ({ ...current, reorderLevel: e.target.value }))}
-                    disabled={inventorySettingsDisabled}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                    inputMode="decimal"
-                  />
-                </Field>
-                <Field label={isArabic ? "كمية إعادة الطلب" : "Reorder Quantity"} labelAlign={isArabic ? "end" : "start"}>
-                  <Input
-                    value={editor.reorderQuantity}
-                    onChange={(e) => updateEditor((current) => ({ ...current, reorderQuantity: e.target.value }))}
-                    disabled={inventorySettingsDisabled}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                    inputMode="decimal"
-                  />
-                </Field>
-              </div>
-            </section>
+              {/* Tab 4: tax */}
+              {activeTab === "tax" && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <LuPercent className="h-5 w-5 text-indigo-500" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "الإعدادات الضريبية" : "Tax Settings"}</h3>
+                    </div>
 
-            {/* Section 5: الحسابات المحاسبية */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
-                <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "5. الحسابات المحاسبية" : "5. Accounting Accounts"}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {isArabic
-                      ? "إذا لم يتم اختيار حسابات هنا، سيتم استخدام الحسابات المحددة في مجموعة المواد."
-                      : "If accounts are not selected here, the accounts specified in the item group will be used."}
-                  </div>
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                  <FileText className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={isArabic ? "حساب المخزون" : "Inventory Account"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.inventoryAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, inventoryAccountId: e.target.value }))}
-                    disabled={editor.type === "SERVICE"}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {inventoryAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حساب مصروف الشراء" : "Purchase Expense Account"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.expenseAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, expenseAccountId: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {expenseAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حساب المبيعات" : "Sales Account"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.salesAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, salesAccountId: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {salesAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حساب تكلفة البضاعة المباعة" : "COGS Account"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.cogsAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, cogsAccountId: e.target.value }))}
-                    disabled={editor.type === "SERVICE"}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {cogsAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حساب مردودات المبيعات" : "Sales Returns Account"} labelAlign={isArabic ? "end" : "start"}>
-                  <Select
-                    value={editor.salesReturnAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, salesReturnAccountId: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {salesAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={isArabic ? "حساب تسويات المخزون" : "Inventory Adjustment Account"} labelAlign={isArabic ? "end" : "start"} className="md:col-span-2">
-                  <Select
-                    value={editor.adjustmentAccountId}
-                    onChange={(e) => updateEditor((current) => ({ ...current, adjustmentAccountId: e.target.value }))}
-                    disabled={editor.type === "SERVICE"}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  >
-                    <option value="">{t("inventory.placeholder.selectAccount")}</option>
-                    {adjustmentAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{formatAccountOptionLabel(a, isArabic)}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-            </section>
-
-            {/* Section 6: الوصف والملاحظات */}
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className={cn("mb-5 flex items-center gap-3", isArabic ? "justify-end" : "justify-start")}>
-                <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-lg font-extrabold text-slate-900 arabic-ui-heading">
-                    {isArabic ? "6. الوصف والملاحظات" : "6. Description & Notes"}
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                      <Field label={isArabic ? "خاضع للضريبة" : "Taxable"} labelAlign={isArabic ? "end" : "start"}>
+                        <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                          <button
+                            type="button"
+                            onClick={() => updateEditor((current) => ({ ...current, taxable: !current.taxable }))}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              editor.taxable ? "bg-emerald-600" : "bg-slate-200"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                editor.taxable ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-semibold text-slate-700">
+                            {editor.taxable ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                          </span>
+                        </div>
+                      </Field>
+                      <Field label={isArabic ? "فئة ضريبة المبيعات" : "Sales Tax Code"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.defaultTaxId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, defaultTaxId: e.target.value }))}
+                          disabled={!editor.taxable}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectTax")}</option>
+                          {activeTaxes.map((tax) => (
+                            <option key={tax.id} value={tax.id}>{formatCodeName(tax.taxCode, tax.taxName, isArabic)} ({parseFloat(tax.rate).toFixed(0)}%)</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "فئة ضريبة المشتريات" : "Purchase Tax Code"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.purchaseTaxId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, purchaseTaxId: e.target.value }))}
+                          disabled={!editor.taxable}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{t("inventory.placeholder.selectTax")}</option>
+                          {activeTaxes.map((tax) => (
+                            <option key={tax.id} value={tax.id}>{formatCodeName(tax.taxCode, tax.taxName, isArabic)} ({parseFloat(tax.rate).toFixed(0)}%)</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "معدل الضريبة الفعلي" : "Effective Tax Rate"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={taxRateDisplay}
+                          disabled
+                          className={cn("border-slate-200 bg-slate-100 text-slate-600 font-bold cursor-not-allowed", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                      <Field label={isArabic ? "السعر شامل الضريبة" : "Price Includes Tax"} labelAlign={isArabic ? "end" : "start"}>
+                        <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
+                          <button
+                            type="button"
+                            onClick={() => updateEditor((current) => ({ ...current, priceIncludesTax: !current.priceIncludesTax }))}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              editor.priceIncludesTax ? "bg-emerald-600" : "bg-slate-200"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                editor.priceIncludesTax ? (isArabic ? "-translate-x-5" : "translate-x-5") : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-semibold text-slate-700">
+                            {editor.priceIncludesTax ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
+                          </span>
+                        </div>
+                      </Field>
+                      <Field label={isArabic ? "معاملة ضريبية خاصة" : "Special Tax Treatment"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.specialTaxTreatment}
+                          onChange={(e) => updateEditor((current) => ({ ...current, specialTaxTreatment: e.target.value }))}
+                          placeholder={isArabic ? "مثال: معفى أو صفري للاتفاقيات الدولية" : "e.g., zero-rated agreements"}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                    </div>
                   </div>
                 </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                  <Paperclip className="h-5 w-5" />
-                </div>
-              </div>
+              )}
 
-              <div className="grid gap-6">
-                <Field label={isArabic ? "الوصف" : "Description"} labelAlign={isArabic ? "end" : "start"}>
-                  <Textarea
-                    value={editor.description}
-                    rows={3}
-                    onChange={(e) => updateEditor((current) => ({ ...current, description: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  />
-                </Field>
-                <Field label={isArabic ? "ملاحظات داخلية" : "Internal Notes"} labelAlign={isArabic ? "end" : "start"}>
-                  <Textarea
-                    value={editor.internalNotes}
-                    rows={3}
-                    onChange={(e) => updateEditor((current) => ({ ...current, internalNotes: e.target.value }))}
-                    className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                  />
-                </Field>
-                <div className="grid gap-6 md:grid-cols-2">
-                  <Field label={isArabic ? "رابط صورة المادة" : "Item Image URL"} labelAlign={isArabic ? "end" : "start"}>
-                    <div className="flex gap-2">
-                      <Input
-                        value={editor.itemImageUrl}
-                        onChange={(e) => updateEditor((current) => ({ ...current, itemImageUrl: e.target.value }))}
-                        className={cn("border-slate-200 bg-slate-50/70", isArabic ? "text-right" : "text-left")}
-                        placeholder="https://..."
-                      />
-                      <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
-                        <ImageIcon className="h-5 w-5" />
+              {/* Tab 5: suppliers */}
+              {activeTab === "suppliers" && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <LuTruck className="h-5 w-5 text-emerald-500" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "معلومات الموردين والمشتريات" : "Supplier & Procurement Info"}</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                      <Field label={isArabic ? "المورد الافتراضي الرئيسي" : "Primary Default Supplier"} labelAlign={isArabic ? "end" : "start"}>
+                        <Select
+                          value={editor.defaultSupplierId}
+                          onChange={(e) => updateEditor((current) => ({ ...current, defaultSupplierId: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        >
+                          <option value="">{isArabic ? "اختر المورد الرئيسي" : "Select Primary Supplier"}</option>
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>{formatCodeName(s.code, s.name, isArabic)}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={isArabic ? "رمز المادة لدى المورد" : "Supplier Item Code / SKU"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.supplierItemCode}
+                          onChange={(e) => updateEditor((current) => ({ ...current, supplierItemCode: e.target.value }))}
+                          placeholder={isArabic ? "أدخل رمز المورد للمادة" : "Supplier-side product code"}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                      <Field label={isArabic ? "آخر سعر شراء مستلم" : "Last Purchase Price"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.lastPurchasePrice}
+                          onChange={(e) => updateEditor((current) => ({ ...current, lastPurchasePrice: e.target.value }))}
+                          placeholder="0.00"
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="decimal"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "فترة التوريد المتوقعة (أيام)" : "Expected Lead Time (Days)"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.leadTime}
+                          onChange={(e) => updateEditor((current) => ({ ...current, leadTime: e.target.value }))}
+                          placeholder="e.g. 5"
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="numeric"
+                        />
+                      </Field>
+                      <Field label={isArabic ? "الحد الأدنى لكمية المشتريات" : "Min Purchase Quantity"} labelAlign={isArabic ? "end" : "start"}>
+                        <Input
+                          value={editor.minPurchaseQuantity}
+                          onChange={(e) => updateEditor((current) => ({ ...current, minPurchaseQuantity: e.target.value }))}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          inputMode="numeric"
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="mt-4">
+                      <Field label={isArabic ? "موردون بديلون وشروط التوريد" : "Alternative Suppliers & Notes"} labelAlign={isArabic ? "end" : "start"}>
+                        <Textarea
+                          value={editor.alternativeSuppliersText}
+                          onChange={(e) => updateEditor((current) => ({ ...current, alternativeSuppliersText: e.target.value }))}
+                          placeholder={isArabic ? "اكتب أسماء الموردين البديلين وشروط تسليم المادة وأي تفاصيل أخرى..." : "List alternative vendor names, contacts, or shipment terms..."}
+                          rows={3}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 6: images_attachments */}
+              {activeTab === "images_attachments" && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <ImageIcon className="h-5 w-5 text-teal-600" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "الصور والمرفقات والمستندات" : "Images, Attachments & Datasheets"}</h3>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="space-y-4">
+                        <Field label={isArabic ? "رابط صورة المادة" : "Item Image URL"} labelAlign={isArabic ? "end" : "start"}>
+                          <div className="flex gap-2">
+                            <Input
+                              value={editor.itemImageUrl}
+                              onChange={(e) => updateEditor((current) => ({ ...current, itemImageUrl: e.target.value }))}
+                              className={cn("border-slate-200 bg-white", isArabic ? "text-right" : "text-left")}
+                              placeholder="https://example.com/image.png"
+                            />
+                            <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
+                              <ImageIcon className="h-5 w-5" />
+                            </div>
+                          </div>
+                        </Field>
+
+                        {/* Image Preview Box */}
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 flex flex-col items-center justify-center h-48">
+                          {editor.itemImageUrl.trim() ? (
+                            <img
+                              src={editor.itemImageUrl.trim()}
+                              alt="Product preview"
+                              className="max-h-full max-w-full rounded-lg object-contain shadow-sm bg-white"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = ""; // Clear on error
+                              }}
+                            />
+                          ) : (
+                            <div className="text-center text-xs text-slate-400">
+                              <ImageIcon className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                              {isArabic ? "لا توجد صورة محملة لمعاينتها" : "No image URL provided for preview"}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <Field label={isArabic ? "روابط ملفات المرفقات (تفصل بسطور جديدة أو فواصل)" : "Attachment URLs (Newline or comma separated)"} labelAlign={isArabic ? "end" : "start"}>
+                          <div className="flex gap-2">
+                            <Textarea
+                              value={editor.attachmentsText}
+                              rows={3}
+                              onChange={(e) => updateEditor((current) => ({ ...current, attachmentsText: e.target.value }))}
+                              className={cn("border-slate-200 bg-white min-h-[100px]", isArabic ? "text-right" : "text-left")}
+                              placeholder={isArabic ? "روابط مستندات المادة..." : "Attachment URLs..."}
+                            />
+                            <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
+                              <Paperclip className="h-5 w-5" />
+                            </div>
+                          </div>
+                        </Field>
+
+                        <Field label={isArabic ? "رابط كتالوج المادة / كتيب المواصفات" : "Product Datasheet / Catalog URL"} labelAlign={isArabic ? "end" : "start"}>
+                          <Input
+                            value={editor.datasheetUrl}
+                            onChange={(e) => updateEditor((current) => ({ ...current, datasheetUrl: e.target.value }))}
+                            placeholder="https://example.com/manual.pdf"
+                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                          />
+                        </Field>
                       </div>
                     </div>
-                  </Field>
-                  <Field label={isArabic ? "المرفقات" : "Attachments"} labelAlign={isArabic ? "end" : "start"}>
-                    <div className="flex gap-2">
-                      <Textarea
-                        value={editor.attachmentsText}
-                        rows={1}
-                        onChange={(e) => updateEditor((current) => ({ ...current, attachmentsText: e.target.value }))}
-                        className={cn("border-slate-200 bg-slate-50/70 min-h-[42px]", isArabic ? "text-right" : "text-left")}
-                        placeholder={isArabic ? "روابط المرفقات..." : "Attachment URLs..."}
-                      />
-                      <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
-                        <Paperclip className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </Field>
+                  </div>
                 </div>
-              </div>
-            </section>
+              )}
+
+              {/* Tab 7: notes */}
+              {activeTab === "notes" && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <LuNotebook className="h-5 w-5 text-emerald-500" />
+                      <h3 className="font-bold text-slate-900">{isArabic ? "الوصف والملحوظات الداخلية والخارجية" : "Descriptions, Public & Internal Notes"}</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label={isArabic ? "الوصف على الفواتير" : "Description on Invoices (Public)"} labelAlign={isArabic ? "end" : "start"}>
+                        <Textarea
+                          value={editor.description}
+                          onChange={(e) => updateEditor((current) => ({ ...current, description: e.target.value }))}
+                          placeholder={isArabic ? "اكتب الوصف الذي يظهر للعملاء في الفاتورة المطبوعة..." : "Enter description displayed to clients on PDF invoices..."}
+                          rows={4}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                      <Field label={isArabic ? "ملاحظات داخلية (سرية للموظفين)" : "Internal Notes (Private)"} labelAlign={isArabic ? "end" : "start"}>
+                        <Textarea
+                          value={editor.internalNotes}
+                          onChange={(e) => updateEditor((current) => ({ ...current, internalNotes: e.target.value }))}
+                          placeholder={isArabic ? "اكتب ملاحظات داخلية تظهر فقط لمدراء النظام والموظفين..." : "Enter private notes visible only to admins and cashiers..."}
+                          rows={4}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                      <Field label={isArabic ? "ملحوظات المشتريات وفواتير الشراء" : "Purchase & Vendor Order Notes"} labelAlign={isArabic ? "end" : "start"}>
+                        <Textarea
+                          value={editor.purchaseNotes}
+                          onChange={(e) => updateEditor((current) => ({ ...current, purchaseNotes: e.target.value }))}
+                          placeholder={isArabic ? "ملاحظات خاصة بمشتريات المادة أو أوامر الشراء..." : "Enter custom notes for purchase orders..."}
+                          rows={3}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                      <Field label={isArabic ? "ملحوظات تسوية وجرد المخزون" : "Warehouse & Inventory Adjustment Notes"} labelAlign={isArabic ? "end" : "start"}>
+                        <Textarea
+                          value={editor.inventoryNotes}
+                          onChange={(e) => updateEditor((current) => ({ ...current, inventoryNotes: e.target.value }))}
+                          placeholder={isArabic ? "تعليمات خاصة بجرد هذه المادة ومكان تخزينها بالمستودعات..." : "Enter adjustment instructions or storage location details..."}
+                          rows={3}
+                          className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className={cn("border-t border-slate-200 bg-white px-5 py-4 sm:px-8", isInline && "rounded-b-lg")}>
-          <div className={cn("flex flex-col gap-3", isArabic ? "sm:flex-row-reverse" : "sm:flex-row")}>
+        {/* Footer with fixed action buttons */}
+        <div className={cn("border-t border-slate-200 bg-white px-5 py-4 sm:px-8", isInline && "rounded-b-lg shadow-md")}>
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button
               onClick={() => onSave("saveAndClose")}
               disabled={isSaving}
-              className="rounded-md bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
+              className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
             >
               <Save className="h-4 w-4" />
               {isArabic ? "حفظ وإغلاق" : "Save & Close"}
@@ -921,12 +1490,12 @@ export function ItemEditorModal({
               variant="secondary"
               onClick={() => onSave("save")}
               disabled={isSaving}
-              className="rounded-md border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
+              className="rounded-xl border-slate-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
             >
               <Save className="h-4 w-4" />
-              {isArabic ? "حفظ" : "Save"}
+              {isArabic ? "حفظ وتعديل" : "Save"}
             </Button>
-            <Button variant="secondary" onClick={onClose} className={cn("rounded-md px-6 font-bold", isArabic ? "mr-auto sm:mr-0" : "ml-auto sm:ml-0")}>
+            <Button variant="secondary" onClick={onClose} className="rounded-xl border-slate-200 px-6 font-bold ltr:ml-auto rtl:mr-auto">
               {isArabic ? "إلغاء" : "Cancel"}
             </Button>
           </div>

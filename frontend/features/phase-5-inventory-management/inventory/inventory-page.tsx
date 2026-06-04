@@ -1189,7 +1189,7 @@ export function InventoryPage() {
   const selectedAdjustment =
     adjustments.find((row) => row.id === (selectedAdjustmentId ?? adjustments[0]?.id)) ?? adjustments[0] ?? null;
 
-  const itemFormError = getItemFormError(itemEditor);
+  const itemFormError = getItemFormError(itemEditor, activeItemGroups);
   const itemGroupFormError = getItemGroupFormError(itemGroupEditor);
   const itemCategoryFormError = getItemCategoryFormError(itemCategoryEditor);
   const unitFormError = getUnitFormError(unitEditor);
@@ -4560,6 +4560,34 @@ function mapItemToEditor(item: InventoryItem): ItemEditorState {
     reorderQuantity: item.reorderQuantity,
     preferredWarehouseId: item.preferredWarehouse?.id ?? item.preferredWarehouseId ?? "",
     unitConversions: item.unitConversions.map(mapUnitConversionToEditor),
+
+    // Extended UI fields
+    isActive: item.isActive,
+    sellable: item.defaultSalesPrice ? true : true,
+    purchasable: item.defaultPurchasePrice ? true : true,
+    onHandQuantity: item.onHandQuantity ?? "0",
+    valuationAmount: item.valuationAmount ?? "0",
+    salesUnitId: item.unitOfMeasureId ?? "",
+    purchaseUnitId: item.unitOfMeasureId ?? "",
+    allowFractionalQuantity: false,
+    minSalesQuantity: "1",
+    minStockLevel: "0",
+    maxStockLevel: "0",
+    allowNegativeStock: false,
+    salesDiscountAccountId: "",
+    defaultCostCenterId: "",
+    purchaseTaxId: "",
+    priceIncludesTax: false,
+    specialTaxTreatment: "",
+    defaultSupplierId: "",
+    supplierItemCode: "",
+    lastPurchasePrice: "",
+    leadTime: "",
+    minPurchaseQuantity: "1",
+    alternativeSuppliersText: "",
+    datasheetUrl: "",
+    purchaseNotes: "",
+    inventoryNotes: "",
   };
 }
 
@@ -4785,6 +4813,7 @@ function mapItemEditorToPayload(editor: ItemEditorState) {
       defaultPurchasePrice: row.defaultPurchasePrice.trim() || undefined,
       isBaseUnit: row.isBaseUnit,
     })),
+    isActive: editor.isActive,
   };
 }
 
@@ -4909,7 +4938,7 @@ function mapAdjustmentEditorToPayload(editor: AdjustmentEditorState) {
   };
 }
 
-function getItemFormError(editor: ItemEditorState) {
+function getItemFormError(editor: ItemEditorState, itemGroups?: InventoryItemGroup[]) {
   if (!editor.name.trim()) return "Material name is required. اسم المادة مطلوب.";
   if (!editor.itemGroupId) return "Item group is required. مجموعة الأصناف مطلوبة.";
   if (!editor.itemCategoryId) return "Item category is required. فئة الصنف / التصنيف مطلوبة.";
@@ -4939,6 +4968,26 @@ function getItemFormError(editor: ItemEditorState) {
   }
   if (editor.reorderQuantity.trim() && Number.isNaN(Number(editor.reorderQuantity))) {
     return "Reorder quantity must be numeric. يجب أن تكون كمية إعادة الطلب رقمية.";
+  }
+
+  if (!isService) {
+    if (editor.minStockLevel && (Number.isNaN(Number(editor.minStockLevel)) || Number(editor.minStockLevel) < 0)) {
+      return "Minimum stock level must be a non-negative number. يجب أن يكون الحد الأدنى للمخزون رقماً غير سالب.";
+    }
+    if (editor.maxStockLevel && (Number.isNaN(Number(editor.maxStockLevel)) || Number(editor.maxStockLevel) < 0)) {
+      return "Maximum stock level must be a non-negative number. يجب أن يكون الحد الأقصى للمخزون رقماً غير سالب.";
+    }
+  }
+
+  if (editor.sellable) {
+    if (!editor.defaultSalesPrice.trim() || Number.isNaN(Number(editor.defaultSalesPrice))) {
+      return "Sales price is required and must be numeric when the item is sellable. سعر البيع مطلوب عند تفعيل خيار قابل للبيع ويجب أن يكون رقمياً.";
+    }
+    const selectedGroup = itemGroups?.find((g) => g.id === editor.itemGroupId);
+    const hasSalesAccount = !!(editor.salesAccountId || selectedGroup?.salesAccount);
+    if (!hasSalesAccount) {
+      return "Sales revenue account or default group sales account must exist when item is sellable. حساب المبيعات مطلوب عند تحديد المادة كقابلة للبيع.";
+    }
   }
 
   const unitIds = new Set<string>();

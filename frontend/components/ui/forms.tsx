@@ -26,8 +26,9 @@ export function Field({
       <span
         className={cn(
           "mb-2 flex w-full items-center gap-1 text-sm font-semibold tracking-wide text-gray-900",
-          labelAlign === "end" && "justify-end text-right",
-          labelAlign === "start" && "justify-start text-left",
+          labelAlign === "start" && "justify-start text-left rtl:justify-end rtl:text-left",
+          labelAlign === "end" && "justify-end text-right rtl:justify-start rtl:text-right",
+          !labelAlign && "justify-start text-start",
           labelClassName,
         )}
       >
