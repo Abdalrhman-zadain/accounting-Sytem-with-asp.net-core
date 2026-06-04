@@ -1313,15 +1313,37 @@ export function InventoryPage() {
 
         <section id="inventory-policy-section" className={`space-y-5 ${workspace === "policy" ? "" : "hidden"}`}>
           <SectionHeading title={t("inventory.policy.title")} description={t("inventory.policy.description")} />
-          <Card className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "الطريقة الحالية" : "Current Method"}</span>
+                  <span className="text-lg font-bold text-[#233329]">
+                    {t(`inventory.policy.costingMethod.${inventoryPolicyQuery.data?.costingMethod ?? costingMethodDraft}`)}
+                  </span>
+                </Card>
+                <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "المسودة" : "Draft Selection"}</span>
+                  <span className="text-lg font-bold text-[#233329]">
+                    {t(`inventory.policy.costingMethod.${costingMethodDraft}`)}
+                  </span>
+                </Card>
+              </div>
+
+              <div className="rounded-[24px] border border-[#edf1ee] bg-[#fafcfb] p-5">
+                <div className="flex flex-nowrap items-end gap-3 overflow-x-auto pb-1">
               <Field label={t("inventory.policy.field.costingMethod")}>
-                <Select value={costingMethodDraft} onChange={(event) => setCostingMethodDraft(event.target.value as InventoryCostingMethod)}>
+                <Select
+                  value={costingMethodDraft}
+                  onChange={(event) => setCostingMethodDraft(event.target.value as InventoryCostingMethod)}
+                  className="min-w-[200px] shrink-0 rounded-[16px] border border-[#d6e1d9] bg-white"
+                >
                   <option value="WEIGHTED_AVERAGE">{t("inventory.policy.costingMethod.WEIGHTED_AVERAGE")}</option>
                   <option value="FIFO">{t("inventory.policy.costingMethod.FIFO")}</option>
                 </Select>
               </Field>
               <Button
+                className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
                 onClick={() => updateInventoryPolicyMutation.mutate()}
                 disabled={
                   updateInventoryPolicyMutation.isPending ||
@@ -1331,6 +1353,8 @@ export function InventoryPage() {
               >
                 {t("inventory.policy.button.save")}
               </Button>
+                </div>
+              </div>
             </div>
             {policyMutationError ? <ErrorBox message={policyMutationError} /> : null}
           </Card>
@@ -1528,111 +1552,351 @@ export function InventoryPage() {
         </section>
 
         <section id="inventory-item-categories-section" className={`space-y-5 ${workspace === "itemCategories" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.itemCategories.title")}
-            description={t("inventory.itemCategories.description")}
-            action={<Button onClick={() => openNewItemCategory()}>{t("inventory.button.newItemCategory")}</Button>}
-          />
-          <MasterDataGrid
-            search={itemCategorySearch}
-            onSearch={setItemCategorySearch}
-            status={itemCategoryStatusFilter}
-            onStatus={(value) => setItemCategoryStatusFilter(value)}
-            searchPlaceholder={t("inventory.itemCategories.filters.search")}
-            loading={itemCategoriesQuery.isLoading}
-            empty={t("inventory.itemCategories.empty")}
-            rows={itemCategories}
-            selectedId={selectedItemCategory?.id ?? null}
-            onSelect={setSelectedItemCategoryId}
-            extraFilter={
-              <Select value={itemCategoryGroupFilter} onChange={(event) => setItemCategoryGroupFilter(event.target.value)}>
-                <option value="">{t("inventory.itemCategories.filters.allGroups")}</option>
-                {activeItemGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {formatCodeNameText(group.code, group.name, isArabic)}
-                  </option>
-                ))}
-              </Select>
-            }
-            renderMeta={(category) =>
-              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
-                <span>{formatCodeName(category.itemGroup.code, category.itemGroup.name, isArabic)}</span>
-                <span>{t("inventory.itemCategories.itemCount", { count: category.itemCount })}</span>
+          {selectedItemCategory ? (
+            <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => setSelectedItemCategoryId(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-sm font-bold text-[#46644b] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]"
+              >
+                {isArabic ? <LuArrowRight className="h-4 w-4" /> : <LuArrowLeft className="h-4 w-4" />}
+                {isArabic ? "العودة إلى فئات المواد" : "Back to Item Categories"}
+              </button>
+
+              <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "مجموعة المواد" : "Item Group"}</span>
+                      <span className="text-sm font-bold text-[#233329]">
+                        {formatCodeName(selectedItemCategory.itemGroup.code, selectedItemCategory.itemGroup.name, isArabic)}
+                      </span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "عدد الأصناف" : "Items"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedItemCategory.itemCount}</span>
+                    </Card>
+                  </div>
+
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-6 shadow-sm">
+                    <div className="flex items-start justify-between border-b border-[#f0f3f0] pb-4">
+                      <div>
+                        <span className="text-xs font-mono tracking-wider text-[#7d8c83]">{selectedItemCategory.code}</span>
+                        <h2 className="mt-1 text-xl font-black text-[#233329]">{selectedItemCategory.name}</h2>
+                      </div>
+                      <StatusPill
+                        label={selectedItemCategory.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                        tone={selectedItemCategory.isActive ? "positive" : "warning"}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DetailCard
+                        label={t("inventory.itemCategories.field.itemGroup")}
+                        value={formatCodeName(selectedItemCategory.itemGroup.code, selectedItemCategory.itemGroup.name, isArabic)}
+                      />
+                      <DetailCard
+                        label={t("inventory.itemCategories.detail.itemCount")}
+                        value={String(selectedItemCategory.itemCount)}
+                      />
+                    </div>
+
+                    {selectedItemCategory.description ? (
+                      <div className="border-t border-[#f0f3f0] pt-4">
+                        <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "الوصف" : "Description"}</span>
+                        <p className="whitespace-pre-wrap text-sm text-gray-700">{selectedItemCategory.description}</p>
+                      </div>
+                    ) : null}
+                  </Card>
+                </div>
+
+                <div>
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4 shadow-sm">
+                    <h3 className="border-b border-[#f0f3f0] pb-2 text-sm font-black text-[#233329]">
+                      {isArabic ? "العمليات" : "Actions"}
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        variant="secondary"
+                        onClick={() => openEditItemCategory(selectedItemCategory)}
+                        disabled={!selectedItemCategory.isActive}
+                        className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]"
+                      >
+                        {t("inventory.button.editItemCategory")}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => confirmDeactivateItemCategory(selectedItemCategory.id)}
+                        disabled={!selectedItemCategory.isActive || deactivateItemCategoryMutation.isPending}
+                        className="rounded-full px-4 py-2 font-bold"
+                      >
+                        {t("inventory.button.deactivate")}
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
               </div>
-            }
-            detail={
-              selectedItemCategory ? (
-                <MasterDataDetail
-                  code={selectedItemCategory.code}
-                  name={selectedItemCategory.name}
-                  isActive={selectedItemCategory.isActive}
-                  description={selectedItemCategory.description}
-                  rows={[
-                    [t("inventory.itemCategories.field.itemGroup"), formatCodeName(selectedItemCategory.itemGroup.code, selectedItemCategory.itemGroup.name, isArabic)],
-                    [t("inventory.itemCategories.detail.itemCount"), String(selectedItemCategory.itemCount)],
-                  ]}
-                  onEdit={() => openEditItemCategory(selectedItemCategory)}
-                  onDeactivate={() => confirmDeactivateItemCategory(selectedItemCategory.id)}
-                  editLabel={t("inventory.button.editItemCategory")}
-                  deactivateLabel={t("inventory.button.deactivate")}
-                  disableActions={!selectedItemCategory.isActive || deactivateItemCategoryMutation.isPending}
-                />
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.itemCategories.details.empty")}</div>
-              )
-            }
-          />
+            </div>
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.itemCategories.title")}
+                description={t("inventory.itemCategories.description")}
+                action={<Button onClick={() => openNewItemCategory()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newItemCategory")}</Button>}
+              />
+
+              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-5 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative">
+                    <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                      <LuSearch size={16} />
+                    </span>
+                    <input
+                      type="text"
+                      value={itemCategorySearch}
+                      onChange={(event) => setItemCategorySearch(event.target.value)}
+                      placeholder={t("inventory.itemCategories.filters.search")}
+                      className={cn(
+                        "w-full min-w-[320px] flex-1 rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                        isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                      )}
+                    />
+                  </div>
+
+                  <select
+                    value={itemCategoryStatusFilter}
+                    onChange={(event) => setItemCategoryStatusFilter(event.target.value as "" | "true" | "false")}
+                    className="min-w-[190px] rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  >
+                    <option value="">{t("inventory.filters.allStatuses")}</option>
+                    <option value="true">{t("inventory.filters.activeOnly")}</option>
+                    <option value="false">{t("inventory.filters.inactiveOnly")}</option>
+                  </select>
+
+                  <select
+                    value={itemCategoryGroupFilter}
+                    onChange={(event) => setItemCategoryGroupFilter(event.target.value)}
+                    className="min-w-[220px] rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  >
+                    <option value="">{t("inventory.itemCategories.filters.allGroups")}</option>
+                    {activeItemGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {formatCodeNameText(group.code, group.name, isArabic)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {itemCategoriesQuery.isLoading ? (
+                    <div className="rounded-2xl border border-[#e7ece8] bg-[#fafcfb] py-6 text-sm text-gray-500">{t("inventory.loading")}</div>
+                  ) : itemCategories.length === 0 ? (
+                    <EmptyState message={t("inventory.itemCategories.empty")} />
+                  ) : (
+                    <table className="min-w-full text-xs text-start">
+                      <thead>
+                        <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الرمز" : "Code"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الاسم" : "Name"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "مجموعة المواد" : "Item Group"}</th>
+                          <th className="px-4 py-3 text-end font-black">{isArabic ? "عدد الأصناف" : "Items"}</th>
+                          <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#f0f3f0]">
+                        {itemCategories.map((category) => (
+                          <tr
+                            key={category.id}
+                            onClick={() => setSelectedItemCategoryId(category.id)}
+                            className="cursor-pointer text-[12px] transition hover:bg-[#f7faf7]"
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900 font-mono tracking-wider">{category.code}</td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{category.name}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {formatCodeName(category.itemGroup.code, category.itemGroup.name, isArabic)}
+                            </td>
+                            <td className="px-4 py-3 text-end font-medium text-gray-600">{category.itemCount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill
+                                label={category.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                                tone={category.isActive ? "positive" : "warning"}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
         </section>
 
         <section id="inventory-units-section" className={`space-y-5 ${workspace === "unitsOfMeasure" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.units.title")}
-            description={t("inventory.units.description")}
-            action={<Button onClick={() => openNewUnit()}>{t("inventory.button.newUnit")}</Button>}
-          />
-          <MasterDataGrid
-            search={unitSearch}
-            onSearch={setUnitSearch}
-            status={unitStatusFilter}
-            onStatus={(value) => setUnitStatusFilter(value)}
-            searchPlaceholder={t("inventory.units.filters.search")}
-            loading={unitsQuery.isLoading}
-            empty={t("inventory.units.empty")}
-            rows={unitsOfMeasure}
-            selectedId={selectedUnit?.id ?? null}
-            onSelect={setSelectedUnitId}
-            renderMeta={(unit) =>
-              [
-                unit.unitType || null,
-                t("inventory.units.decimalPrecision", { count: unit.decimalPrecision }),
-                t("inventory.units.itemCount", { count: unit.itemCount }),
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            }
-            detail={
-              selectedUnit ? (
-                <MasterDataDetail
-                  code={selectedUnit.code}
-                  name={selectedUnit.name}
-                  isActive={selectedUnit.isActive}
-                  description={selectedUnit.description}
-                  rows={[
-                    [t("inventory.units.field.unitType"), selectedUnit.unitType || t("inventory.emptyValue")],
-                    [t("inventory.units.field.decimalPrecision"), String(selectedUnit.decimalPrecision)],
-                    [t("inventory.units.detail.itemCount"), String(selectedUnit.itemCount)],
-                  ]}
-                  onEdit={() => openEditUnit(selectedUnit)}
-                  onDeactivate={() => confirmDeactivateUnit(selectedUnit.id)}
-                  editLabel={t("inventory.button.editUnit")}
-                  deactivateLabel={t("inventory.button.deactivate")}
-                  disableActions={!selectedUnit.isActive || deactivateUnitMutation.isPending}
-                />
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.units.details.empty")}</div>
-              )
-            }
-          />
+          {selectedUnit ? (
+            <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => setSelectedUnitId(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-sm font-bold text-[#46644b] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]"
+              >
+                {isArabic ? <LuArrowRight className="h-4 w-4" /> : <LuArrowLeft className="h-4 w-4" />}
+                {isArabic ? "العودة إلى وحدات القياس" : "Back to Units"}
+              </button>
+
+              <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "نوع الوحدة" : "Unit Type"}</span>
+                      <span className="text-sm font-bold text-[#233329]">{selectedUnit.unitType || t("inventory.emptyValue")}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "خانات عشرية" : "Decimals"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedUnit.decimalPrecision}</span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "عدد الأصناف" : "Items"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedUnit.itemCount}</span>
+                    </Card>
+                  </div>
+
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-6 shadow-sm">
+                    <div className="flex items-start justify-between border-b border-[#f0f3f0] pb-4">
+                      <div>
+                        <span className="text-xs font-mono tracking-wider text-[#7d8c83]">{selectedUnit.code}</span>
+                        <h2 className="mt-1 text-xl font-black text-[#233329]">{selectedUnit.name}</h2>
+                      </div>
+                      <StatusPill
+                        label={selectedUnit.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                        tone={selectedUnit.isActive ? "positive" : "warning"}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DetailCard label={t("inventory.units.field.unitType")} value={selectedUnit.unitType || t("inventory.emptyValue")} />
+                      <DetailCard label={t("inventory.units.field.decimalPrecision")} value={String(selectedUnit.decimalPrecision)} />
+                      <DetailCard label={t("inventory.units.detail.itemCount")} value={String(selectedUnit.itemCount)} />
+                    </div>
+
+                    {selectedUnit.description ? (
+                      <div className="border-t border-[#f0f3f0] pt-4">
+                        <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "الوصف" : "Description"}</span>
+                        <p className="whitespace-pre-wrap text-sm text-gray-700">{selectedUnit.description}</p>
+                      </div>
+                    ) : null}
+                  </Card>
+                </div>
+
+                <div>
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4 shadow-sm">
+                    <h3 className="border-b border-[#f0f3f0] pb-2 text-sm font-black text-[#233329]">
+                      {isArabic ? "العمليات" : "Actions"}
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        variant="secondary"
+                        onClick={() => openEditUnit(selectedUnit)}
+                        disabled={!selectedUnit.isActive}
+                        className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]"
+                      >
+                        {t("inventory.button.editUnit")}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => confirmDeactivateUnit(selectedUnit.id)}
+                        disabled={!selectedUnit.isActive || deactivateUnitMutation.isPending}
+                        className="rounded-full px-4 py-2 font-bold"
+                      >
+                        {t("inventory.button.deactivate")}
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.units.title")}
+                description={t("inventory.units.description")}
+                action={<Button onClick={() => openNewUnit()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newUnit")}</Button>}
+              />
+
+              <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-5 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative">
+                    <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                      <LuSearch size={16} />
+                    </span>
+                    <input
+                      type="text"
+                      value={unitSearch}
+                      onChange={(event) => setUnitSearch(event.target.value)}
+                      placeholder={t("inventory.units.filters.search")}
+                      className={cn(
+                        "w-full min-w-[320px] flex-1 rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                        isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                      )}
+                    />
+                  </div>
+
+                  <select
+                    value={unitStatusFilter}
+                    onChange={(event) => setUnitStatusFilter(event.target.value as "" | "true" | "false")}
+                    className="min-w-[190px] rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  >
+                    <option value="">{t("inventory.filters.allStatuses")}</option>
+                    <option value="true">{t("inventory.filters.activeOnly")}</option>
+                    <option value="false">{t("inventory.filters.inactiveOnly")}</option>
+                  </select>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {unitsQuery.isLoading ? (
+                    <div className="rounded-2xl border border-[#e7ece8] bg-[#fafcfb] py-6 text-sm text-gray-500">{t("inventory.loading")}</div>
+                  ) : unitsOfMeasure.length === 0 ? (
+                    <EmptyState message={t("inventory.units.empty")} />
+                  ) : (
+                    <table className="min-w-full text-xs text-start">
+                      <thead>
+                        <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الرمز" : "Code"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "الاسم" : "Name"}</th>
+                          <th className="px-4 py-3 text-start font-black">{isArabic ? "نوع الوحدة" : "Unit Type"}</th>
+                          <th className="px-4 py-3 text-end font-black">{isArabic ? "الخانات العشرية" : "Decimals"}</th>
+                          <th className="px-4 py-3 text-end font-black">{isArabic ? "عدد الأصناف" : "Items"}</th>
+                          <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#f0f3f0]">
+                        {unitsOfMeasure.map((unit) => (
+                          <tr
+                            key={unit.id}
+                            onClick={() => setSelectedUnitId(unit.id)}
+                            className="cursor-pointer text-[12px] transition hover:bg-[#f7faf7]"
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900 font-mono tracking-wider">{unit.code}</td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{unit.name}</td>
+                            <td className="px-4 py-3 text-gray-600">{unit.unitType || "—"}</td>
+                            <td className="px-4 py-3 text-end font-medium text-gray-600">{unit.decimalPrecision}</td>
+                            <td className="px-4 py-3 text-end font-medium text-gray-600">{unit.itemCount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill
+                                label={unit.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                                tone={unit.isActive ? "positive" : "warning"}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
         </section>
 
         <section id="inventory-items-section" className={`space-y-5 ${workspace === "items" ? "" : "hidden"}`}>
@@ -1952,9 +2216,8 @@ export function InventoryPage() {
 
               <div className="w-full">
             <Card className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Search Input */}
-                <div className="relative w-64">
+              <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_220px]">
+                <div className="relative">
                   <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
                     <LuSearch size={16} />
                   </span>
@@ -1970,22 +2233,20 @@ export function InventoryPage() {
                   />
                 </div>
 
-                {/* Status Filter */}
                 <select
                   value={itemStatusFilter}
                   onChange={(event) => setItemStatusFilter(event.target.value as "" | "true" | "false")}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.filters.allStatuses")}</option>
                   <option value="true">{t("inventory.filters.activeOnly")}</option>
                   <option value="false">{t("inventory.filters.inactiveOnly")}</option>
                 </select>
 
-                {/* Type Filter */}
                 <select
                   value={itemTypeFilter}
                   onChange={(event) => setItemTypeFilter(event.target.value as InventoryItemType | "")}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.filters.allTypes")}</option>
                   {ITEM_TYPE_OPTIONS.map((type) => (
@@ -1995,14 +2256,13 @@ export function InventoryPage() {
                   ))}
                 </select>
 
-                {/* Item Group Filter */}
                 <select
                   value={itemGroupFilter}
                   onChange={(event) => {
                     setItemGroupFilter(event.target.value);
                     setItemCategoryFilter("");
                   }}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.filters.allItemGroups")}</option>
                   {activeItemGroups.map((group) => (
@@ -2012,11 +2272,10 @@ export function InventoryPage() {
                   ))}
                 </select>
 
-                {/* Item Category Filter */}
                 <select
                   value={itemCategoryFilter}
                   onChange={(event) => setItemCategoryFilter(event.target.value)}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.filters.allItemCategories")}</option>
                   {activeItemCategories
@@ -2156,68 +2415,106 @@ export function InventoryPage() {
           <SectionHeading
             title={t("inventory.issues.title")}
             description={t("inventory.issues.description")}
-            action={<Button onClick={() => openNewIssue()}>{t("inventory.button.newIssue")}</Button>}
+            action={<Button onClick={() => openNewIssue()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newIssue")}</Button>}
           />
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-            <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input
-                  value={issueSearch}
-                  onChange={(event) => setIssueSearch(event.target.value)}
-                  placeholder={t("inventory.issues.filters.search")}
-                />
-                <Select value={issueStatusFilter} onChange={(event) => setIssueStatusFilter(event.target.value as InventoryIssueStatus | "")}>
+          <div className={cn("grid gap-6", selectedIssue ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
+            <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_220px]">
+                <div className="relative">
+                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                    <LuSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={issueSearch}
+                    onChange={(event) => setIssueSearch(event.target.value)}
+                    placeholder={t("inventory.issues.filters.search")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                    )}
+                  />
+                </div>
+
+                <select
+                  value={issueStatusFilter}
+                  onChange={(event) => setIssueStatusFilter(event.target.value as InventoryIssueStatus | "")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.issues.filters.allStatuses")}</option>
                   {ISSUE_STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
                       {t(`inventory.issues.status.${status}`)}
                     </option>
                   ))}
-                </Select>
-                <Select value={issueWarehouseFilter} onChange={(event) => setIssueWarehouseFilter(event.target.value)}>
+                </select>
+
+                <select
+                  value={issueWarehouseFilter}
+                  onChange={(event) => setIssueWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.issues.filters.allWarehouses")}</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.code} · {warehouse.name}
                     </option>
                   ))}
-                </Select>
+                </select>
               </div>
 
-              <div className="space-y-3">
+              <div className="overflow-x-auto">
                 {goodsIssuesQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.issues.loading")}</div>
+                  <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.issues.loading")}</div>
                 ) : issues.length === 0 ? (
                   <EmptyState message={t("inventory.issues.empty")} />
                 ) : (
-                  issues.map((issue) => {
-                    const isSelected = selectedIssue?.id === issue.id;
-                    return (
-                      <button
-                        key={issue.id}
-                        type="button"
-                        onClick={() => setSelectedIssueId(issue.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-rose-200 bg-rose-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{issue.reference}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">{issue.warehouse.name}</div>
-                            <div className="text-sm text-gray-600">
-                              {issue.totalQuantity} · {issue.totalAmount}
-                            </div>
-                          </div>
-                          <StatusPill label={t(`inventory.issues.status.${issue.status}`)} tone={issueTone(issue.status)} />
-                        </div>
-                      </button>
-                    );
-                  })
+                  <table className="min-w-full text-xs text-start">
+                    <thead>
+                      <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية" : "Quantity"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "القيمة" : "Amount"}</th>
+                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f3f0]">
+                      {issues.map((issue) => {
+                        const isSelected = selectedIssue?.id === issue.id;
+                        return (
+                          <tr
+                            key={issue.id}
+                            onClick={() => setSelectedIssueId(issue.id)}
+                            className={cn(
+                              "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
+                              isSelected ? "bg-rose-50/60 font-semibold" : "",
+                            )}
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+                                <span className="font-mono tracking-wider">{issue.reference}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{issue.warehouse.name}</td>
+                            <td className="px-4 py-3 text-gray-600">{issue.issueDate.slice(0, 10)}</td>
+                            <td className="px-4 py-3 text-end font-medium text-[#46644b]">{issue.totalQuantity}</td>
+                            <td className="px-4 py-3 text-end font-bold text-gray-900">{issue.totalAmount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill label={t(`inventory.issues.status.${issue.status}`)} tone={issueTone(issue.status)} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 text-sm text-gray-600">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
                 <div>
                   {t("inventory.pagination.summary", {
                     from: issuesRangeStart,
@@ -2243,13 +2540,12 @@ export function InventoryPage() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              {selectedIssue ? (
-                <>
+            {selectedIssue ? (
+              <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedIssue.reference}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">{selectedIssue.warehouse.name}</h2>
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedIssue.reference}</div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#233329]">{selectedIssue.warehouse.name}</h2>
                     </div>
                     <StatusPill label={t(`inventory.issues.status.${selectedIssue.status}`)} tone={issueTone(selectedIssue.status)} />
                   </div>
@@ -2261,7 +2557,7 @@ export function InventoryPage() {
                     <DetailCard label={t("inventory.issues.detail.totalAmount")} value={selectedIssue.totalAmount} />
                   </div>
 
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
+                  <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
                     <div>
                       <span className="font-semibold text-gray-900">{t("inventory.issues.field.warehouse")}:</span>{" "}
                       {selectedIssue.warehouse.code} · {selectedIssue.warehouse.name}
@@ -2288,15 +2584,15 @@ export function InventoryPage() {
                     </div>
                   </div>
 
-                  {selectedIssue.description ? <p className="text-sm leading-7 text-gray-600">{selectedIssue.description}</p> : null}
+                  {selectedIssue.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedIssue.description}</p> : null}
 
-                  <div className="space-y-2 rounded-2xl border border-gray-200 p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+                  <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
                       {t("inventory.issues.lines.title")}
                     </div>
                     {selectedIssue.lines.map((line) => (
-                      <div key={line.id} className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                        <div className="font-semibold text-gray-900">
+                      <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
+                        <div className="font-semibold text-[#233329]">
                           {formatItemServiceLabel(line.item.code, line.item.name)}
                         </div>
                         <div>
@@ -2311,12 +2607,13 @@ export function InventoryPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3 pt-2">
-                    <Button variant="secondary" onClick={() => openEditIssue(selectedIssue)} disabled={!selectedIssue.canEdit}>
+                    <Button variant="secondary" onClick={() => openEditIssue(selectedIssue)} disabled={!selectedIssue.canEdit} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
                       {t("inventory.button.editIssue")}
                     </Button>
                     <Button
                       onClick={() => confirmPostIssue(selectedIssue.id)}
                       disabled={!selectedIssue.canPost || postIssueMutation.isPending}
+                      className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
                     >
                       {t("inventory.button.postIssue")}
                     </Button>
@@ -2324,6 +2621,7 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmCancelIssue(selectedIssue.id)}
                       disabled={!selectedIssue.canCancel || cancelIssueMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.cancelIssue")}
                     </Button>
@@ -2331,15 +2629,13 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmReverseIssue(selectedIssue.id)}
                       disabled={!selectedIssue.canReverse || reverseIssueMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.reverseIssue")}
                     </Button>
                   </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.issues.details.empty")}</div>
-              )}
-            </Card>
+              </Card>
+            ) : null}
           </div>
         </section>
 
@@ -2347,20 +2643,32 @@ export function InventoryPage() {
           <SectionHeading
             title={t("inventory.transfers.title")}
             description={t("inventory.transfers.description")}
-            action={<Button onClick={() => openNewTransfer()}>{t("inventory.button.newTransfer")}</Button>}
+            action={<Button onClick={() => openNewTransfer()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newTransfer")}</Button>}
           />
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-            <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input
-                  value={transferSearch}
-                  onChange={(event) => setTransferSearch(event.target.value)}
-                  placeholder={t("inventory.transfers.filters.search")}
-                />
-                <Select
+          <div className={cn("grid gap-6", selectedTransfer ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
+            <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_210px_210px]">
+                <div className="relative">
+                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                    <LuSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={transferSearch}
+                    onChange={(event) => setTransferSearch(event.target.value)}
+                    placeholder={t("inventory.transfers.filters.search")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                    )}
+                  />
+                </div>
+
+                <select
                   value={transferStatusFilter}
                   onChange={(event) => setTransferStatusFilter(event.target.value as InventoryTransferStatus | "")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.transfers.filters.allStatuses")}</option>
                   {TRANSFER_STATUS_OPTIONS.map((status) => (
@@ -2368,18 +2676,25 @@ export function InventoryPage() {
                       {t(`inventory.transfers.status.${status}`)}
                     </option>
                   ))}
-                </Select>
-                <Select value={transferSourceWarehouseFilter} onChange={(event) => setTransferSourceWarehouseFilter(event.target.value)}>
+                </select>
+
+                <select
+                  value={transferSourceWarehouseFilter}
+                  onChange={(event) => setTransferSourceWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.transfers.filters.allSourceWarehouses")}</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.code} · {warehouse.name}
                     </option>
                   ))}
-                </Select>
-                <Select
+                </select>
+
+                <select
                   value={transferDestinationWarehouseFilter}
                   onChange={(event) => setTransferDestinationWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.transfers.filters.allDestinationWarehouses")}</option>
                   {warehouses.map((warehouse) => (
@@ -2387,44 +2702,60 @@ export function InventoryPage() {
                       {warehouse.code} · {warehouse.name}
                     </option>
                   ))}
-                </Select>
+                </select>
               </div>
 
-              <div className="space-y-3">
+              <div className="overflow-x-auto">
                 {inventoryTransfersQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.transfers.loading")}</div>
+                  <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.transfers.loading")}</div>
                 ) : transfers.length === 0 ? (
                   <EmptyState message={t("inventory.transfers.empty")} />
                 ) : (
-                  transfers.map((transfer) => {
-                    const isSelected = selectedTransfer?.id === transfer.id;
-                    return (
-                      <button
-                        key={transfer.id}
-                        type="button"
-                        onClick={() => setSelectedTransferId(transfer.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-violet-200 bg-violet-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{transfer.reference}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">
-                              {transfer.sourceWarehouse.name} {"->"} {transfer.destinationWarehouse.name}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {transfer.totalQuantity} · {transfer.totalAmount}
-                            </div>
-                          </div>
-                          <StatusPill label={t(`inventory.transfers.status.${transfer.status}`)} tone={transferTone(transfer.status)} />
-                        </div>
-                      </button>
-                    );
-                  })
+                  <table className="min-w-full text-xs text-start">
+                    <thead>
+                      <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "من" : "From"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "إلى" : "To"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية" : "Quantity"}</th>
+                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f3f0]">
+                      {transfers.map((transfer) => {
+                        const isSelected = selectedTransfer?.id === transfer.id;
+                        return (
+                          <tr
+                            key={transfer.id}
+                            onClick={() => setSelectedTransferId(transfer.id)}
+                            className={cn(
+                              "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
+                              isSelected ? "bg-violet-50/60 font-semibold" : "",
+                            )}
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                                <span className="font-mono tracking-wider">{transfer.reference}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{transfer.sourceWarehouse.name}</td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{transfer.destinationWarehouse.name}</td>
+                            <td className="px-4 py-3 text-gray-600">{transfer.transferDate.slice(0, 10)}</td>
+                            <td className="px-4 py-3 text-end font-medium text-[#46644b]">{transfer.totalQuantity}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill label={t(`inventory.transfers.status.${transfer.status}`)} tone={transferTone(transfer.status)} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 text-sm text-gray-600">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
                 <div>
                   {t("inventory.pagination.summary", {
                     from: transfersRangeStart,
@@ -2450,13 +2781,12 @@ export function InventoryPage() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              {selectedTransfer ? (
-                <>
+            {selectedTransfer ? (
+              <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedTransfer.reference}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedTransfer.reference}</div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#233329]">
                         {selectedTransfer.sourceWarehouse.name} {"->"} {selectedTransfer.destinationWarehouse.name}
                       </h2>
                     </div>
@@ -2473,7 +2803,7 @@ export function InventoryPage() {
                     <DetailCard label={t("inventory.transfers.detail.totalAmount")} value={selectedTransfer.totalAmount} />
                   </div>
 
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
+                  <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
                     <div>
                       <span className="font-semibold text-gray-900">{t("inventory.transfers.field.sourceWarehouse")}:</span>{" "}
                       {selectedTransfer.sourceWarehouse.code} · {selectedTransfer.sourceWarehouse.name}
@@ -2488,15 +2818,15 @@ export function InventoryPage() {
                     </div>
                   </div>
 
-                  {selectedTransfer.description ? <p className="text-sm leading-7 text-gray-600">{selectedTransfer.description}</p> : null}
+                  {selectedTransfer.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedTransfer.description}</p> : null}
 
-                  <div className="space-y-2 rounded-2xl border border-gray-200 p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+                  <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
                       {t("inventory.transfers.lines.title")}
                     </div>
                     {selectedTransfer.lines.map((line) => (
-                      <div key={line.id} className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                        <div className="font-semibold text-gray-900">
+                      <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
+                        <div className="font-semibold text-[#233329]">
                           {formatItemServiceLabel(line.item.code, line.item.name)}
                         </div>
                         <div>
@@ -2515,12 +2845,14 @@ export function InventoryPage() {
                       variant="secondary"
                       onClick={() => openEditTransfer(selectedTransfer)}
                       disabled={!selectedTransfer.canEdit}
+                      className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]"
                     >
                       {t("inventory.button.editTransfer")}
                     </Button>
                     <Button
                       onClick={() => confirmPostTransfer(selectedTransfer.id)}
                       disabled={!selectedTransfer.canPost || postTransferMutation.isPending}
+                      className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
                     >
                       {t("inventory.button.postTransfer")}
                     </Button>
@@ -2528,6 +2860,7 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmCancelTransfer(selectedTransfer.id)}
                       disabled={!selectedTransfer.canCancel || cancelTransferMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.cancelTransfer")}
                     </Button>
@@ -2535,15 +2868,13 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmReverseTransfer(selectedTransfer.id)}
                       disabled={!selectedTransfer.canReverse || reverseTransferMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.reverseTransfer")}
                     </Button>
                   </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.transfers.details.empty")}</div>
-              )}
-            </Card>
+              </Card>
+            ) : null}
           </div>
         </section>
 
@@ -2551,20 +2882,32 @@ export function InventoryPage() {
           <SectionHeading
             title={t("inventory.adjustments.title")}
             description={t("inventory.adjustments.description")}
-            action={<Button onClick={() => openNewAdjustment()}>{t("inventory.button.newAdjustment")}</Button>}
+            action={<Button onClick={() => openNewAdjustment()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newAdjustment")}</Button>}
           />
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-            <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input
-                  value={adjustmentSearch}
-                  onChange={(event) => setAdjustmentSearch(event.target.value)}
-                  placeholder={t("inventory.adjustments.filters.search")}
-                />
-                <Select
+          <div className={cn("grid gap-6", selectedAdjustment ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
+            <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_210px_210px]">
+                <div className="relative">
+                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                    <LuSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={adjustmentSearch}
+                    onChange={(event) => setAdjustmentSearch(event.target.value)}
+                    placeholder={t("inventory.adjustments.filters.search")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                    )}
+                  />
+                </div>
+
+                <select
                   value={adjustmentStatusFilter}
                   onChange={(event) => setAdjustmentStatusFilter(event.target.value as InventoryAdjustmentStatus | "")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.adjustments.filters.allStatuses")}</option>
                   {ADJUSTMENT_STATUS_OPTIONS.map((status) => (
@@ -2572,57 +2915,86 @@ export function InventoryPage() {
                       {t(`inventory.adjustments.status.${status}`)}
                     </option>
                   ))}
-                </Select>
-                <Select value={adjustmentWarehouseFilter} onChange={(event) => setAdjustmentWarehouseFilter(event.target.value)}>
+                </select>
+
+                <select
+                  value={adjustmentWarehouseFilter}
+                  onChange={(event) => setAdjustmentWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.adjustments.filters.allWarehouses")}</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.code} · {warehouse.name}
                     </option>
                   ))}
-                </Select>
-                <Input
-                  value={adjustmentReasonFilter}
-                  onChange={(event) => setAdjustmentReasonFilter(event.target.value)}
-                  placeholder={t("inventory.adjustments.filters.reason")}
-                />
+                </select>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={adjustmentReasonFilter}
+                    onChange={(event) => setAdjustmentReasonFilter(event.target.value)}
+                    placeholder={t("inventory.adjustments.filters.reason")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "px-3 text-right" : "px-3 text-left"
+                    )}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="overflow-x-auto">
                 {inventoryAdjustmentsQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.adjustments.loading")}</div>
+                  <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.adjustments.loading")}</div>
                 ) : adjustments.length === 0 ? (
                   <EmptyState message={t("inventory.adjustments.empty")} />
                 ) : (
-                  adjustments.map((adjustment) => {
-                    const isSelected = selectedAdjustment?.id === adjustment.id;
-                    return (
-                      <button
-                        key={adjustment.id}
-                        type="button"
-                        onClick={() => setSelectedAdjustmentId(adjustment.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-emerald-200 bg-emerald-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{adjustment.reference}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">
-                              {adjustment.warehouse.name}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {adjustment.reason} · {adjustment.totalVarianceQuantity} · {adjustment.totalAmount}
-                            </div>
-                          </div>
-                          <StatusPill label={t(`inventory.adjustments.status.${adjustment.status}`)} tone={adjustmentTone(adjustment.status)} />
-                        </div>
-                      </button>
-                    );
-                  })
+                  <table className="min-w-full text-xs text-start">
+                    <thead>
+                      <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "السبب" : "Reason"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الفرق" : "Variance"}</th>
+                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f3f0]">
+                      {adjustments.map((adjustment) => {
+                        const isSelected = selectedAdjustment?.id === adjustment.id;
+                        return (
+                          <tr
+                            key={adjustment.id}
+                            onClick={() => setSelectedAdjustmentId(adjustment.id)}
+                            className={cn(
+                              "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
+                              isSelected ? "bg-emerald-50/60 font-semibold" : "",
+                            )}
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                                <span className="font-mono tracking-wider">{adjustment.reference}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{adjustment.warehouse.name}</td>
+                            <td className="px-4 py-3 text-gray-600">{adjustment.reason}</td>
+                            <td className="px-4 py-3 text-gray-600">{adjustment.adjustmentDate.slice(0, 10)}</td>
+                            <td className="px-4 py-3 text-end font-medium text-[#46644b]">{adjustment.totalVarianceQuantity}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill label={t(`inventory.adjustments.status.${adjustment.status}`)} tone={adjustmentTone(adjustment.status)} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 text-sm text-gray-600">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
                 <div>
                   {t("inventory.pagination.summary", {
                     from: adjustmentsRangeStart,
@@ -2652,13 +3024,12 @@ export function InventoryPage() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              {selectedAdjustment ? (
-                <>
+            {selectedAdjustment ? (
+              <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedAdjustment.reference}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">{selectedAdjustment.warehouse.name}</h2>
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedAdjustment.reference}</div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#233329]">{selectedAdjustment.warehouse.name}</h2>
                     </div>
                     <StatusPill
                       label={t(`inventory.adjustments.status.${selectedAdjustment.status}`)}
@@ -2673,7 +3044,7 @@ export function InventoryPage() {
                     <DetailCard label={t("inventory.adjustments.detail.totalAmount")} value={selectedAdjustment.totalAmount} />
                   </div>
 
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
+                  <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
                     <div>
                       <span className="font-semibold text-gray-900">{t("inventory.adjustments.field.warehouse")}:</span>{" "}
                       {selectedAdjustment.warehouse.code} · {selectedAdjustment.warehouse.name}
@@ -2688,15 +3059,15 @@ export function InventoryPage() {
                     </div>
                   </div>
 
-                  {selectedAdjustment.description ? <p className="text-sm leading-7 text-gray-600">{selectedAdjustment.description}</p> : null}
+                  {selectedAdjustment.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedAdjustment.description}</p> : null}
 
-                  <div className="space-y-2 rounded-2xl border border-gray-200 p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+                  <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
                       {t("inventory.adjustments.lines.title")}
                     </div>
                     {selectedAdjustment.lines.map((line) => (
-                      <div key={line.id} className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                        <div className="font-semibold text-gray-900">
+                      <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
+                        <div className="font-semibold text-[#233329]">
                           {formatItemServiceLabel(line.item.code, line.item.name)}
                         </div>
                         <div>
@@ -2716,12 +3087,14 @@ export function InventoryPage() {
                       variant="secondary"
                       onClick={() => openEditAdjustment(selectedAdjustment)}
                       disabled={!selectedAdjustment.canEdit}
+                      className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]"
                     >
                       {t("inventory.button.editAdjustment")}
                     </Button>
                     <Button
                       onClick={() => confirmPostAdjustment(selectedAdjustment.id)}
                       disabled={!selectedAdjustment.canPost || postAdjustmentMutation.isPending}
+                      className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
                     >
                       {t("inventory.button.postAdjustment")}
                     </Button>
@@ -2729,6 +3102,7 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmCancelAdjustment(selectedAdjustment.id)}
                       disabled={!selectedAdjustment.canCancel || cancelAdjustmentMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.cancelAdjustment")}
                     </Button>
@@ -2736,213 +3110,321 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmReverseAdjustment(selectedAdjustment.id)}
                       disabled={!selectedAdjustment.canReverse || reverseAdjustmentMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.reverseAdjustment")}
                     </Button>
                   </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.adjustments.details.empty")}</div>
-              )}
-            </Card>
+              </Card>
+            ) : null}
           </div>
         </section>
 
         <section id="inventory-warehouses-section" className={`space-y-5 ${workspace === "warehouses" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.warehouses.title")}
-            description={t("inventory.warehouses.description")}
-            action={<Button onClick={() => openNewWarehouse()}>{t("inventory.button.newWarehouse")}</Button>}
-          />
+          {selectedWarehouse ? (
+            <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => setSelectedWarehouseId(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#d6e0d8] bg-white px-4 py-2 text-sm font-bold text-[#46644b] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]"
+              >
+                {isArabic ? <LuArrowRight className="h-4 w-4" /> : <LuArrowLeft className="h-4 w-4" />}
+                {isArabic ? "العودة إلى المستودعات" : "Back to Warehouses"}
+              </button>
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-            <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input
-                  value={warehouseSearch}
-                  onChange={(event) => setWarehouseSearch(event.target.value)}
-                  placeholder={t("inventory.warehouses.filters.search")}
-                />
-                <Select value={warehouseStatusFilter} onChange={(event) => setWarehouseStatusFilter(event.target.value as "" | "true" | "false")}>
-                  <option value="">{t("inventory.filters.allStatuses")}</option>
-                  <option value="true">{t("inventory.filters.activeOnly")}</option>
-                  <option value="false">{t("inventory.filters.inactiveOnly")}</option>
-                </Select>
-                <Select
-                  value={warehouseTransitFilter}
-                  onChange={(event) => setWarehouseTransitFilter(event.target.value as "" | "true" | "false")}
-                >
-                  <option value="">{t("inventory.warehouses.filters.allModes")}</option>
-                  <option value="false">{t("inventory.warehouses.filters.storageOnly")}</option>
-                  <option value="true">{t("inventory.warehouses.filters.transitOnly")}</option>
-                </Select>
-              </div>
+              <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "نمط المستودع" : "Mode"}</span>
+                      <span className="text-sm font-bold text-[#233329]">
+                        {selectedWarehouse.isTransit ? t("inventory.warehouses.mode.transit") : t("inventory.warehouses.mode.storage")}
+                      </span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "ترانزيت افتراضي" : "Default Transit"}</span>
+                      <span className="text-lg font-bold text-[#233329]">
+                        {selectedWarehouse.isDefaultTransit ? t("inventory.boolean.yes") : t("inventory.boolean.no")}
+                      </span>
+                    </Card>
+                    <Card className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <span className="mb-1 block text-xs font-semibold text-gray-500">{isArabic ? "عدد الأصناف" : "Items"}</span>
+                      <span className="text-lg font-bold text-[#233329]">{selectedWarehouse.itemCount}</span>
+                    </Card>
+                  </div>
 
-              <div className="space-y-3">
-                {inventoryWarehousesQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.warehouses.loading")}</div>
-                ) : warehouses.length === 0 ? (
-                  <EmptyState message={t("inventory.warehouses.empty")} />
-                ) : (
-                  warehouses.map((warehouse) => {
-                    const isSelected = selectedWarehouse?.id === warehouse.id;
-                    return (
-                      <button
-                        key={warehouse.id}
-                        type="button"
-                        onClick={() => setSelectedWarehouseId(warehouse.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-amber-200 bg-amber-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-6 shadow-sm">
+                    <div className="flex items-start justify-between border-b border-[#f0f3f0] pb-4">
+                      <div>
+                        <span className="text-xs font-mono tracking-wider text-[#7d8c83]">{selectedWarehouse.code}</span>
+                        <h2 className="mt-1 text-xl font-black text-[#233329]">{selectedWarehouse.name}</h2>
+                      </div>
+                      <StatusPill
+                        label={selectedWarehouse.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                        tone={selectedWarehouse.isActive ? "positive" : "warning"}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DetailCard
+                        label={t("inventory.warehouses.detail.mode")}
+                        value={selectedWarehouse.isTransit ? t("inventory.warehouses.mode.transit") : t("inventory.warehouses.mode.storage")}
+                      />
+                      <DetailCard
+                        label={t("inventory.warehouses.detail.defaultTransit")}
+                        value={selectedWarehouse.isDefaultTransit ? t("inventory.boolean.yes") : t("inventory.boolean.no")}
+                      />
+                      <DetailCard label={t("inventory.warehouses.detail.itemCount")} value={String(selectedWarehouse.itemCount)} />
+                    </div>
+
+                    <div className="rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
+                      <div>
+                        <span className="font-semibold text-gray-900">{t("inventory.warehouses.field.address")}:</span>{" "}
+                        {selectedWarehouse.address || t("inventory.emptyValue")}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-gray-900">{t("inventory.warehouses.field.responsiblePerson")}:</span>{" "}
+                        {selectedWarehouse.responsiblePerson || t("inventory.emptyValue")}
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+
+                <div>
+                  <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4 shadow-sm">
+                    <h3 className="border-b border-[#f0f3f0] pb-2 text-sm font-black text-[#233329]">
+                      {isArabic ? "العمليات" : "Actions"}
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <Button variant="secondary" onClick={() => openEditWarehouse(selectedWarehouse)} disabled={!selectedWarehouse.isActive} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
+                        {t("inventory.button.editWarehouse")}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => confirmDeactivateWarehouse(selectedWarehouse.id)}
+                        disabled={!selectedWarehouse.isActive || deactivateWarehouseMutation.isPending}
+                        className="rounded-full px-4 py-2 font-bold"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{warehouse.code}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">{warehouse.name}</div>
-                            <div className="text-sm text-gray-600">
-                              {warehouse.isTransit ? t("inventory.warehouses.mode.transit") : t("inventory.warehouses.mode.storage")} ·{" "}
-                              {t("inventory.warehouses.itemCount", { count: warehouse.itemCount })}
-                              {warehouse.isDefaultTransit ? ` · ${t("inventory.warehouses.badge.defaultTransit")}` : ""}
-                            </div>
-                          </div>
-                          <StatusPill
-                            label={warehouse.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
-                            tone={warehouse.isActive ? "positive" : "warning"}
-                          />
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
+                        {t("inventory.button.deactivate")}
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
               </div>
-            </Card>
+            </div>
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.warehouses.title")}
+                description={t("inventory.warehouses.description")}
+                action={<Button onClick={() => openNewWarehouse()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newWarehouse")}</Button>}
+              />
 
-            <Card className="space-y-4">
-              {selectedWarehouse ? (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedWarehouse.code}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">{selectedWarehouse.name}</h2>
+              <div className="space-y-6">
+                <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_220px]">
+                    <div className="relative">
+                      <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                        <LuSearch size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        value={warehouseSearch}
+                        onChange={(event) => setWarehouseSearch(event.target.value)}
+                        placeholder={t("inventory.warehouses.filters.search")}
+                        className={cn(
+                          "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                          isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                        )}
+                      />
                     </div>
-                    <StatusPill
-                      label={selectedWarehouse.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
-                      tone={selectedWarehouse.isActive ? "positive" : "warning"}
-                    />
-                  </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailCard
-                      label={t("inventory.warehouses.detail.mode")}
-                      value={
-                        selectedWarehouse.isTransit
-                          ? t("inventory.warehouses.mode.transit")
-                          : t("inventory.warehouses.mode.storage")
-                      }
-                    />
-                    <DetailCard
-                      label={t("inventory.warehouses.detail.defaultTransit")}
-                      value={selectedWarehouse.isDefaultTransit ? t("inventory.boolean.yes") : t("inventory.boolean.no")}
-                    />
-                    <DetailCard label={t("inventory.warehouses.detail.itemCount")} value={String(selectedWarehouse.itemCount)} />
-                  </div>
-
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.warehouses.field.address")}:</span>{" "}
-                      {selectedWarehouse.address || t("inventory.emptyValue")}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.warehouses.field.responsiblePerson")}:</span>{" "}
-                      {selectedWarehouse.responsiblePerson || t("inventory.emptyValue")}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <Button variant="secondary" onClick={() => openEditWarehouse(selectedWarehouse)} disabled={!selectedWarehouse.isActive}>
-                      {t("inventory.button.editWarehouse")}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => confirmDeactivateWarehouse(selectedWarehouse.id)}
-                      disabled={!selectedWarehouse.isActive || deactivateWarehouseMutation.isPending}
+                    <select
+                      value={warehouseStatusFilter}
+                      onChange={(event) => setWarehouseStatusFilter(event.target.value as "" | "true" | "false")}
+                      className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                     >
-                      {t("inventory.button.deactivate")}
-                    </Button>
+                      <option value="">{t("inventory.filters.allStatuses")}</option>
+                      <option value="true">{t("inventory.filters.activeOnly")}</option>
+                      <option value="false">{t("inventory.filters.inactiveOnly")}</option>
+                    </select>
+
+                    <select
+                      value={warehouseTransitFilter}
+                      onChange={(event) => setWarehouseTransitFilter(event.target.value as "" | "true" | "false")}
+                      className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                    >
+                      <option value="">{t("inventory.warehouses.filters.allModes")}</option>
+                      <option value="false">{t("inventory.warehouses.filters.storageOnly")}</option>
+                      <option value="true">{t("inventory.warehouses.filters.transitOnly")}</option>
+                    </select>
                   </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.warehouses.details.empty")}</div>
-              )}
-            </Card>
-          </div>
+
+                  <div className="overflow-x-auto">
+                    {inventoryWarehousesQuery.isLoading ? (
+                      <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.warehouses.loading")}</div>
+                    ) : warehouses.length === 0 ? (
+                      <EmptyState message={t("inventory.warehouses.empty")} />
+                    ) : (
+                      <table className="min-w-full text-xs text-start">
+                        <thead>
+                          <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "الرمز" : "Code"}</th>
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "الاسم" : "Name"}</th>
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "النمط" : "Mode"}</th>
+                            <th className="px-4 py-3 text-end font-black">{isArabic ? "عدد الأصناف" : "Items"}</th>
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "المسؤول" : "Responsible"}</th>
+                            <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#f0f3f0]">
+                          {warehouses.map((warehouse) => (
+                            <tr
+                              key={warehouse.id}
+                              onClick={() => setSelectedWarehouseId(warehouse.id)}
+                              className="cursor-pointer text-[12px] transition hover:bg-[#f7faf7]"
+                            >
+                              <td className="px-4 py-3 font-bold text-gray-900">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+                                      warehouse.isTransit ? "bg-[#c48a2c]" : "bg-[#4b7a57]",
+                                    )}
+                                  />
+                                  <span className="font-mono tracking-wider">{warehouse.code}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 font-bold text-gray-900">{warehouse.name}</td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {warehouse.isTransit ? t("inventory.warehouses.mode.transit") : t("inventory.warehouses.mode.storage")}
+                                {warehouse.isDefaultTransit ? ` · ${t("inventory.warehouses.badge.defaultTransit")}` : ""}
+                              </td>
+                              <td className="px-4 py-3 text-end font-medium text-[#46644b]">{warehouse.itemCount}</td>
+                              <td className="px-4 py-3 text-gray-600">{warehouse.responsiblePerson || "—"}</td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusPill
+                                  label={warehouse.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                                  tone={warehouse.isActive ? "positive" : "warning"}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </Card>
+
+              </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-receipts-section" className={`space-y-5 ${workspace === "receipts" ? "" : "hidden"}`}>
           <SectionHeading
             title={t("inventory.receipts.title")}
             description={t("inventory.receipts.description")}
-            action={<Button onClick={() => openNewReceipt()}>{t("inventory.button.newReceipt")}</Button>}
+            action={<Button onClick={() => openNewReceipt()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newReceipt")}</Button>}
           />
 
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-            <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input
-                  value={receiptSearch}
-                  onChange={(event) => setReceiptSearch(event.target.value)}
-                  placeholder={t("inventory.receipts.filters.search")}
-                />
-                <Select value={receiptStatusFilter} onChange={(event) => setReceiptStatusFilter(event.target.value as InventoryReceiptStatus | "")}>
+          <div className={cn("grid gap-6", selectedReceipt ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
+            <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_220px]">
+                <div className="relative">
+                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                    <LuSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={receiptSearch}
+                    onChange={(event) => setReceiptSearch(event.target.value)}
+                    placeholder={t("inventory.receipts.filters.search")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                    )}
+                  />
+                </div>
+
+                <select
+                  value={receiptStatusFilter}
+                  onChange={(event) => setReceiptStatusFilter(event.target.value as InventoryReceiptStatus | "")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.receipts.filters.allStatuses")}</option>
                   {RECEIPT_STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
                       {t(`inventory.receipts.status.${status}`)}
                     </option>
                   ))}
-                </Select>
-                <Select value={receiptWarehouseFilter} onChange={(event) => setReceiptWarehouseFilter(event.target.value)}>
+                </select>
+
+                <select
+                  value={receiptWarehouseFilter}
+                  onChange={(event) => setReceiptWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.receipts.filters.allWarehouses")}</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.code} · {warehouse.name}
                     </option>
                   ))}
-                </Select>
+                </select>
               </div>
 
-              <div className="space-y-3">
+              <div className="overflow-x-auto">
                 {goodsReceiptsQuery.isLoading ? (
-                  <div className="text-sm text-gray-500">{t("inventory.receipts.loading")}</div>
+                  <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.receipts.loading")}</div>
                 ) : receipts.length === 0 ? (
                   <EmptyState message={t("inventory.receipts.empty")} />
                 ) : (
-                  receipts.map((receipt) => {
-                    const isSelected = selectedReceipt?.id === receipt.id;
-                    return (
-                      <button
-                        key={receipt.id}
-                        type="button"
-                        onClick={() => setSelectedReceiptId(receipt.id)}
-                        className={`w-full rounded-2xl border px-5 py-4 text-left transition ${isSelected ? "border-sky-200 bg-sky-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{receipt.reference}</div>
-                            <div className="text-lg font-black tracking-tight text-gray-900">{receipt.warehouse.name}</div>
-                            <div className="text-sm text-gray-600">
-                              {receipt.totalQuantity} · {receipt.totalAmount}
-                            </div>
-                          </div>
-                          <StatusPill label={t(`inventory.receipts.status.${receipt.status}`)} tone={receiptTone(receipt.status)} />
-                        </div>
-                      </button>
-                    );
-                  })
+                  <table className="min-w-full text-xs text-start">
+                    <thead>
+                      <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
+                        <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية" : "Quantity"}</th>
+                        <th className="px-4 py-3 text-end font-black">{isArabic ? "القيمة" : "Amount"}</th>
+                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f3f0]">
+                      {receipts.map((receipt) => {
+                        const isSelected = selectedReceipt?.id === receipt.id;
+                        return (
+                          <tr
+                            key={receipt.id}
+                            onClick={() => setSelectedReceiptId(receipt.id)}
+                            className={cn(
+                              "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
+                              isSelected ? "bg-sky-50/60 font-semibold" : "",
+                            )}
+                          >
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+                                <span className="font-mono tracking-wider">{receipt.reference}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{receipt.warehouse.name}</td>
+                            <td className="px-4 py-3 text-gray-600">{receipt.receiptDate.slice(0, 10)}</td>
+                            <td className="px-4 py-3 text-end font-medium text-[#46644b]">{receipt.totalQuantity}</td>
+                            <td className="px-4 py-3 text-end font-bold text-gray-900">{receipt.totalAmount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <StatusPill label={t(`inventory.receipts.status.${receipt.status}`)} tone={receiptTone(receipt.status)} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 text-sm text-gray-600">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
                 <div>
                   {t("inventory.pagination.summary", {
                     from: receiptsRangeStart,
@@ -2968,13 +3450,12 @@ export function InventoryPage() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              {selectedReceipt ? (
-                <>
+            {selectedReceipt ? (
+              <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{selectedReceipt.reference}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-gray-900">{selectedReceipt.warehouse.name}</h2>
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedReceipt.reference}</div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#233329]">{selectedReceipt.warehouse.name}</h2>
                     </div>
                     <StatusPill label={t(`inventory.receipts.status.${selectedReceipt.status}`)} tone={receiptTone(selectedReceipt.status)} />
                   </div>
@@ -2986,7 +3467,7 @@ export function InventoryPage() {
                     <DetailCard label={t("inventory.receipts.detail.totalAmount")} value={selectedReceipt.totalAmount} />
                   </div>
 
-                  <div className="space-y-2 text-sm leading-7 text-gray-600">
+                  <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
                     <div>
                       <span className="font-semibold text-gray-900">{t("inventory.receipts.field.warehouse")}:</span>{" "}
                       {selectedReceipt.warehouse.code} · {selectedReceipt.warehouse.name}
@@ -3005,15 +3486,15 @@ export function InventoryPage() {
                     </div>
                   </div>
 
-                  {selectedReceipt.description ? <p className="text-sm leading-7 text-gray-600">{selectedReceipt.description}</p> : null}
+                  {selectedReceipt.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedReceipt.description}</p> : null}
 
-                  <div className="space-y-2 rounded-2xl border border-gray-200 p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+                  <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
                       {t("inventory.receipts.lines.title")}
                     </div>
                     {selectedReceipt.lines.map((line) => (
-                      <div key={line.id} className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                        <div className="font-semibold text-gray-900">
+                      <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
+                        <div className="font-semibold text-[#233329]">
                           {formatItemServiceLabel(line.item.code, line.item.name)}
                         </div>
                         <div>
@@ -3025,12 +3506,13 @@ export function InventoryPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3 pt-2">
-                    <Button variant="secondary" onClick={() => openEditReceipt(selectedReceipt)} disabled={!selectedReceipt.canEdit}>
+                    <Button variant="secondary" onClick={() => openEditReceipt(selectedReceipt)} disabled={!selectedReceipt.canEdit} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
                       {t("inventory.button.editReceipt")}
                     </Button>
                     <Button
                       onClick={() => confirmPostReceipt(selectedReceipt.id)}
                       disabled={!selectedReceipt.canPost || postReceiptMutation.isPending}
+                      className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
                     >
                       {t("inventory.button.postReceipt")}
                     </Button>
@@ -3038,6 +3520,7 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmCancelReceipt(selectedReceipt.id)}
                       disabled={!selectedReceipt.canCancel || cancelReceiptMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.cancelReceipt")}
                     </Button>
@@ -3045,47 +3528,67 @@ export function InventoryPage() {
                       variant="danger"
                       onClick={() => confirmReverseReceipt(selectedReceipt.id)}
                       disabled={!selectedReceipt.canReverse || reverseReceiptMutation.isPending}
+                      className="rounded-full px-4 py-2 font-bold"
                     >
                       {t("inventory.button.reverseReceipt")}
                     </Button>
                   </div>
-                </>
-              ) : (
-                <div className="text-sm leading-7 text-gray-500">{t("inventory.receipts.details.empty")}</div>
-              )}
-            </Card>
+              </Card>
+            ) : null}
           </div>
         </section>
 
         <section id="inventory-stock-ledger-section" className={`space-y-6 ${workspace === "stockLedger" ? "" : "hidden"}`}>
           <SectionHeading title={t("inventory.stockLedger.title")} description={t("inventory.stockLedger.description")} />
 
-          <Card className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <Input
-                value={stockLedgerSearch}
-                onChange={(event) => setStockLedgerSearch(event.target.value)}
-                placeholder={t("inventory.stockLedger.filters.search")}
-              />
-              <Select value={stockLedgerItemFilter} onChange={(event) => setStockLedgerItemFilter(event.target.value)}>
+          <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_190px_190px_190px]">
+              <div className="relative">
+                <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                  <LuSearch size={16} />
+                </span>
+                <input
+                  type="text"
+                  value={stockLedgerSearch}
+                  onChange={(event) => setStockLedgerSearch(event.target.value)}
+                  placeholder={t("inventory.stockLedger.filters.search")}
+                  className={cn(
+                    "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                    isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                  )}
+                />
+              </div>
+
+              <select
+                value={stockLedgerItemFilter}
+                onChange={(event) => setStockLedgerItemFilter(event.target.value)}
+                className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+              >
                 <option value="">{t("inventory.stockLedger.filters.allItems")}</option>
                 {items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {formatItemServiceLabel(item.code, item.name)}
                   </option>
                 ))}
-              </Select>
-              <Select value={stockLedgerWarehouseFilter} onChange={(event) => setStockLedgerWarehouseFilter(event.target.value)}>
+              </select>
+
+              <select
+                value={stockLedgerWarehouseFilter}
+                onChange={(event) => setStockLedgerWarehouseFilter(event.target.value)}
+                className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+              >
                 <option value="">{t("inventory.stockLedger.filters.allWarehouses")}</option>
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.code} · {warehouse.name}
                   </option>
                 ))}
-              </Select>
-              <Select
+              </select>
+
+              <select
                 value={stockLedgerMovementTypeFilter}
                 onChange={(event) => setStockLedgerMovementTypeFilter(event.target.value as InventoryStockMovementType | "")}
+                className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
               >
                 <option value="">{t("inventory.stockLedger.filters.allMovementTypes")}</option>
                 {STOCK_MOVEMENT_TYPE_OPTIONS.map((movementType) => (
@@ -3093,53 +3596,65 @@ export function InventoryPage() {
                     {t(`inventory.stockLedger.movementType.${movementType}`)}
                   </option>
                 ))}
-              </Select>
+              </select>
             </div>
 
             {inventoryStockLedgerQuery.isLoading ? (
-              <div className="text-sm text-gray-500">{t("inventory.stockLedger.loading")}</div>
+              <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.stockLedger.loading")}</div>
             ) : stockMovements.length === 0 ? (
               <EmptyState message={t("inventory.stockLedger.empty")} />
             ) : (
-              <div className="space-y-3">
-                {stockMovements.map((movement) => (
-                  <Card key={movement.id} className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">
-                        {movement.transactionReference} · {movement.transactionDate.slice(0, 10)}
-                      </div>
-                      <StatusPill label={t(`inventory.stockLedger.movementType.${movement.movementType}`)} tone="neutral" />
-                    </div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {formatItemServiceLabel(movement.item.code, movement.item.name)} · {movement.warehouse.code} · {movement.warehouse.name}
-                    </div>
-                    <div className="text-sm text-gray-700">
-                      {t("inventory.stockLedger.detail.quantityIn")}: {movement.quantityIn} · {t("inventory.stockLedger.detail.quantityOut")}:
-                      {" "}
-                      {movement.quantityOut} · {t("inventory.stockLedger.detail.runningQuantity")}: {movement.runningQuantity}
-                    </div>
-                    <div className="text-sm text-gray-700">
-                      {t("inventory.stockLedger.detail.valueIn")}: {movement.valueIn} · {t("inventory.stockLedger.detail.valueOut")}:
-                      {" "}
-                      {movement.valueOut} · {t("inventory.stockLedger.detail.runningValuation")}: {movement.runningValuation}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {t("inventory.stockLedger.detail.transactionType")}: {movement.transactionType} ·{" "}
-                      {t("inventory.stockLedger.detail.transactionId")}: {movement.transactionId}
-                    </div>
-                    {isStockMovementDrillDownSupported(movement) ? (
-                      <div className="pt-1">
-                        <Button variant="secondary" onClick={() => openStockMovementSource(movement)}>
-                          {t("inventory.stockLedger.action.openSource")}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </Card>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs text-start">
+                  <thead>
+                    <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                      <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                      <th className="px-4 py-3 text-start font-black">{isArabic ? "الصنف" : "Item"}</th>
+                      <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
+                      <th className="px-4 py-3 text-start font-black">{isArabic ? "النوع" : "Type"}</th>
+                      <th className="px-4 py-3 text-end font-black">{isArabic ? "داخل" : "In"}</th>
+                      <th className="px-4 py-3 text-end font-black">{isArabic ? "خارج" : "Out"}</th>
+                      <th className="px-4 py-3 text-end font-black">{isArabic ? "الرصيد" : "Balance"}</th>
+                      <th className="px-4 py-3 text-center font-black">{isArabic ? "إجراء" : "Action"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0f3f0]">
+                    {stockMovements.map((movement) => (
+                      <tr key={movement.id} className="text-[12px] transition hover:bg-[#f7faf7]">
+                        <td className="px-4 py-3 font-bold text-gray-900">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" />
+                            <div>
+                              <div className="font-mono tracking-wider">{movement.transactionReference}</div>
+                              <div className="text-[11px] font-medium text-[#7d8c83]">{movement.transactionDate.slice(0, 10)}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-gray-900">{formatItemServiceLabel(movement.item.code, movement.item.name)}</td>
+                        <td className="px-4 py-3 text-gray-600">{movement.warehouse.code} · {movement.warehouse.name}</td>
+                        <td className="px-4 py-3">
+                          <StatusPill label={t(`inventory.stockLedger.movementType.${movement.movementType}`)} tone="neutral" />
+                        </td>
+                        <td className="px-4 py-3 text-end font-medium text-emerald-700">{movement.quantityIn}</td>
+                        <td className="px-4 py-3 text-end font-medium text-rose-700">{movement.quantityOut}</td>
+                        <td className="px-4 py-3 text-end font-bold text-[#46644b]">{movement.runningQuantity}</td>
+                        <td className="px-4 py-3 text-center">
+                          {isStockMovementDrillDownSupported(movement) ? (
+                            <Button variant="secondary" onClick={() => openStockMovementSource(movement)} className="rounded-full border-[#d6e0d8] px-3 py-1.5 text-xs font-bold text-[#46644b]">
+                              {t("inventory.stockLedger.action.openSource")}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-[#7d8c83]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 text-sm text-gray-600">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
               <div>
                 {t("inventory.pagination.summary", {
                   from: stockMovementsRangeStart,
@@ -4346,11 +4861,11 @@ function MetricCard({ label, value, suffix }: { label: string; value: string; su
   return (
     <Card 
       className={cn(
-        "space-y-2 transition-all duration-300",
-        isActive ? "bg-[#F0FBF6] border border-[#1D9E75]" : ""
+        "rounded-2xl border border-[#d7ddd8] bg-white p-4 shadow-sm transition-all duration-300",
+        isActive ? "border-[#b7d9c2] bg-[#f0fbf6]" : ""
       )}
     >
-      <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{label}</div>
+      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{label}</div>
       <div 
         className="text-3xl font-black tracking-tight"
         style={{
@@ -4366,9 +4881,9 @@ function MetricCard({ label, value, suffix }: { label: string; value: string; su
 
 function DetailCard({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-200 px-4 py-3 bg-white">
-      <div className="text-[12px] font-normal uppercase tracking-[0.08em] text-gray-500">{label}</div>
-      <div className="mt-1 text-[12px] font-medium text-gray-900">{value}</div>
+    <div className="rounded-2xl border border-[#e1e7e2] bg-[#fafcfb] px-4 py-3 shadow-sm">
+      <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#7d8c83]">{label}</div>
+      <div className="mt-1 text-[13px] font-semibold text-[#233329]">{value}</div>
     </div>
   );
 }
@@ -4383,19 +4898,22 @@ function SectionHeading({
   action?: ReactNode;
 }) {
   const isPageTitle = typeof title === "string" && (title.includes("المخزون") || title.includes("Inventory"));
-  const titleSize = isPageTitle ? "18px" : "16px";
+  const titleSize = isPageTitle ? "20px" : "18px";
 
   return (
-    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="space-y-1">
+    <div className="mb-4 flex flex-col gap-3 rounded-[28px] border border-[#d7ddd8] bg-[linear-gradient(180deg,_rgba(255,255,255,0.98)_0%,_rgba(246,248,246,0.94)_100%)] px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-[#7d8c83]">
+          {isPageTitle ? "Inventory Workspace" : "Inventory View"}
+        </div>
         <h1 
-          className="app-title font-medium tracking-tight text-gray-900"
-          style={{ fontSize: titleSize, fontWeight: 500 }}
+          className="app-title tracking-tight text-[#233329]"
+          style={{ fontSize: titleSize, fontWeight: 800 }}
         >
           {title}
         </h1>
         {description ? (
-          <p className="app-subtitle text-[12px] leading-relaxed text-gray-500 font-normal">
+          <p className="app-subtitle max-w-3xl text-[13px] leading-relaxed font-normal text-[#66756d]">
             {description}
           </p>
         ) : null}
@@ -4435,11 +4953,15 @@ function PreviewCard({
 }
 
 function EmptyState({ message }: { message: string }) {
-  return <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-10 text-sm text-gray-500">{message}</div>;
+  return (
+    <div className="rounded-[24px] border border-dashed border-[#d7ddd8] bg-[#fafcfb] px-6 py-10 text-sm text-[#66756d] shadow-sm">
+      {message}
+    </div>
+  );
 }
 
 function ErrorBox({ message }: { message: string }) {
-  return <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>;
+  return <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">{message}</div>;
 }
 
 type MasterDataRow = {
@@ -4484,20 +5006,29 @@ function MasterDataGrid<T extends MasterDataRow>({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-      <Card className="space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row">
-          <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder={searchPlaceholder} />
-          <Select value={status} onChange={(event) => onStatus(event.target.value as "" | "true" | "false")}>
+      <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_220px] xl:grid-cols-[minmax(0,1.5fr)_220px_220px]">
+          <Input
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="rounded-xl border-[#d7ddd8] bg-[#fafcfb]"
+          />
+          <Select
+            value={status}
+            onChange={(event) => onStatus(event.target.value as "" | "true" | "false")}
+            className="rounded-xl border-[#d7ddd8] bg-[#fafcfb]"
+          >
             <option value="">{t("inventory.filters.allStatuses")}</option>
             <option value="true">{t("inventory.filters.activeOnly")}</option>
             <option value="false">{t("inventory.filters.inactiveOnly")}</option>
           </Select>
-          {extraFilter}
+          {extraFilter ? <div className="[&>select]:rounded-xl [&>select]:border-[#d7ddd8] [&>select]:bg-[#fafcfb]">{extraFilter}</div> : null}
         </div>
 
         <div className="space-y-3">
           {loading ? (
-            <div className="text-sm text-gray-500">{t("inventory.loading")}</div>
+            <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.loading")}</div>
           ) : rows.length === 0 ? (
             <EmptyState message={empty} />
           ) : (
@@ -4507,20 +5038,32 @@ function MasterDataGrid<T extends MasterDataRow>({
                 type="button"
                 onClick={() => onSelect(row.id)}
                 className={`w-full rounded-2xl border px-5 py-4 transition ${
-                  selectedId === row.id ? "border-teal-200 bg-teal-50/60" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  selectedId === row.id
+                    ? "border-[#cfe2d3] bg-[linear-gradient(135deg,_rgba(238,248,241,0.96)_0%,_rgba(255,255,255,1)_100%)] shadow-sm"
+                    : "border-[#e1e7e2] bg-[#fcfdfc] hover:border-[#cfd8d1] hover:bg-white"
                 }`}
               >
-                <div className={`flex items-start gap-4 ${isArabic ? "flex-row-reverse" : "justify-between"}`}>
-                  <div className={`flex min-w-0 flex-1 flex-col space-y-1 ${isArabic ? "items-end text-right" : "text-left"}`}>
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{row.code}</div>
-                    <div className="text-lg font-black tracking-tight text-gray-900">{row.name}</div>
-                    <div className="text-sm text-gray-600">{renderMeta(row)}</div>
-                  </div>
-                  <div className="shrink-0">
-                    <StatusPill
-                      label={row.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
-                      tone={row.isActive ? "positive" : "warning"}
-                    />
+                <div className={`flex items-center gap-4 ${isArabic ? "flex-row-reverse" : ""}`}>
+                  <span
+                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#4b7a57]"
+                    aria-hidden="true"
+                  />
+                  <div className={`flex min-w-0 flex-1 items-center justify-between gap-4 ${isArabic ? "flex-row-reverse" : ""}`}>
+                    <div className={`min-w-0 flex-1 ${isArabic ? "text-right" : "text-left"}`}>
+                      <div className="font-mono text-xs font-black uppercase tracking-[0.2em] text-[#7d8c83]">
+                        {row.code}
+                      </div>
+                      <div className="mt-1 truncate text-base font-black tracking-tight text-[#233329]">
+                        {row.name}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-[#66756d]">{renderMeta(row)}</div>
+                    </div>
+                    <div className="shrink-0">
+                      <StatusPill
+                        label={row.isActive ? t("inventory.status.active") : t("inventory.status.inactive")}
+                        tone={row.isActive ? "positive" : "warning"}
+                      />
+                    </div>
                   </div>
                 </div>
               </button>
@@ -4528,7 +5071,7 @@ function MasterDataGrid<T extends MasterDataRow>({
           )}
         </div>
       </Card>
-      <Card className="space-y-4">{detail}</Card>
+      <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">{detail}</Card>
     </div>
   );
 }
@@ -4563,26 +5106,27 @@ function MasterDataDetail({
     <>
       <div className={`flex items-start gap-4 ${isArabic ? "flex-row-reverse" : "justify-between"}`}>
         <div className={`flex min-w-0 flex-1 flex-col space-y-1 ${isArabic ? "items-end text-right" : "text-left"}`}>
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-gray-500">{code}</div>
-          <h2 className="text-2xl font-black tracking-tight text-gray-900">{name}</h2>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{code}</div>
+          <h2 className="text-2xl font-black tracking-tight text-[#233329]">{name}</h2>
         </div>
         <div className="shrink-0">
           <StatusPill label={isActive ? t("inventory.status.active") : t("inventory.status.inactive")} tone={isActive ? "positive" : "warning"} />
         </div>
       </div>
-      {description ? <p className={`text-sm leading-7 text-gray-600 ${isArabic ? "text-right" : ""}`}>{description}</p> : null}
-      <div className="space-y-2 text-sm leading-7 text-gray-600">
+      {description ? <p className={`text-sm leading-7 text-[#66756d] ${isArabic ? "text-right" : ""}`}>{description}</p> : null}
+      <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
         {rows.map(([label, value]) => (
-          <div key={label} className="text-right">
-            <span className="font-semibold text-gray-900">{label}:</span> {value}
+          <div key={label} className={cn("flex justify-between gap-4 border-b border-[#edf1ee] py-1.5 last:border-b-0", isArabic ? "text-right" : "text-left")}>
+            <span className="font-semibold text-[#233329]">{label}</span>
+            <span className="text-[#4f5d55]">{value}</span>
           </div>
         ))}
       </div>
       <div className={`flex flex-wrap gap-3 pt-2 ${isArabic ? "justify-end" : ""}`}>
-        <Button variant="secondary" onClick={onEdit} disabled={disableActions}>
+        <Button variant="secondary" onClick={onEdit} disabled={disableActions} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
           {editLabel}
         </Button>
-        <Button variant="danger" onClick={onDeactivate} disabled={disableActions}>
+        <Button variant="danger" onClick={onDeactivate} disabled={disableActions} className="rounded-full px-4 py-2 font-bold">
           {deactivateLabel}
         </Button>
       </div>
@@ -4605,10 +5149,10 @@ function EditorActions({
 }) {
   return (
     <div className="flex flex-wrap gap-3">
-      <Button variant="secondary" onClick={onCancel}>
+      <Button variant="secondary" onClick={onCancel} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
         {cancelLabel}
       </Button>
-      <Button onClick={onSave} disabled={disabled}>
+      <Button onClick={onSave} disabled={disabled} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">
         {label}
       </Button>
     </div>
