@@ -1278,52 +1278,28 @@ export function InventoryPage() {
           </div>
         ) : (
           <>
-            <SectionHeading title={t("inventory.title")} description={t("inventory.description")} />
-
-            <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
-              <MetricCard label={t("inventory.metrics.total")} value={String(itemTotal)} />
-              <MetricCard label={t("inventory.metrics.active")} value={String(activeItems)} />
-              <MetricCard label={t("inventory.metrics.itemGroups")} value={String(itemGroups.length)} />
-              <MetricCard label={t("inventory.metrics.itemCategories")} value={String(itemCategories.length)} />
-              <MetricCard label={t("inventory.metrics.unitsOfMeasure")} value={String(unitsOfMeasure.length)} />
-              <MetricCard label={t("inventory.metrics.warehouses")} value={String(warehouses.length)} />
-              <MetricCard label={t("inventory.metrics.activeWarehouses")} value={String(activeWarehouses)} />
-              <MetricCard label={t("inventory.metrics.receipts")} value={String(receiptsTotal)} />
-              <MetricCard label={t("inventory.metrics.postedReceipts")} value={String(postedReceipts)} />
-              <MetricCard label={t("inventory.metrics.issues")} value={String(issuesTotal)} />
-              <MetricCard label={t("inventory.metrics.postedIssues")} value={String(postedIssues)} />
-              <MetricCard label={t("inventory.metrics.transfers")} value={String(transfersTotal)} />
-              <MetricCard label={t("inventory.metrics.postedTransfers")} value={String(postedTransfers)} />
-              <MetricCard label={t("inventory.metrics.adjustments")} value={String(adjustmentsTotal)} />
-              <MetricCard label={t("inventory.metrics.postedAdjustments")} value={String(postedAdjustments)} />
-              <MetricCard label={t("inventory.metrics.stockMovements")} value={String(stockMovementsTotal)} />
+            <div className="flex flex-wrap gap-3">
+              {INVENTORY_WORKSPACE_TABS.map((tab) => {
+                const active = workspace === tab.id;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setWorkspace(tab.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 py-2 text-[13px] font-bold transition-colors",
+                      active
+                        ? "border-gray-900 bg-gray-900 text-white"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {t(tab.labelKey)}
+                  </button>
+                );
+              })}
             </div>
-
-            <section className="space-y-4">
-              <SectionHeading title={t("inventory.workspace.title")} description={t("inventory.workspace.description")} />
-              <div className="flex flex-wrap gap-3">
-                {INVENTORY_WORKSPACE_TABS.map((tab) => {
-                  const active = workspace === tab.id;
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setWorkspace(tab.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 py-2 text-[13px] font-bold transition-colors",
-                        active
-                          ? "border-gray-900 bg-gray-900 text-white"
-                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      {t(tab.labelKey)}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
           </>
         )}
 
@@ -1743,35 +1719,32 @@ export function InventoryPage() {
 
                 {/* Sidebar Info: Barcode / QR / Accounts / Location */}
                 <div className="space-y-6">
-                  {/* Barcode & QR Code Card */}
-                  {(selectedItem.barcode || selectedItem.qrCodeValue) && (
+                  {/* Barcode Card */}
+                  {selectedItem.barcode && (
                     <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
                       <h2 className="text-sm font-black text-[#233329] border-b border-[#f0f3f0] pb-2">
-                        {isArabic ? "الرموز والملصقات" : "Barcodes & QR"}
+                        {isArabic ? "الباركود" : "Barcode"}
                       </h2>
-                      <div className="space-y-4">
-                        {selectedItem.barcode && (
-                          <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "الباركود" : "Barcode"}</div>
-                            <div
-                              className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full"
-                              style={{ minHeight: "80px" }}
-                              dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(selectedItem.barcode) }}
-                            />
-                            <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider font-mono">{selectedItem.barcode}</div>
-                          </div>
-                        )}
-                        {selectedItem.qrCodeValue && (
-                          <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 flex flex-col items-center justify-center">
-                            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mb-3">{isArabic ? "رمز QR" : "QR Code"}</div>
-                            <div
-                              className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full"
-                              style={{ minHeight: "80px" }}
-                              dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(selectedItem.qrCodeValue) }}
-                            />
-                            <div className="mt-3 text-xs font-semibold text-gray-600 tracking-wider font-mono">{selectedItem.qrCodeValue}</div>
-                          </div>
-                        )}
+                      <div className="flex flex-col items-center justify-center bg-gray-50/50 rounded-2xl p-4">
+                        <div
+                          className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full max-w-[260px]"
+                          dangerouslySetInnerHTML={{ __html: getBarcodePreviewSvg(selectedItem.barcode) }}
+                        />
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* QR Code Card */}
+                  {selectedItem.qrCodeValue && (
+                    <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6 space-y-4">
+                      <h2 className="text-sm font-black text-[#233329] border-b border-[#f0f3f0] pb-2">
+                        {isArabic ? "رمز QR" : "QR Code"}
+                      </h2>
+                      <div className="flex flex-col items-center justify-center bg-gray-50/50 rounded-2xl p-4">
+                        <div
+                          className="overflow-hidden rounded-xl bg-white border border-gray-150 p-3 flex items-center justify-center w-full max-w-[140px]"
+                          dangerouslySetInnerHTML={{ __html: getQrPreviewSvg(selectedItem.qrCodeValue) }}
+                        />
                       </div>
                     </Card>
                   )}
@@ -1846,27 +1819,57 @@ export function InventoryPage() {
 
               <div className="w-full">
             <Card className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <Input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder={t("inventory.filters.search")} />
-                <Select value={itemStatusFilter} onChange={(event) => setItemStatusFilter(event.target.value as "" | "true" | "false")}>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Search Input */}
+                <div className="relative w-64">
+                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                    <LuSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={itemSearch}
+                    onChange={(event) => setItemSearch(event.target.value)}
+                    placeholder={t("inventory.filters.search")}
+                    className={cn(
+                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                    )}
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <select
+                  value={itemStatusFilter}
+                  onChange={(event) => setItemStatusFilter(event.target.value as "" | "true" | "false")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.filters.allStatuses")}</option>
                   <option value="true">{t("inventory.filters.activeOnly")}</option>
                   <option value="false">{t("inventory.filters.inactiveOnly")}</option>
-                </Select>
-                <Select value={itemTypeFilter} onChange={(event) => setItemTypeFilter(event.target.value as InventoryItemType | "")}>
+                </select>
+
+                {/* Type Filter */}
+                <select
+                  value={itemTypeFilter}
+                  onChange={(event) => setItemTypeFilter(event.target.value as InventoryItemType | "")}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.filters.allTypes")}</option>
                   {ITEM_TYPE_OPTIONS.map((type) => (
                     <option key={type} value={type}>
                       {t(`inventory.type.${type}`)}
                     </option>
                   ))}
-                </Select>
-                <Select
+                </select>
+
+                {/* Item Group Filter */}
+                <select
                   value={itemGroupFilter}
                   onChange={(event) => {
                     setItemGroupFilter(event.target.value);
                     setItemCategoryFilter("");
                   }}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
                 >
                   <option value="">{t("inventory.filters.allItemGroups")}</option>
                   {activeItemGroups.map((group) => (
@@ -1874,8 +1877,14 @@ export function InventoryPage() {
                       {formatCodeNameText(group.code, group.name, isArabic)}
                     </option>
                   ))}
-                </Select>
-                <Select value={itemCategoryFilter} onChange={(event) => setItemCategoryFilter(event.target.value)}>
+                </select>
+
+                {/* Item Category Filter */}
+                <select
+                  value={itemCategoryFilter}
+                  onChange={(event) => setItemCategoryFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
                   <option value="">{t("inventory.filters.allItemCategories")}</option>
                   {activeItemCategories
                     .filter((category) => !itemGroupFilter || category.itemGroupId === itemGroupFilter)
@@ -1884,7 +1893,7 @@ export function InventoryPage() {
                         {formatCodeNameText(category.code, category.name, isArabic)}
                       </option>
                     ))}
-                </Select>
+                </select>
               </div>
 
               <div className="overflow-x-auto">
@@ -4241,11 +4250,11 @@ function SectionHeading({
   action?: ReactNode;
 }) {
   const isPageTitle = typeof title === "string" && (title.includes("المخزون") || title.includes("Inventory"));
-  const titleSize = isPageTitle ? "20px" : "16px";
+  const titleSize = isPageTitle ? "18px" : "16px";
 
   return (
-    <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between mb-8">
-      <div className="space-y-3">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-1">
         <h1 
           className="app-title font-medium tracking-tight text-gray-900"
           style={{ fontSize: titleSize, fontWeight: 500 }}

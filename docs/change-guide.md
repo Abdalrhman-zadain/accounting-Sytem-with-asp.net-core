@@ -364,10 +364,10 @@ What else to check:
 
 - keep the inventory module split by subdomain ownership such as item master, warehouses, goods receipts, issues, transfers, adjustments, costing, inquiry, posting/accounting, and validation/control
 - inventory list reads (`/inventory/items`, `/inventory/goods-receipts`, `/inventory/goods-issues`, `/inventory/transfers`, `/inventory/adjustments`, `/inventory/stock-ledger`) should use `page`/`limit` and keep frontend pagination state/controls in the owning Phase 5 feature page
-- the inventory items list is full-width, and selecting an item from the list displays the item information in a dedicated Accountant Review-style detail view containing an edit button, which then opens the full-form editor modal to modify the item records
+- the inventory items list is full-width and rendered as a compact table (matching the POS Session Review row-styling), where selecting an item from the list displays the item details in a dedicated Accountant Review-style view with separate, properly scaled cards for barcodes and QR codes, and a button to open the full-form editor modal
 - item records that point to a preferred warehouse should reference the Phase 5 warehouse master slice instead of introducing parallel free-text warehouse registries
 - item barcode values must remain unique across all inventory items; use the dedicated item-master workflow for manual entry, scanner entry, or internal barcode generation
-- QR data for item cards should be stored as text/value only and generated from item master fields in the owning Phase 5 UI/workflow; preview images should remain derived UI output rather than database content
+- QR data for item cards should be stored as text/value only, generated dynamically from item fields, and rendered cleanly inside a dedicated max-width container without raw JSON text output
 - barcode/QR additions must stay operational only and must not create Phase 1 journal entries or other accounting postings
 - route files must stay thin and compose the owning Phase 5 feature page
 - valuation method changes should flow through `GET/PATCH /inventory/policy`; use `INVENTORY_COSTING_METHOD` only as fallback bootstrap/default behavior
