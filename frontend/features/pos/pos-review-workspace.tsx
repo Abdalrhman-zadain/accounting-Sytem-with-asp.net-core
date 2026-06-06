@@ -13,6 +13,7 @@ import type {
   DeliveryDriver,
   DeliveryStatus,
   JournalEntry,
+  JournalEntryLine,
   PosOrderType,
   PosPaymentMethod,
   PosSale,
@@ -255,16 +256,204 @@ export function PosReviewWorkspace({
       return null;
     }
 
-    const journalId = isSessionPosting
-      ? report?.sessionJournalEntry?.id ?? null
-      : activeInvoiceDetail.journalEntry?.id ?? null;
+    if (isSessionPosting) {
+      const findAccountDetails = (accountId: string) => {
+        for (const entry of journalEntries) {
+          const line = entry.lines.find((l) => l.accountId === accountId);
+          if (line) {
+            return {
+              code: line.accountCode,
+              name: line.accountName,
+              nameAr: line.accountNameAr || line.accountName,
+            };
+          }
+        }
+        const pAcc = paymentAccounts.find((a) => a.account.id === accountId);
+        if (pAcc) {
+          return {
+            code: pAcc.account.code,
+            name: pAcc.account.name,
+            nameAr: pAcc.account.nameAr || pAcc.account.name,
+          };
+        }
+        return null;
+      };
 
+      const lines: JournalEntryLine[] = [];
+      let lineIndex = 0;
+
+      // 1. Debits: Payments
+      activeInvoiceDetail.payments.forEach((payment) => {
+        let accountId = "";
+        if (payment.paymentMethod === "DELIVERY") {
+          const companyId = payment.deliveryCompanyId || activeInvoiceDetail.deliveryCompanyId;
+          const company = deliveryCompanies.find((c) => c.id === companyId);
+          accountId = company?.receivableAccountId || "";
+        } else {
+          accountId = payment.bankCashAccount?.account?.id || payment.bankCashAccount?.id || "";
+        }
+
+        if (accountId) {
+          const accDetails = findAccountDetails(accountId);
+          lines.push({
+            id: `payment-${payment.id}`,
+            accountId,
+            accountCode: accDetails?.code || "—",
+            accountName: accDetails?.name || "—",
+            accountNameAr: accDetails?.nameAr || accDetails?.name || "—",
+            debitAmount: Number(payment.amount).toFixed(2),
+            creditAmount: "0.00",
+            lineNumber: ++lineIndex,
+            description: `POS sale ${activeInvoiceDetail.reference} payment`,
+          });
+        }
+      });
+
+      // 2. Debits: Outstanding balance
+      const totalApplied = activeInvoiceDetail.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const outstandingAmount = Math.max(0, Number(activeInvoiceDetail.totalAmount) - totalApplied);
+      if (outstandingAmount > 0.005) {
+        let receivableAccountId = "";
+        if (activeInvoiceDetail.deliveryCompanyId) {
+          const company = deliveryCompanies.find((c) => c.id === activeInvoiceDetail.deliveryCompanyId);
+          receivableAccountId = company?.receivableAccountId || "";
+        } else {
+          for (const entry of journalEntries) {
+            const line = entry.lines.find((l) => l.accountCode === "1121001" || l.accountCode?.startsWith("112"));
+            if (line) {
+              receivableAccountId = line.accountId;
+              break;
+            }
+          }
+        }
+
+        if (receivableAccountId) {
+          const accDetails = findAccountDetails(receivableAccountId);
+          lines.push({
+            id: `outstanding-${activeInvoiceDetail.id}`,
+            accountId: receivableAccountId,
+            accountCode: accDetails?.code || "—",
+            accountName: accDetails?.name || "—",
+            accountNameAr: accDetails?.nameAr || accDetails?.name || "—",
+            debitAmount: outstandingAmount.toFixed(2),
+            creditAmount: "0.00",
+            lineNumber: ++lineIndex,
+            description: `POS sale ${activeInvoiceDetail.reference} outstanding balance`,
+          });
+        }
+      }
+
+      // 3. Debits: Sales Discount
+      const discountAmount = Number(activeInvoiceDetail.discountAmount || 0);
+      if (discountAmount > 0.005) {
+        let salesDiscountAccountId = posSettings?.accounts?.salesDiscountAccountId || "";
+        if (!salesDiscountAccountId) {
+          for (const entry of journalEntries) {
+            const line = entry.lines.find((l) => l.accountCode?.startsWith("412") || l.accountCode === "4110002");
+            if (line) {
+              salesDiscountAccountId = line.accountId;
+              break;
+            }
+          }
+        }
+        if (salesDiscountAccountId) {
+          const accDetails = findAccountDetails(salesDiscountAccountId);
+          lines.push({
+            id: `discount-${activeInvoiceDetail.id}`,
+            accountId: salesDiscountAccountId,
+            accountCode: accDetails?.code || "—",
+            accountName: accDetails?.name || "—",
+            accountNameAr: accDetails?.nameAr || accDetails?.name || "—",
+            debitAmount: discountAmount.toFixed(2),
+            creditAmount: "0.00",
+            lineNumber: ++lineIndex,
+            description: `POS sale ${activeInvoiceDetail.reference} discount`,
+          });
+        }
+      }
+
+      // 4. Credits: Sales Revenue
+      let salesRevenueAccountId = posSettings?.accounts?.salesRevenueAccountId || "";
+      if (!salesRevenueAccountId) {
+        for (const entry of journalEntries) {
+          const line = entry.lines.find((l) => l.accountCode === "4110001");
+          if (line) {
+            salesRevenueAccountId = line.accountId;
+            break;
+          }
+        }
+      }
+      if (salesRevenueAccountId) {
+        const accDetails = findAccountDetails(salesRevenueAccountId);
+        const revenueAmount = Number(activeInvoiceDetail.subtotalAmount) +
+          Number(activeInvoiceDetail.discountAmount || 0) +
+          Number(activeInvoiceDetail.serviceChargeAmount || 0) +
+          Number(activeInvoiceDetail.deliveryFeeAmount || 0);
+        lines.push({
+          id: `revenue-${activeInvoiceDetail.id}`,
+          accountId: salesRevenueAccountId,
+          accountCode: accDetails?.code || "—",
+          accountName: accDetails?.name || "—",
+          accountNameAr: accDetails?.nameAr || accDetails?.name || "—",
+          debitAmount: "0.00",
+          creditAmount: revenueAmount.toFixed(2),
+          lineNumber: ++lineIndex,
+          description: `POS sale ${activeInvoiceDetail.reference} revenue`,
+        });
+      }
+
+      // 5. Credits: Tax/VAT
+      const taxAmount = Number(activeInvoiceDetail.taxAmount || 0);
+      if (taxAmount > 0.005) {
+        let outputVatAccountId = posSettings?.accounts?.outputVatAccountId || "";
+        if (!outputVatAccountId) {
+          for (const entry of journalEntries) {
+            const line = entry.lines.find((l) => l.accountCode === "2121001" || l.accountCode?.startsWith("212"));
+            if (line) {
+              outputVatAccountId = line.accountId;
+              break;
+            }
+          }
+        }
+        if (outputVatAccountId) {
+          const accDetails = findAccountDetails(outputVatAccountId);
+          lines.push({
+            id: `tax-${activeInvoiceDetail.id}`,
+            accountId: outputVatAccountId,
+            accountCode: accDetails?.code || "—",
+            accountName: accDetails?.name || "—",
+            accountNameAr: accDetails?.nameAr || accDetails?.name || "—",
+            debitAmount: "0.00",
+            creditAmount: taxAmount.toFixed(2),
+            lineNumber: ++lineIndex,
+            description: `POS sale ${activeInvoiceDetail.reference} tax`,
+          });
+        }
+      }
+
+      return {
+        id: activeInvoiceDetail.id + "-virtual",
+        reference: activeInvoiceDetail.reference,
+        entryDate: activeInvoiceDetail.invoiceDate,
+        status: activeInvoiceDetail.posAccountingStatus === "POSTED" ? "POSTED" : "DRAFT",
+        description: `POS sale ${activeInvoiceDetail.reference} accounting preview`,
+        lines,
+      } as JournalEntry;
+    }
+
+    const journalId = activeInvoiceDetail.journalEntry?.id ?? null;
     if (!journalId) {
       return null;
     }
-
     return journalEntries.find((entry) => entry.id === journalId) ?? null;
-  }, [activeInvoiceDetail, isSessionPosting, journalEntries, report?.sessionJournalEntry?.id]);
+  }, [
+    activeInvoiceDetail,
+    isSessionPosting,
+    journalEntries,
+    paymentAccounts,
+    deliveryCompanies,
+    posSettings,
+  ]);
 
   const isDifferenceAccepted = (session: PosSession) =>
     Number(session.difference || 0) === 0 || session.differenceStatus === "ACCEPTED_DIFFERENCE";
@@ -305,9 +494,7 @@ export function PosReviewWorkspace({
     }
   };
 
-  const activeJournalEntryLabel = isSessionPosting
-    ? getTranslation("pos.review.sessionGroupedEntry", "قيد مجمع للوردية")
-    : getTranslation("pos.review.headerReference", "مرجع الفاتورة");
+  const activeJournalEntryLabel = getTranslation("pos.review.headerReference", "مرجع الفاتورة");
 
   const localizeDisplayText = (value?: string | null, emptyFallback = "—") => {
     if (!value) return emptyFallback;
@@ -1599,9 +1786,7 @@ export function PosReviewWorkspace({
                     {activeJournalEntryLabel}
                   </span>
                   <span className="font-bold text-gray-900">
-                    {isSessionPosting
-                      ? report?.sessionJournalEntry?.sourceNumber || selectedSession?.sessionNumber || "—"
-                      : activeInvoiceDetail?.reference || "—"}
+                    {activeInvoiceDetail?.reference || "—"}
                   </span>
                 </div>
               </div>
