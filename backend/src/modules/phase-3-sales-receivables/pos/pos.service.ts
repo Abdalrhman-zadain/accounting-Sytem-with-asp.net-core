@@ -7026,7 +7026,12 @@ export class PosService {
   }
 
   async listDeliveryCompanies(user?: AuthorizedUser) {
-    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    if (
+      !this.hasPosPermissionCode("POS_VIEW_POS_SCREEN", user) &&
+      !this.hasPosPermissionCode("POS_VIEW_POS_REPORTS", user)
+    ) {
+      throw new BadRequestException("You do not have permission to view delivery companies.");
+    }
     const includeInactive = this.hasPosPermissionCode("POS_VIEW_POS_REPORTS", user);
     return this.prisma.deliveryCompany.findMany({
       where: includeInactive ? undefined : { isActive: true },
