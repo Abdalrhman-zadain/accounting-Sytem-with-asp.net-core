@@ -54,6 +54,7 @@ import {
 import { Card, Modal, PageShell, SearchableSelect } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
+  ApiError,
   approvePosAccounting,
   approvePosSessionAccounting,
   rejectPosSessionAccounting,
@@ -1123,7 +1124,7 @@ export function PosPage() {
   const settingsQuery = useQuery({
     queryKey: queryKeys.posSettings(token),
     queryFn: () => getPosSettings(token),
-    enabled: Boolean(token && (workspace === "sales" || workspace === "settings")),
+    enabled: Boolean(token && (workspace === "sales" || workspace === "settings" || workspace === "review")),
   });
 
   const updatePosSettingsMutation = useMutation({
@@ -1240,6 +1241,13 @@ export function PosPage() {
     enabled: Boolean(token && reviewSessionId && workspace === "review"),
   });
 
+  const reviewUsesSessionPosting =
+    settingsQuery.data?.runtime.postingMode === "BY_SESSION" ||
+    Boolean(
+      reviewSessionReportQuery.data?.sessionJournalEntry?.id &&
+        (reviewSessionReportQuery.data?.sales?.length ?? 0) > 0,
+    );
+
   const reviewJournalEntriesQuery = useQuery({
     queryKey: [
       "pos-review-journal-entries",
@@ -1247,7 +1255,11 @@ export function PosPage() {
       reviewSessionId,
       [
         reviewSessionReportQuery.data?.sessionJournalEntry?.id ?? "",
-        ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? ""),
+        ...(
+          reviewUsesSessionPosting
+            ? []
+            : (reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? "")
+        ),
         ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? ""),
       ]
         .filter(Boolean)
@@ -1258,12 +1270,28 @@ export function PosPage() {
         new Set(
           [
             reviewSessionReportQuery.data?.sessionJournalEntry?.id ?? null,
-            ...(reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? null),
+            ...(
+              reviewUsesSessionPosting
+                ? []
+                : (reviewSessionReportQuery.data?.sales ?? []).map((sale) => sale.journalEntry?.id ?? null)
+            ),
             ...(reviewSessionReportQuery.data?.returns ?? []).map((posReturn) => posReturn.journalEntry?.id ?? null),
           ].filter((id): id is string => Boolean(id)),
         ),
       );
-      return Promise.all(ids.map((id) => getJournalEntryById(id, token)));
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            return await getJournalEntryById(id, token);
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 404) {
+              return null;
+            }
+            throw error;
+          }
+        }),
+      );
+      return results.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
     },
     enabled: Boolean(
       token &&
@@ -1329,6 +1357,7 @@ export function PosPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.posReturns(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posReportsOverview(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posSessionReport(token, selectedSessionId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posSessionReport(token, reviewSessionId || null) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByPaymentMethod(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByCashier(token) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posSalesByBranch(token) }),

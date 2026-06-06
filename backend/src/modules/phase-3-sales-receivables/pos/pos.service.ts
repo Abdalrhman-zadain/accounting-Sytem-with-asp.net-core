@@ -741,10 +741,10 @@ export class PosService {
       );
     }
 
-    const report = await this.buildSessionReport(id);
+    const reportBeforeClose = await this.buildSessionReport(id);
     const actualCash = this.toAmount(dto.actualCash);
     const difference = this.toAmount(
-      Number(dto.actualCash) - Number(report.expectedCash),
+      Number(dto.actualCash) - Number(reportBeforeClose.expectedCash),
     );
 
     const closed = await this.prisma.posSession.update({
@@ -765,6 +765,8 @@ export class PosService {
       });
     }
 
+    const report = await this.buildSessionReport(id);
+
     await this.auditService.log({
       userId: user?.userId,
       entity: "PosSession",
@@ -772,7 +774,7 @@ export class PosService {
       action: AuditAction.CLOSE,
       details: {
         sessionNumber: closed.sessionNumber,
-        expectedCash: report.expectedCash,
+        expectedCash: reportBeforeClose.expectedCash,
         actualCash: dto.actualCash,
         difference: difference.toString(),
       },

@@ -330,24 +330,6 @@ export function PosRestaurantCartControls({
             />
           </div>
 
-          {/* Waiter for delivery too */}
-          <div>
-            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
-              {isAr ? "مندوب / ويتر" : "Staff"}
-            </div>
-            <select
-              value={selectedWaiterId ?? ""}
-              onChange={(e) => onWaiterChange(e.target.value || null)}
-              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
-            >
-              <option value="">{isAr ? "— اختر —" : "— None —"}</option>
-              {waiters.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name || w.email}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       ) : null}
 

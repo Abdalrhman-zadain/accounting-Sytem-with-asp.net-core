@@ -180,7 +180,9 @@ export function PosReviewWorkspace({
   const { user, token } = useAuth();
   const { language } = useTranslation();
   const isArabic = language === "ar";
-  const isSessionPosting = posSettings?.runtime.postingMode === "BY_SESSION";
+  const isSessionPosting =
+    posSettings?.runtime.postingMode === "BY_SESSION" ||
+    Boolean(report?.sessionJournalEntry?.id && (report?.sales?.length ?? 0) > 0);
   const pageDir = isArabic ? "rtl" : "ltr";
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [diffDecision, setDiffDecision] = useState("ACCEPT");
