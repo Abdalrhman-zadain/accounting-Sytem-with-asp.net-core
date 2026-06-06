@@ -27,6 +27,7 @@ import {
   updateDeliveryStatus,
   updateDeliveryCompanyStatus,
 } from "@/lib/api";
+import { hasPermission } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -243,7 +244,12 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showDone, setShowDone] = React.useState(false);
-  const canManageSettlements = Boolean(user?.permissions?.includes("POS_VIEW_POS_REPORTS" as any));
+  const canManageSettlements = hasPermission(user, "POS_VIEW_POS_REPORTS");
+  const canViewOperationalBoard =
+    !canManageSettlements &&
+    (hasPermission(user, "POS_VIEW_POS_SCREEN") ||
+      hasPermission(user, "RST_CREATE_DELIVERY_ORDER") ||
+      hasPermission(user, "RST_ASSIGN_DRIVER"));
   const [selectedCompanyId, setSelectedCompanyId] = React.useState("");
   const [periodFrom, setPeriodFrom] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [periodTo, setPeriodTo] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -262,20 +268,20 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
   const { data: allSales = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.posCompletedSales(token),
     queryFn: () => getCompletedPosSales(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && canViewOperationalBoard),
     refetchInterval: 15000,
   });
 
   const { data: drivers = [] } = useQuery({
     queryKey: ["pos-delivery-drivers", token],
     queryFn: () => getDeliveryDrivers(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && canViewOperationalBoard),
   });
 
   const { data: deliveryCompanies = [] } = useQuery({
     queryKey: ["pos-delivery-companies", token],
     queryFn: () => getDeliveryCompanies(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && (canViewOperationalBoard || canManageSettlements)),
   });
 
   const { data: receivableRows = [] } = useQuery({
@@ -439,7 +445,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
     (col) => showDone || !col.isTerminal,
   );
 
-  if (isLoading) {
+  if (canViewOperationalBoard && isLoading) {
     return embedded ? (
       <div className="flex h-full min-h-[50vh] items-center justify-center">
         <PageSkeleton />
@@ -468,120 +474,128 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
               <div>
                 <h1 className="text-xl font-black">{t("pos.delivery.title")}</h1>
                 <p className="mt-0.5 text-sm font-semibold text-white/80">
-                  {t("pos.delivery.subtitle")}
+                  {canManageSettlements
+                    ? "Delivery receivables and settlement follow-up"
+                    : t("pos.delivery.subtitle")}
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/70">
-                  {t("pos.delivery.activeCount")}
-                </div>
-                <div className="text-2xl font-black">{activeCount}</div>
-              </div>
-              {outCount > 0 ? (
-                <div className="rounded-xl border border-indigo-300/50 bg-indigo-500/30 px-4 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-100">
-                    {t("pos.delivery.outCount")}
+            {canViewOperationalBoard ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-white/70">
+                    {t("pos.delivery.activeCount")}
                   </div>
-                  <div className="text-2xl font-black text-indigo-50">{outCount}</div>
+                  <div className="text-2xl font-black">{activeCount}</div>
                 </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold hover:bg-white/20"
-              >
-                <LuRefreshCcw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-                {t("pos.delivery.refresh")}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 border-b border-[#e1e7e2] bg-white px-5 py-3">
-          <div className="relative min-w-[200px] max-w-md flex-1">
-            <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#68776f] ltr:left-3 rtl:right-3" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("pos.delivery.searchPlaceholder")}
-              className="h-10 w-full rounded-xl border border-[#d6e1d9] bg-[#fbfcfb] text-sm font-semibold text-[#233329] ltr:pl-10 ltr:pr-3 rtl:pl-3 rtl:pr-10"
-            />
-          </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-[#506054]">
-            <input
-              type="checkbox"
-              checked={showDone}
-              onChange={(e) => setShowDone(e.target.checked)}
-              className="h-4 w-4 rounded border-[#d6e1d9]"
-            />
-            {t("pos.delivery.showDone")}
-          </label>
-          <span className="text-xs font-semibold text-[#68776f]">
-            {t("pos.delivery.autoRefresh")}
-          </span>
-        </div>
-
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto p-4">
-          {visibleColumns.map((col) => {
-            const colSales = salesByStatus[col.status];
-            return (
-              <section
-                key={col.status}
-                className="flex w-[min(100%,300px)] shrink-0 flex-col rounded-2xl border border-[#e1e7e2] bg-[#f6f7f8]"
-              >
-                <header
-                  className={cn(
-                    "flex items-center justify-between rounded-t-2xl px-4 py-3 text-white",
-                    col.headerClass,
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={cn("h-2 w-2 rounded-full", col.dotClass)} />
-                    <h2 className="text-sm font-black">{t(col.labelKey)}</h2>
-                  </div>
-                  <span className="rounded-full bg-black/20 px-2.5 py-0.5 text-xs font-black">
-                    {colSales.length}
-                  </span>
-                </header>
-                <div className="flex max-h-[calc(100vh-16rem)] min-h-[200px] flex-1 flex-col gap-3 overflow-y-auto p-3">
-                  {colSales.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#d6e1d9] bg-white py-10 text-center">
-                      <LuTruck className="h-6 w-6 text-[#c5d0c8]" />
-                      <p className="mt-2 text-xs font-semibold text-[#68776f]">
-                        {t("pos.delivery.emptyColumn")}
-                      </p>
+                {outCount > 0 ? (
+                  <div className="rounded-xl border border-indigo-300/50 bg-indigo-500/30 px-4 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-100">
+                      {t("pos.delivery.outCount")}
                     </div>
-                  ) : (
-                    colSales.map((sale) => (
-                      <DeliveryOrderCard
-                        key={sale.id}
-                        sale={sale}
-                        language={language}
-                        drivers={drivers}
-                        isUpdating={
-                          updateStatusMutation.isPending || assignDriverMutation.isPending
-                        }
-                        t={t}
-                        onAssignDriver={(saleId, driverId) =>
-                          assignDriverMutation.mutate({ saleId, driverId })
-                        }
-                        onAdvance={(saleId, status) =>
-                          updateStatusMutation.mutate({ saleId, status })
-                        }
-                        onCancel={(saleId) =>
-                          updateStatusMutation.mutate({ saleId, status: "CANCELLED" })
-                        }
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-            );
-          })}
+                    <div className="text-2xl font-black text-indigo-50">{outCount}</div>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold hover:bg-white/20"
+                >
+                  <LuRefreshCcw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                  {t("pos.delivery.refresh")}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
+
+        {canViewOperationalBoard ? (
+          <>
+            <div className="flex flex-wrap items-center gap-3 border-b border-[#e1e7e2] bg-white px-5 py-3">
+              <div className="relative min-w-[200px] max-w-md flex-1">
+                <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#68776f] ltr:left-3 rtl:right-3" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t("pos.delivery.searchPlaceholder")}
+                  className="h-10 w-full rounded-xl border border-[#d6e1d9] bg-[#fbfcfb] text-sm font-semibold text-[#233329] ltr:pl-10 ltr:pr-3 rtl:pl-3 rtl:pr-10"
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-[#506054]">
+                <input
+                  type="checkbox"
+                  checked={showDone}
+                  onChange={(e) => setShowDone(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#d6e1d9]"
+                />
+                {t("pos.delivery.showDone")}
+              </label>
+              <span className="text-xs font-semibold text-[#68776f]">
+                {t("pos.delivery.autoRefresh")}
+              </span>
+            </div>
+
+            <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto p-4">
+              {visibleColumns.map((col) => {
+                const colSales = salesByStatus[col.status];
+                return (
+                  <section
+                    key={col.status}
+                    className="flex w-[min(100%,300px)] shrink-0 flex-col rounded-2xl border border-[#e1e7e2] bg-[#f6f7f8]"
+                  >
+                    <header
+                      className={cn(
+                        "flex items-center justify-between rounded-t-2xl px-4 py-3 text-white",
+                        col.headerClass,
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={cn("h-2 w-2 rounded-full", col.dotClass)} />
+                        <h2 className="text-sm font-black">{t(col.labelKey)}</h2>
+                      </div>
+                      <span className="rounded-full bg-black/20 px-2.5 py-0.5 text-xs font-black">
+                        {colSales.length}
+                      </span>
+                    </header>
+                    <div className="flex max-h-[calc(100vh-16rem)] min-h-[200px] flex-1 flex-col gap-3 overflow-y-auto p-3">
+                      {colSales.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#d6e1d9] bg-white py-10 text-center">
+                          <LuTruck className="h-6 w-6 text-[#c5d0c8]" />
+                          <p className="mt-2 text-xs font-semibold text-[#68776f]">
+                            {t("pos.delivery.emptyColumn")}
+                          </p>
+                        </div>
+                      ) : (
+                        colSales.map((sale) => (
+                          <DeliveryOrderCard
+                            key={sale.id}
+                            sale={sale}
+                            language={language}
+                            drivers={drivers}
+                            isUpdating={
+                              updateStatusMutation.isPending || assignDriverMutation.isPending
+                            }
+                            t={t}
+                            onAssignDriver={(saleId, driverId) =>
+                              assignDriverMutation.mutate({ saleId, driverId })
+                            }
+                            onAdvance={(saleId, status) =>
+                              updateStatusMutation.mutate({ saleId, status })
+                            }
+                            onCancel={(saleId) =>
+                              updateStatusMutation.mutate({ saleId, status: "CANCELLED" })
+                            }
+                          />
+                        ))
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
         {canManageSettlements ? (
           <div className="space-y-4 border-t border-[#e1e7e2] bg-[#f7faf8] p-4">
             <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">

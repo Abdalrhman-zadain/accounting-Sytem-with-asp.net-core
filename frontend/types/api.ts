@@ -3603,6 +3603,8 @@ export type PosSettings = {
     deliveryCompanies: Array<{
       id: string;
       receivableAccountId: string;
+      commissionAccountId?: string;
+      serviceFeeAccountId?: string;
     }>;
   };
   permissions: Record<string, boolean>;

@@ -248,7 +248,7 @@ Where to edit:
 What else to check:
 
 - cashier payment UI must not expose manual accounting-account selection; keep it limited to payment method, paid amount, and reference when required
-- POS settings should store payment method mappings in `PosRuntimeSetting` and delivery-company receivables on the linked `DeliveryCompany`
+- POS settings should store payment method mappings in `PosRuntimeSetting`; delivery-company rows in the same POS settings flow should update the linked `DeliveryCompany` receivable, commission, and service-fee accounts
 - third-party delivery orders must distinguish between `restaurant collected` vs `delivery company collected`; only company-collected orders should create `PosPayment(paymentMethod=DELIVERY)` rows and enter delivery-company settlement follow-up
 - payment-method mappings for `CARD`, `CLIQ`, `WALLET`, and `BANK_TRANSFER` should point to active bank/cash registry rows through their linked posting accounts so `PosPayment.bankCashAccountId` can still be stored
 - card/Visa should normally map to a clearing account, not directly to the bank

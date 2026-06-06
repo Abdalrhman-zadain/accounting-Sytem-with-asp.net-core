@@ -2431,7 +2431,12 @@ export async function updatePosSettings(
     outputVatAccountId?: string;
     salesDiscountAccountId?: string;
     salesReturnsAccountId?: string;
-    deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
+    deliveryCompanies?: Array<{
+      id: string;
+      receivableAccountId: string;
+      commissionAccountId?: string;
+      serviceFeeAccountId?: string;
+    }>;
   },
   token?: string | null,
 ) {

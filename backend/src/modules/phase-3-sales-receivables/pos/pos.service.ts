@@ -77,7 +77,12 @@ type PosAccountMappings = {
   outputVatAccountId: string | null;
   salesDiscountAccountId: string | null;
   salesReturnsAccountId: string | null;
-  deliveryCompanies: Array<{ id: string; receivableAccountId: string }>;
+  deliveryCompanies: Array<{
+    id: string;
+    receivableAccountId: string;
+    commissionAccountId?: string;
+    serviceFeeAccountId?: string;
+  }>;
 };
 
 @Injectable()
@@ -128,7 +133,12 @@ export class PosService {
 
     const settingsMap = new Map(settings.map((s) => [s.key, s.value]));
 
-    let deliveryCompanies: Array<{ id: string; receivableAccountId: string }> = [];
+    let deliveryCompanies: Array<{
+      id: string;
+      receivableAccountId: string;
+      commissionAccountId?: string;
+      serviceFeeAccountId?: string;
+    }> = [];
     const delVal = settingsMap.get("POS_MAPPING_DELIVERY_COMPANIES");
     if (delVal) {
       try {
@@ -312,9 +322,19 @@ export class PosService {
         if (dto.deliveryCompanies) {
           for (const item of dto.deliveryCompanies) {
             await this.ensureActivePostingAccount(item.receivableAccountId, tx);
+            if (item.commissionAccountId?.trim()) {
+              await this.ensureActivePostingAccount(item.commissionAccountId, tx);
+            }
+            if (item.serviceFeeAccountId?.trim()) {
+              await this.ensureActivePostingAccount(item.serviceFeeAccountId, tx);
+            }
             await tx.deliveryCompany.update({
               where: { id: item.id },
-              data: { receivableAccountId: item.receivableAccountId },
+              data: {
+                receivableAccountId: item.receivableAccountId,
+                commissionAccountId: item.commissionAccountId?.trim() || null,
+                serviceFeeAccountId: item.serviceFeeAccountId?.trim() || null,
+              },
             });
           }
         }

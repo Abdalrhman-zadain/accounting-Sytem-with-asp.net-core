@@ -1139,7 +1139,12 @@ export function PosPage() {
       outputVatAccountId?: string;
       salesDiscountAccountId?: string;
       salesReturnsAccountId?: string;
-      deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
+      deliveryCompanies?: Array<{
+        id: string;
+        receivableAccountId: string;
+        commissionAccountId?: string;
+        serviceFeeAccountId?: string;
+      }>;
     }) => updatePosSettings(payload, token),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -6601,7 +6606,12 @@ function SettingsWorkspace({
     outputVatAccountId?: string;
     salesDiscountAccountId?: string;
     salesReturnsAccountId?: string;
-    deliveryCompanies?: Array<{ id: string; receivableAccountId: string }>;
+    deliveryCompanies?: Array<{
+      id: string;
+      receivableAccountId: string;
+      commissionAccountId?: string;
+      serviceFeeAccountId?: string;
+    }>;
   }) => void;
 }) {
     const settings = posSettings;
@@ -6622,7 +6632,12 @@ function SettingsWorkspace({
       outputVatAccountId: string;
       salesDiscountAccountId: string;
       salesReturnsAccountId: string;
-      deliveryCompanies: Array<{ id: string; receivableAccountId: string }>;
+      deliveryCompanies: Array<{
+        id: string;
+        receivableAccountId: string;
+        commissionAccountId: string;
+        serviceFeeAccountId: string;
+      }>;
     } | null>(null);
     const lastSettingsSeedRef = useRef<string | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -6665,6 +6680,14 @@ function SettingsWorkspace({
           receivableAccountId:
             settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
             company.receivableAccountId ??
+            "",
+          commissionAccountId:
+            settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.commissionAccountId ??
+            company.commissionAccountId ??
+            "",
+          serviceFeeAccountId:
+            settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.serviceFeeAccountId ??
+            company.serviceFeeAccountId ??
             "",
         })),
       };
@@ -6726,6 +6749,14 @@ function SettingsWorkspace({
             receivableAccountId:
               settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ??
               company.receivableAccountId ??
+              "",
+            commissionAccountId:
+              settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.commissionAccountId ??
+              company.commissionAccountId ??
+              "",
+            serviceFeeAccountId:
+              settings.accounts.deliveryCompanies.find((row) => row.id === company.id)?.serviceFeeAccountId ??
+              company.serviceFeeAccountId ??
               "",
           })),
         );
@@ -6817,8 +6848,16 @@ function SettingsWorkspace({
                     salesDiscountAccountId: localAccountMappings.salesDiscountAccountId,
                     salesReturnsAccountId: localAccountMappings.salesReturnsAccountId,
                     deliveryCompanies: localAccountMappings.deliveryCompanies.filter(
-                      (row) => row.receivableAccountId.trim().length > 0,
-                    ),
+                      (row) =>
+                        row.receivableAccountId.trim().length > 0 ||
+                        row.commissionAccountId.trim().length > 0 ||
+                        row.serviceFeeAccountId.trim().length > 0,
+                    ).map((row) => ({
+                      id: row.id,
+                      receivableAccountId: row.receivableAccountId,
+                      commissionAccountId: row.commissionAccountId.trim() || undefined,
+                      serviceFeeAccountId: row.serviceFeeAccountId.trim() || undefined,
+                    })),
                   })
                 }
                 disabled={isSavingRuntimeSettings}
@@ -7056,33 +7095,99 @@ function SettingsWorkspace({
                         <td className="px-6 py-4 align-middle text-start">
                           <div className="text-sm font-bold text-[#233329]">{company.arabicName?.trim() || company.name}</div>
                           <div className="mt-1 text-xs text-[#6b7b72]">
-                            {`${company.name} Receivable / ذمم ${company.arabicName?.trim() || company.name}`}
+                            {`${company.name} / ${company.arabicName?.trim() || company.name}`}
+                          </div>
+                          <div className="mt-2 text-[11px] text-[#8a968f]">
+                            {`Commission ${company.commissionRate}%`}
                           </div>
                         </td>
                         <td className="w-[50%] min-w-[min(100%,32rem)] px-6 py-4 align-middle text-end">
-                          <SearchableSelect
-                            value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ?? ""}
-                            onChange={(val) =>
-                              setLocalAccountMappings((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      deliveryCompanies: prev.deliveryCompanies.map((row) =>
-                                        row.id === company.id ? { ...row, receivableAccountId: val } : row,
-                                      ),
-                                    }
-                                  : prev,
-                              )
-                            }
-                            className="inline-block h-[42px] w-full min-w-[min(100%,28rem)] rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
-                            options={[
-                              { value: "", label: "غير محدد / Not mapped" },
-                              ...accountOptions.map((account) => ({
-                                value: account.id,
-                                label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
-                              }))
-                            ]}
-                          />
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div className="text-start">
+                              <div className="mb-1 text-[11px] font-bold text-[#6b7b72]">
+                                Receivable / الذمم
+                              </div>
+                              <SearchableSelect
+                                value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.receivableAccountId ?? ""}
+                                onChange={(val) =>
+                                  setLocalAccountMappings((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          deliveryCompanies: prev.deliveryCompanies.map((row) =>
+                                            row.id === company.id ? { ...row, receivableAccountId: val } : row,
+                                          ),
+                                        }
+                                      : prev,
+                                  )
+                                }
+                                className="inline-block h-[42px] w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
+                                options={[
+                                  { value: "", label: "غير محدد / Not mapped" },
+                                  ...accountOptions.map((account) => ({
+                                    value: account.id,
+                                    label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                                  }))
+                                ]}
+                              />
+                            </div>
+                            <div className="text-start">
+                              <div className="mb-1 text-[11px] font-bold text-[#6b7b72]">
+                                Commission / عمولة
+                              </div>
+                              <SearchableSelect
+                                value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.commissionAccountId ?? ""}
+                                onChange={(val) =>
+                                  setLocalAccountMappings((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          deliveryCompanies: prev.deliveryCompanies.map((row) =>
+                                            row.id === company.id ? { ...row, commissionAccountId: val } : row,
+                                          ),
+                                        }
+                                      : prev,
+                                  )
+                                }
+                                className="inline-block h-[42px] w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
+                                options={[
+                                  { value: "", label: "غير محدد / Not mapped" },
+                                  ...accountOptions.map((account) => ({
+                                    value: account.id,
+                                    label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                                  }))
+                                ]}
+                              />
+                            </div>
+                            <div className="text-start">
+                              <div className="mb-1 text-[11px] font-bold text-[#6b7b72]">
+                                Service fee / رسوم الخدمة
+                              </div>
+                              <SearchableSelect
+                                value={localAccountMappings.deliveryCompanies.find((row) => row.id === company.id)?.serviceFeeAccountId ?? ""}
+                                onChange={(val) =>
+                                  setLocalAccountMappings((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          deliveryCompanies: prev.deliveryCompanies.map((row) =>
+                                            row.id === company.id ? { ...row, serviceFeeAccountId: val } : row,
+                                          ),
+                                        }
+                                      : prev,
+                                  )
+                                }
+                                className="inline-block h-[42px] w-full rounded-[16px] border border-[#d4ddd7] bg-white px-4 py-2.5 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
+                                options={[
+                                  { value: "", label: "غير محدد / Not mapped" },
+                                  ...accountOptions.map((account) => ({
+                                    value: account.id,
+                                    label: `${account.code} - ${isArabic ? (account.nameAr || account.name) : account.name}`
+                                  }))
+                                ]}
+                              />
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}

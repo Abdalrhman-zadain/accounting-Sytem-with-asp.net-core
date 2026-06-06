@@ -256,6 +256,14 @@ export class DeliveryCompanyMappingDto {
 
   @IsString()
   receivableAccountId!: string;
+
+  @IsOptional()
+  @IsString()
+  commissionAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceFeeAccountId?: string;
 }
 
 export class UpdatePosSettingsDto {

@@ -275,7 +275,11 @@ describe("PosService restaurant operations", () => {
     expect(prismaMock.$executeRaw).toHaveBeenCalled();
     expect(prismaMock.deliveryCompany.update).toHaveBeenCalledWith({
       where: { id: "dc1" },
-      data: { receivableAccountId: "talabat-rec" },
+      data: {
+        receivableAccountId: "talabat-rec",
+        commissionAccountId: null,
+        serviceFeeAccountId: null,
+      },
     });
     expect(result.accounts).toEqual(
       expect.objectContaining({
