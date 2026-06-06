@@ -29,6 +29,7 @@ describe("PosService restaurant operations", () => {
       deleteMany: jest.fn(),
       createMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     account: {
       findUnique: jest.fn(),
@@ -130,7 +131,7 @@ describe("PosService restaurant operations", () => {
       tableId: "t1",
       posAccountingStatus: PosAccountingStatus.PENDING_REVIEW,
     });
-    prismaMock.deliveryCompany.findUnique.mockResolvedValue({ id: "dc1", isActive: true });
+    prismaMock.deliveryCompany.findUnique.mockResolvedValue({ id: "dc1", isActive: true, receivableAccountId: "rec1" });
     prismaMock.deliveryDriver.findUnique.mockResolvedValue({ id: "drv1", isActive: true });
     prismaMock.kitchenOrder.findUnique.mockResolvedValue({ id: "kot1", salesInvoiceId: "inv1" });
 
@@ -325,7 +326,7 @@ describe("PosService restaurant operations", () => {
       tableId: "t1",
       posAccountingStatus: PosAccountingStatus.PENDING_REVIEW,
     });
-    prismaMock.deliveryCompany.findUnique.mockResolvedValue({ id: "dc1", isActive: true });
+    prismaMock.deliveryCompany.findUnique.mockResolvedValue({ id: "dc1", isActive: true, receivableAccountId: "rec1" });
     prismaMock.kitchenOrder.findUnique.mockResolvedValue(null);
 
     await service.correctOrderType(
