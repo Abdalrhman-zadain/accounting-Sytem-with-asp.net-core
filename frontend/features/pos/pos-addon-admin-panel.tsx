@@ -111,7 +111,7 @@ export function PosAddonAdminPanel() {
     });
   };
 
-  const items = itemsQuery.data?.items ?? [];
+  const items = itemsQuery.data?.data ?? [];
   const groups = groupsQuery.data ?? [];
 
   return (

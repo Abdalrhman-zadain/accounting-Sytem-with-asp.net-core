@@ -475,7 +475,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                 <h1 className="text-xl font-black">{t("pos.delivery.title")}</h1>
                 <p className="mt-0.5 text-sm font-semibold text-white/80">
                   {canManageSettlements
-                    ? "Delivery receivables and settlement follow-up"
+                    ? t("pos.delivery.accountingSubtitle")
                     : t("pos.delivery.subtitle")}
                 </p>
               </div>
@@ -602,10 +602,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-black text-[#233329]">
-                    Delivery receivables / ذمم شركات التوصيل
+                    {t("pos.delivery.receivablesTitle")}
                   </h2>
                   <p className="text-xs font-semibold text-[#68776f]">
-                    Outstanding balances by company
+                    {t("pos.delivery.receivablesSubtitle")}
                   </p>
                 </div>
               </div>
@@ -615,9 +615,11 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="text-sm font-black text-[#233329]">
-                          {row.deliveryCompanyArabicName || row.deliveryCompanyName}
+                          {isAr ? (row.deliveryCompanyArabicName || row.deliveryCompanyName) : row.deliveryCompanyName}
                         </div>
-                        <div className="text-[11px] text-[#68776f]">{row.deliveryCompanyName}</div>
+                        {isAr && row.deliveryCompanyArabicName ? (
+                          <div className="text-[11px] text-[#68776f]">{row.deliveryCompanyName}</div>
+                        ) : null}
                       </div>
                       <button
                         type="button"
@@ -631,14 +633,14 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                         className="rounded-full border border-[#d8e2dc] px-3 py-1 text-[10px] font-bold text-[#46644b]"
                       >
                         {deliveryCompanies.find((company) => company.id === row.deliveryCompanyId)?.isActive === false
-                          ? "Activate"
-                          : "Deactivate"}
+                          ? t("pos.delivery.activate")
+                          : t("pos.delivery.deactivate")}
                       </button>
                     </div>
                     <div className="mt-3 space-y-1 text-xs font-semibold text-[#42564a]">
-                      <div>Outstanding: {row.outstandingBalance}</div>
-                      <div>Settled: {row.settledBalance}</div>
-                      <div>Total: {row.totalReceivable}</div>
+                      <div>{t("pos.delivery.outstanding")}: {row.outstandingBalance} JOD</div>
+                      <div>{t("pos.delivery.settled")}: {row.settledBalance} JOD</div>
+                      <div>{t("pos.delivery.total")}: {row.totalReceivable} JOD</div>
                     </div>
                   </div>
                 ))}
@@ -648,10 +650,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
             <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
               <div className="mb-4">
                 <h2 className="text-lg font-black text-[#233329]">
-                  Delivery settlement / تسوية شركة التوصيل
+                  {t("pos.delivery.settlementTitle")}
                 </h2>
                 <p className="text-xs font-semibold text-[#68776f]">
-                  Preview unsettled orders, then confirm one settlement posting.
+                  {t("pos.delivery.settlementSubtitle")}
                 </p>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -660,10 +662,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                   onChange={(e) => setSelectedCompanyId(e.target.value)}
                   className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                 >
-                  <option value="">Select company</option>
+                  <option value="">{t("pos.delivery.selectCompany")}</option>
                   {deliveryCompanies.map((company) => (
                     <option key={company.id} value={company.id}>
-                      {company.name}
+                      {isAr ? (company.arabicName || company.name) : company.name}
                     </option>
                   ))}
                 </select>
@@ -693,7 +695,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                   }
                   className="rounded-xl bg-[#1f6f5f] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
                 >
-                  Preview settlement
+                  {t("pos.delivery.previewSettlement")}
                 </button>
               </div>
               {previewSettlementMutation.data ? (
@@ -710,10 +712,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       onChange={(e) => setBankCashAccountId(e.target.value)}
                       className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                     >
-                      <option value="">Select bank/cash account</option>
+                      <option value="">{t("pos.delivery.selectBankAccount")}</option>
                       {paymentAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.name}
+                          {isAr ? (account.account?.nameAr || account.name) : account.name}
                         </option>
                       ))}
                     </select>
@@ -721,20 +723,20 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       type="text"
                       value={statementReference}
                       onChange={(e) => setStatementReference(e.target.value)}
-                      placeholder="Statement reference"
+                      placeholder={t("pos.delivery.statementReference")}
                       className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                     />
                   </div>
                   <div className="grid gap-3 md:grid-cols-5">
                     {[
-                      { label: "Statement", value: statementAmount, setter: setStatementAmount },
-                      { label: "Commission", value: commissionAmount, setter: setCommissionAmount },
-                      { label: "Service fees", value: serviceFeeAmount, setter: setServiceFeeAmount },
-                      { label: "Refunds", value: refundAmount, setter: setRefundAmount },
-                      { label: "Adjustments", value: adjustmentAmount, setter: setAdjustmentAmount },
-                    ].map((field) => (
+                      { label: t("pos.delivery.statement"), value: statementAmount, setter: setStatementAmount },
+                      { label: t("pos.delivery.commission"), value: commissionAmount, setter: setCommissionAmount },
+                      { label: t("pos.delivery.serviceFees"), value: serviceFeeAmount, setter: setServiceFeeAmount },
+                      { label: t("pos.delivery.refunds"), value: refundAmount, setter: setRefundAmount },
+                      { label: t("pos.delivery.adjustments"), value: adjustmentAmount, setter: setAdjustmentAmount },
+                    ].map((field, idx) => (
                       <input
-                        key={field.label}
+                        key={idx}
                         type="number"
                         step="0.01"
                         value={field.value}
@@ -749,7 +751,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       type="text"
                       value={differenceReason}
                       onChange={(e) => setDifferenceReason(e.target.value)}
-                      placeholder="Difference reason / reason code"
+                      placeholder={t("pos.delivery.differenceReason")}
                       className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                     />
                     <select
@@ -757,10 +759,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       onChange={(e) => setDifferenceAccountId(e.target.value)}
                       className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                     >
-                      <option value="">Select difference account</option>
+                      <option value="">{t("pos.delivery.selectDifferenceAccount")}</option>
                       {accountOptions.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.code} - {account.name}
+                          {account.code} - {isAr ? (account.nameAr || account.name) : account.name}
                         </option>
                       ))}
                     </select>
@@ -768,19 +770,19 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       type="text"
                       value={differenceNotes}
                       onChange={(e) => setDifferenceNotes(e.target.value)}
-                      placeholder="Difference notes"
+                      placeholder={t("pos.delivery.differenceNotes")}
                       className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
                     />
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">
                     <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      Gross: {previewSettlementMutation.data.grossOrdersAmount}
+                      {t("pos.delivery.gross")}: {previewSettlementMutation.data.grossOrdersAmount} JOD
                     </div>
                     <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      Difference: {computedDifference.toFixed(2)}
+                      {t("pos.delivery.difference")}: {computedDifference.toFixed(2)} JOD
                     </div>
                     <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      Net received: {computedNetReceived.toFixed(2)}
+                      {t("pos.delivery.netReceived")}: {computedNetReceived.toFixed(2)} JOD
                     </div>
                     <button
                       type="button"
@@ -793,11 +795,11 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       onClick={() => createSettlementMutation.mutate()}
                       className="rounded-xl bg-[#233329] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
                     >
-                      Confirm settlement
+                      {t("pos.delivery.confirmSettlement")}
                     </button>
                   </div>
                   <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3">
-                    <div className="mb-2 text-sm font-black text-[#233329]">Orders in preview</div>
+                    <div className="mb-2 text-sm font-black text-[#233329]">{t("pos.delivery.ordersInPreview")}</div>
                     <div className="space-y-2 text-xs text-[#42564a]">
                       {previewSettlementMutation.data.orders.map((row) => (
                         <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#edf2ee] bg-white px-3 py-2">
@@ -813,7 +815,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
 
             <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
               <h2 className="mb-3 text-lg font-black text-[#233329]">
-                Settlement history / سجل التسويات
+                {t("pos.delivery.settlementsHistoryTitle")}
               </h2>
               <div className="space-y-3">
                 {settlementRows.map((row) => (
@@ -822,7 +824,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       <div>
                         <div className="text-sm font-black text-[#233329]">{row.reference}</div>
                         <div className="text-[11px] text-[#68776f]">
-                          {row.deliveryCompany?.name} · {row.status} · {row.netReceivedAmount}
+                          {isAr ? (row.deliveryCompany?.arabicName || row.deliveryCompany?.name) : row.deliveryCompany?.name} · {t(`pos.delivery.settlementStatus.${row.status}`)} · {row.netReceivedAmount} JOD
                         </div>
                       </div>
                       {row.status !== "REVERSED" ? (
@@ -831,7 +833,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                           onClick={() => reverseSettlementMutation.mutate(row.id)}
                           className="rounded-full border border-[#ead7d5] px-3 py-1 text-[11px] font-bold text-[#8f5a55]"
                         >
-                          Reverse
+                          {t("pos.delivery.reverse")}
                         </button>
                       ) : null}
                     </div>
