@@ -488,8 +488,8 @@ export async function seedPosRegisterDemo(
   );
   const jahezAcc = await createAccountIfMissing(
     '1121004',
-    'Jahez Receivable',
-    'ذمم جاهز',
+    'Ashyaai Receivable',
+    'ذمم أشيائي',
     'ASSET',
     'Receivable',
     tradeReceivablesParent.id,
@@ -498,6 +498,14 @@ export async function seedPosRegisterDemo(
     '5100003',
     'Delivery Commission Expense',
     'مصروف عمولات التوصيل',
+    'EXPENSE',
+    'Expense',
+    operatingExpenses.id,
+  );
+  const serviceFeeAcc = await createAccountIfMissing(
+    '5100004',
+    'Delivery Service Fees Expense',
+    'مصروف رسوم خدمات التوصيل',
     'EXPENSE',
     'Expense',
     operatingExpenses.id,
@@ -512,6 +520,7 @@ export async function seedPosRegisterDemo(
       receivableAccountId: talabatAcc.id,
       commissionRate: 15.00,
       commissionAccountId: commissionAcc.id,
+      serviceFeeAccountId: serviceFeeAcc.id,
     },
     {
       id: 'dc_careem',
@@ -520,14 +529,16 @@ export async function seedPosRegisterDemo(
       receivableAccountId: careemAcc.id,
       commissionRate: 12.00,
       commissionAccountId: commissionAcc.id,
+      serviceFeeAccountId: serviceFeeAcc.id,
     },
     {
-      id: 'dc_jahez',
-      name: 'Jahez',
-      arabicName: 'جاهز',
+      id: 'dc_ashyaai',
+      name: 'Ashyaai',
+      arabicName: 'أشيائي',
       receivableAccountId: jahezAcc.id,
       commissionRate: 18.00,
       commissionAccountId: commissionAcc.id,
+      serviceFeeAccountId: serviceFeeAcc.id,
     },
   ];
 
@@ -539,6 +550,7 @@ export async function seedPosRegisterDemo(
         receivableAccountId: dc.receivableAccountId,
         commissionRate: new Prisma.Decimal(dc.commissionRate),
         commissionAccountId: dc.commissionAccountId,
+        serviceFeeAccountId: dc.serviceFeeAccountId,
         isActive: true,
       },
       create: {
@@ -548,6 +560,7 @@ export async function seedPosRegisterDemo(
         receivableAccountId: dc.receivableAccountId,
         commissionRate: new Prisma.Decimal(dc.commissionRate),
         commissionAccountId: dc.commissionAccountId,
+        serviceFeeAccountId: dc.serviceFeeAccountId,
         isActive: true,
       },
     });

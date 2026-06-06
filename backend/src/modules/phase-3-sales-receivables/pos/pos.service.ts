@@ -24,6 +24,8 @@ import {
   OrderType,
   DeliveryStatus,
   KitchenStatus,
+  DeliveryCollectionMethod,
+  DeliverySettlementStatus,
 } from "../../../generated/prisma";
 
 import { PrismaService } from "../../../common/prisma/prisma.service";
@@ -40,7 +42,9 @@ import {
 import {
   ClosePosSessionDto,
   CompletePosSaleDto,
+  CreateDeliveryCompanySettlementDto,
   CreatePosReturnDto,
+  DeliveryCompanySettlementPreviewDto,
   HoldPosSaleDto,
   OpenPosSessionDto,
   PosPaymentDto,
@@ -57,6 +61,7 @@ import {
   CorrectOrderTypeDto,
   CorrectPaymentMethodDto,
   ReprintKotDto,
+  UpdateDeliveryCompanyStatusDto,
 } from "./dto/pos.dto";
 
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
@@ -1001,6 +1006,9 @@ export class PosService {
         deliveryAddress: dto.deliveryAddress?.trim() || null,
         deliveryNotes: dto.deliveryNotes?.trim() || null,
         deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+        deliveryCollectionMethod: dto.deliveryCollectionMethod || null,
+        deliverySettlementStatus: null,
+        deliverySettledAmount: this.toAmount(0),
         originalOrderType: dto.orderType || null,
       };
 
@@ -1163,6 +1171,14 @@ export class PosService {
         );
       }
     }
+    const deliveryCollectionMethod =
+      dto.deliveryCompanyId?.trim()
+        ? dto.deliveryCollectionMethod ||
+          (dto.payments?.length ? DeliveryCollectionMethod.RESTAURANT : DeliveryCollectionMethod.COMPANY)
+        : null;
+    if (deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY && !deliveryCompany) {
+      throw new BadRequestException("A delivery company is required when the delivery company collects payment.");
+    }
 
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     await this.ensurePriceChangePermission(dto.lines, user);
@@ -1179,12 +1195,22 @@ export class PosService {
 
     const accountMappings = await this.getPosAccountMappings();
 
-    if (dto.payments?.length) {
-      await this.resolvePaymentDtoAccounts(dto.payments, accountMappings, this.prisma, session.cashAccountId);
+    const paymentDtos =
+      deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
+        ? [
+            {
+              amount: Number(totals.totalAmount.toFixed(2)),
+              paymentMethod: PosPaymentMethod.DELIVERY,
+            } as PosPaymentDto,
+          ]
+        : dto.payments;
+
+    if (paymentDtos?.length) {
+      await this.resolvePaymentDtoAccounts(paymentDtos, accountMappings, this.prisma, session.cashAccountId);
     }
 
     const bankCashIds = Array.from(
-      new Set(dto.payments.map((payment) => payment.bankCashAccountId!.trim())),
+      new Set((paymentDtos ?? []).map((payment) => payment.bankCashAccountId!.trim())),
     );
     const bankCashAccounts = await this.prisma.bankCashAccount.findMany({
       where: { id: { in: bankCashIds }, isActive: true },
@@ -1220,7 +1246,7 @@ export class PosService {
     const posPostingMode = runtimeConfig.postingMode;
     const cogsPostingEnabled = runtimeConfig.cogsPostingEnabled;
     const normalizedPayments = this.normalizePayments(
-      dto.payments,
+      paymentDtos ?? [],
       accountMap,
       totals.totalAmount,
       allowCreditSale,
@@ -1272,6 +1298,12 @@ export class PosService {
         deliveryAddress: dto.deliveryAddress?.trim() || null,
         deliveryNotes: dto.deliveryNotes?.trim() || null,
         deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+        deliveryCollectionMethod,
+        deliverySettlementStatus:
+          deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
+            ? DeliverySettlementStatus.PENDING
+            : null,
+        deliverySettledAmount: this.toAmount(0),
         originalOrderType: dto.orderType || null,
       };
 
@@ -1400,7 +1432,10 @@ export class PosService {
           amount: this.toAmount(payment.appliedAmount),
           tenderedAmount: this.toAmount(payment.amount),
           reference: payment.reference?.trim() || null,
-          deliveryCompanyId: invoice.deliveryCompanyId ?? null,
+          deliveryCompanyId:
+            deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
+              ? invoice.deliveryCompanyId ?? null
+              : null,
         })),
       });
 
@@ -4786,6 +4821,145 @@ export class PosService {
     return `${year}${month}${day}`;
   }
 
+  private async generateDeliverySettlementReference(tx: Prisma.TransactionClient) {
+    const stamp = this.dateStamp();
+    const prefix = `DCS-${stamp}-`;
+    const rows = await tx.deliveryCompanySettlement.findMany({
+      where: { reference: { startsWith: prefix } },
+      select: { reference: true },
+      orderBy: { reference: "desc" },
+      take: 50,
+    });
+    let nextNumber = 1;
+    for (const row of rows) {
+      const candidate = Number(row.reference.slice(prefix.length));
+      if (Number.isFinite(candidate)) {
+        nextNumber = Math.max(nextNumber, candidate + 1);
+      }
+    }
+    return `${prefix}${nextNumber}`;
+  }
+
+  private async loadSettlementCandidateOrders(
+    deliveryCompanyId: string,
+    periodFromRaw: string,
+    periodToRaw: string,
+    selectedInvoiceIds?: string[],
+  ) {
+    const periodFrom = new Date(periodFromRaw);
+    const periodTo = new Date(periodToRaw);
+    if (Number.isNaN(periodFrom.getTime()) || Number.isNaN(periodTo.getTime())) {
+      throw new BadRequestException("Settlement period dates are invalid.");
+    }
+    if (periodTo < periodFrom) {
+      throw new BadRequestException("Settlement period end must be on or after the period start.");
+    }
+
+    const company = await this.prisma.deliveryCompany.findUnique({
+      where: { id: deliveryCompanyId, isActive: true },
+    });
+    if (!company) {
+      throw new BadRequestException(`Delivery company ${deliveryCompanyId} was not found or is inactive.`);
+    }
+
+    const orders = await this.prisma.salesInvoice.findMany({
+      where: {
+        id: selectedInvoiceIds?.length ? { in: selectedInvoiceIds } : undefined,
+        invoiceType: SalesInvoiceType.POS,
+        deliveryCompanyId,
+        deliveryCollectionMethod: DeliveryCollectionMethod.COMPANY,
+        posOperationalStatus: PosOperationalStatus.COMPLETED,
+        OR: [
+          { deliverySettlementStatus: null },
+          { deliverySettlementStatus: DeliverySettlementStatus.PENDING },
+          { deliverySettlementStatus: DeliverySettlementStatus.PARTIALLY_SETTLED },
+          { deliverySettlementStatus: DeliverySettlementStatus.DIFFERENCE },
+        ],
+        posCompletedAt: {
+          gte: periodFrom,
+          lte: periodTo,
+        },
+      },
+      include: {
+        posSession: {
+          select: {
+            branchName: true,
+          },
+        },
+      },
+      orderBy: [{ posCompletedAt: "asc" }, { createdAt: "asc" }],
+    });
+
+    const grossOrdersAmount = orders.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+    return {
+      company,
+      periodFrom,
+      periodTo,
+      orders,
+      grossOrdersAmount,
+    };
+  }
+
+  private mapDeliveryCompanySettlement(row: any) {
+    const differenceAmount = Number(row.differenceAmount ?? 0);
+    return {
+      id: row.id,
+      reference: row.reference,
+      deliveryCompany: row.deliveryCompany
+        ? {
+            id: row.deliveryCompany.id,
+            name: row.deliveryCompany.name,
+            arabicName: row.deliveryCompany.arabicName ?? null,
+          }
+        : null,
+      periodFrom: row.periodFrom.toISOString(),
+      periodTo: row.periodTo.toISOString(),
+      settlementDate: row.settlementDate.toISOString(),
+      statementReference: row.statementReference ?? null,
+      bankCashAccount: row.bankCashAccount
+        ? {
+            id: row.bankCashAccount.id,
+            name: row.bankCashAccount.name,
+            type: row.bankCashAccount.type,
+          }
+        : null,
+      grossOrdersAmount: row.grossOrdersAmount.toString(),
+      statementAmount: row.statementAmount.toString(),
+      commissionAmount: row.commissionAmount.toString(),
+      serviceFeeAmount: row.serviceFeeAmount.toString(),
+      refundAmount: row.refundAmount.toString(),
+      adjustmentAmount: row.adjustmentAmount.toString(),
+      differenceAmount: row.differenceAmount.toString(),
+      differenceReason: row.differenceReason ?? null,
+      differenceNotes: row.differenceNotes ?? null,
+      netReceivedAmount: row.netReceivedAmount.toString(),
+      statementAttachmentUrl: row.statementAttachmentUrl ?? null,
+      bankReceiptAttachmentUrl: row.bankReceiptAttachmentUrl ?? null,
+      status: row.reversedAt
+        ? "REVERSED"
+        : differenceAmount !== 0
+          ? DeliverySettlementStatus.DIFFERENCE
+          : DeliverySettlementStatus.SETTLED,
+      journalEntry: row.journalEntry
+        ? {
+            id: row.journalEntry.id,
+            reference: row.journalEntry.reference,
+            status: row.journalEntry.status,
+            postedAt: row.journalEntry.postedAt?.toISOString() ?? null,
+          }
+        : null,
+      orders: (row.orders ?? []).map((orderRow: any) => ({
+        salesInvoiceId: orderRow.salesInvoiceId ?? orderRow.salesInvoice?.id,
+        reference: orderRow.salesInvoice?.reference ?? null,
+        grossAmount: orderRow.grossAmount.toString(),
+        totalAmount: orderRow.salesInvoice?.totalAmount?.toString() ?? null,
+      })),
+      reversedAt: row.reversedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   private toAmount(value: number | string | Prisma.Decimal) {
     return new Prisma.Decimal(value).toDecimalPlaces(2);
   }
@@ -5266,6 +5440,9 @@ export class PosService {
       deliveryAddress: row.deliveryAddress ?? null,
       deliveryNotes: row.deliveryNotes ?? null,
       deliveryCompanyId: row.deliveryCompanyId ?? null,
+      deliveryCollectionMethod: row.deliveryCollectionMethod ?? null,
+      deliverySettlementStatus: row.deliverySettlementStatus ?? null,
+      deliverySettledAmount: row.deliverySettledAmount?.toString() ?? "0.00",
       driverId: row.driverId ?? null,
       isCorrected: row.isCorrected ?? false,
       correctedAt: row.correctedAt?.toISOString() ?? null,
@@ -5605,20 +5782,20 @@ export class PosService {
     if (hasKitchenReadyLine) {
       if (existing.lines.length !== resolvedLines.length) {
         throw new BadRequestException(
-          "This order has kitchen-ready items. No order changes are allowed until payment.",
+          "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
         );
       }
       for (const line of existing.lines) {
         const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
         if (!dtoLine) {
           throw new BadRequestException(
-            "This order has kitchen-ready items. No order changes are allowed until payment.",
+            "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
           );
         }
         const nextQty = Number(dtoLine.quantity ?? 0);
         if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
           throw new BadRequestException(
-            "This order has kitchen-ready items. No order changes are allowed until payment.",
+            "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
           );
         }
         if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
@@ -6830,10 +7007,489 @@ export class PosService {
 
   async listDeliveryCompanies(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    const includeInactive = this.hasPosPermissionCode("POS_VIEW_POS_REPORTS", user);
     return this.prisma.deliveryCompany.findMany({
-      where: { isActive: true },
+      where: includeInactive ? undefined : { isActive: true },
       orderBy: { name: "asc" },
     });
+  }
+
+  async updateDeliveryCompanyStatus(id: string, isActive: boolean, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const company = await this.prisma.deliveryCompany.findUnique({
+      where: { id },
+      include: {
+        salesInvoices: {
+          select: { id: true },
+          take: 1,
+        },
+        settlements: {
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!company) {
+      throw new NotFoundException(`Delivery company ${id} was not found.`);
+    }
+    if (!isActive && company.salesInvoices.length === 0 && company.settlements.length === 0) {
+      return this.prisma.deliveryCompany.update({
+        where: { id },
+        data: { isActive: false },
+      });
+    }
+    if (!isActive) {
+      return this.prisma.deliveryCompany.update({
+        where: { id },
+        data: { isActive: false },
+      });
+    }
+    return this.prisma.deliveryCompany.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
+
+  async previewDeliveryCompanySettlement(dto: DeliveryCompanySettlementPreviewDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const { company, periodFrom, periodTo, orders, grossOrdersAmount } =
+      await this.loadSettlementCandidateOrders(dto.deliveryCompanyId, dto.periodFrom, dto.periodTo);
+
+    return {
+      deliveryCompany: {
+        id: company.id,
+        name: company.name,
+        arabicName: company.arabicName,
+      },
+      periodFrom,
+      periodTo,
+      grossOrdersAmount: grossOrdersAmount.toFixed(2),
+      orders: orders.map((invoice) => ({
+        id: invoice.id,
+        reference: invoice.reference,
+        branchName: invoice.posSession?.branchName ?? null,
+        completedAt: invoice.posCompletedAt?.toISOString() ?? invoice.invoiceDate.toISOString(),
+        totalAmount: Number(invoice.totalAmount).toFixed(2),
+        settlementStatus: invoice.deliverySettlementStatus ?? DeliverySettlementStatus.PENDING,
+      })),
+    };
+  }
+
+  async createDeliveryCompanySettlement(dto: CreateDeliveryCompanySettlementDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const { company, periodFrom, periodTo, orders, grossOrdersAmount } =
+      await this.loadSettlementCandidateOrders(dto.deliveryCompanyId, dto.periodFrom, dto.periodTo, dto.salesInvoiceIds);
+    if (!orders.length) {
+      throw new BadRequestException("No unsettled delivery company orders were found for this settlement.");
+    }
+
+    const bankCashAccount = await this.prisma.bankCashAccount.findUnique({
+      where: { id: dto.bankCashAccountId, isActive: true },
+      include: {
+        account: {
+          select: {
+            id: true,
+            isActive: true,
+            isPosting: true,
+          },
+        },
+      },
+    });
+    if (!bankCashAccount?.account?.isActive || !bankCashAccount.account.isPosting) {
+      throw new BadRequestException("Settlement bank account must be linked to an active posting account.");
+    }
+
+    const commissionAmount = Number(dto.commissionAmount.toFixed(2));
+    const serviceFeeAmount = Number(dto.serviceFeeAmount.toFixed(2));
+    const refundAmount = Number(dto.refundAmount.toFixed(2));
+    const adjustmentAmount = Number(dto.adjustmentAmount.toFixed(2));
+    const statementAmount = Number(dto.statementAmount.toFixed(2));
+    const grossOrders = Number(grossOrdersAmount.toFixed(2));
+    const differenceAmount = Number((grossOrders - statementAmount).toFixed(2));
+    const netReceivedAmount = Number(
+      (statementAmount - commissionAmount - serviceFeeAmount - refundAmount - adjustmentAmount).toFixed(2),
+    );
+    if (netReceivedAmount < 0) {
+      throw new BadRequestException("Net received amount cannot be negative.");
+    }
+
+    const requiresDifferenceAccount =
+      refundAmount > 0 || adjustmentAmount > 0 || differenceAmount !== 0;
+    let differenceAccountId = dto.differenceAccountId?.trim() || null;
+    if (requiresDifferenceAccount && !differenceAccountId) {
+      throw new BadRequestException("A difference/adjustment account is required for settlement deductions or differences.");
+    }
+    if (differenceAccountId) {
+      await this.ensureActivePostingAccount(differenceAccountId);
+    }
+    if (commissionAmount > 0 && !company.commissionAccountId) {
+      throw new BadRequestException("The selected delivery company is missing a commission expense account.");
+    }
+    if (serviceFeeAmount > 0 && !company.serviceFeeAccountId) {
+      throw new BadRequestException("The selected delivery company is missing a service fee expense account.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const reference = await this.generateDeliverySettlementReference(tx);
+      const description = `Delivery settlement ${reference} - ${company.name}`;
+      const journalLines: Array<{
+        accountId: string;
+        description: string;
+        debitAmount: number;
+        creditAmount: number;
+      }> = [
+        {
+          accountId: bankCashAccount.accountId,
+          description,
+          debitAmount: netReceivedAmount,
+          creditAmount: 0,
+        },
+      ];
+
+      if (commissionAmount > 0) {
+        journalLines.push({
+          accountId: company.commissionAccountId!,
+          description: `${description} commission`,
+          debitAmount: commissionAmount,
+          creditAmount: 0,
+        });
+      }
+      if (serviceFeeAmount > 0) {
+        journalLines.push({
+          accountId: company.serviceFeeAccountId!,
+          description: `${description} service fees`,
+          debitAmount: serviceFeeAmount,
+          creditAmount: 0,
+        });
+      }
+      if (differenceAccountId) {
+        const deductionDebit = Number((refundAmount + adjustmentAmount + Math.max(differenceAmount, 0)).toFixed(2));
+        const differenceCredit = Number(Math.max(-differenceAmount, 0).toFixed(2));
+        if (deductionDebit > 0 || differenceCredit > 0) {
+          journalLines.push({
+            accountId: differenceAccountId,
+            description: `${description} differences`,
+            debitAmount: deductionDebit,
+            creditAmount: differenceCredit,
+          });
+        }
+      }
+      journalLines.push({
+        accountId: company.receivableAccountId,
+        description: `${description} clear receivable`,
+        debitAmount: 0,
+        creditAmount: grossOrders,
+      });
+      this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
+
+      const journal = await this.journalEntriesService.create(
+        {
+          entryDate: new Date(dto.settlementDate).toISOString(),
+          description,
+          sourceType: "DeliveryCompanySettlement",
+          sourceNumber: reference,
+          lines: journalLines,
+        },
+        { tx },
+      );
+      const posted = await this.postingService.post(journal.id, tx as never);
+
+      const settlement = await tx.deliveryCompanySettlement.create({
+        data: {
+          reference,
+          deliveryCompanyId: company.id,
+          periodFrom,
+          periodTo,
+          settlementDate: new Date(dto.settlementDate),
+          statementReference: dto.statementReference?.trim() || null,
+          bankCashAccountId: bankCashAccount.id,
+          statementAmount: this.toAmount(statementAmount),
+          grossOrdersAmount: this.toAmount(grossOrders),
+          commissionAmount: this.toAmount(commissionAmount),
+          serviceFeeAmount: this.toAmount(serviceFeeAmount),
+          refundAmount: this.toAmount(refundAmount),
+          adjustmentAmount: this.toAmount(adjustmentAmount),
+          differenceAmount: this.toAmount(differenceAmount),
+          differenceReason: dto.differenceReason?.trim() || null,
+          differenceAccountId,
+          differenceNotes: dto.differenceNotes?.trim() || null,
+          netReceivedAmount: this.toAmount(netReceivedAmount),
+          statementAttachmentUrl: dto.statementAttachmentUrl?.trim() || null,
+          bankReceiptAttachmentUrl: dto.bankReceiptAttachmentUrl?.trim() || null,
+          journalEntryId: journal.id,
+          createdByUserId: user?.userId ?? null,
+          confirmedByUserId: user?.userId ?? null,
+          orders: {
+            create: orders.map((invoice) => ({
+              salesInvoiceId: invoice.id,
+              grossAmount: this.toAmount(invoice.totalAmount),
+            })),
+          },
+        },
+        include: {
+          deliveryCompany: true,
+          bankCashAccount: true,
+          journalEntry: { select: { id: true, reference: true, status: true, postedAt: true } },
+          orders: {
+            include: {
+              salesInvoice: {
+                select: {
+                  id: true,
+                  reference: true,
+                  totalAmount: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      await tx.salesInvoice.updateMany({
+        where: { id: { in: orders.map((invoice) => invoice.id) } },
+        data: {
+          deliverySettlementStatus:
+            differenceAmount !== 0
+              ? DeliverySettlementStatus.DIFFERENCE
+              : DeliverySettlementStatus.SETTLED,
+          deliverySettledAmount: this.toAmount(grossOrders),
+        },
+      });
+
+      await this.auditService.log({
+        userId: user?.userId,
+        entity: "DeliveryCompanySettlement",
+        entityId: settlement.id,
+        action: AuditAction.POST,
+        details: {
+          reference,
+          deliveryCompanyId: company.id,
+          grossOrdersAmount: grossOrders,
+          netReceivedAmount,
+          postedAt: posted.postedAt,
+        },
+      });
+
+      return this.mapDeliveryCompanySettlement(settlement);
+    });
+  }
+
+  async reverseDeliveryCompanySettlement(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const settlement = await this.prisma.deliveryCompanySettlement.findUnique({
+      where: { id },
+      include: {
+        orders: { select: { salesInvoiceId: true } },
+      },
+    });
+    if (!settlement) {
+      throw new NotFoundException(`Delivery company settlement ${id} was not found.`);
+    }
+    if (settlement.reversedAt) {
+      throw new BadRequestException("This delivery company settlement has already been reversed.");
+    }
+    if (!settlement.journalEntryId) {
+      throw new BadRequestException("This delivery company settlement has no journal entry to reverse.");
+    }
+
+    await this.reversalService.reverse(settlement.journalEntryId, {
+      reversalDate: dto.reversalDate,
+      description: dto.description?.trim() || `Reverse delivery settlement ${settlement.reference}`,
+    });
+
+    const reversed = await this.prisma.$transaction(async (tx) => {
+      await tx.salesInvoice.updateMany({
+        where: { id: { in: settlement.orders.map((row) => row.salesInvoiceId) } },
+        data: {
+          deliverySettlementStatus: DeliverySettlementStatus.PENDING,
+          deliverySettledAmount: this.toAmount(0),
+        },
+      });
+
+      return tx.deliveryCompanySettlement.update({
+        where: { id },
+        data: {
+          reversedAt: new Date(),
+          reversedByUserId: user?.userId ?? null,
+        },
+        include: {
+          deliveryCompany: true,
+          bankCashAccount: true,
+          journalEntry: { select: { id: true, reference: true, status: true, postedAt: true } },
+          orders: {
+            include: {
+              salesInvoice: {
+                select: {
+                  id: true,
+                  reference: true,
+                  totalAmount: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "DeliveryCompanySettlement",
+      entityId: reversed.id,
+      action: AuditAction.REVERSE,
+      details: {
+        reference: reversed.reference,
+      },
+    });
+
+    return this.mapDeliveryCompanySettlement(reversed);
+  }
+
+  async listDeliveryCompanySettlements(
+    filters: { deliveryCompanyId?: string },
+    user?: AuthorizedUser,
+  ) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const rows = await this.prisma.deliveryCompanySettlement.findMany({
+      where: {
+        deliveryCompanyId: filters.deliveryCompanyId?.trim() || undefined,
+      },
+      include: {
+        deliveryCompany: true,
+        bankCashAccount: true,
+        journalEntry: { select: { id: true, reference: true, status: true, postedAt: true } },
+        orders: {
+          include: {
+            salesInvoice: {
+              select: {
+                id: true,
+                reference: true,
+                totalAmount: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ settlementDate: "desc" }, { createdAt: "desc" }],
+    });
+    return rows.map((row) => this.mapDeliveryCompanySettlement(row));
+  }
+
+  async getDeliveryCompanyReceivableReport(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const companies = await this.prisma.deliveryCompany.findMany({
+      include: {
+        salesInvoices: {
+          where: {
+            invoiceType: SalesInvoiceType.POS,
+            deliveryCollectionMethod: DeliveryCollectionMethod.COMPANY,
+            posOperationalStatus: PosOperationalStatus.COMPLETED,
+          },
+          select: {
+            totalAmount: true,
+            deliverySettlementStatus: true,
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return companies.map((company) => {
+      const totalReceivable = company.salesInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+      const outstanding = company.salesInvoices
+        .filter((invoice) => invoice.deliverySettlementStatus !== DeliverySettlementStatus.SETTLED)
+        .reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+      return {
+        deliveryCompanyId: company.id,
+        deliveryCompanyName: company.name,
+        deliveryCompanyArabicName: company.arabicName ?? null,
+        totalReceivable: totalReceivable.toFixed(2),
+        outstandingBalance: outstanding.toFixed(2),
+        settledBalance: Number((totalReceivable - outstanding).toFixed(2)).toFixed(2),
+      };
+    });
+  }
+
+  async getDeliveryCompanySettlementReport(
+    filters: { deliveryCompanyId?: string },
+    user?: AuthorizedUser,
+  ) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const rows = await this.listDeliveryCompanySettlements(filters, user);
+    return rows.map((row) => ({
+      id: row.id,
+      reference: row.reference,
+      deliveryCompany: row.deliveryCompany,
+      settlementDate: row.settlementDate,
+      periodFrom: row.periodFrom,
+      periodTo: row.periodTo,
+      grossOrdersAmount: row.grossOrdersAmount,
+      commissionAmount: row.commissionAmount,
+      serviceFeeAmount: row.serviceFeeAmount,
+      refundAmount: row.refundAmount,
+      adjustmentAmount: row.adjustmentAmount,
+      differenceAmount: row.differenceAmount,
+      netReceivedAmount: row.netReceivedAmount,
+      status: row.status,
+      statementReference: row.statementReference,
+      orderCount: row.orders.length,
+    }));
+  }
+
+  async getDeliveryCompanySalesReport(
+    filters: {
+      deliveryCompanyId?: string;
+      branchName?: string;
+      settlementStatus?: string;
+      from?: string;
+      to?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+    const where: Prisma.SalesInvoiceWhereInput = {
+      invoiceType: SalesInvoiceType.POS,
+      deliveryCompanyId: filters.deliveryCompanyId?.trim() || undefined,
+      posOperationalStatus: PosOperationalStatus.COMPLETED,
+      deliveryCollectionMethod: DeliveryCollectionMethod.COMPANY,
+    };
+    if (filters.branchName?.trim()) {
+      where.posSession = { branchName: filters.branchName.trim() };
+    }
+    if (filters.settlementStatus?.trim()) {
+      where.deliverySettlementStatus = filters.settlementStatus.trim() as DeliverySettlementStatus;
+    }
+    if (filters.from || filters.to) {
+      where.posCompletedAt = {};
+      if (filters.from) {
+        where.posCompletedAt.gte = new Date(filters.from);
+      }
+      if (filters.to) {
+        where.posCompletedAt.lte = new Date(filters.to);
+      }
+    }
+
+    const rows = await this.prisma.salesInvoice.findMany({
+      where,
+      include: {
+        deliveryCompany: {
+          select: { id: true, name: true, arabicName: true },
+        },
+        posSession: {
+          select: { id: true, branchName: true, sessionNumber: true },
+        },
+      },
+      orderBy: [{ posCompletedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      reference: row.reference,
+      completedAt: row.posCompletedAt?.toISOString() ?? row.invoiceDate.toISOString(),
+      branchName: row.posSession?.branchName ?? null,
+      sessionNumber: row.posSession?.sessionNumber ?? null,
+      totalAmount: row.totalAmount.toString(),
+      deliveryCompany: row.deliveryCompany,
+      settlementStatus: row.deliverySettlementStatus ?? DeliverySettlementStatus.PENDING,
+    }));
   }
 
   async listDeliveryDrivers(user?: AuthorizedUser) {

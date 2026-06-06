@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { LuArrowRightLeft, LuChefHat, LuCombine, LuScissors, LuUser, LuUtensils } from "react-icons/lu";
 import type {
   DeliveryCompany,
+  DeliveryCollectionMethod,
   DeliveryDriver,
   PosOrderType,
   PosTable,
@@ -15,6 +16,7 @@ type PosRestaurantCartControlsProps = {
   deliveryAddress: string;
   deliveryCompanies: DeliveryCompany[];
   deliveryCompanyId: string | null;
+  deliveryCollectionMethod: DeliveryCollectionMethod;
   deliveryDriverId: string | null;
   deliveryDrivers: DeliveryDriver[];
   deliveryFee: number;
@@ -23,6 +25,7 @@ type PosRestaurantCartControlsProps = {
   editingInvoiceId: string | null;
   onDeliveryAddressChange: (value: string) => void;
   onDeliveryCompanyChange: (value: string | null) => void;
+  onDeliveryCollectionMethodChange: (value: DeliveryCollectionMethod) => void;
   onDeliveryDriverChange: (value: string | null) => void;
   onDeliveryFeeChange: (value: string) => void;
   onDeliveryModeChange: (value: "DIRECT" | "THIRD_PARTY") => void;
@@ -60,6 +63,7 @@ export function PosRestaurantCartControls({
   deliveryAddress,
   deliveryCompanies,
   deliveryCompanyId,
+  deliveryCollectionMethod,
   deliveryDriverId,
   deliveryDrivers,
   deliveryFee,
@@ -68,6 +72,7 @@ export function PosRestaurantCartControls({
   editingInvoiceId,
   onDeliveryAddressChange,
   onDeliveryCompanyChange,
+  onDeliveryCollectionMethodChange,
   onDeliveryDriverChange,
   onDeliveryFeeChange,
   onDeliveryModeChange,
@@ -271,20 +276,43 @@ export function PosRestaurantCartControls({
               ))}
             </select>
           ) : (
-            <select
-              value={deliveryCompanyId ?? ""}
-              disabled={controlsDisabled}
-              onChange={(e) => onDeliveryCompanyChange(e.target.value || null)}
-              className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
-            >
-              <option value="">{isAr ? "اختر الشركة" : "Select company"}</option>
-              {deliveryCompanies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.arabicName ? ` / ${c.arabicName}` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <select
+                value={deliveryCompanyId ?? ""}
+                disabled={controlsDisabled}
+                onChange={(e) => onDeliveryCompanyChange(e.target.value || null)}
+                className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
+              >
+                <option value="">{isAr ? "اختر الشركة" : "Select company"}</option>
+                {deliveryCompanies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.arabicName ? ` / ${c.arabicName}` : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "RESTAURANT" as const, en: "Restaurant collects", ar: "المطعم يحصّل" },
+                  { value: "COMPANY" as const, en: "Company collects", ar: "الشركة تحصّل" },
+                ]).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={controlsDisabled}
+                    onClick={() => onDeliveryCollectionMethodChange(option.value)}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-40",
+                      deliveryCollectionMethod === option.value
+                        ? "bg-[#0f766e] text-white"
+                        : "border border-[#cbd5cf] bg-white text-[#46644b]",
+                    )}
+                  >
+                    {isAr ? option.ar : option.en}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           <input

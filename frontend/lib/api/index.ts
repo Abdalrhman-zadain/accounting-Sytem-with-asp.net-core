@@ -144,8 +144,12 @@ import {
   PosReturn,
   KitchenOrder,
   DeliveryCompany,
+  DeliveryCompanySettlement,
+  DeliveryCompanySettlementPreview,
+  DeliveryCollectionMethod,
   DeliveryDriver,
   DeliveryStatus,
+  DeliverySettlementStatus,
   PosWaiter,
   CorrectPosPaymentMethodPayload,
   CorrectPosOrderTypePayload,
@@ -2948,6 +2952,126 @@ export async function getPosTaxSummaryReport(token?: string | null) {
   return apiRequest<PosTaxSummaryRow[]>("/pos/reports/tax-summary", { token });
 }
 
+export async function getDeliveryCompanyReceivableReport(token?: string | null) {
+  return apiRequest<
+    Array<{
+      deliveryCompanyId: string;
+      deliveryCompanyName: string;
+      deliveryCompanyArabicName?: string | null;
+      totalReceivable: string;
+      outstandingBalance: string;
+      settledBalance: string;
+    }>
+  >("/pos/reports/delivery-company-receivables", { token });
+}
+
+export async function getDeliveryCompanySettlementReport(
+  params: { deliveryCompanyId?: string } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.deliveryCompanyId) searchParams.set("deliveryCompanyId", params.deliveryCompanyId);
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<DeliveryCompanySettlement[]>(`/pos/reports/delivery-company-settlements${suffix}`, { token });
+}
+
+export async function getDeliveryCompanySalesReport(
+  params: {
+    deliveryCompanyId?: string;
+    branchName?: string;
+    settlementStatus?: DeliverySettlementStatus;
+    from?: string;
+    to?: string;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.deliveryCompanyId) searchParams.set("deliveryCompanyId", params.deliveryCompanyId);
+  if (params.branchName) searchParams.set("branchName", params.branchName);
+  if (params.settlementStatus) searchParams.set("settlementStatus", params.settlementStatus);
+  if (params.from) searchParams.set("from", params.from);
+  if (params.to) searchParams.set("to", params.to);
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<
+    Array<{
+      id: string;
+      reference: string;
+      completedAt: string;
+      branchName?: string | null;
+      sessionNumber?: string | null;
+      totalAmount: string;
+      deliveryCompany?: {
+        id: string;
+        name: string;
+        arabicName?: string | null;
+      } | null;
+      settlementStatus: DeliverySettlementStatus;
+    }>
+  >(`/pos/reports/delivery-company-sales${suffix}`, { token });
+}
+
+export async function previewDeliveryCompanySettlement(
+  payload: { deliveryCompanyId: string; periodFrom: string; periodTo: string },
+  token?: string | null,
+) {
+  return apiRequest<DeliveryCompanySettlementPreview>("/pos/delivery/settlements/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function getDeliveryCompanySettlements(
+  params: { deliveryCompanyId?: string } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.deliveryCompanyId) searchParams.set("deliveryCompanyId", params.deliveryCompanyId);
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<DeliveryCompanySettlement[]>(`/pos/delivery/settlements${suffix}`, { token });
+}
+
+export async function createDeliveryCompanySettlement(
+  payload: {
+    deliveryCompanyId: string;
+    periodFrom: string;
+    periodTo: string;
+    settlementDate: string;
+    bankCashAccountId: string;
+    statementReference?: string;
+    statementAmount: number;
+    commissionAmount: number;
+    serviceFeeAmount: number;
+    refundAmount: number;
+    adjustmentAmount: number;
+    differenceReason?: string;
+    differenceAccountId?: string;
+    differenceNotes?: string;
+    statementAttachmentUrl?: string;
+    bankReceiptAttachmentUrl?: string;
+    salesInvoiceIds: string[];
+  },
+  token?: string | null,
+) {
+  return apiRequest<DeliveryCompanySettlement>("/pos/delivery/settlements", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function reverseDeliveryCompanySettlement(
+  id: string,
+  payload: { reversalDate?: string; description?: string } = {},
+  token?: string | null,
+) {
+  return apiRequest<DeliveryCompanySettlement>(`/pos/delivery/settlements/${id}/reverse`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
 export async function reprintPosReceipt(id: string, token?: string | null) {
   return apiRequest<PosCompleteSaleResponse>(`/pos/sales/${id}/reprint`, {
     method: "POST",
@@ -3050,6 +3174,18 @@ export async function reprintKot(
 
 export async function getDeliveryCompanies(token?: string | null) {
   return apiRequest<DeliveryCompany[]>("/pos/delivery/companies", { token });
+}
+
+export async function updateDeliveryCompanyStatus(
+  id: string,
+  isActive: boolean,
+  token?: string | null,
+) {
+  return apiRequest<DeliveryCompany>(`/pos/delivery/companies/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ isActive }),
+    token,
+  });
 }
 
 export async function getDeliveryDrivers(token?: string | null) {

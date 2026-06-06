@@ -10,7 +10,7 @@ The Restaurant POS extends the base POS system by adding:
 1. **Dine-in Workflow**: Floor plans, table states, waiter ordering, bill splitting/merging, and pre-billing.
 2. **Kitchen Workflow (KOT & KDS)**: Kitchen Order Tickets generated and routed to preparation stations, and a Kitchen Display System for preparing, readying, and serving items.
 3. **Delivery Workflow**: Customer addresses, driver assignments, delivery fees, and delivery statuses.
-4. **Third-Party Delivery Channel Settlements**: Direct mapping of orders from Talabat, Careem, and Jahez to dedicated receivable accounts.
+4. **Third-Party Delivery Channel Settlements**: Direct mapping of orders from Talabat, Careem, and Ashyaai to dedicated receivable accounts.
 5. **Session Submission & Accountant Review**: Cashier operational shift submission, variance explanation, and accountant review/posting.
 6. **Order Type Corrections**: Post-sale changes to order types with audit logs and ledger adjustment.
 
@@ -22,7 +22,7 @@ graph TD
     
     B -->|Dine-in| C[Select Floor/Table]
     B -->|Takeaway/Pickup| D[Open Cart Directly]
-    B -->|Delivery / 3rd Party| E[Enter Address / Select Talabat/Careem/Jahez]
+    B -->|Delivery / 3rd Party| E[Enter Address / Select Talabat/Careem/Ashyaai]
 
     C --> F[Add Items & Modifiers]
     D --> F

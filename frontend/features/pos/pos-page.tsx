@@ -151,6 +151,7 @@ import type {
   InventoryWarehouse,
   JournalEntry,
   DeliveryCompany,
+  DeliveryCollectionMethod,
   DeliveryDriver,
   DeliveryStatus,
   PosOrderType,
@@ -285,6 +286,7 @@ type HeldSale = {
   tableId?: string | null;
   waiterId?: string | null;
   deliveryCompanyId?: string | null;
+  deliveryCollectionMethod?: DeliveryCollectionMethod | null;
   driverId?: string | null;
   deliveryFeeAmount: number;
   serviceChargeAmount: number;
@@ -602,6 +604,9 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     tableId: sale.tableId ?? null,
     waiterId: sale.waiterId ?? null,
     deliveryCompanyId: sale.deliveryCompanyId ?? null,
+    deliveryCollectionMethod:
+      sale.deliveryCollectionMethod ??
+      (sale.deliveryCompanyId ? "RESTAURANT" : null),
     driverId: sale.driverId ?? null,
     deliveryFeeAmount: parseAmount(sale.deliveryFeeAmount),
     serviceChargeAmount: parseAmount(sale.serviceChargeAmount),
@@ -968,6 +973,8 @@ export function PosPage() {
   const [selectedWaiterId, setSelectedWaiterId] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<"DIRECT" | "THIRD_PARTY">("DIRECT");
   const [deliveryCompanyId, setDeliveryCompanyId] = useState<string | null>(null);
+  const [deliveryCollectionMethod, setDeliveryCollectionMethod] =
+    useState<DeliveryCollectionMethod>("RESTAURANT");
   const [deliveryDriverId, setDeliveryDriverId] = useState<string | null>(null);
   const [serviceChargeAmount, setServiceChargeAmount] = useState(0);
   const [deliveryFee, setDeliveryFee] = useState(0);
@@ -2232,6 +2239,38 @@ export function PosPage() {
     );
   };
 
+  useEffect(() => {
+    const companyCollectedByDelivery =
+      orderType === "DELIVERY" &&
+      deliveryMode === "THIRD_PARTY" &&
+      deliveryCollectionMethod === "COMPANY";
+    if (companyCollectedByDelivery) {
+      if (paymentEntries.length > 0) {
+        setPaymentEntries([]);
+      }
+      return;
+    }
+    if (paymentEntries.length === 0) {
+      setPaymentEntries([
+        {
+          id: createLocalId(),
+          paymentMethod: "CASH",
+          bankCashAccountId: resolveMappedBankCashAccountId("CASH"),
+          amount: "",
+          reference: "",
+        },
+      ]);
+    }
+  }, [
+    deliveryCollectionMethod,
+    deliveryMode,
+    orderType,
+    paymentEntries.length,
+    paymentAccounts,
+    activeSession?.cashAccount?.id,
+    posSettings?.accounts.cashAccountId,
+  ]);
+
   const inferSelectedPayMethod = () => {
     if (paymentEntriesResolved.length > 1) {
       return "MIXED" as const;
@@ -2413,7 +2452,13 @@ export function PosPage() {
   };
 
   const buildPaymentPayload = () =>
-    paymentEntriesResolved
+    (
+      orderType === "DELIVERY" &&
+      deliveryMode === "THIRD_PARTY" &&
+      deliveryCollectionMethod === "COMPANY"
+        ? []
+        : paymentEntriesResolved
+    )
       .filter((entry) => entry.bankCashAccountId && entry.amountValue > 0)
       .map((entry) => ({
         bankCashAccountId: entry.bankCashAccountId,
@@ -2435,6 +2480,10 @@ export function PosPage() {
     deliveryCompanyId:
       orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
         ? deliveryCompanyId ?? undefined
+        : undefined,
+    deliveryCollectionMethod:
+      orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+        ? deliveryCollectionMethod
         : undefined,
     deliveryStatus: orderType === "DELIVERY" ? ("PENDING" as DeliveryStatus) : undefined,
     deliveryAddress: orderType === "DELIVERY" ? deliveryAddress.trim() || undefined : undefined,
@@ -2519,6 +2568,7 @@ export function PosPage() {
     setSelectedWaiterId(null);
     setDeliveryMode("DIRECT");
     setDeliveryCompanyId(null);
+    setDeliveryCollectionMethod("RESTAURANT");
     setDeliveryDriverId(null);
     setServiceChargeAmount(0);
     setDeliveryFee(0);
@@ -2955,6 +3005,7 @@ export function PosPage() {
     setSelectedTableId(target.tableId ?? null);
     setSelectedWaiterId(target.waiterId ?? null);
     setDeliveryCompanyId(target.deliveryCompanyId ?? null);
+    setDeliveryCollectionMethod(target.deliveryCollectionMethod ?? "RESTAURANT");
     setDeliveryDriverId(target.driverId ?? null);
     setServiceChargeAmount(target.serviceChargeAmount ?? 0);
     setDeliveryFee(target.deliveryFeeAmount ?? 0);
@@ -3072,6 +3123,10 @@ export function PosPage() {
   };
 
   const completeSale = () => {
+    const companyCollectedByDelivery =
+      orderType === "DELIVERY" &&
+      deliveryMode === "THIRD_PARTY" &&
+      deliveryCollectionMethod === "COMPANY";
     if (!activeSession?.id) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
@@ -3092,8 +3147,12 @@ export function PosPage() {
       pushError(getLocalizedText("Enter delivery address before completing delivery orders / أدخل عنوان التوصيل قبل إكمال الطلب", language));
       return;
     }
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY" && !deliveryCompanyId) {
+      pushError(getLocalizedText("Select a delivery company before completing the order / اختر شركة التوصيل قبل إكمال الطلب", language));
+      return;
+    }
 
-    if (cartMetrics.amountDue > 0 && !selectedCustomerId) {
+    if (cartMetrics.amountDue > 0 && !selectedCustomerId && !companyCollectedByDelivery) {
       pushMessage(
         getLocalizedText("Select a customer for partial payment or credit / اختر عميلاً للبيع الآجل أو الجزئي", language),
       );
@@ -3118,14 +3177,19 @@ export function PosPage() {
     }
 
     if (
-      paymentEntriesResolved.length === 0 ||
-      paymentEntriesResolved.every((entry) => !entry.bankCashAccountId || entry.amountValue <= 0)
+      !companyCollectedByDelivery &&
+      (
+        paymentEntriesResolved.length === 0 ||
+        paymentEntriesResolved.every((entry) => !entry.bankCashAccountId || entry.amountValue <= 0)
+      )
     ) {
       pushMessage(t("pos.sales.alert.paymentRequired"));
       return;
     }
 
-    const unmappedPayment = paymentEntriesResolved.find(
+    const unmappedPayment = companyCollectedByDelivery
+      ? null
+      : paymentEntriesResolved.find(
       (entry) => entry.amountValue > 0 && !entry.bankCashAccountId,
     );
     if (unmappedPayment) {
@@ -3133,7 +3197,9 @@ export function PosPage() {
       return;
     }
 
-    const missingReference = paymentEntriesResolved.find(
+    const missingReference = companyCollectedByDelivery
+      ? null
+      : paymentEntriesResolved.find(
       (entry) =>
         entry.amountValue > 0 &&
         paymentMethodNeedsReference(entry.paymentMethod) &&
@@ -3149,7 +3215,11 @@ export function PosPage() {
       return;
     }
 
-    if (cartMetrics.paid < cartMetrics.total && !posSettings?.runtime.allowCreditSale) {
+    if (
+      !companyCollectedByDelivery &&
+      cartMetrics.paid < cartMetrics.total &&
+      !posSettings?.runtime.allowCreditSale
+    ) {
       pushMessage(t("pos.sales.alert.insufficientPayment"));
       return;
     }
@@ -3702,6 +3772,7 @@ export function PosPage() {
                     deliveryAddress={deliveryAddress}
                     deliveryCompanies={deliveryCompanies}
                     deliveryCompanyId={deliveryCompanyId}
+                    deliveryCollectionMethod={deliveryCollectionMethod}
                     deliveryDriverId={deliveryDriverId}
                     deliveryDrivers={deliveryDrivers}
                     deliveryFee={deliveryFee}
@@ -3710,6 +3781,7 @@ export function PosPage() {
                     editingInvoiceId={editingInvoiceId}
                     onDeliveryAddressChange={setDeliveryAddress}
                     onDeliveryCompanyChange={setDeliveryCompanyId}
+                    onDeliveryCollectionMethodChange={setDeliveryCollectionMethod}
                     onDeliveryDriverChange={setDeliveryDriverId}
                     onDeliveryFeeChange={(value) => setDeliveryFee(parseAmount(value))}
                     onDeliveryModeChange={setDeliveryMode}

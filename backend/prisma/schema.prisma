@@ -231,6 +231,18 @@ enum DeliveryStatus {
   CANCELLED
 }
 
+enum DeliveryCollectionMethod {
+  RESTAURANT
+  COMPANY
+}
+
+enum DeliverySettlementStatus {
+  PENDING
+  PARTIALLY_SETTLED
+  SETTLED
+  DIFFERENCE
+}
+
 enum CreditNoteStatus {
   DRAFT
   POSTED
@@ -547,6 +559,8 @@ model Account {
   // Delivery Company relations for Restaurant POS
   deliveryCompaniesAsReceivable DeliveryCompany[] @relation("DeliveryCompanyReceivable")
   deliveryCompaniesAsCommission DeliveryCompany[] @relation("DeliveryCompanyCommission")
+  deliveryCompaniesAsServiceFee DeliveryCompany[] @relation("DeliveryCompanyServiceFee")
+  deliverySettlementDifferenceAccounts DeliveryCompanySettlement[] @relation("DeliverySettlementDifferenceAccount")
 
   createdById String?
   createdBy   User?   @relation("AccountCreator", fields: [createdById], references: [id])
@@ -579,6 +593,7 @@ model BankCashAccount {
   posSessions          PosSession[]
   posPayments          PosPayment[]
   posReturnPayments    PosReturnPayment[]
+  deliveryCompanySettlements DeliveryCompanySettlement[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -883,6 +898,7 @@ model JournalEntry {
   fixedAssetAcquisition     FixedAssetAcquisition?     @relation("FixedAssetAcquisitionToJournalEntry")
   fixedAssetDepreciationRun FixedAssetDepreciationRun? @relation("FixedAssetDepreciationRunToJournalEntry")
   fixedAssetDisposal        FixedAssetDisposal?        @relation("FixedAssetDisposalToJournalEntry")
+  deliveryCompanySettlement DeliveryCompanySettlement? @relation("DeliveryCompanySettlementToJournalEntry")
 
   sourceType   String?
   sourceId     String?
@@ -2373,7 +2389,11 @@ model SalesInvoice {
   deliveryNotes       String?
   deliveryCompanyId   String?
   deliveryCompany     DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
+  deliveryCollectionMethod DeliveryCollectionMethod?
+  deliverySettlementStatus DeliverySettlementStatus?
+  deliverySettledAmount    Decimal?                  @default(0) @db.Decimal(18, 2)
   kitchenOrder        KitchenOrder?
+  deliverySettlementOrders DeliveryCompanySettlementOrder[]
   waiterConfirmedAt   DateTime?
 
   // Audits & Corrections
@@ -2877,6 +2897,9 @@ model User {
   posAccessRoles                      UserPosAccessRole[]
   posFavoriteItems                    PosUserFavoriteItem[]
   auditLogs                           AuditLog[]
+  createdDeliverySettlements          DeliveryCompanySettlement[]    @relation("DeliverySettlementCreatedByUser")
+  confirmedDeliverySettlements        DeliveryCompanySettlement[]    @relation("DeliverySettlementConfirmedByUser")
+  reversedDeliverySettlements         DeliveryCompanySettlement[]    @relation("DeliverySettlementReversedByUser")
 
   // Restaurant POS relations
   tablesServed                        PosTable[]                     @relation("TableWaiter")
@@ -2954,11 +2977,70 @@ model DeliveryCompany {
   commissionRate      Decimal        @default(0) @db.Decimal(5, 2)
   commissionAccountId String?
   commissionAccount   Account?       @relation("DeliveryCompanyCommission", fields: [commissionAccountId], references: [id], onDelete: Restrict)
+  serviceFeeAccountId String?
+  serviceFeeAccount   Account?       @relation("DeliveryCompanyServiceFee", fields: [serviceFeeAccountId], references: [id], onDelete: Restrict)
   isActive            Boolean        @default(true)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   salesInvoices       SalesInvoice[]
   posPayments         PosPayment[]
+  settlements         DeliveryCompanySettlement[]
+}
+
+model DeliveryCompanySettlement {
+  id                       String                   @id @default(cuid())
+  reference                String                   @unique
+  deliveryCompanyId        String
+  deliveryCompany          DeliveryCompany          @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
+  periodFrom               DateTime
+  periodTo                 DateTime
+  settlementDate           DateTime
+  statementReference       String?
+  bankCashAccountId        String
+  bankCashAccount          BankCashAccount          @relation(fields: [bankCashAccountId], references: [id], onDelete: Restrict)
+  statementAmount          Decimal                  @default(0) @db.Decimal(18, 2)
+  grossOrdersAmount        Decimal                  @default(0) @db.Decimal(18, 2)
+  commissionAmount         Decimal                  @default(0) @db.Decimal(18, 2)
+  serviceFeeAmount         Decimal                  @default(0) @db.Decimal(18, 2)
+  refundAmount             Decimal                  @default(0) @db.Decimal(18, 2)
+  adjustmentAmount         Decimal                  @default(0) @db.Decimal(18, 2)
+  differenceAmount         Decimal                  @default(0) @db.Decimal(18, 2)
+  differenceReason         String?
+  differenceAccountId      String?
+  differenceAccount        Account?                 @relation("DeliverySettlementDifferenceAccount", fields: [differenceAccountId], references: [id], onDelete: Restrict)
+  differenceNotes          String?
+  netReceivedAmount        Decimal                  @default(0) @db.Decimal(18, 2)
+  statementAttachmentUrl   String?
+  bankReceiptAttachmentUrl String?
+  journalEntryId           String?                  @unique
+  journalEntry             JournalEntry?            @relation("DeliveryCompanySettlementToJournalEntry", fields: [journalEntryId], references: [id], onDelete: Restrict)
+  createdByUserId          String?
+  createdByUser            User?                    @relation("DeliverySettlementCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  confirmedByUserId        String?
+  confirmedByUser          User?                    @relation("DeliverySettlementConfirmedByUser", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+  reversedByUserId         String?
+  reversedByUser           User?                    @relation("DeliverySettlementReversedByUser", fields: [reversedByUserId], references: [id], onDelete: SetNull)
+  reversedAt               DateTime?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  orders                   DeliveryCompanySettlementOrder[]
+
+  @@index([deliveryCompanyId, periodFrom, periodTo])
+  @@index([bankCashAccountId])
+  @@index([settlementDate])
+}
+
+model DeliveryCompanySettlementOrder {
+  id          String                    @id @default(cuid())
+  settlementId String
+  settlement   DeliveryCompanySettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  salesInvoiceId String
+  salesInvoice   SalesInvoice            @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  grossAmount    Decimal                 @db.Decimal(18, 2)
+  createdAt      DateTime                @default(now())
+
+  @@unique([settlementId, salesInvoiceId])
+  @@index([salesInvoiceId])
 }
 
 model DeliveryDriver {

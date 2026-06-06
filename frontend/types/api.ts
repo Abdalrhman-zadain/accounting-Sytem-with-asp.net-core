@@ -1983,6 +1983,12 @@ export type DeliveryStatus =
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "CANCELLED";
+export type DeliveryCollectionMethod = "RESTAURANT" | "COMPANY";
+export type DeliverySettlementStatus =
+  | "PENDING"
+  | "PARTIALLY_SETTLED"
+  | "SETTLED"
+  | "DIFFERENCE";
 export type PosPaymentMethod =
   | "CASH"
   | "CARD"
@@ -3499,6 +3505,7 @@ export type HoldPosSalePayload = {
   deliveryAddress?: string;
   deliveryNotes?: string;
   deliveryCompanyId?: string;
+  deliveryCollectionMethod?: DeliveryCollectionMethod;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
   reservationId?: string;
@@ -3520,6 +3527,7 @@ export type SavePosDraftPayload = {
   deliveryAddress?: string;
   deliveryNotes?: string;
   deliveryCompanyId?: string;
+  deliveryCollectionMethod?: DeliveryCollectionMethod;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
   reservationId?: string;
@@ -3541,6 +3549,7 @@ export type CompletePosSalePayload = {
   deliveryAddress?: string;
   deliveryNotes?: string;
   deliveryCompanyId?: string;
+  deliveryCollectionMethod?: DeliveryCollectionMethod;
   lines: SalesLinePayload[];
   payments: PosPaymentEntryPayload[];
 };
@@ -3687,6 +3696,9 @@ export type PosSale = {
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
   deliveryCompanyId?: string | null;
+  deliveryCollectionMethod?: DeliveryCollectionMethod | null;
+  deliverySettlementStatus?: DeliverySettlementStatus | null;
+  deliverySettledAmount?: string;
   driverId?: string | null;
   isCorrected?: boolean;
   correctedAt?: string | null;
@@ -3812,9 +3824,76 @@ export type DeliveryCompany = {
   receivableAccountId: string;
   commissionRate: string;
   commissionAccountId?: string | null;
+  serviceFeeAccountId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type DeliveryCompanySettlement = {
+  id: string;
+  reference: string;
+  deliveryCompany?: {
+    id: string;
+    name: string;
+    arabicName?: string | null;
+  } | null;
+  periodFrom: string;
+  periodTo: string;
+  settlementDate: string;
+  statementReference?: string | null;
+  bankCashAccount?: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
+  grossOrdersAmount: string;
+  statementAmount: string;
+  commissionAmount: string;
+  serviceFeeAmount: string;
+  refundAmount: string;
+  adjustmentAmount: string;
+  differenceAmount: string;
+  differenceReason?: string | null;
+  differenceNotes?: string | null;
+  netReceivedAmount: string;
+  statementAttachmentUrl?: string | null;
+  bankReceiptAttachmentUrl?: string | null;
+  status: DeliverySettlementStatus | "REVERSED";
+  journalEntry?: {
+    id: string;
+    reference: string;
+    status: "DRAFT" | "POSTED";
+    postedAt?: string | null;
+  } | null;
+  orders: Array<{
+    salesInvoiceId: string;
+    reference?: string | null;
+    grossAmount: string;
+    totalAmount?: string | null;
+  }>;
+  reversedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DeliveryCompanySettlementPreview = {
+  deliveryCompany: {
+    id: string;
+    name: string;
+    arabicName?: string | null;
+  };
+  periodFrom: string;
+  periodTo: string;
+  grossOrdersAmount: string;
+  orders: Array<{
+    id: string;
+    reference: string;
+    branchName?: string | null;
+    completedAt: string;
+    totalAmount: string;
+    settlementStatus: DeliverySettlementStatus;
+  }>;
 };
 
 export type DeliveryDriver = {

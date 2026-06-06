@@ -14,7 +14,9 @@ Previously identified issue (Resolved/Intermittent):
 Current Status:
 
 - The build currently succeeds (`npm run build`) in the engineering environment.
-- normal TypeScript checking and typecheck passes.
+- `frontend` typecheck is currently blocked by two existing errors in `features/pos/pos-addon-admin-panel.tsx`:
+  - `Property 'items' does not exist on type 'InventoryItemsResponse'.`
+  - `Parameter 'item' implicitly has an 'any' type.`
 - the issue is documented here for reference if it reappears during heavy CI loads or environment changes.
 - performance verification must run from `frontend/` against the production Next server (`npm run build && npm run start`), not against dev mode or another package/toolchain in the repo
 - the frontend shell now mirrors the language preference into a cookie so server rendering can keep `lang`/`dir` aligned with the persisted setting and avoid avoidable LTR/RTL layout shift on reloads
@@ -216,7 +218,7 @@ Current limitation:
 - the delivery board lists completed POS sales with `orderType === "DELIVERY"` (same data source as the old register tab); orders must be completed at the register before they appear on the board.
 - the KDS workspace in the register tab still shows a pulsing "Ready orders" alert banner when any order reaches READY status; Kitchen / Delivery Board links are in the site navigation.
 - **Kitchen-ready order lock:** when any line sent to the kitchen is marked `READY` or `SERVED` on the KDS, the register cart is frozen — no add/edit/remove, order-type or customer changes, hold/draft, kitchen resync, or cancel. Cashier can still **Pay** to complete the sale. Backend `saveDraft` / hold paths enforce the same rule server-side.
-- the restaurant workflow is still incomplete: waiter master-data administration is still lightweight, delivery-company settlement/accounting follow-up is still basic, pre-order completion still does not auto-occupy the table at the database level (cashier must confirm via the new handoff prompt), and broader reopen/correction lifecycle tooling remains narrower than the full restaurant requirements.
+- the restaurant workflow is still incomplete: waiter master-data administration is still lightweight, delivery-company settlement is now available for accountant confirmation/reversal and reporting but still uses manual statement/attachment URLs rather than a dedicated upload subsystem or external delivery API integration, pre-order completion still does not auto-occupy the table at the database level (cashier must confirm via the new handoff prompt), and broader reopen/correction lifecycle tooling remains narrower than the full restaurant requirements.
 - table reservations support multiple non-overlapping time slots on the same table even while it has a live order; the reserve modal lists each slot with **Pre-order products** and **Cancel reservation** only (no guest-note or arrival fields in the UI). When the current order closes, table status is recalculated so later reservations can show as **Reserved** again. Waiter assignment remains at the table level via the table gear menu.
 
 What this means for future edits:

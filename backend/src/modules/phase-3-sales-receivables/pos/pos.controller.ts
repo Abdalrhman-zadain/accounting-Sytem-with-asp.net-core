@@ -5,7 +5,9 @@ import { JwtAuthGuard } from "../../platform/auth/guards/jwt-auth.guard";
 import {
   ClosePosSessionDto,
   CompletePosSaleDto,
+  CreateDeliveryCompanySettlementDto,
   CreatePosReturnDto,
+  DeliveryCompanySettlementPreviewDto,
   HoldPosSaleDto,
   OpenPosSessionDto,
   PosReverseAccountingDto,
@@ -13,6 +15,7 @@ import {
   UpdatePosSettingsDto,
   SavePosDraftDto,
   SetPosFavoriteItemsDto,
+  UpdateDeliveryCompanyStatusDto,
   VoidPosSaleDto,
   CorrectOrderTypeDto,
   CorrectPaymentMethodDto,
@@ -126,6 +129,34 @@ export class PosController {
   @Get("reports/tax-summary")
   getTaxSummary(@Req() req: Request & { user?: any }) {
     return this.service.getTaxSummaryReport(req.user);
+  }
+
+  @Get("reports/delivery-company-receivables")
+  getDeliveryCompanyReceivables(@Req() req: Request & { user?: any }) {
+    return this.service.getDeliveryCompanyReceivableReport(req.user);
+  }
+
+  @Get("reports/delivery-company-settlements")
+  getDeliveryCompanySettlements(
+    @Req() req: Request & { user?: any },
+    @Query("deliveryCompanyId") deliveryCompanyId?: string,
+  ) {
+    return this.service.getDeliveryCompanySettlementReport({ deliveryCompanyId }, req.user);
+  }
+
+  @Get("reports/delivery-company-sales")
+  getDeliveryCompanySales(
+    @Req() req: Request & { user?: any },
+    @Query("deliveryCompanyId") deliveryCompanyId?: string,
+    @Query("branchName") branchName?: string,
+    @Query("settlementStatus") settlementStatus?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.service.getDeliveryCompanySalesReport(
+      { deliveryCompanyId, branchName, settlementStatus, from, to },
+      req.user,
+    );
   }
 
   @Get("reports/time-window")
@@ -288,6 +319,48 @@ export class PosController {
   @Get("delivery/companies")
   listDeliveryCompanies(@Req() req: Request & { user?: any }) {
     return this.service.listDeliveryCompanies(req.user);
+  }
+
+  @Put("delivery/companies/:id/status")
+  updateDeliveryCompanyStatus(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: UpdateDeliveryCompanyStatusDto,
+  ) {
+    return this.service.updateDeliveryCompanyStatus(id, dto.isActive, req.user);
+  }
+
+  @Post("delivery/settlements/preview")
+  previewDeliverySettlement(
+    @Req() req: Request & { user?: any },
+    @Body() dto: DeliveryCompanySettlementPreviewDto,
+  ) {
+    return this.service.previewDeliveryCompanySettlement(dto, req.user);
+  }
+
+  @Get("delivery/settlements")
+  listDeliverySettlements(
+    @Req() req: Request & { user?: any },
+    @Query("deliveryCompanyId") deliveryCompanyId?: string,
+  ) {
+    return this.service.listDeliveryCompanySettlements({ deliveryCompanyId }, req.user);
+  }
+
+  @Post("delivery/settlements")
+  createDeliverySettlement(
+    @Req() req: Request & { user?: any },
+    @Body() dto: CreateDeliveryCompanySettlementDto,
+  ) {
+    return this.service.createDeliveryCompanySettlement(dto, req.user);
+  }
+
+  @Post("delivery/settlements/:id/reverse")
+  reverseDeliverySettlement(
+    @Req() req: Request & { user?: any },
+    @Param("id") id: string,
+    @Body() dto: PosReverseAccountingDto,
+  ) {
+    return this.service.reverseDeliveryCompanySettlement(id, dto, req.user);
   }
 
   @Get("delivery/drivers")

@@ -23,6 +23,7 @@ import {
   PosRefundMethod,
   OrderType,
   DeliveryStatus,
+  DeliveryCollectionMethod,
   TableStatus,
   KitchenStatus,
 } from "../../../../generated/prisma";
@@ -210,6 +211,10 @@ class PosSaleBaseDto {
   @IsOptional()
   @IsString()
   deliveryCompanyId?: string;
+
+  @IsOptional()
+  @IsEnum(DeliveryCollectionMethod)
+  deliveryCollectionMethod?: DeliveryCollectionMethod;
 
   @IsOptional()
   @IsString()
@@ -518,4 +523,88 @@ export class CreateTableDto {
   @IsNumber()
   @Min(1)
   capacity!: number;
+}
+
+export class UpdateDeliveryCompanyStatusDto {
+  @IsBoolean()
+  isActive!: boolean;
+}
+
+export class DeliveryCompanySettlementPreviewDto {
+  @IsString()
+  deliveryCompanyId!: string;
+
+  @IsDateString()
+  periodFrom!: string;
+
+  @IsDateString()
+  periodTo!: string;
+}
+
+export class CreateDeliveryCompanySettlementDto extends DeliveryCompanySettlementPreviewDto {
+  @IsDateString()
+  settlementDate!: string;
+
+  @IsString()
+  bankCashAccountId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 120)
+  statementReference?: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_AMOUNT)
+  statementAmount!: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_AMOUNT)
+  commissionAmount!: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_AMOUNT)
+  serviceFeeAmount!: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_AMOUNT)
+  refundAmount!: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_AMOUNT)
+  adjustmentAmount!: number;
+
+  @IsOptional()
+  @IsString()
+  differenceReason?: string;
+
+  @IsOptional()
+  @IsString()
+  differenceAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  differenceNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  statementAttachmentUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  bankReceiptAttachmentUrl?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  salesInvoiceIds!: string[];
 }

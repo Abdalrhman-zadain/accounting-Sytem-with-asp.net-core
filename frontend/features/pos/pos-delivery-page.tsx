@@ -14,15 +14,34 @@ import {
 import { PageShell, PageSkeleton } from "@/components/ui";
 import {
   assignDriver,
+  createDeliveryCompanySettlement,
+  getAccountOptions,
+  getBankCashAccounts,
   getCompletedPosSales,
+  getDeliveryCompanies,
+  getDeliveryCompanyReceivableReport,
+  getDeliveryCompanySettlements,
   getDeliveryDrivers,
+  previewDeliveryCompanySettlement,
+  reverseDeliveryCompanySettlement,
   updateDeliveryStatus,
+  updateDeliveryCompanyStatus,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { DeliveryStatus, PosSale } from "@/types/api";
+import type {
+  AccountOption,
+  BankCashAccount,
+  DeliveryCollectionMethod,
+  DeliveryCompany,
+  DeliveryCompanySettlement,
+  DeliveryCompanySettlementPreview,
+  DeliverySettlementStatus,
+  DeliveryStatus,
+  PosSale,
+} from "@/types/api";
 
 const DELIVERY_PIPELINE: DeliveryStatus[] = [
   "PENDING",
@@ -218,12 +237,27 @@ function DeliveryOrderCard({
 }
 
 export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { language, t } = useTranslation();
   const isAr = language === "ar";
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showDone, setShowDone] = React.useState(false);
+  const canManageSettlements = Boolean(user?.permissions?.includes("POS_VIEW_POS_REPORTS" as any));
+  const [selectedCompanyId, setSelectedCompanyId] = React.useState("");
+  const [periodFrom, setPeriodFrom] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [periodTo, setPeriodTo] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [settlementDate, setSettlementDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [bankCashAccountId, setBankCashAccountId] = React.useState("");
+  const [statementReference, setStatementReference] = React.useState("");
+  const [statementAmount, setStatementAmount] = React.useState("0");
+  const [commissionAmount, setCommissionAmount] = React.useState("0");
+  const [serviceFeeAmount, setServiceFeeAmount] = React.useState("0");
+  const [refundAmount, setRefundAmount] = React.useState("0");
+  const [adjustmentAmount, setAdjustmentAmount] = React.useState("0");
+  const [differenceReason, setDifferenceReason] = React.useState("");
+  const [differenceAccountId, setDifferenceAccountId] = React.useState("");
+  const [differenceNotes, setDifferenceNotes] = React.useState("");
 
   const { data: allSales = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.posCompletedSales(token),
@@ -236,6 +270,36 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
     queryKey: ["pos-delivery-drivers", token],
     queryFn: () => getDeliveryDrivers(token),
     enabled: Boolean(token),
+  });
+
+  const { data: deliveryCompanies = [] } = useQuery({
+    queryKey: ["pos-delivery-companies", token],
+    queryFn: () => getDeliveryCompanies(token),
+    enabled: Boolean(token),
+  });
+
+  const { data: receivableRows = [] } = useQuery({
+    queryKey: ["pos-delivery-receivables", token],
+    queryFn: () => getDeliveryCompanyReceivableReport(token),
+    enabled: Boolean(token && canManageSettlements),
+  });
+
+  const { data: settlementRows = [] } = useQuery({
+    queryKey: ["pos-delivery-settlements", token],
+    queryFn: () => getDeliveryCompanySettlements({}, token),
+    enabled: Boolean(token && canManageSettlements),
+  });
+
+  const { data: paymentAccounts = [] } = useQuery({
+    queryKey: queryKeys.bankCashAccounts(token, { isActive: "true" }),
+    queryFn: () => getBankCashAccounts({ isActive: "true" }, token),
+    enabled: Boolean(token && canManageSettlements),
+  });
+
+  const { data: accountOptions = [] } = useQuery({
+    queryKey: queryKeys.accounts(token, { isActive: "true", isPosting: "true", view: "selector" }),
+    queryFn: () => getAccountOptions({ isActive: "true", isPosting: "true" }, token),
+    enabled: Boolean(token && canManageSettlements),
   });
 
   const deliverySales = React.useMemo(
@@ -256,6 +320,58 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
       assignDriver(payload.saleId, payload.driverId, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.posCompletedSales(token) });
+    },
+  });
+
+  const previewSettlementMutation = useMutation({
+    mutationFn: (payload: { deliveryCompanyId: string; periodFrom: string; periodTo: string }) =>
+      previewDeliveryCompanySettlement(payload, token),
+  });
+
+  const createSettlementMutation = useMutation({
+    mutationFn: () =>
+      createDeliveryCompanySettlement(
+        {
+          deliveryCompanyId: selectedCompanyId,
+          periodFrom,
+          periodTo,
+          settlementDate,
+          bankCashAccountId,
+          statementReference: statementReference || undefined,
+          statementAmount: Number(statementAmount || 0),
+          commissionAmount: Number(commissionAmount || 0),
+          serviceFeeAmount: Number(serviceFeeAmount || 0),
+          refundAmount: Number(refundAmount || 0),
+          adjustmentAmount: Number(adjustmentAmount || 0),
+          differenceReason: differenceReason || undefined,
+          differenceAccountId: differenceAccountId || undefined,
+          differenceNotes: differenceNotes || undefined,
+          salesInvoiceIds: previewSettlementMutation.data?.orders.map((row) => row.id) ?? [],
+        },
+        token,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pos-delivery-settlements", token] });
+      queryClient.invalidateQueries({ queryKey: ["pos-delivery-receivables", token] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.posCompletedSales(token) });
+      previewSettlementMutation.reset();
+    },
+  });
+
+  const reverseSettlementMutation = useMutation({
+    mutationFn: (id: string) => reverseDeliveryCompanySettlement(id, {}, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pos-delivery-settlements", token] });
+      queryClient.invalidateQueries({ queryKey: ["pos-delivery-receivables", token] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.posCompletedSales(token) });
+    },
+  });
+
+  const toggleCompanyMutation = useMutation({
+    mutationFn: (payload: { id: string; isActive: boolean }) =>
+      updateDeliveryCompanyStatus(payload.id, payload.isActive, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pos-delivery-companies", token] });
     },
   });
 
@@ -303,6 +419,21 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
   ).length;
 
   const outCount = deliverySales.filter((s) => s.deliveryStatus === "OUT_FOR_DELIVERY").length;
+
+  const computedNetReceived = React.useMemo(() => {
+    return (
+      Number(statementAmount || 0) -
+      Number(commissionAmount || 0) -
+      Number(serviceFeeAmount || 0) -
+      Number(refundAmount || 0) -
+      Number(adjustmentAmount || 0)
+    );
+  }, [adjustmentAmount, commissionAmount, refundAmount, serviceFeeAmount, statementAmount]);
+
+  const computedDifference = React.useMemo(() => {
+    const gross = Number(previewSettlementMutation.data?.grossOrdersAmount || 0);
+    return gross - Number(statementAmount || 0);
+  }, [previewSettlementMutation.data?.grossOrdersAmount, statementAmount]);
 
   const visibleColumns = DELIVERY_COLUMNS.filter(
     (col) => showDone || !col.isTerminal,
@@ -451,6 +582,251 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
             );
           })}
         </div>
+        {canManageSettlements ? (
+          <div className="space-y-4 border-t border-[#e1e7e2] bg-[#f7faf8] p-4">
+            <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-[#233329]">
+                    Delivery receivables / ذمم شركات التوصيل
+                  </h2>
+                  <p className="text-xs font-semibold text-[#68776f]">
+                    Outstanding balances by company
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {receivableRows.map((row) => (
+                  <div key={row.deliveryCompanyId} className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-black text-[#233329]">
+                          {row.deliveryCompanyArabicName || row.deliveryCompanyName}
+                        </div>
+                        <div className="text-[11px] text-[#68776f]">{row.deliveryCompanyName}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCompanyMutation.mutate({
+                            id: row.deliveryCompanyId,
+                            isActive:
+                              deliveryCompanies.find((company) => company.id === row.deliveryCompanyId)?.isActive === false,
+                          })
+                        }
+                        className="rounded-full border border-[#d8e2dc] px-3 py-1 text-[10px] font-bold text-[#46644b]"
+                      >
+                        {deliveryCompanies.find((company) => company.id === row.deliveryCompanyId)?.isActive === false
+                          ? "Activate"
+                          : "Deactivate"}
+                      </button>
+                    </div>
+                    <div className="mt-3 space-y-1 text-xs font-semibold text-[#42564a]">
+                      <div>Outstanding: {row.outstandingBalance}</div>
+                      <div>Settled: {row.settledBalance}</div>
+                      <div>Total: {row.totalReceivable}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
+              <div className="mb-4">
+                <h2 className="text-lg font-black text-[#233329]">
+                  Delivery settlement / تسوية شركة التوصيل
+                </h2>
+                <p className="text-xs font-semibold text-[#68776f]">
+                  Preview unsettled orders, then confirm one settlement posting.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                >
+                  <option value="">Select company</option>
+                  {deliveryCompanies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={periodFrom}
+                  onChange={(e) => setPeriodFrom(e.target.value)}
+                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                />
+                <input
+                  type="date"
+                  value={periodTo}
+                  onChange={(e) => setPeriodTo(e.target.value)}
+                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                />
+              </div>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  disabled={!selectedCompanyId || previewSettlementMutation.isPending}
+                  onClick={() =>
+                    previewSettlementMutation.mutate({
+                      deliveryCompanyId: selectedCompanyId,
+                      periodFrom,
+                      periodTo,
+                    })
+                  }
+                  className="rounded-xl bg-[#1f6f5f] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+                >
+                  Preview settlement
+                </button>
+              </div>
+              {previewSettlementMutation.data ? (
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <input
+                      type="date"
+                      value={settlementDate}
+                      onChange={(e) => setSettlementDate(e.target.value)}
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    />
+                    <select
+                      value={bankCashAccountId}
+                      onChange={(e) => setBankCashAccountId(e.target.value)}
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    >
+                      <option value="">Select bank/cash account</option>
+                      {paymentAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={statementReference}
+                      onChange={(e) => setStatementReference(e.target.value)}
+                      placeholder="Statement reference"
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-5">
+                    {[
+                      { label: "Statement", value: statementAmount, setter: setStatementAmount },
+                      { label: "Commission", value: commissionAmount, setter: setCommissionAmount },
+                      { label: "Service fees", value: serviceFeeAmount, setter: setServiceFeeAmount },
+                      { label: "Refunds", value: refundAmount, setter: setRefundAmount },
+                      { label: "Adjustments", value: adjustmentAmount, setter: setAdjustmentAmount },
+                    ].map((field) => (
+                      <input
+                        key={field.label}
+                        type="number"
+                        step="0.01"
+                        value={field.value}
+                        onChange={(e) => field.setter(e.target.value)}
+                        placeholder={field.label}
+                        className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                      />
+                    ))}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <input
+                      type="text"
+                      value={differenceReason}
+                      onChange={(e) => setDifferenceReason(e.target.value)}
+                      placeholder="Difference reason / reason code"
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    />
+                    <select
+                      value={differenceAccountId}
+                      onChange={(e) => setDifferenceAccountId(e.target.value)}
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    >
+                      <option value="">Select difference account</option>
+                      {accountOptions.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.code} - {account.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={differenceNotes}
+                      onChange={(e) => setDifferenceNotes(e.target.value)}
+                      placeholder="Difference notes"
+                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
+                      Gross: {previewSettlementMutation.data.grossOrdersAmount}
+                    </div>
+                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
+                      Difference: {computedDifference.toFixed(2)}
+                    </div>
+                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
+                      Net received: {computedNetReceived.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={
+                        !bankCashAccountId ||
+                        !selectedCompanyId ||
+                        createSettlementMutation.isPending ||
+                        previewSettlementMutation.data.orders.length === 0
+                      }
+                      onClick={() => createSettlementMutation.mutate()}
+                      className="rounded-xl bg-[#233329] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                    >
+                      Confirm settlement
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3">
+                    <div className="mb-2 text-sm font-black text-[#233329]">Orders in preview</div>
+                    <div className="space-y-2 text-xs text-[#42564a]">
+                      {previewSettlementMutation.data.orders.map((row) => (
+                        <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#edf2ee] bg-white px-3 py-2">
+                          <span>{row.reference}</span>
+                          <span>{row.totalAmount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
+              <h2 className="mb-3 text-lg font-black text-[#233329]">
+                Settlement history / سجل التسويات
+              </h2>
+              <div className="space-y-3">
+                {settlementRows.map((row) => (
+                  <div key={row.id} className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-black text-[#233329]">{row.reference}</div>
+                        <div className="text-[11px] text-[#68776f]">
+                          {row.deliveryCompany?.name} · {row.status} · {row.netReceivedAmount}
+                        </div>
+                      </div>
+                      {row.status !== "REVERSED" ? (
+                        <button
+                          type="button"
+                          onClick={() => reverseSettlementMutation.mutate(row.id)}
+                          className="rounded-full border border-[#ead7d5] px-3 py-1 text-[11px] font-bold text-[#8f5a55]"
+                        >
+                          Reverse
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
     </div>
   );
 
