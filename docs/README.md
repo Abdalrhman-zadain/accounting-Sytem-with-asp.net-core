@@ -70,6 +70,7 @@ Implemented:
 - POS backend actions now enforce permission-based access inside the POS service for session open/close, sales completion, held sales, review, reports, and accounting approval/rejection flows
 - POS route aliases now exist for cashier and accountant flows, including `/pos/register`, `/pos/session`, `/pos/sessions`, `/pos/held-sales`, `/pos/accounting-review`, `/pos/completed-sales`, `/pos/reports`, and `/pos/settings`
 - the restaurant dine-in tables screen `/pos/tables` is treated as a cashier-side operational route and is no longer granted to accountant-only access snapshots
+- the POS returns screen `/pos/returns` is treated as a cashier-side operational route and is no longer granted to accountant-only access snapshots
 - seed/setup support now includes dedicated POS logins: `cashier / cashier123`, `kitchen / kitchen123`, and `waiter / waiter123` (waiter lands on `/pos/waiter/tables`, confirms orders via `POST /pos/sales/:id/send-to-kitchen`, cannot pay)
 
 Not fully implemented yet:

@@ -114,7 +114,7 @@ import {
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
-import { hasPermission } from "@/lib/auth-access";
+import { hasPermission, isCashierPosUser } from "@/lib/auth-access";
 import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -1856,7 +1856,12 @@ export function PosPage() {
       }
       if (tab.id === "held") return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
       if (tab.id === "review") return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
-      if (tab.id === "kitchen") return hasPermission(user, "RST_VIEW_KITCHEN_SCREEN");
+      if (tab.id === "kitchen") {
+        return (
+          (isCashierPosUser(user) || user?.posRoles.includes("KITCHEN")) &&
+          hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
+        );
+      }
       if (tab.id === "delivery") {
         return (
           hasPermission(user, "POS_VIEW_POS_SCREEN") ||
@@ -1864,7 +1869,9 @@ export function PosPage() {
           hasPermission(user, "RST_ASSIGN_DRIVER")
         );
       }
-      if (tab.id === "returns") return hasPermission(user, "POS_VIEW_COMPLETED_SALES");
+      if (tab.id === "returns") {
+        return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");
+      }
       if (tab.id === "reports") return hasPermission(user, "POS_VIEW_POS_REPORTS");
       if (tab.id === "settings") return hasPermission(user, "POS_VIEW_POS_REPORTS");
       return false;
@@ -1873,7 +1880,10 @@ export function PosPage() {
     if (visible.length) {
       return visible;
     }
-    if (hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")) {
+    if (
+      (isCashierPosUser(user) || user?.posRoles.includes("KITCHEN")) &&
+      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
+    ) {
       return workspaceTabs.filter((tab) => tab.id === "kitchen");
     }
     return workspaceTabs.filter((tab) => tab.id === "sales");
@@ -2116,19 +2126,7 @@ export function PosPage() {
     }
   }, [selectedWarehouseId, sessionState.warehouseId, warehouses]);
 
-  useEffect(() => {
-    if (paymentEntries.length === 0 && paymentAccounts.length > 0) {
-      setPaymentEntries([
-        {
-          id: createLocalId(),
-          paymentMethod: "CASH",
-          bankCashAccountId: resolveMappedBankCashAccountId("CASH"),
-          amount: "",
-          reference: "",
-        },
-      ]);
-    }
-  }, [paymentAccounts, paymentEntries.length, activeSession?.cashAccount?.id, posSettings?.accounts.cashAccountId]);
+
 
   useEffect(() => {
     if (!selectedReturnSaleId && completedSales.length > 0) {
@@ -2255,7 +2253,7 @@ export function PosPage() {
       }
       return;
     }
-    if (paymentEntries.length === 0) {
+    if (paymentEntries.length === 0 && paymentAccounts.length > 0) {
       setPaymentEntries([
         {
           id: createLocalId(),

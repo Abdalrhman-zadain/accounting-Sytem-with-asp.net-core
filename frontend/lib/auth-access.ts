@@ -46,6 +46,10 @@ export function isWaiterOnlyUser(user: AuthUser | null | undefined) {
   );
 }
 
+export function isCashierPosUser(user: AuthUser | null | undefined) {
+  return Boolean(user?.posRoles?.includes("CASHIER"));
+}
+
 export function canAccessRoute(user: AuthUser | null | undefined, pathname: string) {
   if (!user) {
     return false;
@@ -54,12 +58,19 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   const normalizedPath = normalizePath(pathname);
   const allowedRoutes = user.allowedRoutes ?? [];
 
-  if (allowedRoutes.some((route) => routeMatches(route, normalizedPath))) {
-    return true;
+  if (normalizedPath === "/pos/returns" || normalizedPath.startsWith("/pos/returns/")) {
+    return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");
   }
 
   if (normalizedPath === "/pos/kitchen" || normalizedPath.startsWith("/pos/kitchen/")) {
-    return hasPermission(user, "RST_VIEW_KITCHEN_SCREEN");
+    return (
+      (isCashierPosUser(user) || isKitchenOnlyUser(user)) &&
+      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
+    );
+  }
+
+  if (allowedRoutes.some((route) => routeMatches(route, normalizedPath))) {
+    return true;
   }
 
   if (
@@ -84,10 +95,6 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
       hasPermission(user, "RST_CREATE_DELIVERY_ORDER") ||
       hasPermission(user, "RST_ASSIGN_DRIVER")
     );
-  }
-
-  if (normalizedPath === "/pos/returns" || normalizedPath.startsWith("/pos/returns/")) {
-    return hasPermission(user, "POS_VIEW_COMPLETED_SALES");
   }
 
   if (

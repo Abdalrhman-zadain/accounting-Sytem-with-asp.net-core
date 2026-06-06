@@ -111,7 +111,6 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/completed-sales",
     "/pos/kitchen",
     "/pos/delivery",
-    "/pos/returns",
     "/pos/reports",
     "/pos/settings",
   ],
