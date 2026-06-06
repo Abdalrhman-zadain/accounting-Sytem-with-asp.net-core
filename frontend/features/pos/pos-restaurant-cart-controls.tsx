@@ -291,26 +291,10 @@ export function PosRestaurantCartControls({
                   </option>
                 ))}
               </select>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  { value: "RESTAURANT" as const, en: "Restaurant collects", ar: "المطعم يحصّل" },
-                  { value: "COMPANY" as const, en: "Company collects", ar: "الشركة تحصّل" },
-                ]).map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    disabled={controlsDisabled}
-                    onClick={() => onDeliveryCollectionMethodChange(option.value)}
-                    className={cn(
-                      "rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-40",
-                      deliveryCollectionMethod === option.value
-                        ? "bg-[#0f766e] text-white"
-                        : "border border-[#cbd5cf] bg-white text-[#46644b]",
-                    )}
-                  >
-                    {isAr ? option.ar : option.en}
-                  </button>
-                ))}
+              <div className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-center text-[11px] font-bold text-[#166534] shadow-sm">
+                {isAr
+                  ? "العميل دفع على تطبيق شركة التوصيل"
+                  : "Customer paid through the delivery app"}
               </div>
             </div>
           )}

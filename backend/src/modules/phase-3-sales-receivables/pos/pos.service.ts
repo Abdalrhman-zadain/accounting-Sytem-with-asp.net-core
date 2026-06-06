@@ -1026,7 +1026,7 @@ export class PosService {
         deliveryAddress: dto.deliveryAddress?.trim() || null,
         deliveryNotes: dto.deliveryNotes?.trim() || null,
         deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
-        deliveryCollectionMethod: dto.deliveryCollectionMethod || null,
+        deliveryCollectionMethod: dto.deliveryCompanyId?.trim() ? DeliveryCollectionMethod.COMPANY : null,
         deliverySettlementStatus: null,
         deliverySettledAmount: this.toAmount(0),
         originalOrderType: dto.orderType || null,
@@ -1193,11 +1193,17 @@ export class PosService {
     }
     const deliveryCollectionMethod =
       dto.deliveryCompanyId?.trim()
-        ? dto.deliveryCollectionMethod ||
-          (dto.payments?.length ? DeliveryCollectionMethod.RESTAURANT : DeliveryCollectionMethod.COMPANY)
+        ? DeliveryCollectionMethod.COMPANY
         : null;
-    if (deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY && !deliveryCompany) {
-      throw new BadRequestException("A delivery company is required when the delivery company collects payment.");
+    if (deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY) {
+      if (!deliveryCompany) {
+        throw new BadRequestException("A delivery company is required when the delivery company collects payment.");
+      }
+      if (!deliveryCompany.receivableAccountId) {
+        throw new BadRequestException(
+          `No receivable account is configured for the selected delivery company (${deliveryCompany.name}).`
+        );
+      }
     }
 
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
@@ -1543,7 +1549,20 @@ export class PosService {
           }
         }
 
-        const paymentDebits = this.aggregatePaymentDebits(normalizedPayments.payments, description);
+        const paymentsWithReceivables = normalizedPayments.payments.map((p) => {
+          if (
+            p.paymentMethod === PosPaymentMethod.DELIVERY &&
+            invoiceWithDetails.deliveryCompanyId
+          ) {
+            return {
+              ...p,
+              accountId: receivableAccountId,
+            };
+          }
+          return p;
+        });
+
+        const paymentDebits = this.aggregatePaymentDebits(paymentsWithReceivables, description);
         const receivableDebits =
           normalizedPayments.outstandingAmount > 0
             ? [
@@ -6656,6 +6675,11 @@ export class PosService {
     const invoice = await this.prisma.salesInvoice.findUnique({
       where: { id },
       include: {
+        posSession: {
+          select: {
+            cashAccountId: true,
+          },
+        },
         posPayments: {
           select: {
             amount: true,
@@ -6684,6 +6708,11 @@ export class PosService {
       });
       if (!company) {
         throw new BadRequestException(`Delivery company ${dto.deliveryCompanyId} was not found or is inactive.`);
+      }
+      if (dto.orderType === OrderType.DELIVERY && !company.receivableAccountId) {
+        throw new BadRequestException(
+          `No receivable account is configured for the selected delivery company (${company.name}).`
+        );
       }
       deliveryCompanyId = company.id;
     }
@@ -6756,6 +6785,14 @@ export class PosService {
           serviceChargeAmount: serviceCharge,
           deliveryFeeAmount: deliveryFee,
           deliveryStatus: dto.orderType === OrderType.DELIVERY ? DeliveryStatus.PENDING : null,
+          deliveryCollectionMethod:
+            dto.orderType === OrderType.DELIVERY && deliveryCompanyId
+              ? DeliveryCollectionMethod.COMPANY
+              : null,
+          deliverySettlementStatus:
+            dto.orderType === OrderType.DELIVERY && deliveryCompanyId
+              ? DeliverySettlementStatus.PENDING
+              : null,
           totalAmount: total,
           allocatedAmount: this.toAmount(appliedPaymentTotal),
           outstandingAmount: this.toAmount(nextOutstandingAmount),
@@ -6774,6 +6811,26 @@ export class PosService {
           correctedByUserId: actorUserId,
         },
       });
+
+      if (dto.orderType === OrderType.DELIVERY && deliveryCompanyId) {
+        await tx.posPayment.updateMany({
+          where: { salesInvoiceId: id },
+          data: {
+            paymentMethod: PosPaymentMethod.DELIVERY,
+            deliveryCompanyId: deliveryCompanyId,
+            bankCashAccountId: invoice.posSession?.cashAccountId ?? undefined,
+          },
+        });
+      } else if (originalOrderType === OrderType.DELIVERY && invoice.deliveryCompanyId && dto.orderType !== OrderType.DELIVERY) {
+        await tx.posPayment.updateMany({
+          where: { salesInvoiceId: id },
+          data: {
+            paymentMethod: PosPaymentMethod.CASH,
+            deliveryCompanyId: null,
+            bankCashAccountId: invoice.posSession?.cashAccountId ?? undefined,
+          },
+        });
+      }
 
       const kot = await tx.kitchenOrder.findUnique({
         where: { salesInvoiceId: id },
@@ -6900,6 +6957,15 @@ export class PosService {
           receivableAccountId: string | null;
         }
       | null = null;
+    if (invoice.orderType === OrderType.DELIVERY && invoice.deliveryCompanyId) {
+      if (dto.paymentMethod !== PosPaymentMethod.DELIVERY) {
+        throw new BadRequestException("Normal payment methods are not allowed for delivery company orders.");
+      }
+      if (dto.deliveryCompanyId !== invoice.deliveryCompanyId) {
+        throw new BadRequestException("Cannot change the delivery company during payment correction.");
+      }
+    }
+
     if (dto.paymentMethod === PosPaymentMethod.DELIVERY) {
       if (!dto.deliveryCompanyId?.trim()) {
         throw new BadRequestException("A delivery company is required for delivery payment correction.");
@@ -6950,6 +7016,14 @@ export class PosService {
             dto.paymentMethod === PosPaymentMethod.DELIVERY
               ? targetDeliveryCompany!.id
               : invoice.deliveryCompanyId ?? null,
+          deliveryCollectionMethod:
+            dto.paymentMethod === PosPaymentMethod.DELIVERY
+              ? DeliveryCollectionMethod.COMPANY
+              : null,
+          deliverySettlementStatus:
+            dto.paymentMethod === PosPaymentMethod.DELIVERY
+              ? (invoice.deliverySettlementStatus ?? DeliverySettlementStatus.PENDING)
+              : null,
           correctionReason: dto.reason.trim(),
           isCorrected: true,
           correctedAt: new Date(),

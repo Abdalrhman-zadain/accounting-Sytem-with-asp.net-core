@@ -2243,6 +2243,14 @@ export function PosPage() {
   };
 
   useEffect(() => {
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") {
+      if (deliveryCollectionMethod !== "COMPANY") {
+        setDeliveryCollectionMethod("COMPANY");
+      }
+    }
+  }, [orderType, deliveryMode, deliveryCollectionMethod]);
+
+  useEffect(() => {
     const companyCollectedByDelivery =
       orderType === "DELIVERY" &&
       deliveryMode === "THIRD_PARTY" &&
@@ -3150,9 +3158,23 @@ export function PosPage() {
       pushError(getLocalizedText("Enter delivery address before completing delivery orders / أدخل عنوان التوصيل قبل إكمال الطلب", language));
       return;
     }
-    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY" && !deliveryCompanyId) {
-      pushError(getLocalizedText("Select a delivery company before completing the order / اختر شركة التوصيل قبل إكمال الطلب", language));
-      return;
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") {
+      if (!deliveryCompanyId) {
+        pushError(getLocalizedText("Select a delivery company before completing the order / اختر شركة التوصيل قبل إكمال الطلب", language));
+        return;
+      }
+      const mappedCompany = posSettings?.accounts.deliveryCompanies?.find(
+        (c) => c.id === deliveryCompanyId
+      );
+      if (!mappedCompany?.receivableAccountId) {
+        pushError(
+          getLocalizedText(
+            "The order cannot be completed because no receivable account is configured for the selected delivery company / لا يمكن إكمال الطلب لعدم تهيئة حساب ذمم لشركة التوصيل المحددة",
+            language
+          )
+        );
+        return;
+      }
     }
 
     if (cartMetrics.amountDue > 0 && !selectedCustomerId && !companyCollectedByDelivery) {
@@ -3245,6 +3267,11 @@ export function PosPage() {
     }
     if (cartLines.length === 0) {
       pushMessage(t("pos.sales.alert.emptyCart"));
+      return;
+    }
+
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") {
+      completeSale();
       return;
     }
 
@@ -4068,16 +4095,23 @@ export function PosPage() {
 
                   <button
                     type="button"
-                    onClick={openPayModal}
+                    onClick={
+                      orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+                        ? completeSale
+                        : openPayModal
+                    }
                     disabled={
                       cartLines.length === 0 ||
                       !hasPermission(user, "POS_COMPLETE_SALE") ||
-                      !hasPermission(user, "POS_SELECT_PAYMENT_METHOD")
+                      (!(orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") &&
+                        !hasPermission(user, "POS_SELECT_PAYMENT_METHOD"))
                     }
                     className="flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#16a34a] text-[15px] font-bold text-white shadow-sm transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <LuWallet className="h-5 w-5" />
-                    {getLocalizedText("Pay / دفع", language)}
+                    {orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+                      ? getLocalizedText("Complete Order / إكمال الطلب", language)
+                      : getLocalizedText("Pay / دفع", language)}
                   </button>
 
                   {!orderKitchenLocked ? (
