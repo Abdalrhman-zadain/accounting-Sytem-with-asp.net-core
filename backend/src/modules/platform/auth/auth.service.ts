@@ -18,11 +18,15 @@ import { LoginDto, RegisterDto } from './dto/auth.dto';
 const POS_ACCESS_ROLE_NAMES: Record<PosAccessRoleCode, string> = {
   CASHIER: 'Cashier',
   ACCOUNTANT: 'Accountant',
+  KITCHEN: 'Kitchen',
+  WAITER: 'Waiter',
 };
 
 const POS_ACCESS_ROLE_DESCRIPTIONS: Record<PosAccessRoleCode, string> = {
   CASHIER: 'Operational POS sales access limited to cashier workflows.',
   ACCOUNTANT: 'POS accounting review, reporting, and posting access.',
+  KITCHEN: 'Kitchen display only — view and update order preparation status.',
+  WAITER: 'Table ordering and send-to-kitchen only — no payment.',
 };
 
 const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; description: string }> = {
@@ -190,6 +194,8 @@ export class AuthService {
       allowedRoutes: accessUser.allowedRoutes,
       defaultRoute: accessUser.defaultRoute,
       isCashierOnly: accessUser.isCashierOnly,
+      isKitchenOnly: accessUser.isKitchenOnly,
+      isWaiterOnly: accessUser.isWaiterOnly,
     };
 
     return {
@@ -211,14 +217,22 @@ export class AuthService {
   private normalizePosRoles(posRoles?: string[]) {
     const normalized = (posRoles ?? [])
       .map((role) => role.trim().toUpperCase())
-      .filter((role): role is PosAccessRoleCode => role === 'CASHIER' || role === 'ACCOUNTANT');
+      .filter(
+        (role): role is PosAccessRoleCode =>
+          role === 'CASHIER' || role === 'ACCOUNTANT' || role === 'KITCHEN' || role === 'WAITER',
+      );
 
     return normalized.length ? Array.from(new Set(normalized)) : [PosAccessRoleCode.ACCOUNTANT];
   }
 
   private async ensurePosAccessBaseline() {
     await this.prisma.$transaction(async (tx) => {
-      for (const roleCode of [PosAccessRoleCode.CASHIER, PosAccessRoleCode.ACCOUNTANT] as const) {
+      for (const roleCode of [
+        PosAccessRoleCode.CASHIER,
+        PosAccessRoleCode.ACCOUNTANT,
+        PosAccessRoleCode.KITCHEN,
+        PosAccessRoleCode.WAITER,
+      ] as const) {
         await tx.posAccessRole.upsert({
           where: { code: roleCode },
           update: {
@@ -249,7 +263,16 @@ export class AuthService {
       }
 
       const roles = await tx.posAccessRole.findMany({
-        where: { code: { in: [PosAccessRoleCode.CASHIER, PosAccessRoleCode.ACCOUNTANT] } },
+        where: {
+          code: {
+            in: [
+              PosAccessRoleCode.CASHIER,
+              PosAccessRoleCode.ACCOUNTANT,
+              PosAccessRoleCode.KITCHEN,
+              PosAccessRoleCode.WAITER,
+            ],
+          },
+        },
         select: { id: true, code: true },
       });
       const permissions = await tx.posPermission.findMany({
@@ -321,8 +344,28 @@ export class AuthService {
       ),
     );
 
-    const isCashierOnly = posRoles.includes("CASHIER") && !posRoles.includes("ACCOUNTANT");
-    const defaultRoute = isCashierOnly ? "/pos/register" : "/dashboard";
+    const isKitchenOnly =
+      posRoles.includes("KITCHEN") &&
+      !posRoles.includes("CASHIER") &&
+      !posRoles.includes("ACCOUNTANT") &&
+      !posRoles.includes("WAITER");
+    const isWaiterOnly =
+      posRoles.includes("WAITER") &&
+      !posRoles.includes("CASHIER") &&
+      !posRoles.includes("ACCOUNTANT") &&
+      !posRoles.includes("KITCHEN");
+    const isCashierOnly =
+      posRoles.includes("CASHIER") &&
+      !posRoles.includes("ACCOUNTANT") &&
+      !posRoles.includes("KITCHEN") &&
+      !posRoles.includes("WAITER");
+    const defaultRoute = isKitchenOnly
+      ? "/pos/kitchen"
+      : isWaiterOnly
+        ? "/pos/waiter/tables"
+        : isCashierOnly
+          ? "/pos/register"
+          : "/dashboard";
 
     return {
       userId: user.id,
@@ -336,6 +379,8 @@ export class AuthService {
       allowedRoutes,
       defaultRoute,
       isCashierOnly,
+      isKitchenOnly,
+      isWaiterOnly,
     };
   }
 

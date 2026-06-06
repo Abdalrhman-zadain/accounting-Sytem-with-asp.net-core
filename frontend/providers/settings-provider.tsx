@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 
 type Language = "en" | "ar";
 
@@ -22,7 +22,7 @@ export function SettingsProvider({
     const [language, setLanguage] = useState<Language>(initialLanguage);
     const [isHydrated, setIsHydrated] = useState(false);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         let nextLanguage = initialLanguage;
         const stored = localStorage.getItem("app_language") as Language;
         if (stored === "ar" || stored === "en") {

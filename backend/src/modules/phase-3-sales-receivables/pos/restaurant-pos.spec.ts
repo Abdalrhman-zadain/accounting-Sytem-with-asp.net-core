@@ -25,8 +25,16 @@ describe("Restaurant POS Controllers", () => {
     $transaction: jest.fn(),
   };
 
+  const kitchenUser = {
+    userId: "kitchen1",
+    posRoles: ["KITCHEN"],
+    permissions: ["RST_VIEW_KITCHEN_SCREEN", "RST_UPDATE_KITCHEN_STATUS"],
+  } as never;
+
   const posServiceMock = {
     auditKotReprint: jest.fn(),
+    assertKitchenViewPermission: jest.fn(),
+    assertKitchenUpdatePermission: jest.fn(),
   };
 
   let tableController: PosTableController;
@@ -42,7 +50,13 @@ describe("Restaurant POS Controllers", () => {
   describe("PosTableController", () => {
     it("lists all tables", async () => {
       const mockTables = [
-        { id: "t1", tableNumber: "T1", capacity: 4, status: TableStatus.AVAILABLE },
+        {
+          id: "t1",
+          tableNumber: "T1",
+          capacity: 4,
+          status: TableStatus.AVAILABLE,
+          reservations: [],
+        },
       ];
       prismaMock.posTable.findMany.mockResolvedValue(mockTables);
 
@@ -92,17 +106,19 @@ describe("Restaurant POS Controllers", () => {
       ];
       prismaMock.kitchenOrder.findMany.mockResolvedValue(mockOrders);
 
-      const result = await kitchenController.listOrders();
+      const result = await kitchenController.listOrders({ user: kitchenUser });
       expect(result).toEqual(mockOrders);
     });
 
     it("gets kitchen order by id or throws NotFound", async () => {
       prismaMock.kitchenOrder.findUnique.mockResolvedValue(null);
-      await expect(kitchenController.getOrder("invalid")).rejects.toThrow(NotFoundException);
+      await expect(kitchenController.getOrder({ user: kitchenUser }, "invalid")).rejects.toThrow(
+        NotFoundException,
+      );
 
       const mockOrder = { id: "o1", orderNumber: "KOT-1" };
       prismaMock.kitchenOrder.findUnique.mockResolvedValue(mockOrder);
-      const result = await kitchenController.getOrder("o1");
+      const result = await kitchenController.getOrder({ user: kitchenUser }, "o1");
       expect(result).toEqual(mockOrder);
     });
 
@@ -128,7 +144,11 @@ describe("Restaurant POS Controllers", () => {
       ]);
       prismaMock.kitchenOrder.update.mockResolvedValue({ id: "o1", status: KitchenStatus.READY });
 
-      const result = await kitchenController.updateOrderItemStatus("item1", { status: KitchenStatus.READY });
+      const result = await kitchenController.updateOrderItemStatus(
+        { user: kitchenUser },
+        "item1",
+        { status: KitchenStatus.READY },
+      );
       expect(result.status).toEqual(KitchenStatus.READY);
       expect(prismaMock.kitchenOrder.update).toHaveBeenCalledWith({
         where: { id: "o1" },

@@ -16,6 +16,7 @@ export const CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
   "POS_SELECT_PAYMENT_METHOD",
   "POS_PRINT_RECEIPT",
   "POS_VIEW_OWN_SESSION_REPORT",
+  "POS_VIEW_COMPLETED_SALES",
   "POS_CHANGE_UNIT_PRICE",
   "RST_VIEW_TABLE_SCREEN",
   "RST_OPEN_TABLE_ORDER",
@@ -25,6 +26,26 @@ export const CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
   "RST_APPLY_SERVICE_CHARGE",
   "RST_COMPLETE_RESTAURANT_PAYMENT",
   "RST_PRINT_PRE_BILL",
+  "RST_VIEW_KITCHEN_SCREEN",
+  "RST_UPDATE_KITCHEN_STATUS",
+];
+
+export const KITCHEN_PERMISSION_CODES: PosPermissionCode[] = [
+  "RST_VIEW_KITCHEN_SCREEN",
+  "RST_UPDATE_KITCHEN_STATUS",
+  "RST_CANCEL_KOT_ITEM",
+  "RST_MARK_ITEM_UNAVAILABLE",
+];
+
+export const WAITER_PERMISSION_CODES: PosPermissionCode[] = [
+  "RST_VIEW_TABLE_SCREEN",
+  "RST_OPEN_TABLE_ORDER",
+  "RST_SEND_KOT",
+  "POS_HOLD_SALE",
+  "POS_SEARCH_ITEM",
+  "POS_ADD_ITEM_TO_CART",
+  "POS_UPDATE_ITEM_QUANTITY",
+  "POS_REMOVE_ITEM_FROM_CART",
 ];
 
 export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
@@ -65,7 +86,19 @@ export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
 ];
 
 export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
-  CASHIER: ["/pos", "/pos/register", "/pos/session", "/pos/held-sales", "/pos/receipt", "/pos/tables"],
+  CASHIER: [
+    "/pos/register",
+    "/pos/session",
+    "/pos/sessions",
+    "/pos/held-sales",
+    "/pos/receipt",
+    "/pos/tables",
+    "/pos/kitchen",
+    "/pos/delivery",
+    "/pos/returns",
+  ],
+  KITCHEN: ["/pos/kitchen"],
+  WAITER: ["/pos/waiter/tables", "/pos/waiter/order"],
   ACCOUNTANT: [
     "/dashboard",
     "/accounts",
@@ -73,10 +106,12 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/journal-entries",
     "/general-ledger",
     "/inventory",
-    "/pos",
     "/pos/accounting-review",
     "/pos/sessions",
     "/pos/completed-sales",
+    "/pos/kitchen",
+    "/pos/delivery",
+    "/pos/returns",
     "/pos/reports",
     "/pos/settings",
   ],
@@ -85,10 +120,17 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
 export const POS_ROLE_PERMISSIONS: Record<PosAccessRoleCode, PosPermissionCode[]> = {
   CASHIER: CASHIER_PERMISSION_CODES,
   ACCOUNTANT: ACCOUNTANT_PERMISSION_CODES,
+  KITCHEN: KITCHEN_PERMISSION_CODES,
+  WAITER: WAITER_PERMISSION_CODES,
 };
 
 export const ALL_POS_PERMISSION_CODES: PosPermissionCode[] = Array.from(
-  new Set([...CASHIER_PERMISSION_CODES, ...ACCOUNTANT_PERMISSION_CODES]),
+  new Set([
+    ...CASHIER_PERMISSION_CODES,
+    ...ACCOUNTANT_PERMISSION_CODES,
+    ...KITCHEN_PERMISSION_CODES,
+    ...WAITER_PERMISSION_CODES,
+  ]),
 );
 
 export function uniqueRoutes(routes: string[]) {

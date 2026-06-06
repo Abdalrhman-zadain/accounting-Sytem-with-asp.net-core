@@ -38,7 +38,10 @@ if (mode === 'dev') {
   nextArgs.push('--webpack');
 }
 
-if (mode === 'dev') {
+// Only wipe the dev cache when explicitly requested. Clearing on every start
+// invalidates chunk URLs in open browser tabs and can race with a running dev
+// server (ChunkLoadError / webpack PackFileCacheStrategy ENOENT).
+if (mode === 'dev' && process.env.NEXT_DEV_CLEAN === '1') {
   resetNextArtifacts(devNextDir);
 }
 

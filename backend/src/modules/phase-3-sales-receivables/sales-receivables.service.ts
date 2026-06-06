@@ -68,6 +68,7 @@ const EMPLOYEE_PAYABLES_PARENT_CODE = "2130000";
 const CUSTOMER_AUTO_RECEIVABLE_SUBTYPE = "Current Assets";
 
 type ResolvedLine = {
+  salesInvoiceLineId?: string | null;
   itemId: string | null;
   warehouseId: string | null;
   itemName: string | null;
@@ -2830,6 +2831,7 @@ export class SalesReceivablesService {
       }
 
       resolved.push({
+        salesInvoiceLineId: rawLine.salesInvoiceLineId?.trim() || null,
         itemId,
         warehouseId,
         itemName: rawLine.itemName?.trim() || item?.name || null,

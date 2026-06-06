@@ -39,6 +39,11 @@ export class CreateTableReservationDto {
   @IsString()
   @Length(0, 255)
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 2000)
+  orderNotes?: string;
 }
 
 export class CancelTableReservationDto {
@@ -48,6 +53,22 @@ export class CancelTableReservationDto {
   reason?: string;
 }
 
+export class UpdateTableReservationDto {
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 2000)
+  orderNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["UNKNOWN", "ARRIVED", "NO_SHOW"])
+  attendanceStatus?: "UNKNOWN" | "ARRIVED" | "NO_SHOW";
+}
 
 export class OpenPosSessionDto {
   @IsString()
@@ -189,6 +210,10 @@ class PosSaleBaseDto {
   @IsOptional()
   @IsString()
   deliveryCompanyId?: string;
+
+  @IsOptional()
+  @IsString()
+  reservationId?: string;
 }
 
 export class HoldPosSaleDto extends PosSaleBaseDto {

@@ -11,8 +11,39 @@ function normalizePath(pathname: string) {
   return withoutQuery.endsWith("/") && withoutQuery !== "/" ? withoutQuery.slice(0, -1) : withoutQuery;
 }
 
+function routeMatches(allowedRoute: string, normalizedPath: string) {
+  if (allowedRoute === POS_ROUTE_PREFIX) {
+    return normalizedPath === POS_ROUTE_PREFIX;
+  }
+  return normalizedPath === allowedRoute || normalizedPath.startsWith(`${allowedRoute}/`);
+}
+
 export function hasPermission(user: AuthUser | null | undefined, permission: PosPermissionCode) {
   return Boolean(user?.permissions?.includes(permission));
+}
+
+export function isKitchenOnlyUser(user: AuthUser | null | undefined) {
+  if (!user) {
+    return false;
+  }
+  return (
+    user.posRoles.includes("KITCHEN") &&
+    !user.posRoles.includes("CASHIER") &&
+    !user.posRoles.includes("ACCOUNTANT") &&
+    !user.posRoles.includes("WAITER")
+  );
+}
+
+export function isWaiterOnlyUser(user: AuthUser | null | undefined) {
+  if (!user) {
+    return false;
+  }
+  return (
+    user.posRoles.includes("WAITER") &&
+    !user.posRoles.includes("CASHIER") &&
+    !user.posRoles.includes("ACCOUNTANT") &&
+    !user.posRoles.includes("KITCHEN")
+  );
 }
 
 export function canAccessRoute(user: AuthUser | null | undefined, pathname: string) {
@@ -23,19 +54,98 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   const normalizedPath = normalizePath(pathname);
   const allowedRoutes = user.allowedRoutes ?? [];
 
-  if (allowedRoutes.includes(normalizedPath)) {
+  if (allowedRoutes.some((route) => routeMatches(route, normalizedPath))) {
     return true;
   }
 
+  if (normalizedPath === "/pos/kitchen" || normalizedPath.startsWith("/pos/kitchen/")) {
+    return hasPermission(user, "RST_VIEW_KITCHEN_SCREEN");
+  }
+
+  if (
+    normalizedPath === "/pos/waiter/tables" ||
+    normalizedPath.startsWith("/pos/waiter/tables/") ||
+    normalizedPath === "/pos/waiter/order" ||
+    normalizedPath.startsWith("/pos/waiter/order/")
+  ) {
+    return (
+      hasPermission(user, "RST_VIEW_TABLE_SCREEN") ||
+      hasPermission(user, "RST_OPEN_TABLE_ORDER")
+    );
+  }
+
+  if (normalizedPath === "/pos/tables" || normalizedPath.startsWith("/pos/tables/")) {
+    return hasPermission(user, "RST_VIEW_TABLE_SCREEN");
+  }
+
+  if (normalizedPath === "/pos/delivery" || normalizedPath.startsWith("/pos/delivery/")) {
+    return (
+      hasPermission(user, "POS_VIEW_POS_SCREEN") ||
+      hasPermission(user, "RST_CREATE_DELIVERY_ORDER") ||
+      hasPermission(user, "RST_ASSIGN_DRIVER")
+    );
+  }
+
+  if (normalizedPath === "/pos/returns" || normalizedPath.startsWith("/pos/returns/")) {
+    return hasPermission(user, "POS_VIEW_COMPLETED_SALES");
+  }
+
+  if (
+    normalizedPath === "/pos/register" ||
+    normalizedPath.startsWith("/pos/register/") ||
+    normalizedPath === "/pos/receipt" ||
+    normalizedPath.startsWith("/pos/receipt/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_SCREEN");
+  }
+
+  if (
+    normalizedPath === "/pos/held-sales" ||
+    normalizedPath.startsWith("/pos/held-sales/")
+  ) {
+    return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
+  }
+
+  if (
+    normalizedPath === "/pos/session" ||
+    normalizedPath.startsWith("/pos/session/") ||
+    normalizedPath === "/pos/sessions" ||
+    normalizedPath.startsWith("/pos/sessions/")
+  ) {
+    return (
+      hasPermission(user, "POS_VIEW_OWN_SESSION_REPORT") ||
+      hasPermission(user, "POS_VIEW_SESSION_REPORT")
+    );
+  }
+
+  if (
+    normalizedPath === "/pos/accounting-review" ||
+    normalizedPath.startsWith("/pos/accounting-review/") ||
+    normalizedPath === "/pos/completed-sales" ||
+    normalizedPath.startsWith("/pos/completed-sales/")
+  ) {
+    return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
+  }
+
+  if (
+    normalizedPath === "/pos/reports" ||
+    normalizedPath.startsWith("/pos/reports/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_REPORTS");
+  }
+
+  if (
+    normalizedPath === "/pos/settings" ||
+    normalizedPath.startsWith("/pos/settings/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_REPORTS");
+  }
+
   if (normalizedPath === "/pos") {
-    return allowedRoutes.some((route) => route === POS_ROUTE_PREFIX || route.startsWith(`${POS_ROUTE_PREFIX}/`));
+    return allowedRoutes.some((route) => routeMatches(route, normalizedPath));
   }
 
-  if (normalizedPath === "/pos/tables") {
-    return allowedRoutes.includes("/pos/tables") && hasPermission(user, "RST_VIEW_TABLE_SCREEN" as any);
-  }
-
-  return allowedRoutes.some((route) => route !== POS_ROUTE_PREFIX && normalizedPath.startsWith(`${route}/`));
+  return false;
 }
 
 export function getDefaultRoute(user: AuthUser | null | undefined) {

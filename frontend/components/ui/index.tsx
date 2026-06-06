@@ -1,4 +1,7 @@
-import React, { ReactNode } from "react";
+"use client";
+
+import React, { ReactNode, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./skeleton";
@@ -34,7 +37,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "app-surface p-8 md:p-10 transition-all duration-300",
+        "app-surface p-8 md:p-10 transition-all duration-500",
         className,
       )}
     >
@@ -140,7 +143,26 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl" | "full";
   className?: string;
 }) {
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   const sizes = {
     sm: "max-w-sm",
@@ -156,17 +178,24 @@ export function Modal({
     full: "max-w-full mx-4",
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
+        aria-hidden="true"
       />
-      <div className={cn("relative w-full animate-in zoom-in-95 fade-in duration-300", sizes[size])}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={cn("relative z-10 w-full animate-in zoom-in-95 fade-in duration-300", sizes[size])}
+        onClick={(event) => event.stopPropagation()}
+      >
         <Card className={cn("p-8 shadow-2xl ring-1 ring-white/10", className)}>
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-900">
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-900">
               <span className="sr-only">Close</span>
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -176,7 +205,8 @@ export function Modal({
           {children}
         </Card>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

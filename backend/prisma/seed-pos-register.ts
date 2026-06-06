@@ -3,6 +3,7 @@ import {
   Prisma,
   PrismaClient,
 } from '../src/generated/prisma';
+import { seedPosAddons } from './seed-pos-addons';
 
 type PosProductSeed = {
   code: string;
@@ -635,6 +636,8 @@ export async function seedPosRegisterDemo(
       throw error;
     }
   }
+
+  await seedPosAddons(prisma);
 
   console.log(
     `POS register demo ready: ${POS_PRODUCTS.length} products, warehouses ${mainWarehouse.code}/${branchWarehouse.code}, customers including ${walkInCustomer.code}.`,

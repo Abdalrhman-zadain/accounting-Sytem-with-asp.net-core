@@ -1,4 +1,4 @@
-export type PosAccessRoleCode = "CASHIER" | "ACCOUNTANT";
+export type PosAccessRoleCode = "CASHIER" | "ACCOUNTANT" | "KITCHEN" | "WAITER";
 
 export type PosPermissionCode =
   | "POS_OPEN_SESSION"
@@ -72,4 +72,6 @@ export type AuthorizedUser = {
   allowedRoutes: string[];
   defaultRoute: string;
   isCashierOnly: boolean;
+  isKitchenOnly: boolean;
+  isWaiterOnly: boolean;
 };

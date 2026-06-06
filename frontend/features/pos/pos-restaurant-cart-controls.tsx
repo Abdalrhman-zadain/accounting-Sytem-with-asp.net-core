@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { LuArrowRightLeft, LuChefHat, LuCombine, LuScissors, LuUser, LuUtensils } from "react-icons/lu";
 import type {
   DeliveryCompany,
   DeliveryDriver,
@@ -43,7 +44,16 @@ type PosRestaurantCartControlsProps = {
   lockedTableId?: string | null;
   waiterMode?: boolean;
   onBackToTables?: () => void;
+  language?: string;
+  orderLocked?: boolean;
 };
+
+const ORDER_TYPE_OPTIONS: Array<{ value: PosOrderType; en: string; ar: string }> = [
+  { value: "DINE_IN", en: "Dine-In", ar: "محلي" },
+  { value: "TAKEAWAY", en: "Takeaway", ar: "سفري" },
+  { value: "DELIVERY", en: "Delivery", ar: "توصيل" },
+  { value: "PICKUP", en: "Pickup", ar: "استلام" },
+];
 
 export function PosRestaurantCartControls({
   cartLinesCount,
@@ -79,173 +89,274 @@ export function PosRestaurantCartControls({
   lockedTableId,
   waiterMode,
   onBackToTables,
+  language,
+  orderLocked = false,
 }: PosRestaurantCartControlsProps) {
+  const isAr = language === "ar";
+  const selectedTable = restaurantTables.find((t) => t.id === selectedTableId) ?? null;
+  const isTableLocked = Boolean(lockedTableId && lockedTableId === selectedTableId && editingInvoiceId);
+  const controlsDisabled = orderLocked;
+
   return (
-    <div className="space-y-3.5">
+    <div className="flex flex-col gap-3">
+      {/* Back-to-tables (waiter mode) */}
       {waiterMode && onBackToTables && (
         <button
           type="button"
           onClick={onBackToTables}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#cbd5d0] bg-[#edf5ef] px-4 py-2.5 text-xs font-bold text-[#2e5d3c] shadow-sm transition hover:bg-[#e1f2e5]"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-[12px] border border-[#cbd5d0] bg-[#edf5ef] px-4 text-xs font-bold text-[#2e5d3c] shadow-sm transition hover:bg-[#e1f2e5]"
         >
-          ← Back to Tables / العودة للطاولات
+          {isAr ? "← العودة للطاولات" : "← Back to Tables"}
         </button>
       )}
 
-      {orderType === "DINE_IN" ? (
-        <div className="space-y-3.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#46644b]">
-                {lockedTableId ? "Your Table / طاولتك" : "Floor tables / الطاولات"}
-              </div>
-              <div className="mt-1 text-sm font-black text-[#1e2c22]">
-                {selectedTableId
-                  ? `Table: ${restaurantTables.find((table) => table.id === selectedTableId)?.tableNumber ?? "—"}`
-                  : "Select a table / اختر طاولة"}
-              </div>
-            </div>
-            {!lockedTableId && (
-              <button
-                type="button"
-                onClick={onOpenTableSelector}
-                className="whitespace-nowrap rounded-full border border-[#b8ccbf] bg-white px-4 py-2 text-xs font-bold text-[#2e5d3c] shadow-sm transition-colors hover:bg-[#edf5ef]"
-              >
-                Open floor / فتح القاعة
-              </button>
+      {/* ── ORDER TYPE SELECTOR (2×2 segmented) ── */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {ORDER_TYPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={controlsDisabled || (isTableLocked && opt.value !== orderType)}
+            onClick={() => onOrderTypeChange(opt.value)}
+            className={cn(
+              "flex h-9 items-center justify-center rounded-[10px] border text-xs font-bold transition-colors disabled:opacity-40",
+              orderType === opt.value
+                ? "border-[#ea580c] bg-[#fff7ed] text-[#c2410c]"
+                : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#d1d5db] hover:bg-[#fafafa]",
             )}
-          </div>
-          {!lockedTableId && (
-            <select
-              value={selectedWaiterId ?? ""}
-              onChange={(event) => onWaiterChange(event.target.value || null)}
-              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
+          >
+            {isAr ? opt.ar : opt.en}
+          </button>
+        ))}
+      </div>
+
+      {/* ── DINE-IN: table badge + ops + service charge ── */}
+      {orderType === "DINE_IN" ? (
+        <div className="space-y-2.5">
+          {/* Table badge */}
+          <div className="flex items-center gap-2 rounded-xl border border-[#d6d3f0] bg-[#f5f3ff] px-3 py-2">
+            <LuUtensils className="h-4 w-4 shrink-0 text-[#4338ca]" />
+            <span className="flex-1 text-xs font-bold text-[#4338ca]">
+              {selectedTable
+                ? isAr
+                  ? `طاولة ${selectedTable.tableNumber}`
+                  : `Table ${selectedTable.tableNumber}`
+                : isAr
+                  ? "لم تُختر طاولة"
+                  : "No table selected"}
+            </span>
+            <button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={onOpenTableSelector}
+              className="rounded-lg border border-[#c7c3ff] bg-white px-2 py-1 text-[10px] font-bold text-[#4338ca] hover:bg-[#efefff] disabled:opacity-40"
             >
-              <option value="">Select waiter / اختر النادل</option>
-              {waiters.map((waiter) => (
-                <option key={waiter.id} value={waiter.id}>
-                  {waiter.name ?? waiter.email}
-                </option>
-              ))}
-            </select>
-          )}
-          {selectedTableId && !lockedTableId && (
-            <div className="flex flex-wrap gap-2 pt-1">
+              {isAr ? "تغيير" : "Change"}
+            </button>
+          </div>
+
+          {/* Table operations (only visible when a table order is active) */}
+          {selectedTableId && (
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
+                disabled={controlsDisabled}
                 onClick={onOpenTransferTable}
-                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef]"
+                className="flex flex-col items-center gap-1 rounded-xl border border-[#d6e1d9] bg-white px-1.5 py-2 text-center text-[10px] font-bold text-[#506054] transition hover:bg-[#f6faf7] hover:text-[#233329] disabled:opacity-40"
               >
-                Transfer table
+                <LuArrowRightLeft className="h-3.5 w-3.5" />
+                <span>{isAr ? "نقل" : "Transfer"}</span>
               </button>
               <button
                 type="button"
+                disabled={controlsDisabled}
                 onClick={onOpenMergeTables}
-                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef]"
+                className="flex flex-col items-center gap-1 rounded-xl border border-[#d6e1d9] bg-white px-1.5 py-2 text-center text-[10px] font-bold text-[#506054] transition hover:bg-[#f6faf7] hover:text-[#233329] disabled:opacity-40"
               >
-                Merge tables
+                <LuCombine className="h-3.5 w-3.5" />
+                <span>{isAr ? "دمج" : "Merge"}</span>
               </button>
               <button
                 type="button"
                 onClick={onOpenSplitBill}
-                disabled={cartLinesCount === 0}
-                className="rounded-full border border-[#cbd5cf] bg-white px-3.5 py-2 text-[11px] font-bold text-[#46644b] transition-colors hover:bg-[#edf5ef] disabled:opacity-40"
+                disabled={controlsDisabled || cartLinesCount === 0}
+                className="flex flex-col items-center gap-1 rounded-xl border border-[#d6e1d9] bg-white px-1.5 py-2 text-center text-[10px] font-bold text-[#506054] transition hover:bg-[#f6faf7] hover:text-[#233329] disabled:opacity-40"
               >
-                Split bill
+                <LuScissors className="h-3.5 w-3.5" />
+                <span>{isAr ? "تقسيم" : "Split"}</span>
               </button>
             </div>
           )}
+
+          {/* Waiter picker */}
+          <div>
+            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
+              <LuUser className="h-3 w-3" />
+              <span>{isAr ? "الويتر" : "Waiter"}</span>
+            </div>
+            <select
+              value={selectedWaiterId ?? ""}
+              disabled={controlsDisabled}
+              onChange={(e) => onWaiterChange(e.target.value || null)}
+              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
+            >
+              <option value="">{isAr ? "— اختر الويتر —" : "— No waiter —"}</option>
+              {waiters.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name || w.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Service charge */}
+          <div>
+            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
+              {isAr ? "رسوم الخدمة" : "Service charge"}
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              disabled={controlsDisabled}
+              value={serviceChargeAmount}
+              onChange={(e) => onServiceChargeChange(e.target.value)}
+              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-black text-[#233329] disabled:opacity-50"
+            />
+          </div>
         </div>
       ) : null}
 
+      {/* ── DELIVERY details ── */}
       {orderType === "DELIVERY" ? (
-        <div className="space-y-3.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
+        <div className="space-y-2.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-3">
+          {/* Direct vs third-party toggle */}
           <div className="flex gap-2">
             {(["DIRECT", "THIRD_PARTY"] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
+                disabled={controlsDisabled}
                 onClick={() => onDeliveryModeChange(mode)}
                 className={cn(
-                  "rounded-full px-4 py-2 text-xs font-bold transition",
+                  "rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-40",
                   deliveryMode === mode
-                    ? "bg-[#46644b] text-white"
+                    ? "bg-[#4338ca] text-white"
                     : "border border-[#cbd5cf] bg-white text-[#46644b]",
                 )}
               >
                 {mode === "DIRECT"
-                  ? "Direct delivery / توصيل مباشر"
-                  : "3rd party / شركة توصيل"}
+                  ? isAr
+                    ? "توصيل مباشر"
+                    : "Direct"
+                  : isAr
+                    ? "شركة توصيل"
+                    : "3rd party"}
               </button>
             ))}
           </div>
+
           {deliveryMode === "DIRECT" ? (
             <select
               value={deliveryDriverId ?? ""}
-              onChange={(event) => onDeliveryDriverChange(event.target.value || null)}
-              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
+              disabled={controlsDisabled}
+              onChange={(e) => onDeliveryDriverChange(e.target.value || null)}
+              className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
             >
-              <option value="">Select driver / اختر السائق</option>
-              {deliveryDrivers.map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name}
+              <option value="">{isAr ? "اختر السائق" : "Select driver"}</option>
+              {deliveryDrivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
           ) : (
             <select
               value={deliveryCompanyId ?? ""}
-              onChange={(event) => onDeliveryCompanyChange(event.target.value || null)}
-              className="h-10.5 w-full rounded-[12px] border border-[#c2d6c9] bg-white px-3 py-2 text-xs font-bold text-[#233329]"
+              disabled={controlsDisabled}
+              onChange={(e) => onDeliveryCompanyChange(e.target.value || null)}
+              className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
             >
-              <option value="">Select company / اختر الشركة</option>
-              {deliveryCompanies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                  {company.arabicName ? ` / ${company.arabicName}` : ""}
+              <option value="">{isAr ? "اختر الشركة" : "Select company"}</option>
+              {deliveryCompanies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.arabicName ? ` / ${c.arabicName}` : ""}
                 </option>
               ))}
             </select>
           )}
+
           <input
             type="text"
             value={deliveryAddress}
-            onChange={(event) => onDeliveryAddressChange(event.target.value)}
-            placeholder="Address / العنوان"
-            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
+            disabled={controlsDisabled}
+            onChange={(e) => onDeliveryAddressChange(e.target.value)}
+            placeholder={isAr ? "العنوان" : "Address"}
+            className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
           />
           <input
             type="text"
             value={deliveryNotes}
-            onChange={(event) => onDeliveryNotesChange(event.target.value)}
-            placeholder="Notes / ملاحظات"
-            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
+            disabled={controlsDisabled}
+            onChange={(e) => onDeliveryNotesChange(e.target.value)}
+            placeholder={isAr ? "ملاحظات التوصيل" : "Delivery notes"}
+            className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
           />
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={deliveryFee}
-            onChange={(event) => onDeliveryFeeChange(event.target.value)}
-            placeholder="Delivery fee / رسوم التوصيل"
-            className="h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
-          />
+          <div>
+            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
+              {isAr ? "رسوم التوصيل" : "Delivery fee"}
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              disabled={controlsDisabled}
+              value={deliveryFee}
+              onChange={(e) => onDeliveryFeeChange(e.target.value)}
+              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
+            />
+          </div>
+
+          {/* Waiter for delivery too */}
+          <div>
+            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
+              {isAr ? "مندوب / ويتر" : "Staff"}
+            </div>
+            <select
+              value={selectedWaiterId ?? ""}
+              onChange={(e) => onWaiterChange(e.target.value || null)}
+              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
+            >
+              <option value="">{isAr ? "— اختر —" : "— None —"}</option>
+              {waiters.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name || w.email}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       ) : null}
 
-      {orderType === "DINE_IN" ? (
-        <div className="rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-4">
-          <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[#46644b]">
-            Service charge / رسوم الخدمة
+      {/* ── PICKUP: quick waiter ── */}
+      {orderType === "PICKUP" ? (
+        <div>
+          <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
+            {isAr ? "مندوب الاستلام" : "Staff (pickup)"}
           </div>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={serviceChargeAmount}
-            onChange={(event) => onServiceChargeChange(event.target.value)}
-            className="mt-2.5 h-10 w-full rounded-[12px] border border-[#cbd5cf] bg-white px-3 text-xs font-black text-[#233329]"
-          />
+          <select
+            value={selectedWaiterId ?? ""}
+            onChange={(e) => onWaiterChange(e.target.value || null)}
+            className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329]"
+          >
+            <option value="">{isAr ? "— اختر —" : "— None —"}</option>
+            {waiters.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name || w.email}
+              </option>
+            ))}
+          </select>
         </div>
       ) : null}
     </div>

@@ -20,6 +20,7 @@ import {
   MergeTablesDto,
   SplitTableDto,
   TransferTableDto,
+  UpdateTableReservationDto,
   UpdateTableStatusDto,
   UpdateTableWaiterDto,
 } from "./dto/pos.dto";
@@ -35,7 +36,6 @@ export class PosTableController {
 
   @Get()
   async listTables() {
-    const now = new Date();
     const rows = await this.prisma.posTable.findMany({
       include: {
         assignedWaiter: {
@@ -44,10 +44,9 @@ export class PosTableController {
         reservations: {
           where: {
             status: "ACTIVE",
-            reservedTo: { gt: now },
           },
           orderBy: { reservedFrom: "asc" },
-          take: 1,
+          take: 20,
           select: {
             id: true,
             reservedFrom: true,
@@ -71,7 +70,72 @@ export class PosTableController {
       orderBy: { tableNumber: "asc" },
     });
 
-    return rows;
+    // Collect all preOrderSaleIds for a single batch enrichment query
+    const allParsed = rows.flatMap((table) =>
+      (table.reservations ?? []).map((r: any) =>
+        this.posService.parseReservationNotes(typeof r.notes === "string" ? r.notes : null),
+      ),
+    );
+    const preOrderSaleIds = allParsed
+      .map((p) => p.preOrderSaleId)
+      .filter((id): id is string => Boolean(id));
+
+    const preOrderSalesMap = new Map<string, any>();
+    if (preOrderSaleIds.length) {
+      const sales = await this.prisma.salesInvoice.findMany({
+        where: {
+          id: { in: preOrderSaleIds },
+          posOperationalStatus: { in: ["DRAFT", "HELD"] as any },
+        },
+        include: {
+          lines: {
+            select: { itemName: true, quantity: true },
+            orderBy: { lineNumber: "asc" as any },
+            take: 5,
+          },
+        },
+      });
+      for (const s of sales) {
+        preOrderSalesMap.set(s.id, s);
+      }
+    }
+
+    return rows.map((table) => ({
+      ...table,
+      reservations: (table.reservations ?? []).map((r: any) => {
+        const parsed = this.posService.parseReservationNotes(
+          typeof r.notes === "string" ? r.notes : null,
+        );
+        const preOrderSale = parsed.preOrderSaleId
+          ? preOrderSalesMap.get(parsed.preOrderSaleId) ?? null
+          : null;
+
+        return {
+          ...r,
+          notes: parsed.notes,
+          orderNotes: parsed.orderNotes,
+          attendanceStatus: parsed.attendanceStatus,
+          attendanceMarkedAt: parsed.attendanceMarkedAt,
+          preOrderSaleId: parsed.preOrderSaleId,
+          preOrder: preOrderSale
+            ? {
+                saleId: preOrderSale.id,
+                lineCount: preOrderSale.lines.length,
+                totalAmount: preOrderSale.totalAmount.toString(),
+                itemsPreview: preOrderSale.lines.map((l: any) => ({
+                  name: l.itemName ?? "",
+                  quantity: Number(l.quantity),
+                })),
+              }
+            : null,
+        };
+      }),
+    }));
+  }
+
+  @Post("reservations/:reservationId/pre-order")
+  openPreOrder(@Param("reservationId") reservationId: string, @Req() req: any) {
+    return this.posService.openReservationPreOrder(reservationId, req.user);
   }
 
   @Post(":id/reservations")
@@ -82,6 +146,15 @@ export class PosTableController {
   @Post("reservations/:reservationId/cancel")
   cancelReservation(@Param("reservationId") reservationId: string, @Body() dto: CancelTableReservationDto, @Req() req: any) {
     return this.posService.cancelTableReservation(reservationId, dto, req.user);
+  }
+
+  @Put("reservations/:reservationId")
+  updateReservation(
+    @Param("reservationId") reservationId: string,
+    @Body() dto: UpdateTableReservationDto,
+    @Req() req: any,
+  ) {
+    return this.posService.updateTableReservation(reservationId, dto, req.user);
   }
 
 

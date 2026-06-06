@@ -104,6 +104,7 @@ export function PosProductCard({
   isFavorite,
   onToggleFavorite,
   allowNegativeStock,
+  disabled,
 }: {
   item: InventoryItem;
   currencyCode: string;
@@ -111,6 +112,7 @@ export function PosProductCard({
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   allowNegativeStock?: boolean;
+  disabled?: boolean;
 }) {
   const { language } = useTranslation();
   const price = parseAmount(item.defaultSalesPrice);
@@ -119,16 +121,29 @@ export function PosProductCard({
   const lowStock =
     item.trackInventory && qty > 0 && reorderLevel > 0 && qty <= reorderLevel;
   const blockedNoStock = item.trackInventory && qty <= 0 && !allowNegativeStock;
+  const isDisabled = disabled || blockedNoStock;
 
   const visuals = getCategoryVisuals(item, language);
   const CategoryIcon = visuals.icon;
 
   return (
     <div
-      onClick={blockedNoStock ? undefined : onAdd}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-disabled={isDisabled}
+      onClick={isDisabled ? undefined : onAdd}
+      onKeyDown={(event) => {
+        if (isDisabled) {
+          return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onAdd();
+        }
+      }}
       className={cn(
         "group flex flex-col overflow-hidden rounded-[16px] bg-white p-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none",
-        blockedNoStock
+        isDisabled
           ? "opacity-60 cursor-not-allowed"
           : "cursor-pointer hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)] active:scale-[0.98]"
       )}

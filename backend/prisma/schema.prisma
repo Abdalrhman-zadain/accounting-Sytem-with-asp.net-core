@@ -132,6 +132,8 @@ enum PosRefundMethod {
 enum PosAccessRoleCode {
   CASHIER
   ACCOUNTANT
+  KITCHEN
+  WAITER
 }
 
 enum PosPermissionCode {
@@ -1061,6 +1063,7 @@ model InventoryItem {
   // Restaurant Recipe relations
   recipe              RestaurantRecipe?
   recipesAsIngredient RestaurantRecipeIngredient[]
+  posAddonLinks       PosItemAddonGroup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2371,6 +2374,7 @@ model SalesInvoice {
   deliveryCompanyId   String?
   deliveryCompany     DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: Restrict)
   kitchenOrder        KitchenOrder?
+  waiterConfirmedAt   DateTime?
 
   // Audits & Corrections
   originalOrderType OrderType?
@@ -2583,9 +2587,12 @@ model SalesInvoiceLine {
   // Modifier options / cooking levels / extras
   modifiers Json?
 
+  kitchenSentAt DateTime?
+
   createdAt       DateTime         @default(now())
   creditNoteLines CreditNoteLine[]
   posReturnLines  PosReturnLine[]
+  kitchenOrderItems KitchenOrderItem[]
 
   @@unique([salesInvoiceId, lineNumber])
   @@index([itemId])
@@ -2964,34 +2971,90 @@ model DeliveryDriver {
   salesInvoices SalesInvoice[]
 }
 
+enum PosAddonSelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+model PosAddonGroup {
+  id            String                @id @default(cuid())
+  code          String                @unique
+  name          String
+  nameAr        String?
+  selectionType PosAddonSelectionType @default(SINGLE)
+  isRequired    Boolean               @default(false)
+  minSelections Int                   @default(0)
+  maxSelections Int?
+  sortOrder     Int                   @default(0)
+  isActive      Boolean               @default(true)
+  options       PosAddonOption[]
+  itemLinks     PosItemAddonGroup[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model PosAddonOption {
+  id              String        @id @default(cuid())
+  groupId         String
+  group           PosAddonGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name            String
+  nameAr          String?
+  priceAdjustment Decimal       @default(0) @db.Decimal(18, 2)
+  sortOrder       Int           @default(0)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([groupId, isActive, sortOrder])
+}
+
+model PosItemAddonGroup {
+  id        String         @id @default(cuid())
+  itemId    String
+  item      InventoryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     PosAddonGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sortOrder Int            @default(0)
+
+  @@unique([itemId, groupId])
+  @@index([itemId])
+}
+
 model KitchenOrder {
-  id             String             @id @default(cuid())
-  orderNumber    String             @unique
-  salesInvoiceId String?            @unique
-  salesInvoice   SalesInvoice?      @relation(fields: [salesInvoiceId], references: [id], onDelete: SetNull)
-  tableId        String?
-  tableName      String?
-  waiterId       String?
-  waiterName     String?
-  orderType      OrderType
-  status         KitchenStatus      @default(NEW)
-  notes          String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  items          KitchenOrderItem[]
+  id                     String             @id @default(cuid())
+  orderNumber            String             @unique
+  salesInvoiceId         String?            @unique
+  salesInvoice           SalesInvoice?      @relation(fields: [salesInvoiceId], references: [id], onDelete: SetNull)
+  tableId                String?
+  tableName              String?
+  waiterId               String?
+  waiterName             String?
+  orderType              OrderType
+  status                 KitchenStatus      @default(NEW)
+  notes                  String?
+  hasUpdateNotification  Boolean            @default(false)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  items                  KitchenOrderItem[]
 }
 
 model KitchenOrderItem {
-  id             String        @id @default(cuid())
-  kitchenOrderId String
-  kitchenOrder   KitchenOrder  @relation(fields: [kitchenOrderId], references: [id], onDelete: Cascade)
-  itemId         String
-  itemName       String
-  quantity       Decimal       @db.Decimal(18, 4)
-  modifiers      Json?
-  status         KitchenStatus @default(NEW)
-  notes          String?
-  createdAt      DateTime      @default(now())
+  id                 String            @id @default(cuid())
+  kitchenOrderId     String
+  kitchenOrder       KitchenOrder      @relation(fields: [kitchenOrderId], references: [id], onDelete: Cascade)
+  salesInvoiceLineId String?
+  salesInvoiceLine   SalesInvoiceLine? @relation(fields: [salesInvoiceLineId], references: [id], onDelete: SetNull)
+  itemId             String
+  itemName           String
+  quantity           Decimal           @db.Decimal(18, 4)
+  modifiers          Json?
+  status             KitchenStatus     @default(NEW)
+  notes              String?
+  createdAt          DateTime          @default(now())
+
+  @@index([salesInvoiceLineId])
 }
 
 model RestaurantRecipe {

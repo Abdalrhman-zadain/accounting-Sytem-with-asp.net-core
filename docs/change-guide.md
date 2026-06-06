@@ -740,8 +740,12 @@ What else to check:
 - all three POS sale payloads (`holdSale`, `saveDraftSale`, `completeSale`) must stay aligned for restaurant fields; do not add `orderType`, `tableId`, charges, or delivery notes to only one payload
 - if `orderType === "DINE_IN"`, the register should require a selected table before completion and should clear `tableId` when the user switches away from dine-in
 - `mapPosSale`, `posSaleInclude`, and `mapPosSaleToHeldSale` must stay in sync so drafts/held sales resume with the original order type, table, and fee metadata
+- `listDraftSales` / `listHeldSales` return `heldContext` on each sale (`DRAFT`, `HELD`, `RESERVATION_PREORDER`, `TABLE_ORDER`, plus order type/table/reservation window); the held-sales UI uses it for badges and resume links must pass `reservationId` when resuming a reservation pre-order
 - any frontend total shown to the cashier must include persisted restaurant charges such as `serviceChargeAmount` and `deliveryFeeAmount`, otherwise the pay modal and backend totals drift
 - use `GET /pos/tables` and `GET /pos/kitchen/orders` for live restaurant visibility instead of hardcoded demo state
+- kitchen and delivery boards are feature-owned in `pos-kitchen-page.tsx` (`PosKitchenWorkspace`) and `pos-delivery-page.tsx` (`PosDeliveryWorkspace`); routes `app/(erp)/pos/kitchen/page.tsx` and `app/(erp)/pos/delivery/page.tsx` re-export the main POS page (`../page`) so they render inside `PosPage` like the register
+- POS access role `KITCHEN` (`PosAccessRoleCode` in Prisma) is kitchen-display-only: routes `/pos` + `/pos/kitchen`, permissions `RST_VIEW_KITCHEN_SCREEN` / `RST_UPDATE_KITCHEN_STATUS`. Seed with `npx ts-node prisma/setup-pos-kitchen.ts` in `backend/`
+- keep KDS / delivery kanban UI changes in those workspace modules, not duplicated in `pos-page.tsx`
 - the register-side table controls, delivery panel, and cashier close-shift modal are feature-owned in `frontend/features/pos/pos-page.tsx`; if they grow further, split them into feature-local components rather than moving them into route files or generic UI
 - accountant review now includes session-grouped cash, inventory, journal, and order-correction flows; when extending that area, keep the review screen tied to backend review/session/journal APIs rather than rebuilding calculations purely in the client
 
@@ -749,6 +753,11 @@ Must remain compatible:
 
 - base POS sale completion, held sale resume, and accountant-review flows
 - `SalesInvoice.invoiceType = POS` lifecycle invariants
+- waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx`
+- confirm-to-kitchen: `POST /pos/sales/:id/send-to-kitchen` in `pos.controller.ts` / `PosService.sendSaleToKitchen`; draft saves no longer auto-create kitchen tickets — only explicit send (waiter confirm or cashier incremental send)
+- cashier/kitchen edit rule: lines with `kitchenSentAt` stay editable in the register until the linked `KitchenOrderItem` is `READY` or `SERVED`; saving draft/hold/complete runs `syncKitchenOrderWithInvoice` so removed lines (or an empty cart) drop off the kitchen board and the whole `KitchenOrder` is deleted when no items remain; completed/refunded/voided POS sales cannot be edited
+- register **Update kitchen / تحديث المطبخ** calls `POST /pos/sales/update-kitchen` (`PosService.updateSaleKitchen`): saves the table/cart order, marks current lines for kitchen, then `rebuildKitchenOrderFromInvoice` replaces the whole KOT with that order (removals drop off the board); the order status is **not** reset to `NEW` — it preserves its current status, and `hasUpdateNotification` is set to `true` so the kitchen board shows a persistent "Cashier updated" alert; incremental `send-to-kitchen` on an existing ticket also sets `hasUpdateNotification`; the alert persists until kitchen staff clicks ✕ (`PUT /pos/kitchen/orders/:id/dismiss-notification`); the kitchen board polls every 3s with an audible chime on new alerts; the register auto-syncs kitchen tickets ~2s after cart edits on orders that already have a KOT (silent), and cashiers can still use **Update kitchen** manually
+- opening a dine-in table from `/pos/tables` or the register table picker must resume the table's active draft/held sale (`tableId` + `resume` when `activeInvoice` exists); do not reset the cart before held/draft queries finish loading
 - current route ownership under `frontend/features/pos`
 
 Checks to run:
@@ -766,6 +775,7 @@ Where to edit:
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
 - POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+- POS add-on demo groups (extras, cooking level, drink size) linked to sandwich/chips/drinks: `backend/prisma/seed-pos-addons.ts` (runs with register seed); refresh only add-ons on an existing DB with `npm run seed:pos-addons`
 
 ### Volume seed (enterprise demo dataset)
 
@@ -822,3 +832,28 @@ What else to check:
 - if the difference exceeds the configured tolerance threshold (defaulting to 10 JOD), selecting "ACCEPT" requires manager/administrator privileges; otherwise, the option is blocked and a warning is shown.
 - decisions of CORRECTION, REJECT, and REOPEN update the session state, log to the audit log, and return early without posting any accounting entries.
 - accepting the discrepancy updates the session's `differenceStatus = 'ACCEPTED_DIFFERENCE'` and `reviewStatus = 'APPROVED'`, then returns control to the review screen. Session posting remains a separate explicit action after the discrepancy has been accepted.
+
+## Reservation Pre-Order Flow
+
+Added in: reservation pre-order task.
+
+Where to edit:
+
+- backend logic lives in `backend/src/modules/phase-3-sales-receivables/pos/pos.service.ts` — methods `openReservationPreOrder`, `parseReservationNotes`, `syncReservationPreOrder`, and `buildPreOrderSummary`
+- the `POST /pos/tables/reservations/:reservationId/pre-order` endpoint is in `backend/src/modules/phase-3-sales-receivables/pos/pos-table.controller.ts`
+- `GET /pos/tables` reservation enrichment (preOrder summary) is also in `pos-table.controller.ts` `listTables`
+- frontend table UI: `frontend/app/(erp)/pos/tables/page.tsx` — reservation card and `handleOpenPreOrder`
+- frontend POS register: `frontend/features/pos/pos-page.tsx` — `urlReservationId`, `activeReservationId` state, pre-order banner, and `reservationId` propagation through hold/save mutations
+- API helper: `openPosReservationPreOrder` in `frontend/lib/api/index.ts`
+- shared modal shell: `frontend/components/ui/index.tsx` — POS cancel/confirm dialogs portal to `document.body` so they are not clipped by the register layout
+
+Key rules:
+
+- register **Cancel** clears a local-only cart without `POS_VOID_DRAFT_SALE`; void permission is required only when cancelling a resumed draft/held invoice (`editingInvoiceId`)
+- confirm cancel must await `voidPosSale` before `resetSale()` when a server-backed draft/held invoice is open
+- **Hold** requires an active session id, persists the sale as `HELD` for the current shift, and only redirects back to `/pos/tables` for reservation pre-orders — not for ordinary dine-in table holds
+
+- a pre-order HELD sale must NOT call `updateTableStatus` — the table stays `AVAILABLE` and has no `activeInvoiceId`
+- pass `reservationId` in `HoldPosSaleDto` / `SavePosDraftDto` to trigger skip of table activation in `saveDraftLikeSale`
+- `preOrderSaleId` is stored inside the `PosTableReservation.notes` JSON blob alongside `orderNotes`, `attendanceStatus`, etc.
+- one pre-order per reservation at a time; a new pre-order replaces the link if the previous sale is no longer DRAFT/HELD

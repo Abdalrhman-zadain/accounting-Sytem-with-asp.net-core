@@ -3,6 +3,7 @@ import { JwtAuthGuard } from "../../platform/auth/guards/jwt-auth.guard";
 import { PrismaService } from "../../../common/prisma/prisma.service";
 import { UpdateKitchenOrderStatusDto, UpdateKitchenOrderItemStatusDto, ReprintKotDto } from "./dto/pos.dto";
 import { KitchenStatus } from "../../../generated/prisma";
+import type { AuthorizedUser } from "../../platform/auth/auth.types";
 import { PosService } from "./pos.service";
 
 @UseGuards(JwtAuthGuard)
@@ -14,7 +15,8 @@ export class PosKitchenController {
   ) {}
 
   @Get("orders")
-  async listOrders(@Query("status") status?: KitchenStatus) {
+  async listOrders(@Req() req: { user?: AuthorizedUser }, @Query("status") status?: KitchenStatus) {
+    this.posService.assertKitchenViewPermission(req.user);
     return this.prisma.kitchenOrder.findMany({
       where: status ? { status } : undefined,
       include: {
@@ -25,7 +27,8 @@ export class PosKitchenController {
   }
 
   @Get("orders/:id")
-  async getOrder(@Param("id") id: string) {
+  async getOrder(@Req() req: { user?: AuthorizedUser }, @Param("id") id: string) {
+    this.posService.assertKitchenViewPermission(req.user);
     const order = await this.prisma.kitchenOrder.findUnique({
       where: { id },
       include: {
@@ -66,7 +69,12 @@ export class PosKitchenController {
   }
 
   @Put("items/:itemId/status")
-  async updateOrderItemStatus(@Param("itemId") itemId: string, @Body() dto: UpdateKitchenOrderItemStatusDto) {
+  async updateOrderItemStatus(
+    @Req() req: { user?: AuthorizedUser },
+    @Param("itemId") itemId: string,
+    @Body() dto: UpdateKitchenOrderItemStatusDto,
+  ) {
+    this.posService.assertKitchenUpdatePermission(req.user);
     const item = await this.prisma.kitchenOrderItem.findUnique({
       where: { id: itemId },
     });
@@ -105,7 +113,30 @@ export class PosKitchenController {
   }
 
   @Post("orders/:id/reprint")
-  async reprintKot(@Param("id") id: string, @Body() dto: ReprintKotDto, @Req() req: any) {
+  async reprintKot(
+    @Param("id") id: string,
+    @Body() dto: ReprintKotDto,
+    @Req() req: { user?: AuthorizedUser },
+  ) {
+    this.posService.assertKitchenUpdatePermission(req.user);
     return this.posService.auditKotReprint(id, dto, req.user);
+  }
+
+  @Put("orders/:id/dismiss-notification")
+  async dismissNotification(
+    @Param("id") id: string,
+    @Req() req: { user?: AuthorizedUser },
+  ) {
+    this.posService.assertKitchenViewPermission(req.user);
+    const order = await this.prisma.kitchenOrder.findUnique({
+      where: { id },
+    });
+    if (!order) {
+      throw new NotFoundException(`Kitchen order with ID ${id} was not found.`);
+    }
+    return this.prisma.kitchenOrder.update({
+      where: { id },
+      data: { hasUpdateNotification: false },
+    });
   }
 }

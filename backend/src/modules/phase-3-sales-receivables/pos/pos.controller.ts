@@ -152,6 +152,16 @@ export class PosController {
     return this.service.saveDraft(dto, req.user);
   }
 
+  @Post("sales/:id/send-to-kitchen")
+  sendSaleToKitchen(@Req() req: Request & { user?: any }, @Param("id") id: string) {
+    return this.service.sendSaleToKitchen(id, req.user);
+  }
+
+  @Post("sales/update-kitchen")
+  updateSaleKitchen(@Req() req: Request & { user?: any }, @Body() dto: SavePosDraftDto) {
+    return this.service.updateSaleKitchen(dto, req.user);
+  }
+
   @Post("sales/complete")
   completeSale(@Req() req: Request & { user?: any }, @Body() dto: CompletePosSaleDto) {
     return this.service.completeSale(dto, req.user);

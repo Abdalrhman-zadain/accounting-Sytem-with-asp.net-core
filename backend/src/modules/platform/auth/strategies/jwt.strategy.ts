@@ -27,6 +27,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             allowedRoutes: Array.isArray(payload.allowedRoutes) ? payload.allowedRoutes : [],
             defaultRoute: payload.defaultRoute ?? '/dashboard',
             isCashierOnly: Boolean(payload.isCashierOnly),
+            isKitchenOnly: Boolean(payload.isKitchenOnly),
+            isWaiterOnly: Boolean(payload.isWaiterOnly),
         };
     }
 }

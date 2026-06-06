@@ -1,6 +1,7 @@
 import {
   AuditAction,
   DeliveryStatus,
+  KitchenStatus,
   OrderType,
   PosAccountingStatus,
   PosOperationalStatus,
@@ -13,6 +14,20 @@ describe("PosService restaurant operations", () => {
   const prismaMock = {
     salesInvoice: {
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      update: jest.fn(),
+      create: jest.fn(),
+    },
+    salesInvoiceLine: {
+      deleteMany: jest.fn(),
+    },
+    customer: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    posPayment: {
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
       update: jest.fn(),
     },
     account: {
@@ -20,9 +35,6 @@ describe("PosService restaurant operations", () => {
     },
     bankCashAccount: {
       findFirst: jest.fn(),
-    },
-    posPayment: {
-      update: jest.fn(),
     },
     user: {
       findUnique: jest.fn(),
@@ -44,9 +56,18 @@ describe("PosService restaurant operations", () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    posSession: {
+      findUnique: jest.fn(),
+    },
     kitchenOrder: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
+    },
+    kitchenOrderItem: {
+      delete: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
     },
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
@@ -597,6 +618,480 @@ describe("PosService restaurant operations", () => {
         status: TableStatus.OCCUPIED,
         activeInvoiceId: "inv1",
       },
+    });
+  });
+
+  describe("saveDraft waiter permissions", () => {
+    const waiterWithoutCompleteSale = {
+      userId: "waiter1",
+      posRoles: ["WAITER"],
+      permissions: [
+        "RST_SEND_KOT",
+        "RST_VIEW_TABLE_SCREEN",
+        "RST_OPEN_TABLE_ORDER",
+        "POS_HOLD_SALE",
+        "POS_ADD_ITEM_TO_CART",
+      ],
+    } as any;
+
+    it("allows waiter saveDraft with hold/table-order permissions only", async () => {
+      prismaMock.posSession.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.saveDraft(
+          {
+            sessionId: "s1",
+            orderType: "DINE_IN",
+            tableId: "t1",
+            waiterId: "waiter1",
+            lines: [{ itemId: "item1", quantity: 1, unitPrice: 5, lineAmount: 5 }],
+          } as any,
+          waiterWithoutCompleteSale,
+        ),
+      ).rejects.toThrow("POS session s1 was not found");
+    });
+
+    it("rejects waiter saveDraft without draft permissions", async () => {
+      await expect(
+        service.saveDraft(
+          { sessionId: "s1", lines: [{ itemId: "item1", quantity: 1 }] } as any,
+          {
+            userId: "waiter1",
+            posRoles: ["WAITER"],
+            permissions: ["RST_SEND_KOT"],
+          } as any,
+        ),
+      ).rejects.toThrow("permission to save POS drafts");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pre-order helper unit tests
+// ---------------------------------------------------------------------------
+
+describe("PosService.parseReservationNotes", () => {
+  let service: PosService;
+
+  beforeEach(() => {
+    const prismaMock = {
+      salesInvoice: { findUnique: jest.fn(), update: jest.fn() },
+      posPayment: { update: jest.fn() },
+      user: { findUnique: jest.fn() },
+      journalEntry: { findFirst: jest.fn() },
+      deliveryCompany: { findUnique: jest.fn() },
+      deliveryDriver: { findUnique: jest.fn() },
+      posTable: { findUnique: jest.fn(), update: jest.fn() },
+      kitchenOrder: { findUnique: jest.fn(), update: jest.fn() },
+      $queryRaw: jest.fn(),
+      $executeRaw: jest.fn(),
+      $transaction: jest.fn(),
+    };
+    service = new PosService(
+      prismaMock as never,
+      { log: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  });
+
+  it("returns defaults for null input", () => {
+    const result = service.parseReservationNotes(null);
+    expect(result.notes).toBeNull();
+    expect(result.orderNotes).toBeNull();
+    expect(result.attendanceStatus).toBe("UNKNOWN");
+    expect(result.preOrderSaleId).toBeNull();
+    expect(result.preOrderUpdatedAt).toBeNull();
+  });
+
+  it("returns defaults for plain-string notes (legacy format)", () => {
+    const result = service.parseReservationNotes("some notes");
+    expect(result.notes).toBe("some notes");
+    expect(result.orderNotes).toBeNull();
+    expect(result.preOrderSaleId).toBeNull();
+  });
+
+  it("parses JSON notes correctly including preOrderSaleId", () => {
+    const payload = JSON.stringify({
+      notes: "vip",
+      orderNotes: "2 burgers",
+      attendanceStatus: "ARRIVED",
+      attendanceMarkedAt: "2026-06-03T10:00:00.000Z",
+      preOrderSaleId: "sale123",
+      preOrderUpdatedAt: "2026-06-03T10:00:00.000Z",
+    });
+    const result = service.parseReservationNotes(payload);
+    expect(result.notes).toBe("vip");
+    expect(result.orderNotes).toBe("2 burgers");
+    expect(result.attendanceStatus).toBe("ARRIVED");
+    expect(result.preOrderSaleId).toBe("sale123");
+    expect(result.preOrderUpdatedAt).toBe("2026-06-03T10:00:00.000Z");
+  });
+
+  it("returns null for preOrderSaleId when not present in JSON", () => {
+    const payload = JSON.stringify({ notes: null, attendanceStatus: "UNKNOWN" });
+    const result = service.parseReservationNotes(payload);
+    expect(result.preOrderSaleId).toBeNull();
+  });
+
+  it("handles malformed JSON gracefully", () => {
+    const result = service.parseReservationNotes("{bad json");
+    expect(result.preOrderSaleId).toBeNull();
+    expect(result.attendanceStatus).toBe("UNKNOWN");
+  });
+});
+
+describe("PosService.openReservationPreOrder — guard conditions", () => {
+  const prismaMock = {
+    posTableReservation: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    salesInvoice: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+    salesInvoiceLine: { deleteMany: jest.fn() },
+    posSession: { findFirst: jest.fn(), findUnique: jest.fn() },
+    posTable: { findUnique: jest.fn(), update: jest.fn() },
+    customer: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
+    taxTreatment: { findFirst: jest.fn() },
+    user: { findUnique: jest.fn() },
+    journalEntry: { findFirst: jest.fn() },
+    salesInvoiceCounter: { upsert: jest.fn() },
+    kitchenOrder: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    kitchenOrderItem: { delete: jest.fn(), update: jest.fn(), count: jest.fn() },
+    posPayment: { deleteMany: jest.fn() },
+    posRuntimeSetting: { findMany: jest.fn().mockResolvedValue([]) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(),
+  };
+
+  let service: PosService;
+  const user = {
+    userId: "u1",
+    permissions: ["POS_VIEW_POS_SCREEN"],
+  } as any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaMock.posRuntimeSetting.findMany.mockResolvedValue([]);
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock as never),
+    );
+    service = new PosService(
+      prismaMock as never,
+      { log: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  });
+
+  it("throws NotFoundException when reservation does not exist", async () => {
+    prismaMock.posTableReservation.findUnique.mockResolvedValue(null);
+    await expect(
+      service.openReservationPreOrder("nonexistent", user),
+    ).rejects.toThrow("Reservation not found.");
+  });
+
+  it("throws BadRequestException when reservation is not ACTIVE", async () => {
+    prismaMock.posTableReservation.findUnique.mockResolvedValue({
+      id: "r1",
+      status: "CANCELLED",
+      notes: null,
+      table: { id: "t1", tableNumber: "T1", activeInvoiceId: null },
+    });
+    await expect(
+      service.openReservationPreOrder("r1", user),
+    ).rejects.toThrow("Only ACTIVE reservations can have pre-orders.");
+  });
+
+  it("throws BadRequestException when table already has an active order", async () => {
+    prismaMock.posTableReservation.findUnique.mockResolvedValue({
+      id: "r1",
+      status: "ACTIVE",
+      notes: null,
+      table: { id: "t1", tableNumber: "T1", activeInvoiceId: "existing-invoice" },
+    });
+    await expect(
+      service.openReservationPreOrder("r1", user),
+    ).rejects.toThrow("Cannot add pre-order: the table already has a different active order.");
+  });
+
+  it("does NOT update table activeInvoiceId when creating a pre-order", async () => {
+    prismaMock.posTableReservation.findUnique.mockResolvedValue({
+      id: "r1",
+      status: "ACTIVE",
+      notes: JSON.stringify({ preOrderSaleId: null }),
+      table: { id: "t1", tableNumber: "T1", activeInvoiceId: null },
+    });
+    prismaMock.posSession.findFirst.mockResolvedValue({ id: "sess1", status: "OPEN" });
+    prismaMock.taxTreatment.findFirst.mockResolvedValue({ id: "tax1" });
+    prismaMock.customer.findFirst.mockResolvedValue({ id: "cust-walkin", isActive: true });
+    prismaMock.customer.findUnique.mockResolvedValue({ id: "cust-walkin", isActive: true });
+    prismaMock.customer.create.mockResolvedValue({ id: "cust-walkin", isActive: true });
+    prismaMock.salesInvoiceCounter.upsert.mockResolvedValue({ lastNumber: 1 });
+    prismaMock.salesInvoice.findFirst.mockResolvedValue(null);
+    prismaMock.salesInvoice.create.mockResolvedValue({
+      id: "preorder-inv",
+      reference: "POS-001",
+      status: "DRAFT",
+      invoiceDate: new Date(),
+      subtotalAmount: { toString: () => "0" },
+      discountAmount: { toString: () => "0" },
+      taxAmount: { toString: () => "0" },
+      totalAmount: { toString: () => "0" },
+      allocatedAmount: { toString: () => "0" },
+      outstandingAmount: { toString: () => "0" },
+      posOperationalStatus: "HELD",
+      posAccountingStatus: "UNPOSTED",
+      posChangeAmount: null,
+      posVoidedAt: null,
+      posVoidReason: null,
+      posReviewedAt: null,
+      posReviewedByUserId: null,
+      posReviewNotes: null,
+      posCompletedAt: null,
+      postedAt: null,
+      serviceChargeAmount: { toString: () => "0" },
+      deliveryFeeAmount: { toString: () => "0" },
+      isCorrected: false,
+      correctedAt: null,
+      correctionReason: null,
+      orderType: "DINE_IN",
+      originalOrderType: null,
+      tableId: "t1",
+      waiterId: null,
+      deliveryStatus: null,
+      deliveryAddress: null,
+      deliveryNotes: null,
+      deliveryCompanyId: null,
+      driverId: null,
+      lines: [],
+      posPayments: [],
+      posSession: null,
+      customer: { id: "cust-walkin", name: "Walk-in" },
+      table: { id: "t1", tableNumber: "T1", status: "AVAILABLE" },
+      waiter: null,
+      deliveryCompany: null,
+      driver: null,
+      journalEntry: null,
+      createdAt: new Date("2026-06-03T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-03T10:00:00.000Z"),
+    });
+    prismaMock.posTableReservation.update.mockResolvedValue({});
+
+    await service.openReservationPreOrder("r1", user);
+
+    // Crucially: posTable.update should NOT have been called to set activeInvoiceId
+    expect(prismaMock.posTable.update).not.toHaveBeenCalled();
+    // The reservation should have been updated with the preOrderSaleId
+    expect(prismaMock.posTableReservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "r1" },
+        data: expect.objectContaining({
+          notes: expect.stringContaining("preorder-inv"),
+        }),
+      }),
+    );
+  });
+
+  describe("sendSaleToKitchen / waiter lock", () => {
+    const waiterUser = {
+      userId: "waiter1",
+      posRoles: ["WAITER"],
+      permissions: [
+        "RST_SEND_KOT",
+        "RST_VIEW_TABLE_SCREEN",
+        "RST_OPEN_TABLE_ORDER",
+        "POS_HOLD_SALE",
+        "POS_COMPLETE_SALE",
+      ],
+    } as any;
+
+    const cashierUser = {
+      userId: "cashier1",
+      posRoles: ["CASHIER"],
+      permissions: ["RST_SEND_KOT", "POS_VIEW_POS_SCREEN", "POS_COMPLETE_SALE"],
+    } as any;
+
+    it("rejects waiter completeSale", async () => {
+      await expect(
+        service.completeSale({ sessionId: "s1", lines: [], payments: [] } as any, waiterUser),
+      ).rejects.toThrow("Waiters cannot complete sales or take payment");
+    });
+
+    it("rejects waiter second confirm after waiterConfirmedAt", async () => {
+      prismaMock.salesInvoice.findUnique.mockResolvedValue({
+        id: "inv1",
+        invoiceType: "POS",
+        posOperationalStatus: "DRAFT",
+        waiterConfirmedAt: new Date(),
+        orderType: "DINE_IN",
+        tableId: "t1",
+        waiterId: "waiter1",
+        description: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            itemName: "Burger",
+            quantity: { toString: () => "1" },
+            description: null,
+            modifiers: null,
+            kitchenSentAt: new Date(),
+          },
+        ],
+        kitchenOrder: { id: "kot1", items: [] },
+      });
+
+      await expect(service.sendSaleToKitchen("inv1", waiterUser)).rejects.toThrow(
+        "already confirmed",
+      );
+    });
+
+    it("rejects cashier saveDraft that removes a kitchen line marked ready", async () => {
+      const salesReceivablesMock = {
+        resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
+          { itemId: "item2", quantity: 1 },
+        ]),
+        computeSalesDocumentTotals: jest.fn().mockReturnValue({
+          subtotalAmount: 5,
+          discountAmount: 0,
+          taxAmount: 0,
+          totalAmount: 5,
+        }),
+        buildSalesInvoiceLineInput: jest.fn(),
+      };
+      const lockedService = new PosService(
+        prismaMock as never,
+        { log: jest.fn() } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        salesReceivablesMock as never,
+      );
+
+      prismaMock.posSession.findUnique.mockResolvedValue({
+        id: "s1",
+        status: "OPEN",
+        cashAccountId: "bc-1",
+        warehouseId: "wh1",
+      });
+      prismaMock.customer.findFirst.mockResolvedValue({
+        id: "cust-walkin",
+        isActive: true,
+      });
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.READY }],
+      });
+      prismaMock.salesInvoice.findUnique.mockResolvedValue({
+        id: "inv1",
+        invoiceType: "POS",
+        posSessionId: "s1",
+        posOperationalStatus: "DRAFT",
+        journalEntryId: null,
+        waiterConfirmedAt: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" },
+            kitchenSentAt: new Date(),
+          },
+        ],
+      });
+
+      await expect(
+        lockedService.saveDraft(
+          {
+            sessionId: "s1",
+            invoiceId: "inv1",
+            lines: [{ itemId: "item2", quantity: 1 }],
+          } as any,
+          cashierUser,
+        ),
+      ).rejects.toThrow("ready or served");
+    });
+
+    it("rejects any cart change when the order already has a kitchen-ready line", async () => {
+      const salesReceivablesMock = {
+        resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
+          { salesInvoiceLineId: "line1", itemId: "item1", quantity: 3 },
+          { salesInvoiceLineId: "line2", itemId: "item2", quantity: 1 },
+        ]),
+        computeSalesDocumentTotals: jest.fn().mockReturnValue({
+          subtotalAmount: 20,
+          discountAmount: 0,
+          taxAmount: 0,
+          totalAmount: 20,
+        }),
+        buildSalesInvoiceLineInput: jest.fn(),
+      };
+      const lockedService = new PosService(
+        prismaMock as never,
+        { log: jest.fn() } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        salesReceivablesMock as never,
+      );
+
+      prismaMock.posSession.findUnique.mockResolvedValue({
+        id: "s1",
+        status: "OPEN",
+        cashAccountId: "bc-1",
+        warehouseId: "wh1",
+      });
+      prismaMock.customer.findFirst.mockResolvedValue({
+        id: "cust-walkin",
+        isActive: true,
+      });
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.READY }],
+      });
+      prismaMock.salesInvoice.findUnique.mockResolvedValue({
+        id: "inv1",
+        invoiceType: "POS",
+        posSessionId: "s1",
+        posOperationalStatus: "DRAFT",
+        journalEntryId: null,
+        waiterConfirmedAt: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" },
+            kitchenSentAt: new Date(),
+          },
+          {
+            id: "line2",
+            itemId: "item2",
+            quantity: { toString: () => "1" },
+            kitchenSentAt: null,
+          },
+        ],
+      });
+
+      await expect(
+        lockedService.saveDraft(
+          {
+            sessionId: "s1",
+            invoiceId: "inv1",
+            lines: [
+              { salesInvoiceLineId: "line1", itemId: "item1", quantity: 2 },
+              { salesInvoiceLineId: "line2", itemId: "item2", quantity: 2 },
+            ],
+          } as any,
+          cashierUser,
+        ),
+      ).rejects.toThrow("kitchen-ready items");
     });
   });
 });

@@ -9,7 +9,7 @@ export const ACCOUNT_TYPES = [
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
-export type PosAccessRole = "CASHIER" | "ACCOUNTANT";
+export type PosAccessRole = "CASHIER" | "ACCOUNTANT" | "KITCHEN" | "WAITER";
 export type PosPermissionCode =
   | "POS_OPEN_SESSION"
   | "POS_CLOSE_OWN_SESSION"
@@ -44,7 +44,20 @@ export type PosPermissionCode =
   | "VIEW_INVENTORY_MOVEMENTS"
   | "POS_CREDIT_SALE"
   | "POS_SELL_NEGATIVE_STOCK"
-  | "POS_CHANGE_UNIT_PRICE";
+  | "POS_CHANGE_UNIT_PRICE"
+  | "RST_VIEW_TABLE_SCREEN"
+  | "RST_VIEW_KITCHEN_SCREEN"
+  | "RST_UPDATE_KITCHEN_STATUS"
+  | "RST_SEND_KOT"
+  | "RST_CANCEL_KOT_ITEM"
+  | "RST_REPRINT_KOT"
+  | "RST_OPEN_TABLE_ORDER"
+  | "RST_CREATE_TAKEAWAY_ORDER"
+  | "RST_CREATE_DELIVERY_ORDER"
+  | "RST_ASSIGN_DRIVER"
+  | "RST_APPLY_SERVICE_CHARGE"
+  | "RST_COMPLETE_RESTAURANT_PAYMENT"
+  | "RST_PRINT_PRE_BILL";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -3488,6 +3501,7 @@ export type HoldPosSalePayload = {
   deliveryCompanyId?: string;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
+  reservationId?: string;
 };
 
 export type SavePosDraftPayload = {
@@ -3508,6 +3522,7 @@ export type SavePosDraftPayload = {
   deliveryCompanyId?: string;
   lines: SalesLinePayload[];
   payments?: PosPaymentEntryPayload[];
+  reservationId?: string;
 };
 
 export type CompletePosSalePayload = {
@@ -3620,6 +3635,22 @@ export type PosSession = {
   updatedAt: string;
 };
 
+export type PosSaleHeldContextSource =
+  | "DRAFT"
+  | "HELD"
+  | "RESERVATION_PREORDER"
+  | "TABLE_ORDER";
+
+export type PosSaleHeldContext = {
+  source: PosSaleHeldContextSource;
+  reservationId?: string | null;
+  reservedFrom?: string | null;
+  reservedTo?: string | null;
+  tableNumber?: string | null;
+  orderType?: PosOrderType | null;
+  isActiveTableOrder?: boolean;
+};
+
 export type PosSale = {
   id: string;
   reference: string;
@@ -3649,6 +3680,7 @@ export type PosSale = {
   originalOrderType?: PosOrderType | null;
   tableId?: string | null;
   waiterId?: string | null;
+  waiterConfirmedAt?: string | null;
   serviceChargeAmount?: string | null;
   deliveryFeeAmount?: string | null;
   deliveryStatus?: DeliveryStatus | null;
@@ -3682,10 +3714,12 @@ export type PosSale = {
     id: string;
     name: string;
   } | null;
+  heldContext?: PosSaleHeldContext | null;
   table?: {
     id: string;
     tableNumber: string;
     status: PosTableStatus;
+    activeInvoiceId?: string | null;
   } | null;
   waiter?: {
     id: string;
@@ -3708,6 +3742,9 @@ export type PosSale = {
     lineAmount: string;
     revenueAccountId: string;
     taxId?: string | null;
+    kitchenSentAt?: string | null;
+    kitchenItemStatus?: KitchenStatus | null;
+    modifiers?: unknown;
     item?: Pick<InventoryItem, "id" | "code" | "name" | "type" | "trackInventory"> | null;
     warehouse?: Pick<InventoryWarehouse, "id" | "code" | "name"> | null;
   }>;
@@ -3738,8 +3775,18 @@ export type PosTable = {
     reservedTo: string;
     status: "ACTIVE" | "CANCELLED" | "EXPIRED";
     notes?: string | null;
+    orderNotes?: string | null;
+    attendanceStatus?: "UNKNOWN" | "ARRIVED" | "NO_SHOW";
+    attendanceMarkedAt?: string | null;
     createdByUserId?: string | null;
     createdAt: string;
+    preOrderSaleId?: string | null;
+    preOrder?: {
+      saleId: string;
+      lineCount: number;
+      totalAmount: string;
+      itemsPreview: Array<{ name: string; quantity: number }>;
+    } | null;
   }>;
   assignedWaiterId?: string | null;
   assignedWaiter?: {
@@ -3795,6 +3842,9 @@ export type PosTimeWindowReport = {
     reservedTo: string;
     status: "ACTIVE" | "CANCELLED" | "EXPIRED";
     notes?: string | null;
+    orderNotes?: string | null;
+    attendanceStatus?: "UNKNOWN" | "ARRIVED" | "NO_SHOW";
+    attendanceMarkedAt?: string | null;
     createdByUserId?: string | null;
     createdAt: string;
   }>;
@@ -3824,6 +3874,7 @@ export type KitchenOrder = {
   orderType: PosOrderType;
   status: KitchenStatus;
   notes?: string | null;
+  hasUpdateNotification: boolean;
   createdAt: string;
   updatedAt: string;
   items: Array<{

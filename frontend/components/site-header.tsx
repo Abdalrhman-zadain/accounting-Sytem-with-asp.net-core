@@ -33,14 +33,19 @@ import {
   LuUndo2 as Undo2,
   LuChartNoAxesColumn as ChartNoAxesColumn,
   LuUtensils as Utensils,
+  LuChefHat as ChefHat,
+  LuTruck as Truck,
+  LuMaximize2 as Maximize2,
+  LuMinimize2 as Minimize2,
 } from "react-icons/lu";
 
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { useTranslation, TranslationKey } from "@/lib/i18n";
 import { useSettings } from "@/providers/settings-provider";
+import { useKdsMode } from "@/providers/kds-mode-provider";
 import { queryKeys } from "@/lib/query-keys";
-import { canAccessRoute } from "@/lib/auth-access";
+import { canAccessRoute, isKitchenOnlyUser, isWaiterOnlyUser } from "@/lib/auth-access";
 import {
   getAgingReport,
   getAccountOptions,
@@ -110,6 +115,8 @@ const navGroups: NavGroup[] = [
         children: [
           { href: "/pos/register", labelKey: "pos.workspace.sales", icon: Monitor },
           { href: "/pos/tables", labelKey: "pos.workspace.tables", icon: Utensils },
+          { href: "/pos/kitchen", labelKey: "pos.workspace.kitchen", icon: ChefHat },
+          { href: "/pos/delivery", labelKey: "pos.workspace.delivery", icon: Truck },
           { href: "/pos/sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
           { href: "/pos/held-sales", labelKey: "pos.workspace.held", icon: FileClock },
           { href: "/pos/accounting-review", labelKey: "pos.workspace.review", icon: ClipboardCheck },
@@ -183,7 +190,9 @@ export function SiteHeader({
   const { isAuthenticated, isHydrated, logout, user, token } = useAuth();
   const { t } = useTranslation();
   const { language, setLanguage } = useSettings();
+  const { kitchenMode, toggleKitchenMode } = useKdsMode();
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const isKitchenRoute = pathname?.startsWith("/pos/kitchen");
 
   const isItemExpanded = (href: string, isActive: boolean) => {
     if (expandedItems[href] !== undefined) {
@@ -434,7 +443,37 @@ export function SiteHeader({
     }
   };
 
-  const visibleNavGroups = navGroups
+  const kitchenOnly = isKitchenOnlyUser(user);
+  const waiterOnly = isWaiterOnlyUser(user);
+
+  const visibleNavGroups = (waiterOnly
+    ? [
+        {
+          labelKey: "nav.item.pos",
+          items: [
+            {
+              href: "/pos/waiter/tables",
+              labelKey: "pos.workspace.tables",
+              icon: Utensils,
+            },
+          ],
+        },
+      ]
+    : kitchenOnly
+      ? [
+          {
+            labelKey: "nav.item.pos",
+            items: [
+              {
+                href: "/pos/kitchen",
+                labelKey: "pos.workspace.kitchen",
+                icon: ChefHat,
+              },
+            ],
+          },
+        ]
+      : navGroups
+  )
     .map((group) => ({
       ...group,
       items: group.items
@@ -536,6 +575,26 @@ export function SiteHeader({
           {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           <span className={cn(isCollapsed && "sr-only")}>{isCollapsed ? "Open" : "Close"}</span>
         </button>
+
+        {isKitchenRoute && canAccessRoute(user, "/pos/kitchen") ? (
+          <button
+            type="button"
+            onClick={toggleKitchenMode}
+            className={cn(
+              "flex w-full items-center rounded-lg border px-3 py-2.5 text-xs font-bold transition-all",
+              isCollapsed ? "justify-center" : "justify-between gap-2",
+              kitchenMode
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50",
+            )}
+            title={kitchenMode ? t("pos.kitchen.exitKitchenMode") : t("pos.kitchen.kitchenMode")}
+          >
+            {kitchenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            <span className={cn(isCollapsed && "sr-only")}>
+              {kitchenMode ? t("pos.kitchen.exitKitchenMode") : t("pos.kitchen.kitchenMode")}
+            </span>
+          </button>
+        ) : null}
       </div>
 
       <nav className="flex-1 overflow-y-auto space-y-10 px-4 py-8">

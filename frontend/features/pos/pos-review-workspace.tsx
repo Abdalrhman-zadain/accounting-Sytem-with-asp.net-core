@@ -1669,6 +1669,7 @@ export function PosReviewWorkspace({
           isOpen={isCorrectOrderTypeOpen}
           onClose={onCloseCorrectionModal}
           title={t("pos.review.correctOrderTypeModal")}
+          size="3xl"
         >
           <div className="space-y-4 text-start" dir={pageDir}>
             <Field label={getTranslation("pos.review.orderType", "نوع الطلب")} required labelAlign="start">
@@ -1776,6 +1777,7 @@ export function PosReviewWorkspace({
           isOpen={isCorrectPaymentMethodOpen}
           onClose={onClosePaymentCorrectionModal}
           title={t("pos.review.correctPaymentMethodModal")}
+          size="3xl"
         >
           <div className="space-y-4 text-start" dir={pageDir}>
             <div className="grid gap-3 sm:grid-cols-2">

@@ -138,7 +138,10 @@ Key fields:
 - invoice `allocatedAmount`, `outstandingAmount`, and `allocationStatus`
 - quotation line `itemId` (optional link to `InventoryItem`) plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineAmount`/`lineTotalAmount`, and `revenueAccountId`
 - sales-order line `itemId` (optional link to `InventoryItem`) plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineTotalAmount`, and `revenueAccountId`
-- sales-invoice line `itemId` (optional link to `InventoryItem`), optional `warehouseId` for inventory-tracked lines, plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineAmount`, and `revenueAccountId`
+- sales-invoice line `itemId` (optional link to `InventoryItem`), optional `warehouseId` for inventory-tracked lines, plus snapshot/display fields `itemName`, `quantity`, `unitPrice`, `discountAmount`, `taxAmount`, `lineSubtotalAmount`, `lineAmount`, `revenueAccountId`, and optional `kitchenSentAt` (set when the line is included in a KOT send)
+- POS dine-in invoice optional `waiterConfirmedAt` (first waiter confirm-to-kitchen timestamp); `KitchenOrderItem` may link back to `SalesInvoiceLine` through optional `salesInvoiceLineId` for incremental KOT rounds
+- KitchenOrder `hasUpdateNotification` boolean (default false) — set to true when `rebuildKitchenOrderFromInvoice` replaces a kitchen ticket for an already-existing order; kitchen staff must explicitly dismiss the notification via `PUT /pos/kitchen/orders/:id/dismiss-notification`
+- POS add-ons: `PosAddonGroup` (code, name, `selectionType` SINGLE|MULTIPLE, required/min/max rules), `PosAddonOption` (name, `priceAdjustment`), `PosItemAddonGroup` (links inventory items to addon groups). Selected add-ons are stored on `SalesInvoiceLine.modifiers` as JSON `{ addons: [{ groupId, groupName, optionId, name, priceAdjustment }] }`. Line kitchen notes use `SalesInvoiceLine.description`; whole-order kitchen notes use `SalesInvoice.description`.
 - quotation, sales-order, sales-invoice, and credit-note lines may optionally reference `Tax` through `taxId`; the stored `taxAmount` remains the historical calculated amount
 - customer receipt transactions `customerId`, settlement text, and links to posted receipt transactions
 - allocation `amount`, `allocatedAt`, and links to posted receipt transactions
@@ -671,3 +674,22 @@ Do not assume:
 - header and posting accounts are interchangeable
 - balance updates can be skipped because ledger rows exist
 - a bank/cash registry row replaces the linked chart-of-accounts account; it is an operational wrapper around that posting account
+
+## PosTableReservation Notes JSON
+
+`PosTableReservation.notes` stores a JSON blob (as a plain `String` column — no migration required). The schema is:
+
+```json
+{
+  "notes": "string | null",
+  "orderNotes": "string | null",
+  "attendanceStatus": "UNKNOWN | ARRIVED | NO_SHOW",
+  "attendanceMarkedAt": "ISO string | null",
+  "preOrderSaleId": "SalesInvoice.id | null",
+  "preOrderUpdatedAt": "ISO string | null"
+}
+```
+
+- `preOrderSaleId` links a HELD `SalesInvoice` (POS type) that was created as a pre-order for this reservation. The table does NOT become `OCCUPIED`; no `activeInvoiceId` is set on `PosTable`.
+- One pre-order per reservation at a time. If the previously linked sale is no longer DRAFT/HELD, opening the pre-order again creates a new sale and replaces the link.
+- Parse this with `PosService.parseReservationNotes(raw)` — never parse inline to avoid divergence.

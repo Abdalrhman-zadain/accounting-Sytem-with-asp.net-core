@@ -23,6 +23,7 @@ import {
   TableStatus,
   OrderType,
   DeliveryStatus,
+  KitchenStatus,
 } from "../../../generated/prisma";
 
 import { PrismaService } from "../../../common/prisma/prisma.service";
@@ -87,10 +88,11 @@ export class PosService {
   ) {}
 
   async getActiveSession(user?: AuthorizedUser) {
+    const waiterOnly = this.isWaiterOnlyUser(user);
     const session = await this.prisma.posSession.findFirst({
       where: {
         status: PosSessionStatus.OPEN,
-        cashierUserId: user?.userId ?? undefined,
+        ...(waiterOnly ? {} : { cashierUserId: user?.userId ?? undefined }),
       },
       include: this.posSessionInclude(),
       orderBy: { openedAt: "desc" },
@@ -143,6 +145,80 @@ export class PosService {
       salesReturnsAccountId: settingsMap.get("POS_MAPPING_SALES_RETURNS_ACCOUNT_ID") || null,
       deliveryCompanies,
     };
+  }
+
+  async sendSaleToKitchen(invoiceId: string, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("RST_SEND_KOT", user);
+    const waiterOnly = this.isWaiterOnlyUser(user);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.salesInvoice.findUnique({
+        where: { id: invoiceId.trim() },
+        include: {
+          lines: { orderBy: { lineNumber: "asc" } },
+          kitchenOrder: { include: { items: true } },
+        },
+      });
+
+      if (!invoice || invoice.invoiceType !== SalesInvoiceType.POS) {
+        throw new BadRequestException("POS sale was not found.");
+      }
+      if (
+        invoice.posOperationalStatus !== PosOperationalStatus.DRAFT &&
+        invoice.posOperationalStatus !== PosOperationalStatus.HELD
+      ) {
+        throw new BadRequestException("Only open POS orders can be sent to the kitchen.");
+      }
+      if (waiterOnly && invoice.waiterConfirmedAt) {
+        throw new ForbiddenException("This order was already confirmed and cannot be sent again.");
+      }
+
+      const unsentLines = invoice.lines.filter((line) => !line.kitchenSentAt);
+      if (!unsentLines.length) {
+        throw new BadRequestException("There are no new items to send to the kitchen.");
+      }
+
+      const sentAt = new Date();
+      await tx.salesInvoiceLine.updateMany({
+        where: { id: { in: unsentLines.map((line) => line.id) } },
+        data: { kitchenSentAt: sentAt },
+      });
+
+      const headerPatch: Prisma.SalesInvoiceUpdateInput = {};
+      if (waiterOnly && !invoice.waiterConfirmedAt) {
+        headerPatch.waiterConfirmedAt = sentAt;
+        if (user?.userId) {
+          headerPatch.waiter = { connect: { id: user.userId } };
+        }
+      }
+      if (Object.keys(headerPatch).length) {
+        await tx.salesInvoice.update({
+          where: { id: invoice.id },
+          data: headerPatch,
+        });
+      }
+
+      await this.appendKitchenOrderItems(tx, invoice, unsentLines);
+
+      return tx.salesInvoice.findUniqueOrThrow({
+        where: { id: invoice.id },
+        include: this.posSaleInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "KitchenOrder",
+      entityId: result.id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "KOT_SENT",
+        salesInvoiceId: result.id,
+        reference: result.reference,
+      },
+    });
+
+    return this.mapPosSale(result);
   }
 
   async getSettings(user?: AuthorizedUser) {
@@ -328,7 +404,7 @@ export class PosService {
   }
   async createTableReservation(
     tableId: string,
-    dto: { reservedFrom: string; reservedTo: string; notes?: string },
+    dto: { reservedFrom: string; reservedTo: string; notes?: string; orderNotes?: string },
     user?: AuthorizedUser,
   ) {
     // TODO: add explicit permission when permissions list is finalized
@@ -343,21 +419,15 @@ export class PosService {
     if (to <= from) {
       throw new BadRequestException("Reservation end time must be after start time.");
     }
-    // For "special" reservations we require same-day (choose date once, then pick time range).
-    // We validate using the UTC calendar date portion of the parsed ISO timestamps.
-    const fromUtcDate = from.toISOString().slice(0, 10);
-    const toUtcDate = to.toISOString().slice(0, 10);
-    if (fromUtcDate !== toUtcDate) {
-      throw new BadRequestException("Special reservation must be within the same day.");
+    const windowMs = to.getTime() - from.getTime();
+    const maxWindowMs = 24 * 60 * 60 * 1000;
+    if (windowMs > maxWindowMs) {
+      throw new BadRequestException("Reservation window cannot exceed 24 hours.");
     }
 
     return this.prisma.$transaction(async (tx) => {
       const table = await tx.posTable.findUnique({ where: { id: tableId } });
       if (!table) throw new NotFoundException("Table not found.");
-
-      if (table.activeInvoiceId) {
-        throw new BadRequestException("Table already has an active order.");
-      }
 
       const overlap = await tx.posTableReservation.findFirst({
         where: {
@@ -379,15 +449,19 @@ export class PosService {
           reservedFrom: from,
           reservedTo: to,
           status: "ACTIVE",
-          notes: dto.notes?.trim() || null,
+          notes: JSON.stringify({
+            notes: dto.notes?.trim() || null,
+            orderNotes: dto.orderNotes?.trim() || null,
+            attendanceStatus: "UNKNOWN",
+            attendanceMarkedAt: null,
+            preOrderSaleId: null,
+            preOrderUpdatedAt: null,
+          }),
           createdByUserId: user?.userId ?? null,
         },
       });
 
-      await tx.posTable.update({
-        where: { id: tableId },
-        data: { status: "RESERVED" },
-      });
+      await this.refreshTableOperationalStatus(tx, tableId);
 
       return reservation;
     });
@@ -418,19 +492,92 @@ export class PosService {
         data: { status: "CANCELLED" },
       });
 
-      const stillActive = await tx.posTableReservation.findFirst({
-        where: { tableId: reservation.tableId, status: "ACTIVE" },
-        select: { id: true },
-      });
-
-      if (!stillActive) {
-        await tx.posTable.update({
-          where: { id: reservation.tableId },
-          data: { status: "AVAILABLE" },
-        });
-      }
+      await this.refreshTableOperationalStatus(tx, reservation.tableId);
 
       return { success: true };
+    });
+  }
+
+  async updateTableReservation(
+    reservationId: string,
+    dto: { notes?: string; orderNotes?: string; attendanceStatus?: "UNKNOWN" | "ARRIVED" | "NO_SHOW" },
+    user?: AuthorizedUser,
+  ) {
+    // TODO: add explicit permission when permissions list is finalized
+    // this.ensurePosPermissionCode("RST_UPDATE_TABLE_RESERVATION", user);
+
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.posTableReservation.findUnique({
+        where: { id: reservationId },
+        select: { id: true, tableId: true, status: true },
+      });
+      if (!reservation) throw new NotFoundException("Reservation not found.");
+      if (reservation.status !== "ACTIVE") {
+        throw new BadRequestException("Only ACTIVE reservations can be updated.");
+      }
+
+      const current = await tx.posTableReservation.findUnique({
+        where: { id: reservationId },
+        select: { notes: true },
+      });
+
+      const existingParsed = this.parseReservationNotes(typeof current?.notes === "string" ? current.notes : null);
+
+      const nextPayload = {
+        notes: dto.notes !== undefined ? (dto.notes?.trim() || null) : existingParsed.notes,
+        orderNotes:
+          dto.orderNotes !== undefined ? (dto.orderNotes?.trim() || null) : existingParsed.orderNotes,
+        attendanceStatus:
+          dto.attendanceStatus !== undefined ? dto.attendanceStatus : existingParsed.attendanceStatus,
+        attendanceMarkedAt:
+          dto.attendanceStatus !== undefined ? new Date().toISOString() : existingParsed.attendanceMarkedAt,
+        preOrderSaleId: existingParsed.preOrderSaleId,
+        preOrderUpdatedAt: existingParsed.preOrderUpdatedAt,
+      };
+
+      const updated = await tx.posTableReservation.update({
+        where: { id: reservationId },
+        data: {
+          notes: JSON.stringify(nextPayload),
+        },
+        select: {
+          id: true,
+          tableId: true,
+          reservedFrom: true,
+          reservedTo: true,
+          status: true,
+          notes: true,
+          createdByUserId: true,
+          createdAt: true,
+        },
+      });
+
+      await this.refreshTableOperationalStatus(tx, updated.tableId);
+
+      await this.auditService.log({
+        userId: user?.userId || "system",
+        entity: "PosTableReservation",
+        entityId: reservationId,
+        action: AuditAction.UPDATE,
+        details: {
+          message: "Reservation updated",
+          reservationId,
+          tableId: updated.tableId,
+          attendanceStatus: nextPayload.attendanceStatus,
+        },
+      });
+
+      return {
+        ...updated,
+        reservedFrom: updated.reservedFrom.toISOString(),
+        reservedTo: updated.reservedTo.toISOString(),
+        notes: nextPayload.notes,
+        orderNotes: nextPayload.orderNotes,
+        attendanceStatus: nextPayload.attendanceStatus,
+        attendanceMarkedAt: nextPayload.attendanceMarkedAt,
+        preOrderSaleId: nextPayload.preOrderSaleId,
+        createdAt: updated.createdAt.toISOString(),
+      };
     });
   }
   async listFavoriteItemIds(user?: AuthorizedUser) {
@@ -637,7 +784,7 @@ export class PosService {
       orderBy: { updatedAt: "desc" },
     });
 
-    return rows.map((row) => this.mapPosSale(row));
+    return this.mapPosSalesWithHeldContext(rows);
   }
 
   async listDraftSales(sessionId: string, user?: AuthorizedUser) {
@@ -655,7 +802,7 @@ export class PosService {
       orderBy: { updatedAt: "desc" },
     });
 
-    return rows.map((row) => this.mapPosSale(row));
+    return this.mapPosSalesWithHeldContext(rows);
   }
 
   async listCompletedSales(user?: AuthorizedUser) {
@@ -700,14 +847,94 @@ export class PosService {
   }
 
   async saveDraft(dto: SavePosDraftDto, user?: AuthorizedUser) {
-    this.ensurePosPermission("SELL", user);
+    this.ensureCanSavePosDraft(user);
     return this.saveDraftLikeSale(dto, user, PosOperationalStatus.DRAFT);
+  }
+
+  /** Persist cart changes, then replace the kitchen ticket with the full current order. */
+  async updateSaleKitchen(dto: SavePosDraftDto, user?: AuthorizedUser) {
+    this.ensureCanSavePosDraft(user);
+
+    let invoiceId = dto.invoiceId?.trim() || null;
+    if (!invoiceId && dto.tableId?.trim()) {
+      const table = await this.prisma.posTable.findUnique({
+        where: { id: dto.tableId.trim() },
+        select: { activeInvoiceId: true },
+      });
+      invoiceId = table?.activeInvoiceId ?? null;
+    }
+    if (!invoiceId) {
+      throw new BadRequestException(
+        "Open table order or invoiceId is required to update the kitchen ticket.",
+      );
+    }
+
+    const sale = await this.saveDraftLikeSale(
+      { ...dto, invoiceId },
+      user,
+      PosOperationalStatus.DRAFT,
+      { skipKitchenSync: true },
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.salesInvoice.findUnique({
+        where: { id: sale.id },
+        include: { lines: { orderBy: { lineNumber: "asc" } } },
+      });
+      if (!invoice) {
+        return;
+      }
+
+      const kitchenLocks = await this.loadKitchenLineStatusByInvoiceLineId(tx, sale.id);
+      const sentAt = new Date();
+      const lineIdsToMark = invoice.lines
+        .filter((line) => {
+          if (!line.kitchenSentAt) {
+            return true;
+          }
+          return !this.isInvoiceLineKitchenLocked(
+            kitchenLocks,
+            line.id,
+            line.kitchenSentAt,
+          );
+        })
+        .map((line) => line.id);
+
+      if (lineIdsToMark.length) {
+        await tx.salesInvoiceLine.updateMany({
+          where: { id: { in: lineIdsToMark } },
+          data: { kitchenSentAt: sentAt },
+        });
+      }
+
+      await this.rebuildKitchenOrderFromInvoice(tx, sale.id);
+    });
+
+    const refreshed = await this.prisma.salesInvoice.findUniqueOrThrow({
+      where: { id: sale.id },
+      include: this.posSaleInclude(),
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "KitchenOrder",
+      entityId: refreshed.id,
+      action: AuditAction.UPDATE,
+      details: {
+        message: "KOT_REBUILT_FROM_CART",
+        salesInvoiceId: refreshed.id,
+        reference: refreshed.reference,
+      },
+    });
+
+    return this.mapPosSale(refreshed);
   }
 
   private async saveDraftLikeSale(
     dto: HoldPosSaleDto | SavePosDraftDto,
     user: AuthorizedUser | undefined,
     status: PosOperationalStatus,
+    options?: { skipKitchenSync?: boolean },
   ) {
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
@@ -735,7 +962,9 @@ export class PosService {
     const holdPaymentAccountMap = dto.payments?.length
       ? await this.resolvePaymentAccounts(dto.payments)
       : null;
-    if (totals.totalAmount <= 0) {
+    const isClearingOpenSale =
+      Boolean(dto.invoiceId?.trim()) && resolvedLines.length === 0;
+    if (totals.totalAmount <= 0 && !isClearingOpenSale) {
       throw new BadRequestException("Held POS sales require at least one billable line.");
     }
 
@@ -745,20 +974,20 @@ export class PosService {
         dto.invoiceId?.trim()
           ? await tx.salesInvoice.findUnique({
               where: { id: dto.invoiceId.trim() },
-              select: {
-                id: true,
-                posSessionId: true,
-                invoiceType: true,
-                posOperationalStatus: true,
-                journalEntryId: true,
-                tableId: true,
-              },
+              include: { lines: { orderBy: { lineNumber: "asc" } } },
             })
           : null;
+      let sentLineIdsToKeep: string[] = [];
       if (existing) {
         this.ensureDraftLikePosSale(existing, session.id);
+        sentLineIdsToKeep = await this.applyOpenPosSaleLineChanges(
+          tx,
+          user,
+          existing,
+          dto.lines,
+          resolvedLines,
+        );
         await tx.posPayment.deleteMany({ where: { salesInvoiceId: existing.id } });
-        await tx.salesInvoiceLine.deleteMany({ where: { salesInvoiceId: existing.id } });
       }
 
       const restaurantFields = {
@@ -801,8 +1030,10 @@ export class PosService {
                 posReviewedAt: null,
                 posReviewedByUserId: null,
                 lines: {
-                  create: resolvedLines.map((line, index) =>
-                    this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+                  create: this.buildDraftLineCreates(
+                    existing,
+                    resolvedLines,
+                    sentLineIdsToKeep,
                   ),
                 },
                 ...restaurantFields,
@@ -839,16 +1070,23 @@ export class PosService {
             });
 
       // Manage dine-in tables
+      const isPreOrder = Boolean(dto.reservationId?.trim());
       if (existing && existing.tableId && existing.tableId !== dto.tableId) {
         await this.updateTableStatus(tx, existing.tableId, null, null);
       }
-      if (dto.tableId?.trim()) {
+      if (dto.tableId?.trim() && !isPreOrder) {
         await this.updateTableStatus(tx, dto.tableId.trim(), invoice.id, TableStatus.OCCUPIED);
       }
 
-      await this.createOrUpdateKitchenOrder(tx, invoice.id, dto);
+      // Keep the reservation preOrderSaleId in sync when this is a pre-order save
+      if (isPreOrder && dto.reservationId) {
+        await this.syncReservationPreOrder(tx, dto.reservationId, invoice.id);
+      }
 
       if (dto.payments?.length) {
+        if (this.isWaiterOnlyUser(user)) {
+          throw new ForbiddenException("Waiters cannot record payments on held sales.");
+        }
         await tx.posPayment.createMany({
           data: dto.payments.map((payment) => ({
             salesInvoiceId: invoice.id,
@@ -863,6 +1101,16 @@ export class PosService {
             reference: payment.reference?.trim() || null,
           })),
         });
+      }
+
+      if (existing && !options?.skipKitchenSync) {
+        const kitchenOrder = await tx.kitchenOrder.findUnique({
+          where: { salesInvoiceId: invoice.id },
+          select: { id: true },
+        });
+        if (kitchenOrder) {
+          await this.rebuildKitchenOrderFromInvoice(tx, invoice.id);
+        }
       }
 
       return tx.salesInvoice.findUniqueOrThrow({
@@ -888,6 +1136,9 @@ export class PosService {
 
   async completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("SELL", user);
+    if (this.isWaiterOnlyUser(user)) {
+      throw new ForbiddenException("Waiters cannot complete sales or take payment.");
+    }
     const session = await this.ensureOpenSession(dto.sessionId);
     const walkInCustomer = await this.ensureWalkInCustomer();
     let customerId = walkInCustomer.id;
@@ -990,20 +1241,20 @@ export class PosService {
         dto.invoiceId?.trim()
           ? await tx.salesInvoice.findUnique({
               where: { id: dto.invoiceId.trim() },
-              select: {
-                id: true,
-                posSessionId: true,
-                invoiceType: true,
-                posOperationalStatus: true,
-                journalEntryId: true,
-                tableId: true,
-              },
+              include: { lines: { orderBy: { lineNumber: "asc" } } },
             })
           : null;
+      let sentLineIdsToKeep: string[] = [];
       if (existing) {
         this.ensureDraftLikePosSale(existing, session.id);
+        sentLineIdsToKeep = await this.applyOpenPosSaleLineChanges(
+          tx,
+          user,
+          existing,
+          dto.lines,
+          resolvedLines,
+        );
         await tx.posPayment.deleteMany({ where: { salesInvoiceId: existing.id } });
-        await tx.salesInvoiceLine.deleteMany({ where: { salesInvoiceId: existing.id } });
         if (existing.journalEntryId) {
           await tx.journalEntryLine.deleteMany({ where: { journalEntryId: existing.journalEntryId } });
           await tx.journalEntry.delete({ where: { id: existing.journalEntryId } });
@@ -1056,8 +1307,10 @@ export class PosService {
               posReceiptNumber: receiptNumber,
               posChangeAmount: this.toAmount(normalizedPayments.changeAmount),
               lines: {
-                create: resolvedLines.map((line, index) =>
-                  this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+                create: this.buildDraftLineCreates(
+                  existing,
+                  resolvedLines,
+                  sentLineIdsToKeep,
                 ),
               },
               ...restaurantFields,
@@ -1112,7 +1365,32 @@ export class PosService {
         await this.updateTableStatus(tx, dto.tableId.trim(), null, null);
       }
 
-      await this.createOrUpdateKitchenOrder(tx, invoice.id, dto);
+      if (existing) {
+        const kitchenOrder = await tx.kitchenOrder.findUnique({
+          where: { salesInvoiceId: invoice.id },
+          select: { id: true },
+        });
+        if (kitchenOrder) {
+          await this.rebuildKitchenOrderFromInvoice(tx, invoice.id);
+        }
+      }
+
+      const unsentAtComplete = await tx.salesInvoiceLine.findMany({
+        where: { salesInvoiceId: invoice.id, kitchenSentAt: null },
+        orderBy: { lineNumber: "asc" },
+      });
+      if (unsentAtComplete.length && dto.orderType) {
+        const sentAt = new Date();
+        await tx.salesInvoiceLine.updateMany({
+          where: { id: { in: unsentAtComplete.map((line) => line.id) } },
+          data: { kitchenSentAt: sentAt },
+        });
+        const invoiceForKot = await tx.salesInvoice.findUniqueOrThrow({
+          where: { id: invoice.id },
+          include: { lines: true },
+        });
+        await this.appendKitchenOrderItems(tx, invoiceForKot, unsentAtComplete);
+      }
 
       await tx.posPayment.createMany({
         data: normalizedPayments.payments.map((payment) => ({
@@ -1364,11 +1642,11 @@ export class PosService {
     if (sale.posSessionId) {
       const session = await this.prisma.posSession.findUnique({
         where: { id: sale.posSessionId },
-        select: { difference: true, differenceStatus: true },
+        select: { difference: true },
       });
       if (session) {
         const diffVal = Number(session.difference || 0);
-        if (diffVal !== 0 && session.differenceStatus !== "ACCEPTED_DIFFERENCE") {
+        if (diffVal !== 0) {
           throw new BadRequestException("لا يمكن ترحيل القيود المحاسبية لهذه الوردية لوجود فارق كاش لم يتم قبوله بعد.");
         }
       }
@@ -1423,8 +1701,6 @@ export class PosService {
         expectedCash: true,
         actualCash: true,
         status: true,
-        differenceStatus: true,
-        reviewStatus: true,
       },
     });
     if (!session) {
@@ -1433,8 +1709,8 @@ export class PosService {
 
     const diffVal = Number(session.difference || 0);
 
-    // If there is a cash difference and no differenceStatus exists yet:
-    if (diffVal !== 0 && session.differenceStatus !== "ACCEPTED_DIFFERENCE") {
+    // If there is a cash difference, require an explicit decision.
+    if (diffVal !== 0) {
       if (!dto.decision) {
         throw new BadRequestException("يجب مراجعة فارق الكاش أولاً واتخاذ قرار بشأنه.");
       }
@@ -1455,11 +1731,7 @@ export class PosService {
         await this.prisma.posSession.update({
           where: { id },
           data: {
-            differenceStatus: "ACCEPTED_DIFFERENCE",
-            reviewStatus: "APPROVED",
-            acceptedByUserId: user?.userId ?? null,
-            acceptedAt: new Date(),
-            acceptanceReason: dto.reason.trim(),
+            notes: dto.reason.trim(),
           },
         });
 
@@ -1486,15 +1758,12 @@ export class PosService {
           sessionNumber: session.sessionNumber,
           approvedCount: 0,
           sales: [],
-          differenceStatus: "ACCEPTED_DIFFERENCE",
-          reviewStatus: "APPROVED",
         };
       } else if (dto.decision === "CORRECTION") {
         await this.prisma.posSession.update({
           where: { id },
           data: {
-            reviewStatus: "CORRECTION_REQUESTED",
-            rejectionReason: dto.reason?.trim() || null,
+            notes: dto.reason?.trim() || null,
           },
         });
         
@@ -1521,7 +1790,6 @@ export class PosService {
           sessionNumber: session.sessionNumber,
           approvedCount: 0,
           sales: [],
-          reviewStatus: "CORRECTION_REQUESTED",
         };
       } else if (dto.decision === "REJECT") {
         if (!dto.reason || !dto.reason.trim()) {
@@ -1530,8 +1798,7 @@ export class PosService {
         await this.prisma.posSession.update({
           where: { id },
           data: {
-            reviewStatus: "REJECTED",
-            rejectionReason: dto.reason.trim(),
+            notes: dto.reason.trim(),
           },
         });
 
@@ -1558,7 +1825,6 @@ export class PosService {
           sessionNumber: session.sessionNumber,
           approvedCount: 0,
           sales: [],
-          reviewStatus: "REJECTED",
         };
       } else if (dto.decision === "REOPEN") {
         await this.prisma.posSession.update({
@@ -1568,12 +1834,7 @@ export class PosService {
             closedAt: null,
             actualCash: null,
             difference: null,
-            reviewStatus: null,
-            differenceStatus: null,
-            acceptedByUserId: null,
-            acceptedAt: null,
-            acceptanceReason: null,
-            rejectionReason: null,
+            notes: null,
           },
         });
 
@@ -2630,6 +2891,18 @@ export class PosService {
     };
   }
 
+  private ensureCanSavePosDraft(user?: AuthorizedUser) {
+    if (
+      this.hasPosPermissionCode("POS_HOLD_SALE", user) ||
+      this.hasPosPermissionCode("POS_COMPLETE_SALE", user) ||
+      (this.isWaiterOnlyUser(user) &&
+        this.hasPosPermissionCode("RST_OPEN_TABLE_ORDER", user))
+    ) {
+      return;
+    }
+    throw new BadRequestException("You do not have permission to save POS drafts.");
+  }
+
   private ensurePosPermission(
     action:
       | "OPEN_SESSION"
@@ -2660,6 +2933,22 @@ export class PosService {
     if (!this.hasPosPermissionCode(permissionCode, user)) {
       throw new BadRequestException(`You do not have permission for ${permissionCode}.`);
     }
+  }
+
+  assertKitchenViewPermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("RST_VIEW_KITCHEN_SCREEN", user);
+  }
+
+  assertKitchenUpdatePermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("RST_UPDATE_KITCHEN_STATUS", user);
+  }
+
+  assertPosAddonAdminPermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
+  }
+
+  assertPosAddonReadPermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
   }
 
   private hasPosPermissionCode(permissionCode: PosPermissionCode, user?: AuthorizedUser) {
@@ -4636,6 +4925,7 @@ export class PosService {
           id: true,
           tableNumber: true,
           status: true,
+          activeInvoiceId: true,
         },
       },
       waiter: {
@@ -4678,6 +4968,13 @@ export class PosService {
             select: { id: true, email: true, name: true },
           },
           warehouse: { select: { id: true, code: true, name: true } },
+        },
+      },
+      kitchenOrder: {
+        select: {
+          id: true,
+          status: true,
+          items: { select: { salesInvoiceLineId: true, status: true } },
         },
       },
       lines: {
@@ -4866,6 +5163,72 @@ export class PosService {
     };
   }
 
+  private async mapPosSalesWithHeldContext(rows: any[]) {
+    if (!rows.length) {
+      return [];
+    }
+
+    const saleIds = new Set(rows.map((row) => row.id));
+    const reservations = await this.prisma.posTableReservation.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        reservedFrom: true,
+        reservedTo: true,
+        notes: true,
+        table: { select: { tableNumber: true } },
+      },
+    });
+
+    const reservationBySaleId = new Map<
+      string,
+      {
+        reservationId: string;
+        reservedFrom: string;
+        reservedTo: string;
+        tableNumber: string;
+      }
+    >();
+
+    for (const reservation of reservations) {
+      const parsed = this.parseReservationNotes(reservation.notes);
+      if (!parsed.preOrderSaleId || !saleIds.has(parsed.preOrderSaleId)) {
+        continue;
+      }
+      reservationBySaleId.set(parsed.preOrderSaleId, {
+        reservationId: reservation.id,
+        reservedFrom: reservation.reservedFrom.toISOString(),
+        reservedTo: reservation.reservedTo.toISOString(),
+        tableNumber: reservation.table.tableNumber,
+      });
+    }
+
+    return rows.map((row) => {
+      const reservation = reservationBySaleId.get(row.id) ?? null;
+      const isActiveTableOrder = row.table?.activeInvoiceId === row.id;
+      const source = reservation
+        ? "RESERVATION_PREORDER"
+        : isActiveTableOrder || (row.tableId && row.orderType === "DINE_IN")
+          ? "TABLE_ORDER"
+          : row.posOperationalStatus === "DRAFT"
+            ? "DRAFT"
+            : "HELD";
+
+      return {
+        ...this.mapPosSale(row),
+        heldContext: {
+          source,
+          reservationId: reservation?.reservationId ?? null,
+          reservedFrom: reservation?.reservedFrom ?? null,
+          reservedTo: reservation?.reservedTo ?? null,
+          tableNumber: reservation?.tableNumber ?? row.table?.tableNumber ?? null,
+          orderType: row.orderType ?? null,
+          isActiveTableOrder,
+        },
+      };
+    });
+  }
+
   private mapPosSale(row: any) {
     return {
       id: row.id,
@@ -4896,6 +5259,7 @@ export class PosService {
       originalOrderType: row.originalOrderType ?? null,
       tableId: row.tableId ?? null,
       waiterId: row.waiterId ?? null,
+      waiterConfirmedAt: row.waiterConfirmedAt?.toISOString() ?? null,
       serviceChargeAmount: row.serviceChargeAmount?.toString() ?? null,
       deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? null,
       deliveryStatus: row.deliveryStatus ?? null,
@@ -4921,23 +5285,31 @@ export class PosService {
       waiter: row.waiter ?? null,
       deliveryCompany: row.deliveryCompany ?? null,
       driver: row.driver ?? null,
-      lines: row.lines.map((line: any) => ({
-        id: line.id,
-        lineNumber: line.lineNumber,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        description: line.description,
-        quantity: line.quantity.toString(),
-        unitPrice: line.unitPrice.toString(),
-        discountAmount: line.discountAmount.toString(),
-        taxAmount: line.taxAmount.toString(),
-        lineSubtotalAmount: line.lineSubtotalAmount.toString(),
-        lineAmount: line.lineAmount.toString(),
-        revenueAccountId: line.revenueAccountId,
-        taxId: line.taxId,
-        item: line.item ?? null,
-        warehouse: line.warehouse ?? null,
-      })),
+      lines: row.lines.map((line: any) => {
+        const kitchenItem = row.kitchenOrder?.items?.find(
+          (item: { salesInvoiceLineId: string | null }) =>
+            item.salesInvoiceLineId === line.id,
+        );
+        return {
+          id: line.id,
+          lineNumber: line.lineNumber,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountAmount: line.discountAmount.toString(),
+          taxAmount: line.taxAmount.toString(),
+          lineSubtotalAmount: line.lineSubtotalAmount.toString(),
+          lineAmount: line.lineAmount.toString(),
+          revenueAccountId: line.revenueAccountId,
+          taxId: line.taxId,
+          kitchenSentAt: line.kitchenSentAt?.toISOString() ?? null,
+          kitchenItemStatus: kitchenItem?.status ?? null,
+          item: line.item ?? null,
+          warehouse: line.warehouse ?? null,
+        };
+      }),
       payments: row.posPayments.map((payment: any) => ({
         id: payment.id,
         paymentMethod: payment.paymentMethod,
@@ -5062,7 +5434,7 @@ export class PosService {
     status: TableStatus | null,
   ) {
     if (!tableId) return;
-    if (status) {
+    if (status && invoiceId) {
       await tx.posTable.update({
         where: { id: tableId },
         data: {
@@ -5070,17 +5442,563 @@ export class PosService {
           activeInvoiceId: invoiceId,
         },
       });
-    } else {
-      await tx.posTable.update({
-        where: { id: tableId },
-        data: {
-          status: TableStatus.AVAILABLE,
-          activeInvoiceId: null,
-        },
-      });
+      return;
+    }
+
+    await tx.posTable.update({
+      where: { id: tableId },
+      data: { activeInvoiceId: null },
+    });
+    await this.refreshTableOperationalStatus(tx, tableId);
+  }
+
+  private isWaiterOnlyUser(user?: AuthorizedUser) {
+    if (!user) {
+      return false;
+    }
+    return (
+      user.posRoles.includes("WAITER") &&
+      !user.posRoles.includes("CASHIER") &&
+      !user.posRoles.includes("ACCOUNTANT")
+    );
+  }
+
+  private canCashierEditPosCart(user?: AuthorizedUser) {
+    return this.hasPosPermissionCode("POS_VIEW_POS_SCREEN", user);
+  }
+
+  private isPosSaleDone(
+    status: PosOperationalStatus | null | undefined,
+  ) {
+    return (
+      status === PosOperationalStatus.COMPLETED ||
+      status === PosOperationalStatus.REFUNDED ||
+      status === PosOperationalStatus.VOIDED
+    );
+  }
+
+  private isCashierOnlyUser(user?: AuthorizedUser) {
+    if (!user?.posRoles?.length) {
+      return false;
+    }
+    return (
+      user.posRoles.includes("CASHIER") &&
+      !user.posRoles.includes("ACCOUNTANT")
+    );
+  }
+
+  private isKitchenItemDone(status: KitchenStatus) {
+    return status === KitchenStatus.READY || status === KitchenStatus.SERVED;
+  }
+
+  private async loadKitchenLineStatusByInvoiceLineId(
+    tx: Prisma.TransactionClient,
+    salesInvoiceId: string,
+  ) {
+    const order = await tx.kitchenOrder.findUnique({
+      where: { salesInvoiceId },
+      select: {
+        items: { select: { salesInvoiceLineId: true, status: true } },
+      },
+    });
+    const map = new Map<string, KitchenStatus>();
+    for (const item of order?.items ?? []) {
+      if (item.salesInvoiceLineId) {
+        map.set(item.salesInvoiceLineId, item.status);
+      }
+    }
+    return map;
+  }
+
+  private isInvoiceLineKitchenLocked(
+    kitchenStatusByLineId: Map<string, KitchenStatus>,
+    lineId: string,
+    kitchenSentAt: Date | null,
+  ) {
+    if (!kitchenSentAt) {
+      return false;
+    }
+    const status = kitchenStatusByLineId.get(lineId);
+    return status ? this.isKitchenItemDone(status) : false;
+  }
+
+  private findDtoLineForInvoiceLine(
+    lineId: string,
+    dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }>,
+    resolvedLines: ResolvedSalesLine[],
+  ) {
+    return (
+      dtoLines.find((line) => line.salesInvoiceLineId === lineId) ??
+      resolvedLines.find((line) => line.salesInvoiceLineId === lineId) ??
+      null
+    );
+  }
+
+  private getPreservedSentLineIds(
+    existing: {
+      lines: Array<{
+        id: string;
+        itemId: string | null;
+        quantity: Prisma.Decimal;
+        kitchenSentAt: Date | null;
+      }>;
+    },
+    dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }>,
+    resolvedLines: ResolvedSalesLine[],
+  ) {
+    const kept: string[] = [];
+    for (const sentLine of existing.lines) {
+      if (!sentLine.kitchenSentAt) {
+        continue;
+      }
+      const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
+      if (!dtoLine) {
+        continue;
+      }
+      const nextQty = Number(dtoLine.quantity ?? 0);
+      if (sentLine.itemId && dtoLine.itemId && sentLine.itemId !== dtoLine.itemId) {
+        continue;
+      }
+      if (Math.abs(Number(sentLine.quantity) - nextQty) > 0.0001) {
+        continue;
+      }
+      kept.push(sentLine.id);
+    }
+    return kept;
+  }
+
+  private assertPosSaleDraftModification(
+    user: AuthorizedUser | undefined,
+    existing: {
+      posOperationalStatus?: PosOperationalStatus | null;
+      waiterConfirmedAt: Date | null;
+      lines: Array<{
+        id: string;
+        itemId: string | null;
+        quantity: Prisma.Decimal;
+        kitchenSentAt: Date | null;
+      }>;
+    },
+    dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }>,
+    resolvedLines: ResolvedSalesLine[],
+    kitchenStatusByLineId: Map<string, KitchenStatus>,
+  ) {
+    if (this.isPosSaleDone(existing.posOperationalStatus)) {
+      throw new BadRequestException(
+        "Completed POS orders cannot be changed. Use accountant correction flows instead.",
+      );
+    }
+
+    if (this.isWaiterOnlyUser(user) && existing.waiterConfirmedAt) {
+      throw new ForbiddenException(
+        "This order was confirmed and can no longer be changed by the waiter.",
+      );
+    }
+
+    const hasKitchenReadyLine = existing.lines.some((line) =>
+      this.isInvoiceLineKitchenLocked(
+        kitchenStatusByLineId,
+        line.id,
+        line.kitchenSentAt,
+      ),
+    );
+    if (hasKitchenReadyLine) {
+      if (existing.lines.length !== resolvedLines.length) {
+        throw new BadRequestException(
+          "This order has kitchen-ready items. No order changes are allowed until payment.",
+        );
+      }
+      for (const line of existing.lines) {
+        const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
+        if (!dtoLine) {
+          throw new BadRequestException(
+            "This order has kitchen-ready items. No order changes are allowed until payment.",
+          );
+        }
+        const nextQty = Number(dtoLine.quantity ?? 0);
+        if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
+          throw new BadRequestException(
+            "This order has kitchen-ready items. No order changes are allowed until payment.",
+          );
+        }
+        if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
+          throw new BadRequestException(
+            "This order has kitchen-ready items. No order changes are allowed until payment.",
+          );
+        }
+      }
+      const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
+      if (newDtoLines.length > 0) {
+        throw new BadRequestException(
+          "This order has kitchen-ready items. No order changes are allowed until payment.",
+        );
+      }
+    }
+
+    const sentLines = existing.lines.filter((line) => line.kitchenSentAt);
+    for (const sentLine of sentLines) {
+      const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
+      const kitchenLocked = this.isInvoiceLineKitchenLocked(
+        kitchenStatusByLineId,
+        sentLine.id,
+        sentLine.kitchenSentAt,
+      );
+      if (!dtoLine) {
+        if (kitchenLocked) {
+          throw new BadRequestException(
+            "Items marked ready or served on the kitchen screen cannot be removed.",
+          );
+        }
+        continue;
+      }
+      const nextQty = Number(dtoLine.quantity ?? 0);
+      if (sentLine.itemId && dtoLine.itemId && sentLine.itemId !== dtoLine.itemId) {
+        if (kitchenLocked) {
+          throw new BadRequestException(
+            "Items marked ready or served on the kitchen screen cannot be changed.",
+          );
+        }
+        continue;
+      }
+      if (Math.abs(Number(sentLine.quantity) - nextQty) > 0.0001) {
+        if (kitchenLocked) {
+          throw new BadRequestException(
+            "Items marked ready or served on the kitchen screen cannot be changed.",
+          );
+        }
+      }
+    }
+
+    if (!this.canCashierEditPosCart(user) && this.isWaiterOnlyUser(user) && sentLines.length) {
+      const unsentDtoCount = dtoLines.filter(
+        (line) =>
+          !line.salesInvoiceLineId ||
+          !sentLines.some((sent) => sent.id === line.salesInvoiceLineId),
+      ).length;
+      if (unsentDtoCount > 0 && existing.waiterConfirmedAt) {
+        throw new ForbiddenException("Waiter cannot add items after the order was confirmed.");
+      }
     }
   }
 
+  private async applyOpenPosSaleLineChanges(
+    tx: Prisma.TransactionClient,
+    user: AuthorizedUser | undefined,
+    existing: {
+      id: string;
+      posOperationalStatus?: PosOperationalStatus | null;
+      waiterConfirmedAt: Date | null;
+      lines: Array<{
+        id: string;
+        itemId: string | null;
+        quantity: Prisma.Decimal;
+        kitchenSentAt: Date | null;
+      }>;
+    },
+    dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }>,
+    resolvedLines: ResolvedSalesLine[],
+  ) {
+    const kitchenStatusByLineId = await this.loadKitchenLineStatusByInvoiceLineId(
+      tx,
+      existing.id,
+    );
+    this.assertPosSaleDraftModification(
+      user,
+      existing,
+      dtoLines,
+      resolvedLines,
+      kitchenStatusByLineId,
+    );
+
+    const sentIdsToKeep = this.getPreservedSentLineIds(existing, dtoLines, resolvedLines);
+    await tx.salesInvoiceLine.deleteMany({
+      where: {
+        salesInvoiceId: existing.id,
+        OR: [
+          { kitchenSentAt: null },
+          sentIdsToKeep.length
+            ? { kitchenSentAt: { not: null }, id: { notIn: sentIdsToKeep } }
+            : { kitchenSentAt: { not: null } },
+        ],
+      },
+    });
+    return sentIdsToKeep;
+  }
+
+  private async recomputeKitchenOrderStatus(
+    tx: Prisma.TransactionClient,
+    kitchenOrderId: string,
+  ) {
+    const allItems = await tx.kitchenOrderItem.findMany({
+      where: { kitchenOrderId },
+      select: { status: true },
+    });
+    if (!allItems.length) {
+      return;
+    }
+
+    let nextStatus: KitchenStatus = KitchenStatus.NEW;
+    const statuses = allItems.map((item) => item.status);
+    if (statuses.every((status) => status === KitchenStatus.SERVED)) {
+      nextStatus = KitchenStatus.SERVED;
+    } else if (
+      statuses.every(
+        (status) => status === KitchenStatus.READY || status === KitchenStatus.SERVED,
+      )
+    ) {
+      nextStatus = KitchenStatus.READY;
+    } else if (
+      statuses.some(
+        (status) => status === KitchenStatus.PREPARING || status === KitchenStatus.READY,
+      )
+    ) {
+      nextStatus = KitchenStatus.PREPARING;
+    }
+
+    await tx.kitchenOrder.update({
+      where: { id: kitchenOrderId },
+      data: { status: nextStatus },
+    });
+  }
+
+  /** Replace kitchen ticket lines with the invoice's current kitchen-sent lines (full order sync). */
+  private async rebuildKitchenOrderFromInvoice(
+    tx: Prisma.TransactionClient,
+    salesInvoiceId: string,
+  ) {
+    const invoice = await tx.salesInvoice.findUnique({
+      where: { id: salesInvoiceId },
+      select: {
+        id: true,
+        orderType: true,
+        tableId: true,
+        waiterId: true,
+        description: true,
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          select: {
+            id: true,
+            itemId: true,
+            itemName: true,
+            quantity: true,
+            description: true,
+            modifiers: true,
+            kitchenSentAt: true,
+          },
+        },
+      },
+    });
+
+    if (!invoice?.orderType) {
+      return;
+    }
+
+    const sentLines = invoice.lines.filter((line) => line.kitchenSentAt);
+    let kitchenOrder = await tx.kitchenOrder.findUnique({
+      where: { salesInvoiceId },
+      select: { id: true, orderType: true },
+    });
+
+    if (!sentLines.length) {
+      if (kitchenOrder) {
+        await tx.kitchenOrderItem.deleteMany({
+          where: { kitchenOrderId: kitchenOrder.id },
+        });
+        await tx.kitchenOrder.delete({ where: { id: kitchenOrder.id } });
+      }
+      return;
+    }
+
+    if (!kitchenOrder) {
+      await this.appendKitchenOrderItems(tx, invoice, sentLines);
+      return;
+    }
+
+    let waiterName: string | null = null;
+    if (invoice.waiterId) {
+      const waiter = await tx.user.findUnique({
+        where: { id: invoice.waiterId },
+        select: { name: true },
+      });
+      waiterName = waiter?.name || null;
+    }
+
+    let tableName: string | null = null;
+    if (invoice.tableId) {
+      const table = await tx.posTable.findUnique({
+        where: { id: invoice.tableId },
+        select: { tableNumber: true },
+      });
+      tableName = table?.tableNumber || null;
+    }
+
+    await tx.kitchenOrderItem.deleteMany({
+      where: { kitchenOrderId: kitchenOrder.id },
+    });
+
+    await tx.kitchenOrderItem.createMany({
+      data: sentLines.map((line) => ({
+        kitchenOrderId: kitchenOrder!.id,
+        salesInvoiceLineId: line.id,
+        itemId: line.itemId!,
+        itemName: line.itemName || "Item",
+        quantity: line.quantity,
+        notes: line.description || null,
+        modifiers: line.modifiers === null ? undefined : line.modifiers,
+        status: KitchenStatus.NEW,
+      })),
+    });
+
+    await tx.kitchenOrder.update({
+      where: { id: kitchenOrder.id },
+      data: {
+        tableId: invoice.tableId || null,
+        tableName,
+        waiterId: invoice.waiterId || null,
+        waiterName,
+        orderType: invoice.orderType,
+        notes: invoice.description || null,
+        hasUpdateNotification: true,
+      },
+    });
+  }
+
+  private buildDraftLineCreates(
+    existing: { lines: Array<{ id: string; lineNumber: number; kitchenSentAt: Date | null }> } | null,
+    resolvedLines: ResolvedSalesLine[],
+    sentLineIdsToKeep: string[] = [],
+  ) {
+    if (!existing) {
+      return resolvedLines.map((line, index) =>
+        this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+      );
+    }
+
+    const sentIds = new Set(sentLineIdsToKeep);
+    const unsentResolved = resolvedLines
+      .filter((line) => {
+        const lineId = line.salesInvoiceLineId;
+        return !lineId || !sentIds.has(lineId);
+      })
+      .map((line) => ({
+        ...line,
+        salesInvoiceLineId:
+          line.salesInvoiceLineId && sentIds.has(line.salesInvoiceLineId)
+            ? line.salesInvoiceLineId
+            : null,
+      }));
+    const startNumber =
+      existing.lines.reduce((max, line) => Math.max(max, line.lineNumber), 0) + 1;
+
+    return unsentResolved.map((line, index) =>
+      this.salesReceivablesService.buildSalesInvoiceLineInput(line, startNumber + index),
+    );
+  }
+
+  private async appendKitchenOrderItems(
+    tx: Prisma.TransactionClient,
+    invoice: {
+      id: string;
+      orderType: OrderType | null;
+      tableId: string | null;
+      waiterId: string | null;
+      description: string | null;
+      lines?: Array<{
+        id: string;
+        itemId: string | null;
+        itemName: string | null;
+        quantity: Prisma.Decimal;
+        description: string | null;
+        modifiers: Prisma.JsonValue | null;
+      }>;
+    },
+    linesToSend: Array<{
+      id: string;
+      itemId: string | null;
+      itemName: string | null;
+      quantity: Prisma.Decimal;
+      description: string | null;
+      modifiers: Prisma.JsonValue | null;
+    }>,
+  ) {
+    if (!invoice.orderType || !linesToSend.length) {
+      return;
+    }
+
+    let waiterName: string | null = null;
+    if (invoice.waiterId) {
+      const waiter = await tx.user.findUnique({
+        where: { id: invoice.waiterId },
+        select: { name: true },
+      });
+      waiterName = waiter?.name || null;
+    }
+
+    let tableName: string | null = null;
+    if (invoice.tableId) {
+      const table = await tx.posTable.findUnique({
+        where: { id: invoice.tableId },
+        select: { tableNumber: true },
+      });
+      tableName = table?.tableNumber || null;
+    }
+
+    const existing = await tx.kitchenOrder.findUnique({
+      where: { salesInvoiceId: invoice.id },
+    });
+
+    if (existing) {
+      await tx.kitchenOrder.update({
+        where: { id: existing.id },
+        data: {
+          tableId: invoice.tableId || null,
+          tableName,
+          waiterId: invoice.waiterId || null,
+          waiterName,
+          orderType: invoice.orderType,
+          notes: invoice.description || null,
+          hasUpdateNotification: true,
+          items: {
+            create: linesToSend.map((line) => ({
+              salesInvoiceLineId: line.id,
+              itemId: line.itemId!,
+              itemName: line.itemName || "Item",
+              quantity: line.quantity,
+              notes: line.description || null,
+              modifiers: line.modifiers === null ? undefined : line.modifiers,
+            })),
+          },
+        },
+      });
+      return;
+    }
+
+    const orderNumber = `KOT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    await tx.kitchenOrder.create({
+      data: {
+        orderNumber,
+        salesInvoiceId: invoice.id,
+        tableId: invoice.tableId || null,
+        tableName,
+        waiterId: invoice.waiterId || null,
+        waiterName,
+        orderType: invoice.orderType,
+        notes: invoice.description || null,
+        items: {
+          create: linesToSend.map((line) => ({
+            salesInvoiceLineId: line.id,
+            itemId: line.itemId!,
+            itemName: line.itemName || "Item",
+            quantity: line.quantity,
+            notes: line.description || null,
+            modifiers: line.modifiers === null ? undefined : line.modifiers,
+          })),
+        },
+      },
+    });
+  }
+
+  /** @deprecated Use appendKitchenOrderItems via sendSaleToKitchen instead. */
   private async createOrUpdateKitchenOrder(
     tx: Prisma.TransactionClient,
     invoiceId: string,
@@ -5088,81 +6006,21 @@ export class PosService {
   ) {
     if (!dto.orderType) return;
 
-    // Resolve waiter name and table name if available
-    let waiterName: string | null = null;
-    if (dto.waiterId) {
-      const waiter = await tx.user.findUnique({
-        where: { id: dto.waiterId },
-        select: { name: true },
-      });
-      waiterName = waiter?.name || null;
+    const invoice = await tx.salesInvoice.findUnique({
+      where: { id: invoiceId },
+      include: { lines: { where: { kitchenSentAt: null }, orderBy: { lineNumber: "asc" } } },
+    });
+    if (!invoice?.lines.length) {
+      return;
     }
 
-    let tableName: string | null = null;
-    if (dto.tableId) {
-      const table = await tx.posTable.findUnique({
-        where: { id: dto.tableId },
-        select: { tableNumber: true },
-      });
-      tableName = table?.tableNumber || null;
-    }
-
-    const orderNumber = `KOT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    // Upsert or create KitchenOrder
-    const existing = await tx.kitchenOrder.findUnique({
-      where: { salesInvoiceId: invoiceId },
+    const sentAt = new Date();
+    await tx.salesInvoiceLine.updateMany({
+      where: { id: { in: invoice.lines.map((line) => line.id) } },
+      data: { kitchenSentAt: sentAt },
     });
 
-    if (existing) {
-      // Delete existing lines and re-create them
-      await tx.kitchenOrderItem.deleteMany({
-        where: { kitchenOrderId: existing.id },
-      });
-
-      await tx.kitchenOrder.update({
-        where: { id: existing.id },
-        data: {
-          tableId: dto.tableId || null,
-          tableName,
-          waiterId: dto.waiterId || null,
-          waiterName,
-          orderType: dto.orderType,
-          notes: dto.description || null,
-          items: {
-            create: dto.lines.map((line) => ({
-              itemId: line.itemId!,
-              itemName: line.itemName || "Item",
-              quantity: new Prisma.Decimal(line.quantity ?? 0),
-              notes: line.description || null,
-              modifiers: line.modifiers || null,
-            })),
-          },
-        },
-      });
-    } else {
-      await tx.kitchenOrder.create({
-        data: {
-          orderNumber,
-          salesInvoiceId: invoiceId,
-          tableId: dto.tableId || null,
-          tableName,
-          waiterId: dto.waiterId || null,
-          waiterName,
-          orderType: dto.orderType,
-          notes: dto.description || null,
-          items: {
-            create: dto.lines.map((line) => ({
-              itemId: line.itemId!,
-              itemName: line.itemName || "Item",
-              quantity: new Prisma.Decimal(line.quantity ?? 0),
-              notes: line.description || null,
-              modifiers: line.modifiers || null,
-            })),
-          },
-        },
-      });
-    }
+    await this.appendKitchenOrderItems(tx, invoice, invoice.lines);
   }
 
   async transferTable(dto: TransferTableDto, user?: AuthorizedUser) {
@@ -6022,6 +6880,277 @@ export class PosService {
     });
 
     return { success: true };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reservation notes helpers
+  // ---------------------------------------------------------------------------
+
+  private async refreshTableOperationalStatus(
+    tx: Prisma.TransactionClient,
+    tableId: string,
+  ) {
+    const table = await tx.posTable.findUnique({
+      where: { id: tableId },
+      select: { id: true, status: true, activeInvoiceId: true },
+    });
+    if (!table) {
+      return;
+    }
+
+    if (table.activeInvoiceId) {
+      if (table.status !== TableStatus.OCCUPIED) {
+        await tx.posTable.update({
+          where: { id: tableId },
+          data: { status: TableStatus.OCCUPIED },
+        });
+      }
+      return;
+    }
+
+    if (
+      table.status === TableStatus.WAITING_FOR_PAYMENT ||
+      table.status === TableStatus.CLEANING
+    ) {
+      return;
+    }
+
+    const now = new Date();
+    const reservations = await tx.posTableReservation.findMany({
+      where: {
+        tableId,
+        status: "ACTIVE",
+        reservedTo: { gt: now },
+      },
+      select: { reservedFrom: true, reservedTo: true, notes: true },
+    });
+
+    const hasArrivedInWindow = reservations.some((row) => {
+      const parsed = this.parseReservationNotes(row.notes);
+      return (
+        now >= row.reservedFrom &&
+        now <= row.reservedTo &&
+        parsed.attendanceStatus === "ARRIVED"
+      );
+    });
+
+    const hasScheduled = reservations.some(
+      (row) => now <= row.reservedTo,
+    );
+
+    const nextStatus = hasArrivedInWindow
+      ? TableStatus.OCCUPIED
+      : hasScheduled
+        ? TableStatus.RESERVED
+        : TableStatus.AVAILABLE;
+
+    if (table.status !== nextStatus) {
+      await tx.posTable.update({
+        where: { id: tableId },
+        data: { status: nextStatus },
+      });
+    }
+  }
+
+  parseReservationNotes(raw: string | null): {
+    notes: string | null;
+    orderNotes: string | null;
+    attendanceStatus: "UNKNOWN" | "ARRIVED" | "NO_SHOW";
+    attendanceMarkedAt: string | null;
+    preOrderSaleId: string | null;
+    preOrderUpdatedAt: string | null;
+  } {
+    if (!raw || !raw.trim().startsWith("{")) {
+      return {
+        notes: raw ?? null,
+        orderNotes: null,
+        attendanceStatus: "UNKNOWN",
+        attendanceMarkedAt: null,
+        preOrderSaleId: null,
+        preOrderUpdatedAt: null,
+      };
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        notes: parsed?.notes ?? null,
+        orderNotes: parsed?.orderNotes ?? null,
+        attendanceStatus: parsed?.attendanceStatus ?? "UNKNOWN",
+        attendanceMarkedAt: parsed?.attendanceMarkedAt ?? null,
+        preOrderSaleId: parsed?.preOrderSaleId ?? null,
+        preOrderUpdatedAt: parsed?.preOrderUpdatedAt ?? null,
+      };
+    } catch {
+      return {
+        notes: raw,
+        orderNotes: null,
+        attendanceStatus: "UNKNOWN",
+        attendanceMarkedAt: null,
+        preOrderSaleId: null,
+        preOrderUpdatedAt: null,
+      };
+    }
+  }
+
+  private async syncReservationPreOrder(
+    tx: Prisma.TransactionClient,
+    reservationId: string,
+    invoiceId: string,
+  ) {
+    const reservation = await tx.posTableReservation.findUnique({
+      where: { id: reservationId },
+      select: { notes: true },
+    });
+    if (!reservation) return;
+    const parsed = this.parseReservationNotes(reservation.notes);
+    await tx.posTableReservation.update({
+      where: { id: reservationId },
+      data: {
+        notes: JSON.stringify({
+          notes: parsed.notes,
+          orderNotes: parsed.orderNotes,
+          attendanceStatus: parsed.attendanceStatus,
+          attendanceMarkedAt: parsed.attendanceMarkedAt,
+          preOrderSaleId: invoiceId,
+          preOrderUpdatedAt: new Date().toISOString(),
+        }),
+      },
+    });
+  }
+
+  private buildPreOrderSummary(sale: any) {
+    const lines: any[] = sale.lines ?? [];
+    return {
+      saleId: sale.id,
+      lineCount: lines.length,
+      totalAmount: sale.totalAmount,
+      itemsPreview: lines.slice(0, 5).map((l: any) => ({
+        name: l.itemName ?? "",
+        quantity: Number(l.quantity),
+      })),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pre-order for a special reservation (table stays Available)
+  // ---------------------------------------------------------------------------
+
+  async openReservationPreOrder(reservationId: string, user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+
+    const reservation = await this.prisma.posTableReservation.findUnique({
+      where: { id: reservationId },
+      include: { table: { select: { id: true, tableNumber: true, activeInvoiceId: true } } },
+    });
+    if (!reservation) throw new NotFoundException("Reservation not found.");
+    if (reservation.status !== "ACTIVE") {
+      throw new BadRequestException("Only ACTIVE reservations can have pre-orders.");
+    }
+    const parsed = this.parseReservationNotes(reservation.notes);
+
+    if (
+      reservation.table.activeInvoiceId &&
+      reservation.table.activeInvoiceId !== parsed.preOrderSaleId
+    ) {
+      throw new BadRequestException(
+        "Cannot add pre-order: the table already has a different active order.",
+      );
+    }
+
+    // Resume existing pre-order if it is still a live draft/held sale
+    if (parsed.preOrderSaleId) {
+      const existing = await this.prisma.salesInvoice.findUnique({
+        where: { id: parsed.preOrderSaleId },
+        include: this.posSaleInclude(),
+      });
+      if (
+        existing &&
+        (existing.posOperationalStatus === PosOperationalStatus.DRAFT ||
+          existing.posOperationalStatus === PosOperationalStatus.HELD)
+      ) {
+        const mapped = this.mapPosSale(existing);
+        return {
+          reservationId,
+          preOrderSaleId: existing.id,
+          sale: mapped,
+          preOrderSummary: this.buildPreOrderSummary(mapped),
+        };
+      }
+    }
+
+    // Require an open POS session
+    const session = await this.prisma.posSession.findFirst({
+      where: { status: PosSessionStatus.OPEN },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!session) {
+      throw new BadRequestException(
+        "No open POS session found. Please open a session before creating a pre-order.",
+      );
+    }
+
+    const walkInCustomer = await this.ensureWalkInCustomer();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const reference = await this.generateInvoiceReference(tx);
+      const invoice = await tx.salesInvoice.create({
+        data: {
+          reference,
+          invoiceType: SalesInvoiceType.POS,
+          status: SalesInvoiceStatus.DRAFT,
+          invoiceDate: new Date(),
+          customerId: walkInCustomer.id,
+          currencyCode: "JOD",
+          subtotalAmount: this.toAmount(0),
+          discountAmount: this.toAmount(0),
+          taxAmount: this.toAmount(0),
+          totalAmount: this.toAmount(0),
+          allocatedAmount: this.toAmount(0),
+          outstandingAmount: this.toAmount(0),
+          allocationStatus: AllocationStatus.UNALLOCATED,
+          posOperationalStatus: PosOperationalStatus.HELD,
+          posAccountingStatus: PosAccountingStatus.UNPOSTED,
+          posSessionId: session.id,
+          orderType: OrderType.DINE_IN,
+          tableId: reservation.table.id,
+          // Intentionally NOT setting activeInvoiceId on the table — pre-order does not occupy
+        },
+        include: this.posSaleInclude(),
+      });
+
+      // Persist preOrderSaleId on the reservation
+      await tx.posTableReservation.update({
+        where: { id: reservationId },
+        data: {
+          notes: JSON.stringify({
+            notes: parsed.notes,
+            orderNotes: parsed.orderNotes,
+            attendanceStatus: parsed.attendanceStatus,
+            attendanceMarkedAt: parsed.attendanceMarkedAt,
+            preOrderSaleId: invoice.id,
+            preOrderUpdatedAt: new Date().toISOString(),
+          }),
+        },
+      });
+
+      return invoice;
+    });
+
+    await this.auditService.log({
+      userId: user?.userId ?? "system",
+      entity: "PosTableReservation",
+      entityId: reservationId,
+      action: AuditAction.UPDATE,
+      details: { message: "Pre-order sale created for reservation", preOrderSaleId: result.id },
+    });
+
+    const mapped = this.mapPosSale(result);
+    return {
+      reservationId,
+      preOrderSaleId: result.id,
+      sale: mapped,
+      preOrderSummary: this.buildPreOrderSummary(mapped),
+    };
   }
 
   async updateDeliveryStatus(id: string, status: DeliveryStatus, user?: AuthorizedUser) {

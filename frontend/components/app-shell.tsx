@@ -6,6 +6,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { SiteHeader } from "@/components/site-header";
+import { useKdsMode } from "@/providers/kds-mode-provider";
 import { cn } from "@/lib/utils";
 
 const DevRoutePerf =
@@ -17,21 +18,26 @@ const DevRoutePerf =
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { kitchenMode } = useKdsMode();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const isAuthPage = pathname === "/login" || pathname === "/register";
   const isPosPage = pathname?.startsWith("/pos");
+  const isKitchenRoute = pathname?.startsWith("/pos/kitchen");
+  const hideSidebar = kitchenMode && isKitchenRoute;
 
   return (
     <>
       <DevRoutePerf />
-      <SiteHeader
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
-      />
+      {!hideSidebar ? (
+        <SiteHeader
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
+        />
+      ) : null}
       <main
         className={cn(
           "min-h-screen",
-          isAuthPage
+          isAuthPage || hideSidebar
             ? "pl-0 pr-0"
             : isSidebarCollapsed
               ? "ltr:pl-20 rtl:pr-20"

@@ -2482,13 +2482,49 @@ export async function deletePosTable(
   });
 }
 
+export async function updatePosTableStatus(
+  id: string,
+  status: string,
+  token?: string | null,
+) {
+  return apiRequest<{ id: string; status: string }>(`/pos/tables/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+    token,
+  });
+}
+
+export async function updatePosTableWaiter(
+  id: string,
+  assignedWaiterId: string | null,
+  token?: string | null,
+) {
+  return apiRequest<{ id: string }>(`/pos/tables/${id}/waiter`, {
+    method: "PUT",
+    body: JSON.stringify({ assignedWaiterId }),
+    token,
+  });
+}
+
 export async function reservePosTable(
   tableId: string,
-  payload: { reservedFrom: string; reservedTo: string; notes?: string },
+  payload: { reservedFrom: string; reservedTo: string; notes?: string; orderNotes?: string },
   token?: string | null,
 ) {
   return apiRequest(`/pos/tables/${tableId}/reservations`, {
     method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updatePosTableReservation(
+  reservationId: string,
+  payload: { notes?: string; orderNotes?: string; attendanceStatus?: "UNKNOWN" | "ARRIVED" | "NO_SHOW" },
+  token?: string | null,
+) {
+  return apiRequest(`/pos/tables/reservations/${reservationId}`, {
+    method: "PUT",
     body: JSON.stringify(payload),
     token,
   });
@@ -2502,6 +2538,22 @@ export async function cancelPosTableReservation(
   return apiRequest(`/pos/tables/reservations/${reservationId}/cancel`, {
     method: "POST",
     body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function openPosReservationPreOrder(
+  reservationId: string,
+  token?: string | null,
+): Promise<{
+  reservationId: string;
+  preOrderSaleId: string;
+  sale: import("@/types/api").PosSale;
+  preOrderSummary: { saleId: string; lineCount: number; totalAmount: string; itemsPreview: Array<{ name: string; quantity: number }> };
+}> {
+  return apiRequest(`/pos/tables/reservations/${reservationId}/pre-order`, {
+    method: "POST",
+    body: JSON.stringify({}),
     token,
   });
 }
@@ -2520,6 +2572,100 @@ export async function getPosTimeWindowReport(
 
 export async function getPosKitchenOrders(token?: string | null) {
   return apiRequest<KitchenOrder[]>("/pos/kitchen/orders", { token });
+}
+
+export async function getPosAddonGroupsAdmin(token?: string | null) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosAddonGroup[]>(
+    "/pos/addons/groups",
+    { token },
+  );
+}
+
+export async function createPosAddonGroup(
+  payload: {
+    code: string;
+    name: string;
+    nameAr?: string;
+    selectionType?: "SINGLE" | "MULTIPLE";
+    isRequired?: boolean;
+    minSelections?: number;
+    maxSelections?: number;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+  token?: string | null,
+) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosAddonGroup>(
+    "/pos/addons/groups",
+    { method: "POST", body: JSON.stringify(payload), token },
+  );
+}
+
+export async function updatePosAddonGroup(
+  id: string,
+  payload: Record<string, unknown>,
+  token?: string | null,
+) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosAddonGroup>(
+    `/pos/addons/groups/${id}`,
+    { method: "PUT", body: JSON.stringify(payload), token },
+  );
+}
+
+export async function createPosAddonOption(
+  groupId: string,
+  payload: {
+    name: string;
+    nameAr?: string;
+    priceAdjustment?: number;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+  token?: string | null,
+) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosAddonOption>(
+    `/pos/addons/groups/${groupId}/options`,
+    { method: "POST", body: JSON.stringify(payload), token },
+  );
+}
+
+export async function updatePosAddonOption(
+  optionId: string,
+  payload: Record<string, unknown>,
+  token?: string | null,
+) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosAddonOption>(
+    `/pos/addons/options/${optionId}`,
+    { method: "PUT", body: JSON.stringify(payload), token },
+  );
+}
+
+export async function getPosItemAddonConfig(itemId: string, token?: string | null) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosItemAddonConfig>(
+    `/pos/addons/items/${itemId}`,
+    { token },
+  );
+}
+
+export async function setPosItemAddonGroups(
+  itemId: string,
+  payload: { groupIds: string[] },
+  token?: string | null,
+) {
+  return apiRequest<import("@/features/pos/pos-addon-types").PosItemAddonConfig>(
+    `/pos/addons/items/${itemId}`,
+    { method: "PUT", body: JSON.stringify(payload), token },
+  );
+}
+
+export async function getPosAddonCatalog(itemIds: string[], token?: string | null) {
+  const searchParams = new URLSearchParams();
+  if (itemIds.length) {
+    searchParams.set("itemIds", itemIds.join(","));
+  }
+  return apiRequest<{
+    items: import("@/features/pos/pos-addon-types").PosItemAddonConfig[];
+  }>(`/pos/addons/catalog?${searchParams}`, { token });
 }
 
 export async function openPosSession(
@@ -2601,6 +2747,24 @@ export async function savePosDraft(
   token?: string | null,
 ) {
   return apiRequest<PosSale>("/pos/sales/draft", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function sendPosSaleToKitchen(saleId: string, token?: string | null) {
+  return apiRequest<PosSale>(`/pos/sales/${saleId}/send-to-kitchen`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function updatePosSaleKitchen(
+  payload: Parameters<typeof savePosDraft>[0] & { invoiceId: string },
+  token?: string | null,
+) {
+  return apiRequest<PosSale>("/pos/sales/update-kitchen", {
     method: "POST",
     body: JSON.stringify(payload),
     token,
@@ -2940,6 +3104,16 @@ export async function updateKitchenOrderItemStatus(
   return apiRequest<any>(`/pos/kitchen/items/${itemId}/status`, {
     method: "PUT",
     body: JSON.stringify({ status }),
+    token,
+  });
+}
+
+export async function dismissKitchenOrderNotification(
+  orderId: string,
+  token?: string | null,
+) {
+  return apiRequest<KitchenOrder>(`/pos/kitchen/orders/${orderId}/dismiss-notification`, {
+    method: "PUT",
     token,
   });
 }

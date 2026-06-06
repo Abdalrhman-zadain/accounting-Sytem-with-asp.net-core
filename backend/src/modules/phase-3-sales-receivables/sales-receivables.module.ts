@@ -11,14 +11,22 @@ import { InventoryPostingModule } from '../phase-5-inventory-management/inventor
 import { PosController } from './pos/pos.controller';
 import { PosTableController } from './pos/pos-table.controller';
 import { PosKitchenController } from './pos/pos-kitchen.controller';
+import { PosAddonController } from './pos/pos-addon.controller';
+import { PosAddonService } from './pos/pos-addon.service';
 import { PosService } from './pos/pos.service';
 import { SalesReceivablesController } from './sales-receivables.controller';
 import { SalesReceivablesService } from './sales-receivables.service';
 
 @Module({
   imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule],
-  controllers: [SalesReceivablesController, PosController, PosTableController, PosKitchenController],
-  providers: [SalesReceivablesService, PosService],
-  exports: [SalesReceivablesService, PosService],
+  controllers: [
+    SalesReceivablesController,
+    PosController,
+    PosTableController,
+    PosKitchenController,
+    PosAddonController,
+  ],
+  providers: [SalesReceivablesService, PosService, PosAddonService],
+  exports: [SalesReceivablesService, PosService, PosAddonService],
 })
 export class SalesReceivablesModule {}

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import localFont from "next/font/local";
-import Script from "next/script";
 import "./globals.css";
 
 import { AppShell } from "@/components/app-shell";
@@ -25,31 +24,6 @@ export const metadata: Metadata = {
   description: "Enterprise Resource Planning — Chart of Accounts, Journal Entries, and General Ledger.",
 };
 
-type AppLanguage = "en" | "ar";
-
-function getLanguageInitScript(fallbackLanguage: AppLanguage) {
-  return `
-    (() => {
-      try {
-        const stored = window.localStorage.getItem("app_language");
-        const nextLanguage =
-          stored === "ar" || stored === "en"
-            ? stored
-            : (navigator.language || "").toLowerCase().startsWith("ar")
-              ? "ar"
-              : "${fallbackLanguage}";
-
-        document.documentElement.lang = nextLanguage;
-        document.documentElement.dir = nextLanguage === "ar" ? "rtl" : "ltr";
-        document.cookie = "app_language=" + nextLanguage + "; path=/; max-age=31536000; samesite=lax";
-      } catch {
-        document.documentElement.lang = "${fallbackLanguage}";
-        document.documentElement.dir = "${fallbackLanguage}" === "ar" ? "rtl" : "ltr";
-      }
-    })();
-  `;
-}
-
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -66,10 +40,6 @@ export default async function RootLayout({
       className={`${inter.variable} antialiased bg-[#f5f5f5]`}
     >
       <body suppressHydrationWarning className="font-sans selection:bg-primary/30">
-        <script
-          id="app-language-init"
-          dangerouslySetInnerHTML={{ __html: getLanguageInitScript(initialLanguage) }}
-        />
         <AppProviders initialLanguage={initialLanguage}>
           <AppShell>{children}</AppShell>
         </AppProviders>

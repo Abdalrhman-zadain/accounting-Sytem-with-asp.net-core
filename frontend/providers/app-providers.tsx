@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 
 import { AuthProvider } from "@/providers/auth-provider";
+import { KdsModeProvider } from "@/providers/kds-mode-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { SettingsProvider } from "@/providers/settings-provider";
 
@@ -16,7 +17,9 @@ export function AppProviders({
   return (
     <QueryProvider>
       <SettingsProvider initialLanguage={initialLanguage}>
-        <AuthProvider>{children}</AuthProvider>
+        <KdsModeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </KdsModeProvider>
       </SettingsProvider>
     </QueryProvider>
   );
