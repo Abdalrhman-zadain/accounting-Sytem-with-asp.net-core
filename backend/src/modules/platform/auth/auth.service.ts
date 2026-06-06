@@ -226,6 +226,8 @@ export class AuthService {
   }
 
   private async ensurePosAccessBaseline() {
+    await this.ensurePosAccessRoleEnumValues();
+
     await this.prisma.$transaction(async (tx) => {
       for (const roleCode of [
         PosAccessRoleCode.CASHIER,
@@ -313,6 +315,15 @@ export class AuthService {
         }
       }
     });
+  }
+
+  private async ensurePosAccessRoleEnumValues() {
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'KITCHEN'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'WAITER'`,
+    );
   }
 
   private buildAuthorizedUser(user: Prisma.UserGetPayload<{ include: ReturnType<AuthService['userAccessInclude']> }>): AuthorizedUser {

@@ -64,6 +64,17 @@ What this means for future edits:
 - keep backend dev-start documentation aligned with the script behavior if the watcher strategy changes again.
 - if native watcher mode is restored in package scripts, document the required Linux `fs.inotify.max_user_watches` guidance in `backend/README.md` or here so startup failures are not mistaken for backend code regressions.
 
+## Backend POS Enum Bootstrap
+
+Current behavior:
+
+- the auth baseline now self-heals older local databases by adding missing `PosAccessRoleCode` enum values for `KITCHEN` and `WAITER` before seeding POS access roles.
+- this keeps login/register startup compatible with databases that were created before the restaurant POS role extensions were applied.
+
+What this means for future edits:
+
+- keep the enum bootstrap in sync with any future `PosAccessRoleCode` additions so legacy databases can still hydrate POS roles without a manual enum migration step.
+
 ## Local Docker Port Reservation On Windows
 
 Current limitation:
