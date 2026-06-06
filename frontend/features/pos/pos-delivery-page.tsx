@@ -3,6 +3,7 @@
 import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  LuAlertTriangle,
   LuMapPin,
   LuRefreshCcw,
   LuSearch,
@@ -253,10 +254,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
   const [selectedCompanyId, setSelectedCompanyId] = React.useState("");
   const [periodFrom, setPeriodFrom] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [periodTo, setPeriodTo] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [settlementDate, setSettlementDate] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [bankCashAccountId, setBankCashAccountId] = React.useState("");
+  
+  // Step 2 & 3 States
   const [statementReference, setStatementReference] = React.useState("");
-  const [statementAmount, setStatementAmount] = React.useState("0");
+  const [statementDate, setStatementDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [commissionAmount, setCommissionAmount] = React.useState("0");
   const [serviceFeeAmount, setServiceFeeAmount] = React.useState("0");
   const [refundAmount, setRefundAmount] = React.useState("0");
@@ -264,6 +265,10 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
   const [differenceReason, setDifferenceReason] = React.useState("");
   const [differenceAccountId, setDifferenceAccountId] = React.useState("");
   const [differenceNotes, setDifferenceNotes] = React.useState("");
+
+  const [settlementDate, setSettlementDate] = React.useState(() => new Date().toISOString().slice(0, 10)); // Bank Receipt Date
+  const [bankCashAccountId, setBankCashAccountId] = React.useState("");
+  const [netAmountReceived, setNetAmountReceived] = React.useState("0");
 
   const { data: allSales = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.posCompletedSales(token),
@@ -334,6 +339,16 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
       previewDeliveryCompanySettlement(payload, token),
   });
 
+  const calculatedStatementAmount = React.useMemo(() => {
+    return (
+      Number(netAmountReceived || 0) +
+      Number(commissionAmount || 0) +
+      Number(serviceFeeAmount || 0) +
+      Number(refundAmount || 0) +
+      Number(adjustmentAmount || 0)
+    );
+  }, [netAmountReceived, commissionAmount, serviceFeeAmount, refundAmount, adjustmentAmount]);
+
   const createSettlementMutation = useMutation({
     mutationFn: () =>
       createDeliveryCompanySettlement(
@@ -344,14 +359,16 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
           settlementDate,
           bankCashAccountId,
           statementReference: statementReference || undefined,
-          statementAmount: Number(statementAmount || 0),
+          statementAmount: calculatedStatementAmount,
           commissionAmount: Number(commissionAmount || 0),
           serviceFeeAmount: Number(serviceFeeAmount || 0),
           refundAmount: Number(refundAmount || 0),
           adjustmentAmount: Number(adjustmentAmount || 0),
           differenceReason: differenceReason || undefined,
           differenceAccountId: differenceAccountId || undefined,
-          differenceNotes: differenceNotes || undefined,
+          differenceNotes: differenceNotes
+            ? `[Statement Date: ${statementDate}] ${differenceNotes}`
+            : `[Statement Date: ${statementDate}]`,
           salesInvoiceIds: previewSettlementMutation.data?.orders.map((row) => row.id) ?? [],
         },
         token,
@@ -361,6 +378,16 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
       queryClient.invalidateQueries({ queryKey: ["pos-delivery-receivables", token] });
       queryClient.invalidateQueries({ queryKey: queryKeys.posCompletedSales(token) });
       previewSettlementMutation.reset();
+      // Reset form fields
+      setNetAmountReceived("0");
+      setCommissionAmount("0");
+      setServiceFeeAmount("0");
+      setRefundAmount("0");
+      setAdjustmentAmount("0");
+      setStatementReference("");
+      setDifferenceReason("");
+      setDifferenceAccountId("");
+      setDifferenceNotes("");
     },
   });
 
@@ -426,20 +453,27 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
 
   const outCount = deliverySales.filter((s) => s.deliveryStatus === "OUT_FOR_DELIVERY").length;
 
-  const computedNetReceived = React.useMemo(() => {
+  const grossOrders = React.useMemo(() => {
+    return Number(previewSettlementMutation.data?.grossOrdersAmount || 0);
+  }, [previewSettlementMutation.data?.grossOrdersAmount]);
+
+  const netExpectedAmount = React.useMemo(() => {
     return (
-      Number(statementAmount || 0) -
+      grossOrders -
       Number(commissionAmount || 0) -
       Number(serviceFeeAmount || 0) -
       Number(refundAmount || 0) -
       Number(adjustmentAmount || 0)
     );
-  }, [adjustmentAmount, commissionAmount, refundAmount, serviceFeeAmount, statementAmount]);
+  }, [grossOrders, commissionAmount, serviceFeeAmount, refundAmount, adjustmentAmount]);
 
   const computedDifference = React.useMemo(() => {
-    const gross = Number(previewSettlementMutation.data?.grossOrdersAmount || 0);
-    return gross - Number(statementAmount || 0);
-  }, [previewSettlementMutation.data?.grossOrdersAmount, statementAmount]);
+    return Number(netAmountReceived || 0) - netExpectedAmount;
+  }, [netAmountReceived, netExpectedAmount]);
+
+  const isDifferenceInvalid = React.useMemo(() => {
+    return Math.abs(computedDifference) >= 0.01 && (!differenceReason.trim() || !differenceAccountId);
+  }, [computedDifference, differenceReason, differenceAccountId]);
 
   const visibleColumns = DELIVERY_COLUMNS.filter(
     (col) => showDone || !col.isTerminal,
@@ -647,170 +681,426 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
-              <div className="mb-4">
-                <h2 className="text-lg font-black text-[#233329]">
+            {/* Step-by-Step Settlement Process */}
+            <section className="rounded-2xl border border-[#d9e4dc] bg-white p-6 shadow-sm">
+              <div className="mb-6 border-b border-[#e1e7e2] pb-4">
+                <h2 className="text-xl font-black text-[#1a2744]">
                   {t("pos.delivery.settlementTitle")}
                 </h2>
-                <p className="text-xs font-semibold text-[#68776f]">
+                <p className="mt-1 text-xs font-semibold text-[#68776f]">
                   {t("pos.delivery.settlementSubtitle")}
                 </p>
               </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <select
-                  value={selectedCompanyId}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                >
-                  <option value="">{t("pos.delivery.selectCompany")}</option>
-                  {deliveryCompanies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {isAr ? (company.arabicName || company.name) : company.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={periodFrom}
-                  onChange={(e) => setPeriodFrom(e.target.value)}
-                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                />
-                <input
-                  type="date"
-                  value={periodTo}
-                  onChange={(e) => setPeriodTo(e.target.value)}
-                  className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                />
-              </div>
-              <div className="mt-3">
-                <button
-                  type="button"
-                  disabled={!selectedCompanyId || previewSettlementMutation.isPending}
-                  onClick={() =>
-                    previewSettlementMutation.mutate({
-                      deliveryCompanyId: selectedCompanyId,
-                      periodFrom,
-                      periodTo,
-                    })
-                  }
-                  className="rounded-xl bg-[#1f6f5f] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
-                >
-                  {t("pos.delivery.previewSettlement")}
-                </button>
-              </div>
-              {previewSettlementMutation.data ? (
-                <div className="mt-4 space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <input
-                      type="date"
-                      value={settlementDate}
-                      onChange={(e) => setSettlementDate(e.target.value)}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    />
-                    <select
-                      value={bankCashAccountId}
-                      onChange={(e) => setBankCashAccountId(e.target.value)}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    >
-                      <option value="">{t("pos.delivery.selectBankAccount")}</option>
-                      {paymentAccounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {isAr ? (account.account?.nameAr || account.name) : account.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      value={statementReference}
-                      onChange={(e) => setStatementReference(e.target.value)}
-                      placeholder={t("pos.delivery.statementReference")}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    />
+
+              <div className="space-y-8">
+                {/* Step 1: Select delivery company and period */}
+                <div className="relative rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
+                  <div className="absolute -top-3 left-4 rtl:right-4 rtl:left-auto flex h-6 items-center rounded-full bg-[#1a2744] px-3 text-xs font-bold text-white">
+                    {isAr ? "الخطوة 1: اختيار الشركة والفترة" : "Step 1: Company & Period"}
                   </div>
-                  <div className="grid gap-3 md:grid-cols-5">
-                    {[
-                      { label: t("pos.delivery.statement"), value: statementAmount, setter: setStatementAmount },
-                      { label: t("pos.delivery.commission"), value: commissionAmount, setter: setCommissionAmount },
-                      { label: t("pos.delivery.serviceFees"), value: serviceFeeAmount, setter: setServiceFeeAmount },
-                      { label: t("pos.delivery.refunds"), value: refundAmount, setter: setRefundAmount },
-                      { label: t("pos.delivery.adjustments"), value: adjustmentAmount, setter: setAdjustmentAmount },
-                    ].map((field, idx) => (
+                  <div className="mt-2 grid gap-4 md:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-black text-[#233329]">
+                        {t("pos.delivery.selectCompany")}
+                      </label>
+                      <select
+                        value={selectedCompanyId}
+                        onChange={(e) => setSelectedCompanyId(e.target.value)}
+                        className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                      >
+                        <option value="">{t("pos.delivery.selectCompany")}</option>
+                        {deliveryCompanies.map((company) => (
+                          <option key={company.id} value={company.id}>
+                            {isAr ? (company.arabicName || company.name) : company.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[11px] text-[#68776f]">
+                        {isAr ? "اختر شركة التوصيل لإجراء التسوية لها" : "Select delivery company to settle"}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-black text-[#233329]">
+                        {isAr ? "من تاريخ" : "From Date"}
+                      </label>
                       <input
-                        key={idx}
-                        type="number"
-                        step="0.01"
-                        value={field.value}
-                        onChange={(e) => field.setter(e.target.value)}
-                        placeholder={field.label}
-                        className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
+                        type="date"
+                        value={periodFrom}
+                        onChange={(e) => setPeriodFrom(e.target.value)}
+                        className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
                       />
-                    ))}
+                      <span className="text-[11px] text-[#68776f]">
+                        {isAr ? "بداية الفترة المحاسبية للتسوية" : "Start of the settlement period"}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-black text-[#233329]">
+                        {isAr ? "إلى تاريخ" : "To Date"}
+                      </label>
+                      <input
+                        type="date"
+                        value={periodTo}
+                        onChange={(e) => setPeriodTo(e.target.value)}
+                        className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                      />
+                      <span className="text-[11px] text-[#68776f]">
+                        {isAr ? "نهاية الفترة المحاسبية للتسوية" : "End of the settlement period"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <input
-                      type="text"
-                      value={differenceReason}
-                      onChange={(e) => setDifferenceReason(e.target.value)}
-                      placeholder={t("pos.delivery.differenceReason")}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    />
-                    <select
-                      value={differenceAccountId}
-                      onChange={(e) => setDifferenceAccountId(e.target.value)}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    >
-                      <option value="">{t("pos.delivery.selectDifferenceAccount")}</option>
-                      {accountOptions.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.code} - {isAr ? (account.nameAr || account.name) : account.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      value={differenceNotes}
-                      onChange={(e) => setDifferenceNotes(e.target.value)}
-                      placeholder={t("pos.delivery.differenceNotes")}
-                      className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329]"
-                    />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      {t("pos.delivery.gross")}: {previewSettlementMutation.data.grossOrdersAmount} JOD
-                    </div>
-                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      {t("pos.delivery.difference")}: {computedDifference.toFixed(2)} JOD
-                    </div>
-                    <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3 text-sm font-semibold text-[#42564a]">
-                      {t("pos.delivery.netReceived")}: {computedNetReceived.toFixed(2)} JOD
-                    </div>
+
+                  <div className="mt-4 flex justify-end">
                     <button
                       type="button"
-                      disabled={
-                        !bankCashAccountId ||
-                        !selectedCompanyId ||
-                        createSettlementMutation.isPending ||
-                        previewSettlementMutation.data.orders.length === 0
+                      disabled={!selectedCompanyId || previewSettlementMutation.isPending}
+                      onClick={() =>
+                        previewSettlementMutation.mutate({
+                          deliveryCompanyId: selectedCompanyId,
+                          periodFrom,
+                          periodTo,
+                        })
                       }
-                      onClick={() => createSettlementMutation.mutate()}
-                      className="rounded-xl bg-[#233329] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                      className="flex items-center gap-2 rounded-xl bg-[#1f6f5f] px-5 py-2.5 text-sm font-black text-white hover:bg-[#19594c] disabled:opacity-50 transition-all shadow-sm"
                     >
-                      {t("pos.delivery.confirmSettlement")}
+                      <LuRefreshCcw className={cn("h-4 w-4", previewSettlementMutation.isPending && "animate-spin")} />
+                      {t("pos.delivery.previewSettlement")}
                     </button>
                   </div>
-                  <div className="rounded-xl border border-[#e6eeea] bg-[#fbfcfb] p-3">
-                    <div className="mb-2 text-sm font-black text-[#233329]">{t("pos.delivery.ordersInPreview")}</div>
-                    <div className="space-y-2 text-xs text-[#42564a]">
-                      {previewSettlementMutation.data.orders.map((row) => (
-                        <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#edf2ee] bg-white px-3 py-2">
-                          <span>{row.reference}</span>
-                          <span>{row.totalAmount}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
-              ) : null}
+
+                {/* Steps 2 & 3: Activated only when unsettled orders are loaded */}
+                {!previewSettlementMutation.data ? (
+                  <div className="rounded-xl border border-dashed border-[#d6e1d9] bg-[#fbfcfb] p-8 text-center text-sm font-semibold text-[#68776f]">
+                    {isAr
+                      ? "الرجاء تحديد شركة التوصيل والفترة ثم الضغط على 'جلب الطلبات غير المسواة' لتفعيل الخطوات التالية."
+                      : "Please select a company and period then click 'Load Unsettled Orders' to unlock the next steps."}
+                  </div>
+                ) : (
+                  <>
+                    {/* Step 2: Delivery company statement details */}
+                    <div className="relative rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
+                      <div className="absolute -top-3 left-4 rtl:right-4 rtl:left-auto flex h-6 items-center rounded-full bg-[#1a2744] px-3 text-xs font-bold text-white">
+                        {isAr ? "الخطوة 2: تفاصيل كشف شركة التوصيل" : "Step 2: Statement Details"}
+                      </div>
+                      <div className="mt-2 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.statementReference")}
+                          </label>
+                          <input
+                            type="text"
+                            value={statementReference}
+                            onChange={(e) => setStatementReference(e.target.value)}
+                            placeholder={t("pos.delivery.statementReference")}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "رقم مرجع كشف الحساب أو الفاتورة المستلمة" : "Statement ID or invoice number received"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {isAr ? "تاريخ كشف الحساب" : "Statement Date"}
+                          </label>
+                          <input
+                            type="date"
+                            value={statementDate}
+                            onChange={(e) => setStatementDate(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "تاريخ مستند كشف الحساب المرفق" : "The date on the statement document"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.commission")}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={commissionAmount}
+                            onChange={(e) => setCommissionAmount(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "عمولة شركة التوصيل المخصومة من الحساب" : "Commission fee deducted by the company"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.serviceFees")}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={serviceFeeAmount}
+                            onChange={(e) => setServiceFeeAmount(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "رسوم تشغيل إضافية أو رسوم لوجستية" : "Service or operation fees charged"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.refunds")}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={refundAmount}
+                            onChange={(e) => setRefundAmount(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "المرتجع المالي أو التسويات الممنوحة للعملاء" : "Customer refunds/discounts deducted"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.adjustments")}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={adjustmentAmount}
+                            onChange={(e) => setAdjustmentAmount(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "تسويات أو تسويات فرق أخرى" : "Any other deductions or manual adjustments"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-col gap-1.5">
+                        <label className="text-xs font-black text-[#233329]">
+                          {t("pos.delivery.notes")}
+                        </label>
+                        <input
+                          type="text"
+                          value={differenceNotes}
+                          onChange={(e) => setDifferenceNotes(e.target.value)}
+                          placeholder={t("pos.delivery.notes")}
+                          className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                        />
+                        <span className="text-[11px] text-[#68776f]">
+                          {isAr ? "ملاحظات إضافية بخصوص كشف الحساب وتفاصيله" : "Additional information about the statement"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Step 3: Bank receipt details */}
+                    <div className="relative rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
+                      <div className="absolute -top-3 left-4 rtl:right-4 rtl:left-auto flex h-6 items-center rounded-full bg-[#1a2744] px-3 text-xs font-bold text-white">
+                        {isAr ? "الخطوة 3: تفاصيل الإيصال البنكي والتأكيد" : "Step 3: Bank Receipt & Confirm"}
+                      </div>
+                      <div className="mt-2 grid gap-4 md:grid-cols-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {isAr ? "تاريخ إيصال البنك" : "Bank Receipt Date"}
+                          </label>
+                          <input
+                            type="date"
+                            value={settlementDate}
+                            onChange={(e) => setSettlementDate(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "تاريخ إيداع المبلغ في حساب البنك" : "Date of deposit/receipt in the bank account"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {isAr ? "حساب البنك / النقد" : "Bank Account"}
+                          </label>
+                          <select
+                            value={bankCashAccountId}
+                            onChange={(e) => setBankCashAccountId(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          >
+                            <option value="">{t("pos.delivery.selectBankAccount")}</option>
+                            {paymentAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {isAr ? (account.account?.nameAr || account.name) : account.name}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "حساب البنك المستلم للحوالة المالية" : "The bank account receiving the transfer"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-black text-[#233329]">
+                            {t("pos.delivery.netReceived")}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={netAmountReceived}
+                            onChange={(e) => setNetAmountReceived(e.target.value)}
+                            className="h-10 rounded-xl border border-[#d6e1d9] bg-white px-3 text-sm font-semibold text-[#233329] focus:border-[#1f6f5f] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#68776f]">
+                            {isAr ? "المبلغ الفعلي المقيد في كشف الحساب البنكي" : "The actual amount deposited in bank account"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Calculations & Discrepancies Summary */}
+                      <div className="mt-6 border-t border-[#e1e7e2] pt-5">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#233329] mb-3">
+                          {isAr ? "ملخص الحسابات والتسوية" : "Settlement Calculations Summary"}
+                        </h4>
+                        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                          <div className="rounded-xl border border-[#e6eeea] bg-white p-3 shadow-sm">
+                            <span className="block text-[10px] font-bold text-[#68776f] uppercase">
+                              {t("pos.delivery.gross")}
+                            </span>
+                            <span className="text-base font-black text-[#1a2744]">
+                              {previewSettlementMutation.data.grossOrdersAmount} JOD
+                            </span>
+                          </div>
+
+                          <div className="rounded-xl border border-[#e6eeea] bg-white p-3 shadow-sm">
+                            <span className="block text-[10px] font-bold text-[#68776f] uppercase">
+                              {t("pos.delivery.netExpected")}
+                            </span>
+                            <span className="text-base font-black text-[#1a2744]">
+                              {netExpectedAmount.toFixed(2)} JOD
+                            </span>
+                          </div>
+
+                          <div className="rounded-xl border border-[#e6eeea] bg-white p-3 shadow-sm">
+                            <span className="block text-[10px] font-bold text-[#68776f] uppercase">
+                              {t("pos.delivery.netReceived")}
+                            </span>
+                            <span className="text-base font-black text-[#1f6f5f]">
+                              {Number(netAmountReceived || 0).toFixed(2)} JOD
+                            </span>
+                          </div>
+
+                          <div className={cn(
+                            "rounded-xl border p-3 shadow-sm transition-colors",
+                            Math.abs(computedDifference) < 0.01
+                              ? "border-[#e6eeea] bg-white text-[#233329]"
+                              : computedDifference < 0
+                                ? "border-red-200 bg-red-50/50 text-red-700"
+                                : "border-emerald-200 bg-emerald-50/50 text-emerald-700"
+                          )}>
+                            <span className="block text-[10px] font-bold text-[#68776f] uppercase">
+                              {t("pos.delivery.difference")}
+                            </span>
+                            <span className="text-base font-black">
+                              {computedDifference.toFixed(2)} JOD
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Difference Handling Area */}
+                      {Math.abs(computedDifference) >= 0.01 && (
+                        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                          <div className="flex gap-2.5 text-amber-800">
+                            <LuAlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                            <div>
+                              <h5 className="text-xs font-black">
+                                {isAr ? "تنبيه: يوجد فرق تسوية" : "Warning: Settlement Difference Detected"}
+                              </h5>
+                              <p className="mt-1 text-xs leading-normal">
+                                {isAr
+                                  ? `يوجد فرق تسوية بقيمة (${computedDifference.toFixed(2)} د.أ). يجب تحديد سبب الفارق واختيار الحساب المالي لتسوية الفروقات قبل التأكيد.`
+                                  : `There is a difference of (${computedDifference.toFixed(2)} JOD). You must select a difference account and specify the reason/code before you can confirm.`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-black text-[#233329]">
+                                {t("pos.delivery.differenceReason")} <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={differenceReason}
+                                onChange={(e) => setDifferenceReason(e.target.value)}
+                                placeholder={t("pos.delivery.differenceReason")}
+                                className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-[#233329] focus:border-amber-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-xs font-black text-[#233329]">
+                                {t("pos.delivery.selectDifferenceAccount")} <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={differenceAccountId}
+                                onChange={(e) => setDifferenceAccountId(e.target.value)}
+                                className="h-10 rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-[#233329] focus:border-amber-500 focus:outline-none"
+                              >
+                                <option value="">{t("pos.delivery.selectDifferenceAccount")}</option>
+                                {accountOptions.map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.code} - {isAr ? (account.nameAr || account.name) : account.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Confirmation and Submit */}
+                      <div className="mt-6 flex justify-end border-t border-[#e1e7e2] pt-4">
+                        <button
+                          type="button"
+                          disabled={
+                            !bankCashAccountId ||
+                            !selectedCompanyId ||
+                            createSettlementMutation.isPending ||
+                            previewSettlementMutation.data.orders.length === 0 ||
+                            isDifferenceInvalid
+                          }
+                          onClick={() => createSettlementMutation.mutate()}
+                          className="rounded-xl bg-[#233329] px-6 py-3 text-sm font-black text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#1a2720] transition-colors shadow-md"
+                        >
+                          {createSettlementMutation.isPending
+                            ? (isAr ? "جاري التأكيد..." : "Confirming...")
+                            : t("pos.delivery.confirmSettlement")}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Orders Listing in Preview */}
+                    <div className="rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="text-sm font-black text-[#233329]">{t("pos.delivery.ordersInPreview")}</div>
+                        <span className="rounded-full bg-[#e6eeea] px-2.5 py-0.5 text-xs font-black text-[#46644b]">
+                          {previewSettlementMutation.data.orders.length}
+                        </span>
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1.5">
+                        {previewSettlementMutation.data.orders.map((row) => (
+                          <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#edf2ee] bg-white px-4 py-3 shadow-xs">
+                            <span className="text-xs font-bold text-[#233329]">{row.reference}</span>
+                            <span className="text-xs font-black text-[#1f6f5f]">{row.totalAmount} JOD</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </section>
 
             <section className="rounded-2xl border border-[#d9e4dc] bg-white p-4">
