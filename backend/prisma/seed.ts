@@ -1,5 +1,4 @@
 import { PrismaClient } from '../src/generated/prisma';
-import { runBasicDemoSeed } from './seed-basic-demo';
 import { truncateDatabase } from './seed-database';
 import { runFoundationSeed } from './seed-foundation';
 import { seedPosRegisterDemo } from './seed-pos-register';
@@ -13,7 +12,6 @@ async function main() {
   await truncateDatabase(prisma);
 
   const ctx = await runFoundationSeed(prisma);
-  await runBasicDemoSeed(prisma, ctx);
 
   await seedPosRegisterDemo(prisma, {
     adminUserId: ctx.admin.id,

@@ -150,6 +150,60 @@ export async function runBasicDemoSeed(prisma: PrismaClient, ctx: FoundationCont
     },
   });
 
+  const resetCashPosting = await postJournalEntry(prisma, admin.id, {
+    reference: 'PAY-2026-003',
+    description: 'Demo reset for cash register balance',
+    entryDate: new Date('2026-05-01'),
+    fiscalPeriodId: period4.id,
+    lines: [
+      { accountId: accounts.ownerCapital.id, description: 'Owner draw from cash register', debitAmount: 300, creditAmount: 0 },
+      { accountId: accounts.mainCash.id, description: 'Reset seeded cash balance to zero', debitAmount: 0, creditAmount: 300 },
+    ],
+  });
+
+  await prisma.bankCashTransaction.create({
+    data: {
+      kind: 'PAYMENT',
+      status: 'POSTED',
+      reference: 'PAY-2026-003',
+      transactionDate: new Date('2026-05-01'),
+      amount: 300,
+      bankCashAccountId: registers.cash.id,
+      counterAccountId: accounts.ownerCapital.id,
+      counterpartyName: 'Owner',
+      description: 'Demo reset for cash register balance',
+      journalEntryId: resetCashPosting.journalEntry.id,
+      postedAt: new Date('2026-05-01'),
+    },
+  });
+
+  const resetArabBankPosting = await postJournalEntry(prisma, admin.id, {
+    reference: 'PAY-2026-004',
+    description: 'Demo reset for Arab Bank balance',
+    entryDate: new Date('2026-05-01'),
+    fiscalPeriodId: period4.id,
+    lines: [
+      { accountId: accounts.ownerCapital.id, description: 'Owner draw from Arab Bank', debitAmount: 50800, creditAmount: 0 },
+      { accountId: accounts.arabBank.id, description: 'Reset seeded Arab Bank balance to zero', debitAmount: 0, creditAmount: 50800 },
+    ],
+  });
+
+  await prisma.bankCashTransaction.create({
+    data: {
+      kind: 'PAYMENT',
+      status: 'POSTED',
+      reference: 'PAY-2026-004',
+      transactionDate: new Date('2026-05-01'),
+      amount: 50800,
+      bankCashAccountId: registers.arabBank.id,
+      counterAccountId: accounts.ownerCapital.id,
+      counterpartyName: 'Owner',
+      description: 'Demo reset for Arab Bank balance',
+      journalEntryId: resetArabBankPosting.journalEntry.id,
+      postedAt: new Date('2026-05-01'),
+    },
+  });
+
   const capitalBankLedger = capitalPosting.ledgerLines.find((line) => line.accountId === accounts.arabBank.id);
   const bankReceiptLedger = bankReceiptPosting.ledgerLines.find((line) => line.accountId === accounts.arabBank.id);
   const transferBankLedger = transferPosting.ledgerLines.find((line) => line.accountId === accounts.arabBank.id);

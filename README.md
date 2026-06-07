@@ -166,7 +166,7 @@ From the `backend` folder, choose a seed command. **Both commands truncate all p
 
 | Command | When to use | What you get | Typical runtime |
 |---------|-------------|--------------|-----------------|
-| `npm run seed` or `npx prisma db seed` | Daily dev, CI, quick reset | Full chart of accounts, masters, users, ~6 posted journals (FY 2026), POS demo | ~30–60s |
+| `npm run seed` or `npx prisma db seed` | Daily dev, CI, quick reset | Full chart of accounts, masters, users, empty journal history, POS demo | ~30–60s |
 | `npm run seed:volume` | Reporting screenshots, module walkthroughs, “big company” demos | Same foundation **plus** fiscal years 2024–2026, ~15k+ posted journals, enterprise masters, reporting audit activity, quarterly operational samples, POS demo | ~2–8 min |
 
 Login after either seed: **admin** / **admin123** (cashier: **cashier** / **cashier123**).
