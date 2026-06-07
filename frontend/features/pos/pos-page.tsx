@@ -3491,7 +3491,7 @@ export function PosPage() {
     const orderKitchenLocked = isOrderKitchenLocked(cartLines);
 
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[#f6f7f8]">
+      <div className="flex min-h-dvh flex-col bg-[#f6f7f8] lg:h-dvh lg:overflow-hidden">
         <PosSessionBar
           session={activeSession}
           cashierLabel={cashierLabel}
@@ -3522,12 +3522,12 @@ export function PosPage() {
           catalog={
             <section className="space-y-3">
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
-                <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                   <Field
                     label={t("pos.sales.barcodeSearch")}
                     className="mb-0 min-w-0 flex-1"
                   >
-                    <div className="relative flex gap-2">
+                    <div className="relative flex flex-col gap-2 sm:flex-row">
                       <LuScanLine className="pointer-events-none absolute left-3 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3" />
                       <Input
                         ref={searchInputRef}
@@ -3542,40 +3542,42 @@ export function PosPage() {
                         placeholder={t("pos.sales.barcodePlaceholder")}
                         className="h-9 rounded-[6px] border-[#d7dfda] bg-white py-2 pl-9 pr-3 text-xs focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-9"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setIsCameraScannerOpen(true)}
-                        className="flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                        title="Scan Barcode with Camera"
-                      >
-                        <LuCamera className="mr-1.5 h-3.5 w-3.5" />
-                        Scan / كاميرا
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsCalculatorOpen(true)}
-                        className="flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                        title="Calculator"
-                      >
-                        <LuCalculator className="mr-1.5 h-3.5 w-3.5" />
-                        Calc / حاسبة
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void queryClient.invalidateQueries({
-                            queryKey: ["inventory-items", token],
-                          });
-                        }}
-                        className="h-9 shrink-0 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                      >
-                        Refresh / تحديث
-                      </button>
+                      <div className="grid grid-cols-3 gap-2 sm:flex sm:w-auto sm:gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsCameraScannerOpen(true)}
+                          className="flex h-9 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                          title="Scan Barcode with Camera"
+                        >
+                          <LuCamera className="mr-1.5 h-3.5 w-3.5" />
+                          <span className="truncate">Scan / كاميرا</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsCalculatorOpen(true)}
+                          className="flex h-9 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                          title="Calculator"
+                        >
+                          <LuCalculator className="mr-1.5 h-3.5 w-3.5" />
+                          <span className="truncate">Calc / حاسبة</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void queryClient.invalidateQueries({
+                              queryKey: ["inventory-items", token],
+                            });
+                          }}
+                          className="h-9 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                        >
+                          Refresh / تحديث
+                        </button>
+                      </div>
                     </div>
                   </Field>
                 </div>
 
-                <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
+                <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {catalogChips.map((chip) => (
                     <button
                       key={chip.id}
@@ -3640,7 +3642,7 @@ export function PosPage() {
                   </button>
                 </Card>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                   {filteredItems.map((item) => (
                     <PosProductCard
                       key={item.id}

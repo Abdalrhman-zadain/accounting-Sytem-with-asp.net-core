@@ -142,14 +142,14 @@ export function PosProductCard({
         }
       }}
       className={cn(
-        "group flex flex-col overflow-hidden rounded-[16px] bg-white p-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none",
+        "group flex h-full flex-col overflow-hidden rounded-[16px] bg-white p-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none sm:p-3",
         isDisabled
           ? "opacity-60 cursor-not-allowed"
           : "cursor-pointer hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)] active:scale-[0.98]"
       )}
     >
       {/* Product Image Area */}
-      <div className="relative mb-3 aspect-[4/3] w-full overflow-hidden rounded-[12px] bg-[#f8faf9]">
+      <div className="relative mb-2.5 aspect-[4/3] w-full overflow-hidden rounded-[12px] bg-[#f8faf9] sm:mb-3">
         {item.itemImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -165,16 +165,16 @@ export function PosProductCard({
       </div>
 
       {/* Product Name */}
-      <p className="truncate text-[14px] font-semibold text-slate-800 transition-colors duration-200 group-hover:text-slate-900 arabic-heading px-1">
+      <p className="line-clamp-2 min-h-[2.5rem] px-1 text-[13px] font-semibold leading-5 text-slate-800 transition-colors duration-200 group-hover:text-slate-900 arabic-heading sm:text-[14px]">
         {getLocalizedText(item.name, language)}
       </p>
 
       {/* Footer: Category Pill and Price */}
-      <div className="mt-2 flex items-center justify-between px-1">
+      <div className="mt-auto flex items-end justify-between gap-2 px-1 pt-2">
         {/* Pastel Category Badge */}
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide",
+            "max-w-full truncate rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide",
             // Fallback classes if visuals.bg doesn't contain bg colors
             visuals.bg.replace("border", "border-none").replace("text-", "text-opacity-80 text-")
           )}
@@ -183,7 +183,7 @@ export function PosProductCard({
         </span>
 
         {/* Price */}
-        <span className="text-[14px] font-bold text-slate-900">
+        <span className="shrink-0 text-[13px] font-bold text-slate-900 sm:text-[14px]">
           {formatCurrency(price, currencyCode)}
         </span>
       </div>

@@ -55,8 +55,9 @@ export function PosSessionBar({
       .toUpperCase() || "CA";
 
   return (
-    <div className="flex shrink-0 items-center justify-between border-b border-[#e7ebea] bg-white px-4 py-2 sm:px-5">
-      <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+    <div className="shrink-0 border-b border-[#e7ebea] bg-white px-3 py-3 sm:px-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-start gap-3 sm:gap-4 xl:items-center xl:gap-5">
         <div className="flex items-center gap-2">
           <LuStore className="h-4 w-4 text-[#9aa8a0]" />
           <div>
@@ -91,7 +92,7 @@ export function PosSessionBar({
           <select
             value={selectedWarehouseId}
             onChange={(e) => onWarehouseChange(e.target.value)}
-            className="max-w-[190px] cursor-pointer bg-transparent text-[12px] font-semibold text-[#2f3f35] outline-none"
+            className="h-8 min-w-[140px] max-w-full rounded-[10px] border border-[#dfe7e1] bg-[#f8fbf9] px-2.5 text-[12px] font-semibold text-[#2f3f35] outline-none sm:min-w-[180px]"
           >
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
@@ -102,7 +103,8 @@ export function PosSessionBar({
         </div>
 
         {shiftReport && (
-          <div className="ms-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[14px] bg-[#f2f6f3] px-4 py-1.5 text-[10px] shadow-inner">
+          <div className="w-full rounded-[14px] bg-[#f2f6f3] px-3 py-2 text-[10px] shadow-inner xl:ms-2 xl:w-auto xl:px-4 xl:py-1.5">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="flex items-center gap-1.5">
               <span className="text-[9px] font-bold uppercase tracking-wide text-[#8a9990]">{getLocalizedText("Opening / الافتتاح:", language)}</span>
               <span className="font-bold text-[#1f3427]">{formatCurrency(parseAmount(shiftReport.openingCash), cc)}</span>
@@ -128,28 +130,29 @@ export function PosSessionBar({
               <span>{formatCurrency(parseAmount(shiftReport.expectedCash), cc)}</span>
             </span>
           </div>
+          </div>
         )}
       </div>
-      
-      <div className="ms-auto flex shrink-0 items-center gap-2 border-s border-[#e7ebea] ps-4">
-        <button
-          type="button"
-          onClick={onCloseSession}
-          disabled={isPending || canCloseSession === false}
-          title={
-            canCloseSession === false
-              ? getLocalizedText("You cannot close this shift / لا يمكن إغلاق الوردية", language)
-              : undefined
-          }
-          className={cn(
-            "rounded-[12px] border border-[#f0d9d6] bg-[#fff5f4] px-4 py-1.5 text-xs font-bold text-[#b54b40] shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          {isPending ? "Closing…" : getLocalizedText("Close Shift / إغلاق الوردية", language)}
-        </button>
-        <button type="button" className="flex h-[34px] w-[34px] items-center justify-center rounded-[12px] border border-[#e4e9e6] bg-white text-[#9aa8a0] shadow-sm transition hover:bg-[#f5f7f6]">
-          <LuBell className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2 xl:border-s xl:border-[#e7ebea] xl:ps-4">
+          <button
+            type="button"
+            onClick={onCloseSession}
+            disabled={isPending || canCloseSession === false}
+            title={
+              canCloseSession === false
+                ? getLocalizedText("You cannot close this shift / لا يمكن إغلاق الوردية", language)
+                : undefined
+            }
+            className={cn(
+              "flex-1 rounded-[12px] border border-[#f0d9d6] bg-[#fff5f4] px-4 py-2 text-xs font-bold text-[#b54b40] shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 xl:flex-none xl:py-1.5",
+            )}
+          >
+            {isPending ? "Closing…" : getLocalizedText("Close Shift / إغلاق الوردية", language)}
+          </button>
+          <button type="button" className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[12px] border border-[#e4e9e6] bg-white text-[#9aa8a0] shadow-sm transition hover:bg-[#f5f7f6]">
+            <LuBell className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
