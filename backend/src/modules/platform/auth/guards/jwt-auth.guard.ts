@@ -6,6 +6,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     private readonly cashierAllowedPrefixes = [
         '/api/pos',
         '/api/inventory/items',
+        '/api/inventory/item-groups',
         '/api/inventory/warehouses',
         '/api/bank-cash-accounts',
     ];
