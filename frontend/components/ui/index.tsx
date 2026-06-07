@@ -147,7 +147,12 @@ export function Modal({
     if (!isOpen) return undefined;
 
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingInlineEnd = document.body.style.paddingInlineEnd;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingInlineEnd = `${scrollbarWidth}px`;
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -158,6 +163,7 @@ export function Modal({
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingInlineEnd = previousPaddingInlineEnd;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
@@ -179,7 +185,7 @@ export function Modal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] overflow-y-auto p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
@@ -189,20 +195,27 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cn("relative z-10 w-full animate-in zoom-in-95 fade-in duration-300", sizes[size])}
+        className={cn(
+          "relative z-10 mx-auto my-4 w-full animate-in zoom-in-95 fade-in duration-300 sm:my-8",
+          sizes[size],
+        )}
         onClick={(event) => event.stopPropagation()}
       >
-        <Card className={cn("p-8 shadow-2xl ring-1 ring-white/10", className)}>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-900">
-              <span className="sr-only">Close</span>
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+        <Card className={cn("max-h-[calc(100vh-2rem)] overflow-hidden p-0 shadow-2xl ring-1 ring-white/10 sm:max-h-[calc(100vh-4rem)]", className)}>
+          <div className="flex max-h-[inherit] flex-col">
+            <div className="mb-0 flex items-center justify-between border-b border-gray-100 px-6 py-5 sm:px-8">
+              <h2 className="pe-4 text-xl font-bold text-gray-900">{title}</h2>
+              <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-900">
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="min-h-0 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+              {children}
+            </div>
           </div>
-          {children}
         </Card>
       </div>
     </div>,

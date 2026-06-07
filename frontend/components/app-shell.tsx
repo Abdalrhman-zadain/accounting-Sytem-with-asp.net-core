@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { SiteHeader } from "@/components/site-header";
@@ -24,6 +24,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isPosPage = pathname?.startsWith("/pos");
   const isKitchenRoute = pathname?.startsWith("/pos/kitchen");
   const hideSidebar = kitchenMode && isKitchenRoute;
+
+  useEffect(() => {
+    // Defensive cleanup for stale scroll locks left behind during client navigation.
+    document.body.style.overflow = "";
+  }, [pathname]);
 
   return (
     <>

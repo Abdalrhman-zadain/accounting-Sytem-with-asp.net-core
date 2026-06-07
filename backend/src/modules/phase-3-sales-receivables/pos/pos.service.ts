@@ -1723,6 +1723,7 @@ export class PosService {
 
   async approveAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
       throw new BadRequestException("POS accounting posting is configured by session. Approve the session instead of a single invoice.");
     }
@@ -1767,7 +1768,7 @@ export class PosService {
       data: {
         posAccountingStatus: PosAccountingStatus.POSTED,
         posReviewedAt: new Date(),
-        posReviewedByUserId: user?.userId ?? null,
+        posReviewedByUserId: actorUserId,
         posReviewNotes: dto.notes?.trim() || null,
         postedAt: posted.postedAt ? new Date(posted.postedAt) : new Date(),
       },
@@ -1791,6 +1792,7 @@ export class PosService {
 
   async approveSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_POST_BY_SESSION", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       select: {
@@ -2043,7 +2045,7 @@ export class PosService {
           data: {
             posAccountingStatus: PosAccountingStatus.POSTED,
             posReviewedAt: new Date(),
-            posReviewedByUserId: user?.userId ?? null,
+            posReviewedByUserId: actorUserId,
             posReviewNotes: dto.notes?.trim() || null,
             postedAt: groupedPostedAt,
           },
@@ -2089,6 +2091,7 @@ export class PosService {
 
   async rejectSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       select: { id: true, sessionNumber: true },
@@ -2125,7 +2128,7 @@ export class PosService {
           data: {
             posAccountingStatus: PosAccountingStatus.REJECTED,
             posReviewedAt: new Date(),
-            posReviewedByUserId: user?.userId ?? null,
+            posReviewedByUserId: actorUserId,
             posReviewNotes: dto.notes?.trim() || null,
           },
         });
@@ -2161,6 +2164,7 @@ export class PosService {
 
   async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
       throw new BadRequestException("POS accounting posting is configured by session. Review the session instead of a single invoice.");
     }
@@ -2183,7 +2187,7 @@ export class PosService {
       data: {
         posAccountingStatus: PosAccountingStatus.REJECTED,
         posReviewedAt: new Date(),
-        posReviewedByUserId: user?.userId ?? null,
+        posReviewedByUserId: actorUserId,
         posReviewNotes: dto.notes?.trim() || null,
       },
       include: this.posSaleInclude(),
@@ -2206,6 +2210,7 @@ export class PosService {
 
   async reverseAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
       throw new BadRequestException("POS accounting reversal is configured by session. Reverse the grouped session posting instead of a single invoice.");
     }
@@ -2241,7 +2246,7 @@ export class PosService {
       data: {
         posAccountingStatus: PosAccountingStatus.REVERSED,
         posReviewedAt: new Date(),
-        posReviewedByUserId: user?.userId ?? null,
+        posReviewedByUserId: actorUserId,
         posReviewNotes: dto.description?.trim() || "Accounting reversal created",
       },
       include: this.posSaleInclude(),
@@ -2520,6 +2525,7 @@ export class PosService {
 
   async approveReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       include: {
@@ -2543,7 +2549,7 @@ export class PosService {
         status: PosReturnStatus.APPROVED,
         accountingStatus: PosAccountingStatus.POSTED,
         reviewedAt: new Date(),
-        reviewedByUserId: user?.userId ?? null,
+        reviewedByUserId: actorUserId,
         reviewNotes: dto.notes?.trim() || null,
         postedAt: posted.postedAt ? new Date(posted.postedAt) : new Date(),
       },
@@ -2566,6 +2572,7 @@ export class PosService {
 
   async rejectReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       include: this.posReturnInclude(),
@@ -2583,7 +2590,7 @@ export class PosService {
         status: PosReturnStatus.REJECTED,
         accountingStatus: PosAccountingStatus.REJECTED,
         reviewedAt: new Date(),
-        reviewedByUserId: user?.userId ?? null,
+        reviewedByUserId: actorUserId,
         reviewNotes: dto.notes?.trim() || null,
       },
       include: this.posReturnInclude(),
@@ -2605,6 +2612,7 @@ export class PosService {
 
   async reverseReturnAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
+    const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       select: {
@@ -2634,7 +2642,7 @@ export class PosService {
         accountingStatus: PosAccountingStatus.REVERSED,
         reversedAt: new Date(),
         reviewedAt: new Date(),
-        reviewedByUserId: user?.userId ?? null,
+        reviewedByUserId: actorUserId,
         reviewNotes: dto.description?.trim() || "Accounting reversal created",
       },
       include: this.posReturnInclude(),
@@ -4208,7 +4216,8 @@ export class PosService {
     return expectedCash;
   }
 
-  private buildCorrectedInvoiceDebitLines(
+  private async buildCorrectedInvoiceDebitLines(
+    tx: Prisma.TransactionClient,
     invoice: {
       reference: string;
       description?: string | null;
@@ -4231,6 +4240,7 @@ export class PosService {
       const current = debitByAccount.get(accountId) ?? 0;
       debitByAccount.set(accountId, Number((current + amount).toFixed(2)));
     };
+    const accountMappings = await this.getPosAccountMappings(tx);
 
     for (const payment of invoice.posPayments) {
       const amount = Number(payment.amount);
@@ -4238,7 +4248,10 @@ export class PosService {
         continue;
       }
 
-      let accountId = payment.bankCashAccount.accountId;
+      let accountId =
+        payment.bankCashAccount?.accountId ||
+        this.getMappedAccountIdForPaymentMethod(payment.paymentMethod, accountMappings) ||
+        "";
       if (
         payment.paymentMethod === PosPaymentMethod.DELIVERY &&
         payment.deliveryCompany?.receivableAccountId &&
@@ -4246,6 +4259,9 @@ export class PosService {
         payment.deliveryCompanyId === invoice.deliveryCompany.id
       ) {
         accountId = payment.deliveryCompany.receivableAccountId;
+      }
+      if (!accountId) {
+        throw new BadRequestException("طريقة الدفع غير مربوطة بحساب محاسبي");
       }
       addAmount(accountId, amount);
     }
@@ -4329,7 +4345,7 @@ export class PosService {
     const description = invoice.description
       ? `${invoice.reference} - ${invoice.description}`
       : invoice.reference;
-    const debitLines = this.buildCorrectedInvoiceDebitLines(invoice, description);
+    const debitLines = await this.buildCorrectedInvoiceDebitLines(tx, invoice, description);
     const preservedLines = invoice.journalEntry.lines
       .filter((line) => !(Number(line.debitAmount) > 0 && line.account.type === AccountType.ASSET))
       .map((line) => ({
@@ -4541,14 +4557,20 @@ export class PosService {
           continue;
         }
 
-        let debitAccountId = payment.bankCashAccount.accountId;
+        let debitAccountId =
+          payment.bankCashAccount?.accountId ||
+          this.getMappedAccountIdForPaymentMethod(payment.paymentMethod, accountMappings) ||
+          "";
         if (
           payment.deliveryCompany?.receivableAccountId &&
           sale.deliveryCompany?.id &&
           payment.deliveryCompanyId === sale.deliveryCompany.id
         ) {
           debitAccountId = payment.deliveryCompany.receivableAccountId;
-        } else if (payment.paymentMethod !== PosPaymentMethod.CASH) {
+        } else if (
+          payment.paymentMethod !== PosPaymentMethod.CASH ||
+          !payment.bankCashAccount?.accountId
+        ) {
           debitAccountId =
             this.getMappedAccountIdForPaymentMethod(payment.paymentMethod, accountMappings) || "";
         }
