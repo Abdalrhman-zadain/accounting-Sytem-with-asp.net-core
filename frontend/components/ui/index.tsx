@@ -57,9 +57,9 @@ export function SectionHeading({
 }) {
   return (
     <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between mb-8">
-      <div className="space-y-3">
-        <h1 className="app-title text-3xl font-black tracking-tight sm:text-4xl xl:text-5xl">{title}</h1>
-        {description ? <p className="app-subtitle text-lg leading-relaxed">{description}</p> : null}
+      <div className="space-y-3 text-start">
+        <h1 dir="auto" className="app-title arabic-heading text-start text-3xl font-black tracking-tight sm:text-4xl xl:text-5xl">{title}</h1>
+        {description ? <p dir="auto" className="app-subtitle arabic-muted text-start text-lg leading-relaxed">{description}</p> : null}
       </div>
       <div className="flex-shrink-0">
         {action}

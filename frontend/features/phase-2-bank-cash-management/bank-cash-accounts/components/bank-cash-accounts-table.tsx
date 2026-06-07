@@ -28,15 +28,15 @@ export function BankCashAccountsTable({
 
   return (
     <Card className="overflow-hidden border border-gray-200 bg-panel/40 p-0">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead className="border-b border-gray-200 bg-gray-50">
           <tr>
-            <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.account")}</th>
-            <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.bankName")}</th>
-            <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.type")}</th>
-            <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.balance")}</th>
+            <th className="px-6 py-4 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.account")}</th>
+            <th className="px-6 py-4 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.bankName")}</th>
+            <th className="px-6 py-4 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.type")}</th>
+            <th className="px-6 py-4 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.balance")}</th>
             <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.status")}</th>
-            <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.actions")}</th>
+            <th className="px-6 py-4 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.table.actions")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
@@ -62,14 +62,14 @@ export function BankCashAccountsTable({
                 )}
               >
                 <td className="px-6 py-4">
-                  <button className="text-left" onClick={() => onSelect(row.id)}>
-                    <div className="font-bold text-gray-900 arabic-auto">{localizeName(row.name)}</div>
-                    <div className="font-mono text-xs text-teal-500 arabic-auto">
+                  <button className="text-start" onClick={() => onSelect(row.id)}>
+                    <div dir="auto" className="font-bold text-gray-900 arabic-auto text-start">{localizeName(row.name)}</div>
+                    <div dir="auto" className="font-mono text-xs text-teal-500 arabic-auto text-start">
                       {row.account.code} - {localizeName(row.account.name, row.account.nameAr)}
                     </div>
                   </button>
                 </td>
-                <td className="px-6 py-4 text-xs text-gray-500 arabic-muted">
+                <td dir="auto" className="px-6 py-4 text-start text-xs text-gray-500 arabic-muted">
                   {row.bankName || row.accountNumber || "—"}
                 </td>
                 <td className="px-6 py-4">
@@ -77,7 +77,7 @@ export function BankCashAccountsTable({
                     {row.type}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-right font-mono text-xs font-black text-gray-900">
+                <td className="px-6 py-4 text-end font-mono text-xs font-black text-gray-900">
                   {formatCurrency(row.currentBalance)}
                 </td>
                 <td className="px-6 py-4 text-center">

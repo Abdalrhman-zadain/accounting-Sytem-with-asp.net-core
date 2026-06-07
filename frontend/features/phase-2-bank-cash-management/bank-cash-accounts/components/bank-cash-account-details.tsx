@@ -74,30 +74,30 @@ export function BankCashAccountDetails({
           ) : historyRows.length === 0 ? (
             <div className="px-6 py-10 text-sm text-gray-500 arabic-muted">{t("bankCash.history.empty")}</div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-start text-sm">
               <thead className="border-b border-gray-200 bg-white">
                 <tr>
-                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.date")}</th>
-                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.type")}</th>
-                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.reference")}</th>
-                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.journalReference")}</th>
-                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.descriptionColumn")}</th>
-                  <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.debit")}</th>
-                  <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.credit")}</th>
+                  <th className="px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.date")}</th>
+                  <th className="px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.type")}</th>
+                  <th className="px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.reference")}</th>
+                  <th className="px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.journalReference")}</th>
+                  <th className="px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.descriptionColumn")}</th>
+                  <th className="px-6 py-3 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.debit")}</th>
+                  <th className="px-6 py-3 text-end text-[10px] font-bold uppercase tracking-widest text-gray-600">{t("bankCash.history.credit")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {historyRows.map((row) => (
                   <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-3 text-xs text-gray-500 arabic-muted">{formatDate(row.entryDate)}</td>
-                    <td className="px-6 py-3 text-xs font-bold text-gray-900">{row.transactionType}</td>
-                    <td className="px-6 py-3 font-mono text-xs text-teal-500">{row.reference}</td>
-                    <td className="px-6 py-3 font-mono text-xs text-gray-700">{row.journalReference}</td>
-                    <td className="px-6 py-3 text-xs text-gray-500">{row.description || "—"}</td>
-                    <td className="px-6 py-3 text-right font-mono text-xs font-black text-teal-400">
+                    <td className="px-6 py-3 text-start text-xs text-gray-500 arabic-muted">{formatDate(row.entryDate)}</td>
+                    <td className="px-6 py-3 text-start text-xs font-bold text-gray-900">{row.transactionType}</td>
+                    <td className="px-6 py-3 text-start font-mono text-xs text-teal-500">{row.reference}</td>
+                    <td className="px-6 py-3 text-start font-mono text-xs text-gray-700">{row.journalReference}</td>
+                    <td dir="auto" className="px-6 py-3 text-start text-xs text-gray-500">{row.description || "—"}</td>
+                    <td className="px-6 py-3 text-end font-mono text-xs font-black text-teal-400">
                       {Number(row.debitAmount) > 0 ? formatCurrency(row.debitAmount) : "—"}
                     </td>
-                    <td className="px-6 py-3 text-right font-mono text-xs font-black text-orange-400">
+                    <td className="px-6 py-3 text-end font-mono text-xs font-black text-orange-400">
                       {Number(row.creditAmount) > 0 ? formatCurrency(row.creditAmount) : "—"}
                     </td>
                   </tr>
