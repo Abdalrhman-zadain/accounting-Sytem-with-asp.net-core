@@ -3,7 +3,7 @@
 import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LuAlertTriangle,
+  LuTriangleAlert,
   LuMapPin,
   LuRefreshCcw,
   LuSearch,
@@ -1012,7 +1012,7 @@ export function PosDeliveryWorkspace({ embedded = false }: { embedded?: boolean 
                       {Math.abs(computedDifference) >= 0.01 && (
                         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
                           <div className="flex gap-2.5 text-amber-800">
-                            <LuAlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                            <LuTriangleAlert className="h-5 w-5 shrink-0 mt-0.5" />
                             <div>
                               <h5 className="text-xs font-black">
                                 {isAr ? "تنبيه: يوجد فرق تسوية" : "Warning: Settlement Difference Detected"}

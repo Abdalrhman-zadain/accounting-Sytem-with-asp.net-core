@@ -112,6 +112,7 @@ import {
   getPosWaiters,
   getJournalEntryById,
   getPosItemAddonConfig,
+  getInventoryItemGroups,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -119,11 +120,8 @@ import { hasPermission, isCashierPosUser } from "@/lib/auth-access";
 import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
-  POS_CATALOG_CHIPS,
-  catalogItemMatchesChip,
   getPosItemShelfCategory,
   normalizeResumeCategory,
-  type PosCatalogChip,
 } from "@/features/pos/pos-catalog-chips";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import { DetailTile, DetailedTableCard } from "@/features/pos/pos-detail-cards";
@@ -914,7 +912,7 @@ export function PosPage() {
   const [addonModalConfig, setAddonModalConfig] = useState<PosItemAddonConfig | null>(null);
   const [addonEditLine, setAddonEditLine] = useState<CartLine | null>(null);
   const deferredSearch = useDeferredValue(search);
-  const [activeCategory, setActiveCategory] = useState<PosCatalogChip>("all");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
   const [invoiceDiscountType, setInvoiceDiscountType] =
     useState<DiscountType>("FIXED");
@@ -1098,6 +1096,22 @@ export function PosPage() {
 
   const PAGE_SIZE = 48;
 
+  const itemGroupsQuery = useQuery({
+    queryKey: queryKeys.inventoryItemGroups(token, { isActive: "true" }),
+    queryFn: () => getInventoryItemGroups({ isActive: "true" }, token),
+    enabled: Boolean(token && activeSessionQuery.data?.id && workspace === "sales"),
+  });
+
+  const itemGroups = itemGroupsQuery.data ?? [];
+  const catalogChips = useMemo(() => {
+    return [
+      { id: "all", name: language === "ar" ? "الكل" : "All / الكل" },
+      ...itemGroups.map((g) => ({ id: g.id, name: g.name })),
+      { id: "favorites", name: language === "ar" ? "المفضلة" : "Favorites / المفضلة" },
+    ];
+  }, [itemGroups, language]);
+
+
   const itemsQuery = useQuery({
     queryKey: queryKeys.inventoryItems(token, {
       isActive: "true",
@@ -1105,6 +1119,7 @@ export function PosPage() {
       limit: PAGE_SIZE,
       search: deferredSearch.trim() || undefined,
       warehouseId: selectedWarehouseId || undefined,
+      itemGroupId: activeCategory !== "all" && activeCategory !== "favorites" ? activeCategory : undefined,
     }),
     queryFn: () =>
       getInventoryItems(
@@ -1114,6 +1129,7 @@ export function PosPage() {
           limit: PAGE_SIZE,
           search: deferredSearch.trim() || undefined,
           warehouseId: selectedWarehouseId || undefined,
+          itemGroupId: activeCategory !== "all" && activeCategory !== "favorites" ? activeCategory : undefined,
         },
         token,
       ),
@@ -2223,9 +2239,10 @@ export function PosPage() {
   }, [items, selectedWarehouseId]);
 
   const filteredItems = useMemo(() => {
-    return items.filter((item) =>
-      catalogItemMatchesChip(item, activeCategory, favoriteIdSet),
-    );
+    if (activeCategory === "favorites") {
+      return items.filter((item) => favoriteIdSet.has(item.id));
+    }
+    return items;
   }, [activeCategory, favoriteIdSet, items]);
 
   const selectedWarehouse =
@@ -3559,29 +3576,22 @@ export function PosPage() {
                 </div>
 
                 <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-                  {POS_CATALOG_CHIPS.map((chip) => (
+                  {catalogChips.map((chip) => (
                     <button
-                      key={chip}
+                      key={chip.id}
                       type="button"
-                      onClick={() => setActiveCategory(chip)}
+                      onClick={() => {
+                        setActiveCategory(chip.id);
+                        setProductPage(1);
+                      }}
                       className={cn(
                         "min-h-[28px] whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-bold transition",
-                        activeCategory === chip
+                        activeCategory === chip.id
                           ? "border-[#5f8a67] bg-[#5f8a67] text-white"
                           : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
                       )}
                     >
-                      {chip === "all"
-                        ? t("pos.sales.allCategories")
-                        : chip === "drinks"
-                          ? "Drinks / مشروبات"
-                          : chip === "food"
-                            ? "Food / طعام"
-                            : chip === "services"
-                              ? "Services / خدمات"
-                              : chip === "offers"
-                                ? "Offers / عروض"
-                                : "Favorites / المفضلة"}
+                      {chip.name}
                     </button>
                   ))}
                 </div>

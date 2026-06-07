@@ -773,7 +773,8 @@ Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
 - extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
-- category chips and offer/favorite matching: `frontend/features/pos/pos-catalog-chips.ts`
+
+- category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
 - POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
@@ -809,7 +810,7 @@ What else to check:
 
 - `GET /pos/settings` drives `runtime.allowCreditSale`, `runtime.negativeStockAllowed`, `runtime.allowCloseWithDrafts`, and `runtime.cashierDiscountLimitPercent` — align the register with these flags and with POS permission codes (`POS_CREDIT_SALE`, `POS_SELL_NEGATIVE_STOCK`, `POS_CHANGE_UNIT_PRICE`, `POS_HOLD_SALE`, `POS_CLOSE_OWN_SESSION`, etc.)
 - bank transfer in the pay modal must resolve to `BANK_TRANSFER` bank/cash accounts via `normalizePaymentAccountMethod`
-- the **Offers** catalog chip remains name/category heuristic until a real promotion field or table is added to item master
+- the category chips (filters) are dynamically loaded from backend inventory item groups, and the Offers chip has been removed in favor of strict Item Group categories
 
 Checks to run:
 
