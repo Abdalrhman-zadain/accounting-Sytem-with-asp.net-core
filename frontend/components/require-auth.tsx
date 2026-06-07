@@ -6,7 +6,7 @@ import { ReactNode, useEffect } from "react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { Card } from "@/components/ui";
-import { canAccessRoute, getDefaultRoute } from "@/lib/auth-access";
+import { canAccessRoute, getDefaultRoute, isSameRoute } from "@/lib/auth-access";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -15,15 +15,24 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const isAuthorized = canAccessRoute(user, pathname);
 
   useEffect(() => {
-    if (isHydrated && !isAuthenticated) {
-      router.replace("/login");
+    if (!isHydrated) {
       return;
     }
 
-    if (isHydrated && isAuthenticated && !isAuthorized) {
-      router.replace(getDefaultRoute(user));
+    if (!isAuthenticated) {
+      if (!isSameRoute(pathname, "/login")) {
+        router.replace("/login");
+      }
+      return;
     }
-  }, [isAuthenticated, isAuthorized, isHydrated, router, user]);
+
+    if (!isAuthorized) {
+      const defaultRoute = getDefaultRoute(user);
+      if (!isSameRoute(pathname, defaultRoute)) {
+        router.replace(defaultRoute);
+      }
+    }
+  }, [isAuthenticated, isAuthorized, isHydrated, pathname, router, user]);
 
   if (!isHydrated) {
     return (

@@ -158,3 +158,7 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
 export function getDefaultRoute(user: AuthUser | null | undefined) {
   return user?.defaultRoute || "/login";
 }
+
+export function isSameRoute(pathA: string, pathB: string) {
+  return normalizePath(pathA) === normalizePath(pathB);
+}

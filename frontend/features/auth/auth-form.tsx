@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import {
@@ -14,6 +15,7 @@ import {
 } from "react-icons/lu";
 
 import { login, register } from "@/lib/api";
+import { readStoredSession } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import { Card, SectionHeading } from "@/components/ui";
 import { Field, Input } from "@/components/forms";
@@ -45,9 +47,18 @@ export function AuthForm({ mode }: { mode: Mode }) {
     defaultValues: isLogin ? { username: "", password: "" } : { username: "", email: "", password: "", name: "" },
   });
 
+  useEffect(() => {
+    if (!isLogin) {
+      return;
+    }
+
+    readStoredSession();
+  }, [isLogin]);
+
   const mutation = useMutation({
     mutationFn: async (values: LoginValues | RegisterValues) => {
       if (isLogin) {
+        auth.logout();
         return login(values as LoginValues);
       }
 
@@ -59,12 +70,16 @@ export function AuthForm({ mode }: { mode: Mode }) {
     onSuccess: (result) => {
       if (isLogin) {
         const loginResult = result as Awaited<ReturnType<typeof login>>;
-        auth.setSession(loginResult.access_token, loginResult.user);
-        router.push(loginResult.user.defaultRoute || "/");
+        auth.setSession(
+          loginResult.access_token,
+          loginResult.user,
+          loginResult.expires_at,
+        );
+        router.replace(loginResult.user.defaultRoute || "/");
         return;
       }
 
-      router.push("/login?registered=1");
+      router.replace("/login?registered=1");
     },
   });
 

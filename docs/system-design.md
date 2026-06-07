@@ -147,6 +147,7 @@ Backend auth responsibilities:
 - block inactive users before issuing sessions
 - resolve POS access roles (`CASHIER`, `ACCOUNTANT`) into permission codes and allowed frontend route sets
 - issue JWT access tokens containing the multi-tenant company context, legacy system role (`ADMIN`, `MANAGER`, `USER`), and the computed POS access snapshot
+- expire JWT sessions after 1 day (`JWT_EXPIRATION=1d` by default) and return `expires_in` / `expires_at` on login
 - guard protected controllers with `JwtAuthGuard`
 - restrict cashier-only sessions to POS APIs while keeping POS action-level checks enforced inside the POS service
 - provide company-based isolation for database access and business logic
@@ -155,6 +156,7 @@ Frontend auth responsibilities:
 
 - persist the session in local storage
 - hydrate the session on client load
+- clear expired or legacy sessions automatically (JWT `exp`, stored `expires_at`, or 24-hour fallback) and force re-login after 1 day
 - gate ERP routes with `RequireAuth`
 - redirect authenticated users to their computed default route (`/pos/register` for cashier-only access, `/dashboard` for accountant/system access)
 - block sidebar items and direct route entry when a screen is outside the signed-in user's allowed route list

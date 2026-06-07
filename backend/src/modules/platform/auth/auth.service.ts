@@ -12,6 +12,7 @@ import {
   POS_ROLE_ROUTE_ACCESS,
   uniqueRoutes,
 } from './access-control.constants';
+import { AUTH_SESSION_TTL, AUTH_SESSION_TTL_SECONDS } from './auth.constants';
 import type { AuthorizedUser } from './auth.types';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 
@@ -198,8 +199,15 @@ export class AuthService {
       isWaiterOnly: accessUser.isWaiterOnly,
     };
 
+    const accessToken = await this.jwtService.signAsync(payload, {
+      expiresIn: AUTH_SESSION_TTL,
+    });
+    const expiresAt = new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000);
+
     return {
-      access_token: await this.jwtService.signAsync(payload),
+      access_token: accessToken,
+      expires_in: AUTH_SESSION_TTL_SECONDS,
+      expires_at: expiresAt.toISOString(),
       user: {
         id: user.id,
         username: user.username,

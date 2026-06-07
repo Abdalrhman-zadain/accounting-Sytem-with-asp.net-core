@@ -92,6 +92,8 @@ export type RegisterPayload = {
 
 export type LoginResponse = {
   access_token: string;
+  expires_in: number;
+  expires_at: string;
   user: AuthUser;
 };
 
