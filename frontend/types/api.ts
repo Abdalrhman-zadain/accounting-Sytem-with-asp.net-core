@@ -3587,6 +3587,7 @@ export type PosSettings = {
     allowCloseWithDrafts: boolean;
     postingMode: "BY_INVOICE" | "BY_SESSION";
     cogsPostingEnabled: boolean;
+    taxFreeEnabled: boolean;
     allowCreditSale: boolean;
     invoiceDiscountTaxPolicy: "BEFORE_TAX" | "AFTER_TAX";
     negativeStockAllowed: boolean;

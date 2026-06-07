@@ -3129,6 +3129,7 @@ Object.assign(arTranslations, {
   "pos.settings.postingMode.BY_INVOICE": "على مستوى الفاتورة",
   "pos.settings.postingMode.help": "حدد ما إذا كان ترحيل محاسبة POS يتم مجمعًا لكل وردية أو لكل فاتورة.",
   "pos.settings.cogsPostingEnabled": "ترحيل تكلفة البضاعة",
+  "pos.settings.taxFreeEnabled": "وضع البيع بدون ضريبة",
   "pos.settings.saveRuntime": "حفظ إعدادات POS",
   "pos.settings.saving": "جارٍ الحفظ...",
   "pos.settings.discountTaxPolicy": "سياسة ضريبة خصم الفاتورة",

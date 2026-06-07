@@ -4299,7 +4299,7 @@ export class SalesReceivablesService {
       lines.reduce((sum, line) => sum + Number(line.creditAmount), 0).toFixed(2),
     );
     if (totalDebit !== totalCredit) {
-      throw new BadRequestException("Journal entry is not balanced.");
+      throw new BadRequestException(`Journal entry is not balanced. Debit: ${totalDebit}, Credit: ${totalCredit}`);
     }
   }
 

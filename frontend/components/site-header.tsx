@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -217,8 +217,47 @@ export function SiteHeader({
     }));
   };
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const isLoginPage = pathname === "/login" || pathname === "/register";
   const currentLocation = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+
+  if (!mounted) {
+    if (isLoginPage) {
+      return (
+        <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-gray-900">
+              <div className="text-primary">
+                <SiQuickbooks size={24} />
+              </div>
+              {t("app.title")}
+            </div>
+          </div>
+        </header>
+      );
+    }
+    return (
+      <aside
+        className={cn(
+          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white",
+          isCollapsed ? "w-20" : "w-60",
+        )}
+      >
+        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-4")}>
+          <SiQuickbooks className="h-10 w-10 text-primary" />
+          <div className={cn(isCollapsed && "sr-only")}>
+            <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">{t("app.subtitle")}</div>
+          </div>
+        </div>
+        <div className="flex-1 bg-white" />
+      </aside>
+    );
+  }
 
   if (isLoginPage) {
     return (

@@ -225,7 +225,7 @@ export class JournalEntriesService {
     }
 
     if (Number((debitTotal - creditTotal).toFixed(2)) !== 0) {
-      throw new InvalidJournalEntryException('Journal entry is not balanced.');
+      throw new InvalidJournalEntryException(`Journal entry is not balanced. Debit: ${debitTotal}, Credit: ${creditTotal}`);
     }
   }
 

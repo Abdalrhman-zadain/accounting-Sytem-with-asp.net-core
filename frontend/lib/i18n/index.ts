@@ -1850,6 +1850,7 @@ Object.assign(enTranslations, {
   "pos.settings.postingMode.BY_INVOICE": "By invoice",
   "pos.settings.postingMode.help": "Choose whether POS sales accounting is grouped per session or prepared per invoice.",
   "pos.settings.cogsPostingEnabled": "COGS posting",
+  "pos.settings.taxFreeEnabled": "Tax-free sales mode",
   "pos.settings.saveRuntime": "Save POS settings",
   "pos.settings.saving": "Saving...",
   "pos.settings.discountTaxPolicy": "Invoice discount tax policy",

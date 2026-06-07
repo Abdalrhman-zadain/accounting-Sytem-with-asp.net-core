@@ -262,6 +262,27 @@ Checks to run:
 - backend build
 - frontend typecheck
 
+## POS Tax-Free Sales Mode
+
+Where to edit:
+
+- backend `phase-3-sales-receivables/pos` (POS service, DTOs, and runtime settings)
+- frontend `features/pos` (register page workspace, compact cart line components, settings components)
+- types: `frontend/types/api.ts` (API type definitions)
+- i18n translation files: `frontend/lib/i18n` (en/ar translations)
+
+What else to check:
+
+- when `taxFreeEnabled` is true in `PosRuntimeSetting`, all POS sale lines (drafts, held, completed) must force tax amount to zero.
+- the register cart metrics recalculate tax to zero, and the tax badges on cart lines are hidden.
+- setting changes from the POS settings workspace persist correctly to the database and sync instantly.
+
+Checks to run:
+
+- backend unit/integration tests
+- backend build
+- frontend typecheck
+
 ## Start Or Extend Phase 4 Purchases
 
 Where to edit:

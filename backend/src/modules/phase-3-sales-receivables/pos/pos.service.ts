@@ -245,6 +245,7 @@ export class PosService {
         allowCloseWithDrafts: this.parseBoolean(process.env.POS_ALLOW_CLOSE_WITH_DRAFTS, false),
         postingMode: runtimeConfig.postingMode,
         cogsPostingEnabled: runtimeConfig.cogsPostingEnabled,
+        taxFreeEnabled: runtimeConfig.taxFreeEnabled,
         allowCreditSale:
           this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
           this.hasPosPermissionCode("POS_CREDIT_SALE", user),
@@ -275,6 +276,13 @@ export class PosService {
           tx,
           "POS_COGS_POSTING_ENABLED",
           dto.cogsPostingEnabled ? "true" : "false",
+        );
+      }
+      if (dto.taxFreeEnabled !== undefined) {
+        await this.upsertPosRuntimeSetting(
+          tx,
+          "POS_TAX_FREE_ENABLED",
+          dto.taxFreeEnabled ? "true" : "false",
         );
       }
       if (dto.cashAccountId !== undefined) {
@@ -964,6 +972,14 @@ export class PosService {
     options?: { skipKitchenSync?: boolean },
   ) {
     const session = await this.ensureOpenSession(dto.sessionId);
+    const runtimeConfig = await this.getPosRuntimeConfig();
+    if (runtimeConfig.taxFreeEnabled) {
+      dto.lines = dto.lines.map((l) => ({
+        ...l,
+        taxId: undefined,
+        taxAmount: 0,
+      }));
+    }
     const walkInCustomer = await this.ensureWalkInCustomer();
     let customerId = walkInCustomer.id;
     if (dto.customerId?.trim()) {
@@ -1170,6 +1186,14 @@ export class PosService {
       throw new ForbiddenException("Waiters cannot complete sales or take payment.");
     }
     const session = await this.ensureOpenSession(dto.sessionId);
+    const runtimeConfig = await this.getPosRuntimeConfig();
+    if (runtimeConfig.taxFreeEnabled) {
+      dto.lines = dto.lines.map((l) => ({
+        ...l,
+        taxId: undefined,
+        taxAmount: 0,
+      }));
+    }
     const walkInCustomer = await this.ensureWalkInCustomer();
     let customerId = walkInCustomer.id;
     if (dto.customerId?.trim()) {
@@ -1270,7 +1294,6 @@ export class PosService {
     const allowNegativeStockIssue =
       this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
       this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user);
-    const runtimeConfig = await this.getPosRuntimeConfig();
     const posPostingMode = runtimeConfig.postingMode;
     const cogsPostingEnabled = runtimeConfig.cogsPostingEnabled;
     const normalizedPayments = this.normalizePayments(
@@ -5039,7 +5062,7 @@ export class PosService {
       const rows = await db.$queryRaw<Array<{ key: string; value: string }>>(Prisma.sql`
         SELECT "key", "value"
         FROM "PosRuntimeSetting"
-        WHERE "key" IN ('POS_POSTING_MODE', 'POS_COGS_POSTING_ENABLED')
+        WHERE "key" IN ('POS_POSTING_MODE', 'POS_COGS_POSTING_ENABLED', 'POS_TAX_FREE_ENABLED')
       `);
       overrides = new Map(rows.map((row) => [row.key, row.value]));
     } catch (error) {
@@ -5054,6 +5077,10 @@ export class PosService {
       ),
       cogsPostingEnabled: this.parseBoolean(
         overrides.get("POS_COGS_POSTING_ENABLED") ?? process.env.POS_COGS_POSTING_ENABLED,
+        false,
+      ),
+      taxFreeEnabled: this.parseBoolean(
+        overrides.get("POS_TAX_FREE_ENABLED") ?? process.env.POS_TAX_FREE_ENABLED,
         false,
       ),
     };
@@ -5940,6 +5967,35 @@ export class PosService {
         ],
       },
     });
+
+    if (sentIdsToKeep.length > 0) {
+      const runtimeConfig = await this.getPosRuntimeConfig(tx);
+      for (const id of sentIdsToKeep) {
+        const resolved = resolvedLines.find((l) => l.salesInvoiceLineId === id);
+        if (!resolved) continue;
+
+        const taxId = runtimeConfig.taxFreeEnabled ? null : (resolved.taxId || null);
+        const taxAmount = runtimeConfig.taxFreeEnabled ? 0 : (resolved.taxAmount || 0);
+        const lineAmount = runtimeConfig.taxFreeEnabled ? resolved.lineSubtotalAmount : resolved.lineTotalAmount;
+
+        await tx.salesInvoiceLine.update({
+          where: { id },
+          data: {
+            quantity: this.toQuantity(resolved.quantity),
+            unitPrice: this.toAmount(resolved.unitPrice),
+            discountAmount: this.toAmount(resolved.discountAmount),
+            taxId,
+            taxAmount: this.toAmount(taxAmount),
+            lineSubtotalAmount: this.toAmount(resolved.lineSubtotalAmount),
+            lineAmount: this.toAmount(lineAmount),
+            revenueAccountId: resolved.revenueAccountId!,
+            description: resolved.description || null,
+            modifiers: resolved.modifiers || null,
+          },
+        });
+      }
+    }
+
     return sentIdsToKeep;
   }
 

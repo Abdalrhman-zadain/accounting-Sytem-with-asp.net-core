@@ -276,6 +276,10 @@ export class UpdatePosSettingsDto {
   cogsPostingEnabled?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  taxFreeEnabled?: boolean;
+
+  @IsOptional()
   @IsString()
   cashAccountId?: string;
 

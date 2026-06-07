@@ -2422,6 +2422,7 @@ export async function updatePosSettings(
   payload: {
     postingMode?: "BY_INVOICE" | "BY_SESSION";
     cogsPostingEnabled?: boolean;
+    taxFreeEnabled?: boolean;
     cashAccountId?: string;
     cardAccountId?: string;
     cliqAccountId?: string;

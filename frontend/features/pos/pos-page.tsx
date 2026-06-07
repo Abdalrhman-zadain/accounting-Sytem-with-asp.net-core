@@ -503,7 +503,9 @@ function getLineTaxAmount(
   line: CartLine,
   invoiceDiscountShare = 0,
   taxPolicy: PosSettings["runtime"]["invoiceDiscountTaxPolicy"] = "BEFORE_TAX",
+  taxFreeEnabled = false,
 ) {
+  if (taxFreeEnabled) return 0;
   const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
   const taxableBase =
     taxPolicy === "BEFORE_TAX"
@@ -516,17 +518,18 @@ function getLineTotal(
   line: CartLine,
   invoiceDiscountShare = 0,
   taxPolicy: PosSettings["runtime"]["invoiceDiscountTaxPolicy"] = "BEFORE_TAX",
+  taxFreeEnabled = false,
 ) {
   const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
   if (taxPolicy === "AFTER_TAX") {
-    const taxAmount = getLineTaxAmount(line, 0, taxPolicy);
+    const taxAmount = getLineTaxAmount(line, 0, taxPolicy, taxFreeEnabled);
     return Math.max(netBeforeInvoiceDiscount + taxAmount - invoiceDiscountShare, 0);
   }
   const taxableAfterInvoiceDiscount = Math.max(
     netBeforeInvoiceDiscount - invoiceDiscountShare,
     0,
   );
-  return taxableAfterInvoiceDiscount + getLineTaxAmount(line, invoiceDiscountShare, taxPolicy);
+  return taxableAfterInvoiceDiscount + getLineTaxAmount(line, invoiceDiscountShare, taxPolicy, taxFreeEnabled);
 }
 
 function getLineTotalCost(line: CartLine) {
@@ -2356,6 +2359,7 @@ export function PosPage() {
     const taxableBase = Number(
       cartLines.reduce((sum, line) => sum + getLineNetBeforeInvoiceDiscount(line), 0).toFixed(2)
     );
+    const isTaxFree = Boolean(posSettings?.runtime.taxFreeEnabled);
     const invoiceDiscount = Number(
       getInvoiceDiscountAmount(
         invoiceDiscountType,
@@ -2363,7 +2367,7 @@ export function PosPage() {
         taxPolicy === "AFTER_TAX"
           ? taxableBase +
           cartLines.reduce(
-            (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX"),
+            (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX", isTaxFree),
             0,
           )
           : taxableBase,
@@ -2372,11 +2376,11 @@ export function PosPage() {
     const taxRaw = cartLines.reduce((sum, line) => {
       const lineBase = getLineNetBeforeInvoiceDiscount(line);
       if (taxPolicy === "AFTER_TAX") {
-        return sum + getLineTaxAmount(line, 0, taxPolicy);
+        return sum + getLineTaxAmount(line, 0, taxPolicy, isTaxFree);
       }
       if (taxableBase <= 0) return sum;
       const invoiceShare = invoiceDiscount * (lineBase / taxableBase);
-      return sum + getLineTaxAmount(line, invoiceShare, taxPolicy);
+      return sum + getLineTaxAmount(line, invoiceShare, taxPolicy, isTaxFree);
     }, 0);
     const tax = Number(taxRaw.toFixed(2));
     const totalRaw =
@@ -2418,6 +2422,7 @@ export function PosPage() {
     orderType,
     serviceChargeAmount,
     taxPolicy,
+    posSettings,
   ]);
 
   const activeEditingSale = useMemo(() => {
@@ -2468,6 +2473,7 @@ export function PosPage() {
   }, [returnQuantities, selectedReturnSale]);
 
   const buildSaleLinesPayload = () => {
+    const isTaxFree = Boolean(posSettings?.runtime.taxFreeEnabled);
     return cartLines.map((line) => {
       const netBeforeInvoiceDiscount = getLineNetBeforeInvoiceDiscount(line);
       const invoiceShare =
@@ -2478,15 +2484,15 @@ export function PosPage() {
       const afterTaxShare =
         taxPolicy === "AFTER_TAX" && cartMetrics.total > 0
           ? cartMetrics.invoiceDiscount *
-          ((netBeforeInvoiceDiscount + getLineTaxAmount(line, 0, "AFTER_TAX")) /
+          ((netBeforeInvoiceDiscount + getLineTaxAmount(line, 0, "AFTER_TAX", isTaxFree)) /
             (cartMetrics.taxableBase + cartMetrics.tax))
           : 0;
       const totalDiscountAmount = getLineDiscountAmount(line) + invoiceShare;
-      const taxAmount = getLineTaxAmount(line, invoiceShare, taxPolicy);
+      const taxAmount = getLineTaxAmount(line, invoiceShare, taxPolicy, isTaxFree);
       const lineAmount =
         taxPolicy === "AFTER_TAX"
-          ? getLineTotal(line, afterTaxShare, taxPolicy)
-          : getLineTotal(line, invoiceShare, taxPolicy);
+          ? getLineTotal(line, afterTaxShare, taxPolicy, isTaxFree)
+          : getLineTotal(line, invoiceShare, taxPolicy, isTaxFree);
 
       return {
         salesInvoiceLineId: line.salesInvoiceLineId,
@@ -3969,6 +3975,7 @@ export function PosPage() {
                         line={line}
                         language={language}
                         currencyCode={currencyCode}
+                        taxFreeEnabled={Boolean(posSettings?.runtime.taxFreeEnabled)}
                         locked={orderKitchenLocked || isCartLineLocked(line)}
                         onEditAddons={
                           !isCartLineLocked(line) ? () => openLineAddonEditor(line) : undefined
@@ -6148,6 +6155,7 @@ function CompactCartLine({
   canEditLineDiscount: _canEditLineDiscount,
   onUnitPriceChange,
   onEditAddons,
+  taxFreeEnabled = false,
 }: {
   line: CartLine;
   language: string;
@@ -6161,10 +6169,11 @@ function CompactCartLine({
   canEditLineDiscount?: boolean;
   onUnitPriceChange?: (next: number) => void;
   onEditAddons?: () => void;
+  taxFreeEnabled?: boolean;
 }) {
   const [isEditingPrice, setIsEditingPrice] = useState(false);
-  const lineTotal = getLineTotal(line);
-  const lineTax = getLineTaxAmount(line);
+  const lineTotal = getLineTotal(line, 0, "BEFORE_TAX", taxFreeEnabled);
+  const lineTax = getLineTaxAmount(line, 0, "BEFORE_TAX", taxFreeEnabled);
   const hasDiscount = line.discountValue > 0;
   const addonsLabel = formatAddonsForDisplay(line.modifiers, language);
   const unitsLabel = getLocalizedText("Units / وحدات", language);
@@ -6221,7 +6230,7 @@ function CompactCartLine({
             ) : (
               <span dir="ltr">{formatCurrency(line.unitPrice, currencyCode)}</span>
             )}
-            {line.taxRate > 0 ? (
+            {line.taxRate > 0 && !taxFreeEnabled ? (
               <>
                 <span>/</span>
                 <span className="rounded bg-[#fff7ed] px-1 py-px text-[9px] font-semibold text-[#ea580c]">
@@ -6670,6 +6679,7 @@ function SettingsWorkspace({
   onSaveRuntimeSettings: (payload: {
     postingMode?: "BY_INVOICE" | "BY_SESSION";
     cogsPostingEnabled?: boolean;
+    taxFreeEnabled?: boolean;
     cashAccountId?: string;
     cardAccountId?: string;
     cliqAccountId?: string;
@@ -6694,6 +6704,7 @@ function SettingsWorkspace({
     const [localRuntime, setLocalRuntime] = useState<{
       postingMode: "BY_INVOICE" | "BY_SESSION";
       cogsPostingEnabled: boolean;
+      taxFreeEnabled: boolean;
     } | null>(null);
     const [localAccountMappings, setLocalAccountMappings] = useState<{
       cashAccountId: string;
@@ -6769,6 +6780,7 @@ function SettingsWorkspace({
         runtime: {
           postingMode: settings.runtime.postingMode,
           cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
+          taxFreeEnabled: settings.runtime.taxFreeEnabled,
         },
         accounts: nextAccountMappings,
       });
@@ -6781,6 +6793,7 @@ function SettingsWorkspace({
       setLocalRuntime({
         postingMode: settings.runtime.postingMode,
         cogsPostingEnabled: settings.runtime.cogsPostingEnabled,
+        taxFreeEnabled: settings.runtime.taxFreeEnabled,
       });
       setLocalAccountMappings(nextAccountMappings);
     }, [deliveryCompanies, settings]);
@@ -6804,7 +6817,8 @@ function SettingsWorkspace({
 
     const runtimeDirty =
       localRuntime.postingMode !== settings.runtime.postingMode ||
-      localRuntime.cogsPostingEnabled !== settings.runtime.cogsPostingEnabled;
+      localRuntime.cogsPostingEnabled !== settings.runtime.cogsPostingEnabled ||
+      localRuntime.taxFreeEnabled !== settings.runtime.taxFreeEnabled;
     const accountMappingsDirty =
       localAccountMappings.cashAccountId !== (settings.accounts.cashAccountId ?? "") ||
       localAccountMappings.cardAccountId !== (settings.accounts.cardAccountId ?? "") ||
@@ -6911,6 +6925,7 @@ function SettingsWorkspace({
                   onSaveRuntimeSettings({
                     postingMode: localRuntime.postingMode,
                     cogsPostingEnabled: localRuntime.cogsPostingEnabled,
+                    taxFreeEnabled: localRuntime.taxFreeEnabled,
                     cashAccountId: localAccountMappings.cashAccountId,
                     cardAccountId: localAccountMappings.cardAccountId,
                     cliqAccountId: localAccountMappings.cliqAccountId,
@@ -6976,6 +6991,20 @@ function SettingsWorkspace({
                   ? {
                       ...prev,
                       cogsPostingEnabled: !prev.cogsPostingEnabled,
+                    }
+                  : prev,
+              )
+            }
+          />
+          <SettingToggleCard
+            label={t("pos.settings.taxFreeEnabled")}
+            enabled={localRuntime.taxFreeEnabled}
+            onToggle={() =>
+              setLocalRuntime((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      taxFreeEnabled: !prev.taxFreeEnabled,
                     }
                   : prev,
               )

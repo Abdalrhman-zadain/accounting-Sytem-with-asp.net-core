@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import {
   AuditAction,
   DeliveryStatus,
@@ -20,6 +21,7 @@ describe("PosService restaurant operations", () => {
     },
     salesInvoiceLine: {
       deleteMany: jest.fn(),
+      update: jest.fn(),
     },
     customer: {
       findFirst: jest.fn(),
@@ -242,6 +244,27 @@ describe("PosService restaurant operations", () => {
       expect.objectContaining({
         postingMode: "BY_INVOICE",
         cogsPostingEnabled: true,
+      }),
+    );
+  });
+
+  it("updates POS runtime settings for taxFreeEnabled", async () => {
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        { key: "POS_TAX_FREE_ENABLED", value: "true" },
+      ]);
+
+    const result = await service.updateSettings(
+      {
+        taxFreeEnabled: true,
+      },
+      authorizedUser,
+    );
+
+    expect(prismaMock.$executeRaw).toHaveBeenCalled();
+    expect(result.runtime).toEqual(
+      expect.objectContaining({
+        taxFreeEnabled: true,
       }),
     );
   });
@@ -756,7 +779,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       update: jest.fn(),
     },
     salesInvoice: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
-    salesInvoiceLine: { deleteMany: jest.fn() },
+    salesInvoiceLine: { deleteMany: jest.fn(), update: jest.fn() },
     posSession: { findFirst: jest.fn(), findUnique: jest.fn() },
     posTable: { findUnique: jest.fn(), update: jest.fn() },
     customer: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
@@ -1097,6 +1120,63 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           cashierUser,
         ),
       ).rejects.toThrow("kitchen-ready items");
+    });
+
+    it("updates kept lines to tax-free when taxFreeEnabled is true", async () => {
+      prismaMock.$queryRaw.mockResolvedValueOnce([
+        { key: "POS_TAX_FREE_ENABLED", value: "true" },
+      ]);
+      prismaMock.salesInvoiceLine.update.mockResolvedValue({} as any);
+
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "1" } as any,
+            kitchenSentAt: new Date(),
+          },
+        ],
+      };
+      const dtoLines = [
+        { salesInvoiceLineId: "line1", itemId: "item1", quantity: 1 },
+      ];
+      const resolvedLines = [
+        {
+          salesInvoiceLineId: "line1",
+          itemId: "item1",
+          quantity: 1,
+          unitPrice: 10,
+          discountAmount: 0,
+          taxId: "tax1",
+          taxAmount: 1.6,
+          lineSubtotalAmount: 10,
+          lineTotalAmount: 11.6,
+          revenueAccountId: "rev1",
+          description: null,
+          modifiers: null,
+        },
+      ] as any;
+
+      await (service as any).applyOpenPosSaleLineChanges(
+        prismaMock as any,
+        cashierUser,
+        existing,
+        dtoLines,
+        resolvedLines,
+      );
+
+      expect(prismaMock.salesInvoiceLine.update).toHaveBeenCalledWith({
+        where: { id: "line1" },
+        data: expect.objectContaining({
+          taxId: null,
+          taxAmount: expect.any(Object),
+          lineAmount: expect.any(Object),
+        }),
+      });
     });
   });
 });
