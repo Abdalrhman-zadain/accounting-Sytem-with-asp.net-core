@@ -72,6 +72,39 @@ function parseAmount(value: string | number | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatMoney(value: number, currency = "JOD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function computeLineMetrics(line: WaiterCartLine) {
+  const subtotal = line.quantity * line.unitPrice;
+  const taxAmount = subtotal * (line.taxRate / 100);
+  return {
+    subtotal: Number(subtotal.toFixed(2)),
+    taxAmount: Number(taxAmount.toFixed(2)),
+    total: Number((subtotal + taxAmount).toFixed(2)),
+  };
+}
+
+function computeCartMetrics(lines: WaiterCartLine[]) {
+  return lines.reduce(
+    (acc, line) => {
+      const metrics = computeLineMetrics(line);
+      acc.subtotal += metrics.subtotal;
+      acc.tax += metrics.taxAmount;
+      acc.total += metrics.total;
+      acc.itemCount += line.quantity;
+      return acc;
+    },
+    { subtotal: 0, tax: 0, total: 0, itemCount: 0 },
+  );
+}
+
 function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
   return sale.lines.map((line) => ({
     salesInvoiceLineId: line.id,
@@ -211,6 +244,8 @@ export function PosWaiterOrderPage() {
     sessionQuery.data?.cashAccount.currencyCode ??
     filteredItems[0]?.currencyCode ??
     "JOD";
+
+  const cartMetrics = React.useMemo(() => computeCartMetrics(cartLines), [cartLines]);
 
   const buildLinesPayload = () =>
     cartLines.map((line) => {
@@ -431,41 +466,20 @@ export function PosWaiterOrderPage() {
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="flex min-h-0 flex-col border-b border-[#dde5df] lg:border-b-0 lg:border-e">
-          <div className="border-b border-[#eef2ef] bg-white p-3">
-            <div className="relative">
-              <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8a80] ltr:left-3 rtl:right-3" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                disabled={!canEdit}
-                placeholder={t("pos.sales.searchPlaceholder")}
-                className="h-11 w-full rounded-2xl border border-[#d6e1d9] bg-[#f8faf9] text-sm font-semibold ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10"
-              />
+      <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <aside className="order-1 flex min-h-0 flex-col border-b border-[#dde5df] bg-white lg:order-2 lg:max-h-none lg:border-b-0 lg:border-s max-h-[min(50vh,420px)]">
+          <div className="shrink-0 border-b border-[#eef2ef] px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-black text-[#233329]">
+                {getLocalizedText("Order / الطلب", language)}
+              </h2>
+              <span className="rounded-full bg-[#eef3ef] px-2.5 py-0.5 text-xs font-black text-[#46644b]">
+                {cartMetrics.itemCount}{" "}
+                {isAr ? "صنف" : cartMetrics.itemCount === 1 ? "item" : "items"}
+              </span>
             </div>
           </div>
-          <div className="grid flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {filteredItems.map((item) => (
-              <PosProductCard
-                key={item.id}
-                item={item}
-                currencyCode={currencyCode}
-                disabled={!canEdit}
-                allowNegativeStock
-                onAdd={() => addItem(item)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <aside className="flex min-h-0 flex-col bg-white">
-          <div className="border-b border-[#eef2ef] px-4 py-3">
-            <h2 className="text-sm font-black text-[#233329]">
-              {getLocalizedText("Order / الطلب", language)}
-            </h2>
-          </div>
-          <div className="border-b border-[#eef2ef] px-3 py-2">
+          <div className="shrink-0 border-b border-[#eef2ef] px-3 py-2">
             <label className="text-[10px] font-black uppercase text-[#7a8780]">
               {isAr ? "ملاحظة للمطبخ" : "Kitchen note"}
             </label>
@@ -477,78 +491,111 @@ export function PosWaiterOrderPage() {
               className="mt-1 w-full rounded-lg border border-[#d6e1d9] px-2 py-1.5 text-sm disabled:opacity-60"
             />
           </div>
-          <div className="flex-1 space-y-2 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
             {cartLines.length === 0 ? (
               <p className="py-8 text-center text-sm text-[#68776f]">
                 {isAr ? "أضف أصنافاً من القائمة" : "Add items from the menu"}
               </p>
             ) : (
-              cartLines.map((line) => (
-                <div
-                  key={`${line.itemId}-${line.salesInvoiceLineId ?? "new"}`}
-                  className={cn(
-                    "rounded-xl border px-3 py-2",
-                    line.kitchenSentAt
-                      ? "border-emerald-200 bg-emerald-50/50"
-                      : "border-[#eef2ef] bg-[#fafcfb]",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-bold text-[#233329]">{line.name}</div>
-                      {formatAddonsForDisplay(line.modifiers, language) ? (
-                        <p className="text-[10px] text-[#46644b]">
-                          {formatAddonsForDisplay(line.modifiers, language)}
+              cartLines.map((line, index) => {
+                const lineMetrics = computeLineMetrics(line);
+                return (
+                  <div
+                    key={`${line.itemId}-${line.salesInvoiceLineId ?? "new"}-${index}`}
+                    className={cn(
+                      "rounded-xl border px-3 py-2",
+                      line.kitchenSentAt
+                        ? "border-emerald-200 bg-emerald-50/50"
+                        : "border-[#eef2ef] bg-[#fafcfb]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-[#233329]">{line.name}</div>
+                        {formatAddonsForDisplay(line.modifiers, language) ? (
+                          <p className="text-[10px] text-[#46644b]">
+                            {formatAddonsForDisplay(line.modifiers, language)}
+                          </p>
+                        ) : null}
+                        {line.lineNote ? (
+                          <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
+                        ) : null}
+                        <p className="mt-1 text-xs font-semibold text-[#506054]">
+                          {line.quantity} × {formatMoney(line.unitPrice, currencyCode)}
                         </p>
-                      ) : null}
-                      {line.lineNote ? (
-                        <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
-                      ) : null}
-                      {line.kitchenSentAt ? (
-                        <div className="mt-0.5 text-[10px] font-bold text-emerald-700">
-                          {isAr ? "مرسل للمطبخ" : "Sent to kitchen"}
+                        {line.kitchenSentAt ? (
+                          <div className="mt-0.5 text-[10px] font-bold text-emerald-700">
+                            {isAr ? "مرسل للمطبخ" : "Sent to kitchen"}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <div className="text-sm font-black text-[#1a2a20]">
+                          {formatMoney(lineMetrics.total, currencyCode)}
                         </div>
-                      ) : null}
+                        {!line.kitchenSentAt && canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => updateQty(line.itemId, -999)}
+                            className="mt-1 text-rose-600"
+                            aria-label="Remove"
+                          >
+                            <LuTrash2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     {!line.kitchenSentAt && canEdit ? (
-                      <button
-                        type="button"
-                        onClick={() => updateQty(line.itemId, -999)}
-                        className="text-rose-600"
-                        aria-label="Remove"
-                      >
-                        <LuTrash2 className="h-4 w-4" />
-                      </button>
-                    ) : null}
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateQty(line.itemId, -1)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
+                        >
+                          <LuMinus className="h-4 w-4" />
+                        </button>
+                        <span className="min-w-[2rem] text-center text-sm font-black">
+                          {line.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQty(line.itemId, 1)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
+                        >
+                          <LuPlus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-sm font-black text-[#506054]">× {line.quantity}</div>
+                    )}
                   </div>
-                  {!line.kitchenSentAt && canEdit ? (
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateQty(line.itemId, -1)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
-                      >
-                        <LuMinus className="h-4 w-4" />
-                      </button>
-                      <span className="min-w-[2rem] text-center text-sm font-black">
-                        {line.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateQty(line.itemId, 1)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
-                      >
-                        <LuPlus className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-1 text-sm font-black text-[#506054]">× {line.quantity}</div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
-          <div className="border-t border-[#eef2ef] p-4">
+          <div className="shrink-0 border-t border-[#dde5df] bg-[#f8faf9] px-4 py-3">
+            <div className="space-y-1.5 text-sm">
+              <div className="flex items-center justify-between text-[#596760]">
+                <span>{isAr ? "المجموع الفرعي" : "Subtotal"}</span>
+                <span className="font-semibold">
+                  {formatMoney(cartMetrics.subtotal, currencyCode)}
+                </span>
+              </div>
+              {cartMetrics.tax > 0 ? (
+                <div className="flex items-center justify-between text-[#596760]">
+                  <span>{isAr ? "الضريبة" : "Tax"}</span>
+                  <span className="font-semibold">
+                    {formatMoney(cartMetrics.tax, currencyCode)}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between border-t border-[#dde5df] pt-2 text-base font-black text-[#1a2a20]">
+                <span>{isAr ? "الإجمالي" : "Total"}</span>
+                <span>{formatMoney(cartMetrics.total, currencyCode)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 border-t border-[#eef2ef] p-4">
             {canEdit && hasPermission(user, "RST_SEND_KOT") ? (
               <button
                 type="button"
@@ -574,6 +621,33 @@ export function PosWaiterOrderPage() {
             )}
           </div>
         </aside>
+
+        <section className="order-2 flex min-h-0 flex-col lg:order-1 lg:border-e lg:border-[#dde5df]">
+          <div className="border-b border-[#eef2ef] bg-white p-3">
+            <div className="relative">
+              <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8a80] ltr:left-3 rtl:right-3" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                disabled={!canEdit}
+                placeholder={t("pos.sales.searchPlaceholder")}
+                className="h-11 w-full rounded-2xl border border-[#d6e1d9] bg-[#f8faf9] text-sm font-semibold ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10"
+              />
+            </div>
+          </div>
+          <div className="grid flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {filteredItems.map((item) => (
+              <PosProductCard
+                key={item.id}
+                item={item}
+                currencyCode={currencyCode}
+                disabled={!canEdit}
+                allowNegativeStock
+                onAdd={() => addItem(item)}
+              />
+            ))}
+          </div>
+        </section>
       </div>
 
       <PosLineAddonModal

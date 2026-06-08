@@ -780,10 +780,10 @@ Must remain compatible:
 
 - base POS sale completion, held sale resume, and accountant-review flows
 - `SalesInvoice.invoiceType = POS` lifecycle invariants
-- waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx`
+- waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx` — order panel shows line prices, scrollable cart lines, and a fixed subtotal/tax/total + confirm footer; on mobile the order panel stacks above the product grid
 - confirm-to-kitchen: `POST /pos/sales/:id/send-to-kitchen` in `pos.controller.ts` / `PosService.sendSaleToKitchen`; draft saves no longer auto-create kitchen tickets — only explicit send (waiter confirm or cashier incremental send). Sending a draft table order to the kitchen must also promote it to `HELD` and keep the table linked to that invoice so selecting the table later reopens the full submitted order.
 - cart lock rule: once `waiterConfirmedAt` is set on a dine-in sale, register draft/hold edits are blocked until payment; lines with `kitchenSentAt` cannot be removed/changed even before waiter confirm
-- waiter service advance: `PUT /pos/waiter/orders/:id/status` with `RECEIVED` or `DEPARTED`; `DEPARTED` sets the table to `CLEANING` while keeping `activeInvoiceId` for cashier payment
+- waiter service advance: `PUT /pos/waiter/orders/:id/status` with `RECEIVED` or `DEPARTED`; `DEPARTED` sets the table to `CLEANING` while keeping `activeInvoiceId` for cashier payment; completing a dine-in sale then clears `activeInvoiceId` and keeps/sets the table on `CLEANING` until a waiter marks it `AVAILABLE` from the floor plan (`frontend/app/(erp)/pos/tables/page.tsx`)
 - KOT print: `frontend/features/pos/pos-kot-print.ts` on waiter confirm; audit via `POST /pos/kitchen/orders/:id/reprint` when the kitchen order id is known
 - opening a dine-in table from `/pos/tables` or the register table picker must resume the table's active draft/held sale (`tableId` + `resume` when `activeInvoice` exists); do not reset the cart before held/draft queries finish loading. The standalone tables route and register must use the shared POS table React Query key so table occupancy refreshes after kitchen/hold actions, and the register should preserve the resumed sale's table number as a display fallback while table metadata refetches.
 - current route ownership under `frontend/features/pos`
@@ -798,6 +798,8 @@ Checks to run:
 Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
+- payment receipt print (80mm thermal roll layout, auto-print on complete sale): `frontend/features/pos/pos-receipt-print.ts`
+- session closing roll print (80mm thermal roll, auto-print on cashier shift close; same layout as accountant review): `frontend/features/pos/pos-session-roll-print.ts`, triggered from `closeSessionMutation` in `frontend/features/pos/pos-page.tsx`
 - extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
 - shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos/pos-layout-classes.ts`; reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
 - narrow register UX (iPad portrait, phones): `frontend/features/pos/pos-register-mobile-cart.tsx` + `frontend/features/pos/pos-register-layout.tsx` — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full `salePanel`. From `960px` up, catalog and order panel stay side by side. Pass `mobileCartBar` from `pos-page.tsx` when extending the register shell

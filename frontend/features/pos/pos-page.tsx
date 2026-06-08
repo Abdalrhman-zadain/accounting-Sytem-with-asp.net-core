@@ -114,6 +114,7 @@ import {
   getPosAddonCatalog,
   getPosItemAddonConfig,
   getInventoryItemGroups,
+  printPosSessionRollReport,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -146,6 +147,8 @@ import {
   getWeightQuantityStep,
   isWeightSaleItem,
 } from "@/features/pos/pos-weight-utils";
+import { printPosReceipt, type PosReceiptData } from "@/features/pos/pos-receipt-print";
+import { printSessionRollReport } from "@/features/pos/pos-session-roll-print";
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
@@ -322,33 +325,7 @@ type SessionState = {
   completedSales: number;
 };
 
-type CompletedReceipt = {
-  receiptNumber: string;
-  soldAt: string;
-  companyName: string;
-  branchName?: string | null;
-  taxNumber?: string | null;
-  cashierName: string;
-  terminalName?: string | null;
-  warehouseName: string;
-  paymentSummary: string;
-  total: number;
-  paid: number;
-  tendered: number;
-  change: number;
-  subtotal: number;
-  discount: number;
-  tax: number;
-  lines: Array<{
-    name: string;
-    quantity: number;
-    unitPrice: number;
-    discountAmount: number;
-    taxAmount: number;
-    lineTotal: number;
-    unitCode?: string;
-  }>;
-};
+type CompletedReceipt = PosReceiptData;
 
 type FlashNotice = {
   message: string;
@@ -988,79 +965,6 @@ function mapReceiptResponse(receipt: {
   };
 }
 
-function formatReceiptQuantity(line: CompletedReceipt["lines"][number]) {
-  if (line.unitCode) {
-    return formatWeightQuantity(line.quantity, line.unitCode, 3);
-  }
-  return String(line.quantity);
-}
-
-function buildReceiptHtml(receipt: CompletedReceipt) {
-  const rows = receipt.lines
-    .map(
-      (line) => `
-        <tr>
-          <td>${line.name}</td>
-          <td>${formatReceiptQuantity(line)}</td>
-          <td>${line.unitPrice.toFixed(2)}</td>
-          <td>${line.discountAmount.toFixed(2)}</td>
-          <td>${line.taxAmount.toFixed(2)}</td>
-          <td>${line.lineTotal.toFixed(2)}</td>
-        </tr>
-      `,
-    )
-    .join("");
-
-  return `
-    <html lang="ar" dir="rtl">
-      <head>
-        <title>${receipt.receiptNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 24px; color: #233329; }
-          h1, h2, p { margin: 0 0 8px; }
-          .meta, .totals { margin-top: 16px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          th, td { border-bottom: 1px solid #d7ddd8; padding: 8px; text-align: right; font-size: 12px; }
-          th { background: #eef3ef; }
-          .totals-row { display: flex; justify-content: space-between; margin-top: 6px; }
-        </style>
-      </head>
-      <body>
-        <div class="meta">
-          <p>الرقم الضريبي: ${receipt.taxNumber || "—"}</p>
-          <p>التاريخ: ${new Date(receipt.soldAt).toLocaleString()}</p>
-          <p>الكاشير: ${receipt.cashierName}</p>
-          <p>الجهاز: ${receipt.terminalName || "—"}</p>
-          <p>الدفع: ${receipt.paymentSummary}</p>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>الصنف</th>
-              <th>الكمية</th>
-              <th>سعر الوحدة</th>
-              <th>الخصم</th>
-              <th>الضريبة</th>
-              <th>الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="totals">
-          <div class="totals-row"><span>الإجمالي قبل الضريبة</span><strong>${receipt.subtotal.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>الخصومات</span><strong>${receipt.discount.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>الضريبة</span><strong>${receipt.tax.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>الإجمالي النهائي</span><strong>${receipt.total.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>المبلغ المقبوض</span><strong>${receipt.tendered.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>المدفوع</span><strong>${receipt.paid.toFixed(2)}</strong></div>
-          <div class="totals-row"><span>الباقي</span><strong>${receipt.change.toFixed(2)}</strong></div>
-        </div>
-        <p style="margin-top: 24px;">شكراً لزيارتكم</p>
-      </body>
-    </html>
-  `;
-}
-
 function PlaceholderWorkspace({
   title,
   description,
@@ -1629,11 +1533,24 @@ export function PosPage() {
         { actualCash: payload.actualCash, notes: payload.notes },
         token,
       ),
-    onSuccess: async ({ report }) => {
+    onSuccess: async ({ session, report }) => {
       setLastSessionReport(report);
       setIsCashierCloseModalOpen(false);
+      setActualCashCount("");
+      setClosingNotes("");
       await refreshPosData();
       pushMessage(t("pos.sales.alert.sessionMarkedClosed"));
+      try {
+        await printPosSessionRollReport(session.id, "SESSION_ROLL_REPORT", token);
+      } catch {
+        // Non-critical — proceed with client-side print even if audit call fails
+      }
+      printSessionRollReport({
+        session,
+        report,
+        printedBy: user?.name || user?.username || "—",
+        printType: "SESSION_ROLL_REPORT",
+      });
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -3509,28 +3426,10 @@ export function PosPage() {
   };
 
   const printReceipt = (receipt: CompletedReceipt) => {
-    if (typeof window === "undefined") return;
     try {
-      const popup = window.open("", "_blank", "width=720,height=900");
-      if (!popup) {
-        pushMessage(t("pos.sales.alert.printBlocked"));
-        return;
-      }
-      popup.document.write(buildReceiptHtml(receipt));
-      popup.document.close();
-      popup.focus();
-      
-      // Delay printing to allow document to render and avoid NotAllowedError
-      setTimeout(() => {
-        try {
-          popup.print();
-        } catch (err) {
-          console.error("Print failed:", err);
-          pushMessage(t("pos.sales.alert.printBlocked"));
-        }
-      }, 250);
+      printPosReceipt(receipt);
     } catch (err) {
-      console.error("Failed to open print receipt:", err);
+      console.error("Failed to print receipt:", err);
       pushMessage(t("pos.sales.alert.printBlocked"));
     }
   };
@@ -3835,7 +3734,7 @@ export function PosPage() {
               );
               return;
             }
-            setActualCashCount(String(sessionState.expectedCash.toFixed(2)));
+            setActualCashCount("");
             setClosingNotes("");
             setIsCashierCloseModalOpen(true);
           }}
@@ -5226,19 +5125,14 @@ export function PosPage() {
 
         <Modal
           isOpen={isCashierCloseModalOpen}
-          onClose={() => setIsCashierCloseModalOpen(false)}
+          onClose={() => {
+            setIsCashierCloseModalOpen(false);
+            setActualCashCount("");
+            setClosingNotes("");
+          }}
           title={getLocalizedText("Close shift / إغلاق الوردية", language)}
         >
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <DetailTile label="Expected cash" value={formatCurrency(sessionState.expectedCash, currencyCode)} compact />
-              <DetailTile label="Actual count" value={formatCurrency(parseAmount(actualCashCount), currencyCode)} compact />
-              <DetailTile
-                label="Difference"
-                value={formatCurrency(parseAmount(actualCashCount) - sessionState.expectedCash, currencyCode)}
-                compact
-              />
-            </div>
             <Input
               type="number"
               min="0"
@@ -5256,7 +5150,11 @@ export function PosPage() {
             />
             <button
               type="button"
-              disabled={!activeSession?.id || closeSessionMutation.isPending}
+              disabled={
+                !activeSession?.id ||
+                closeSessionMutation.isPending ||
+                actualCashCount.trim() === ""
+              }
               onClick={() =>
                 activeSession
                   ? closeSessionMutation.mutate({

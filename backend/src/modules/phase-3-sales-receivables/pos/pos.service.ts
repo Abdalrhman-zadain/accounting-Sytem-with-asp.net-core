@@ -1449,7 +1449,22 @@ export class PosService {
         await this.updateTableStatus(tx, existing.tableId, null, null);
       }
       if (dto.tableId?.trim()) {
-        await this.updateTableStatus(tx, dto.tableId.trim(), null, null);
+        const paidTableId = dto.tableId.trim();
+        const isDineIn =
+          dto.orderType === OrderType.DINE_IN ||
+          existing?.orderType === OrderType.DINE_IN ||
+          invoice.orderType === OrderType.DINE_IN;
+        if (isDineIn) {
+          await tx.posTable.update({
+            where: { id: paidTableId },
+            data: {
+              activeInvoiceId: null,
+              status: TableStatus.CLEANING,
+            },
+          });
+        } else {
+          await this.updateTableStatus(tx, paidTableId, null, null);
+        }
       }
 
       if (existing) {

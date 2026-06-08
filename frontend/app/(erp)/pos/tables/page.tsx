@@ -246,6 +246,8 @@ export default function TablesPage() {
   const [pendingStatus, setPendingStatus] = React.useState<string>("");
   const [pendingWaiterId, setPendingWaiterId] = React.useState<string>("");
   const [isSavingTableStatus, setIsSavingTableStatus] = React.useState(false);
+  const [markingAvailableTableId, setMarkingAvailableTableId] = React.useState<string | null>(null);
+  const [tableViewFilter, setTableViewFilter] = React.useState<"all" | "cleaning">("all");
 
   const { data: tables, isLoading, refetch } = useQuery({
     queryKey: queryKeys.posTables(token),
@@ -302,6 +304,12 @@ export default function TablesPage() {
     const params = new URLSearchParams({ tableId: table.id });
     const invoice = table.activeInvoice;
     if (
+      !invoice &&
+      (table.status === "CLEANING" || table.status === "WAITING_FOR_PAYMENT")
+    ) {
+      return;
+    }
+    if (
       invoice?.id &&
       (invoice.posOperationalStatus === "DRAFT" ||
         invoice.posOperationalStatus === "HELD")
@@ -309,6 +317,23 @@ export default function TablesPage() {
       params.set("resume", invoice.id);
     }
     router.push(`${orderRoute}?${params.toString()}`);
+  };
+
+  const handleMarkTableAvailable = async (tableId: string) => {
+    setMarkingAvailableTableId(tableId);
+    try {
+      await updatePosTableStatus(tableId, "AVAILABLE", token);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.posTables(token) });
+    } catch (err: unknown) {
+      alert(
+        getErrorMessage(
+          err,
+          isAr ? "فشل تحديث حالة الطاولة" : "Failed to update table status",
+        ),
+      );
+    } finally {
+      setMarkingAvailableTableId(null);
+    }
   };
 
   const openReserveModal = (table: PosTable, mode?: "IMMEDIATE" | "SPECIAL") => {
@@ -454,7 +479,17 @@ export default function TablesPage() {
   const activeTablesList = tables || [];
   const totalCount = activeTablesList.length;
   const occupiedCount = activeTablesList.filter((t) => Boolean(t.activeInvoice)).length;
-  const vacantCount = totalCount - occupiedCount;
+  const cleaningCount = activeTablesList.filter((t) => t.status === "CLEANING").length;
+  const vacantCount = activeTablesList.filter(
+    (t) =>
+      !t.activeInvoice &&
+      t.status !== "CLEANING" &&
+      t.status !== "WAITING_FOR_PAYMENT",
+  ).length;
+  const displayedTables =
+    tableViewFilter === "cleaning"
+      ? activeTablesList.filter((t) => t.status === "CLEANING")
+      : activeTablesList;
   const reservedCount = activeTablesList.reduce(
     (count, table) =>
       count + (table.reservations ?? []).filter((r) => r.status === "ACTIVE").length,
@@ -478,9 +513,13 @@ export default function TablesPage() {
                 {isAr ? "صالة الطعام / Dine-In" : "Restaurant Tables / Dine-In"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-semibold text-[#506055]">
-                {isAr 
-                  ? "اختر طاولة فارغة لبدء طلب جديد، أو اختر طاولة مشغولة لاستكمال الحساب وإضافة الطلبات."
-                  : "Select a vacant table to open a new receipt, or select an occupied table to resume the current bill."}
+                {waiterOnly
+                  ? isAr
+                    ? "اختر طاولة متاحة لطلب جديد. الطاولات قيد التنظيف تحتاج تأكيد «جاهزة» قبل فتح طلب جديد."
+                    : "Pick an available table for a new order. Cleaning tables must be marked ready before reuse."
+                  : isAr
+                    ? "اختر طاولة فارغة لبدء طلب جديد، أو اختر طاولة مشغولة لاستكمال الحساب وإضافة الطلبات."
+                    : "Select a vacant table to open a new receipt, or select an occupied table to resume the current bill."}
               </p>
             </div>
 
@@ -507,6 +546,16 @@ export default function TablesPage() {
                     {isAr ? "مشغولة" : "Occupied"}
                   </div>
                   <div className="text-sm font-black text-[#6d3e15]">{occupiedCount}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 rounded-[16px] border border-[#e0e7ff] bg-[#f5f7ff] px-4 py-2.5 shadow-sm">
+                <LuSparkles className="h-4 w-4 text-[#6366f1]" />
+                <div>
+                  <div className="text-[10px] font-bold text-[#5b56a8] uppercase tracking-wider">
+                    {isAr ? "تحتاج تنظيف" : "Needs cleaning"}
+                  </div>
+                  <div className="text-sm font-black text-[#3730a3]">{cleaningCount}</div>
                 </div>
               </div>
 
@@ -548,28 +597,74 @@ export default function TablesPage() {
         </div>
 
         <div className="min-w-0 flex flex-col gap-4">
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#46644b]">
-              {isAr ? "مخطط الطاولات" : "Floor plan"}
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-black uppercase tracking-wider text-[#46644b]">
+                {isAr ? "مخطط الطاولات" : "Floor plan"}
+              </h2>
+              {cleaningCount > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTableViewFilter("all")}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                      tableViewFilter === "all"
+                        ? "bg-[#46644b] text-white"
+                        : "border border-[#d6e1d9] bg-white text-[#506054] hover:bg-[#f6faf7]",
+                    )}
+                  >
+                    {isAr ? `الكل (${totalCount})` : `All (${totalCount})`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTableViewFilter("cleaning")}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                      tableViewFilter === "cleaning"
+                        ? "bg-[#6366f1] text-white"
+                        : "border border-[#e0e7ff] bg-[#f5f7ff] text-[#3730a3] hover:bg-[#eef1ff]",
+                    )}
+                  >
+                    {isAr
+                      ? `تحتاج تنظيف (${cleaningCount})`
+                      : `Needs cleaning (${cleaningCount})`}
+                  </button>
+                </div>
+              ) : null}
+            </div>
 
         {/* Floor Plan Tables Grid */}
-        {activeTablesList.length === 0 ? (
+        {displayedTables.length === 0 ? (
           <Card className="rounded-[24px] border-[#e1e7e3] bg-white p-12 text-center shadow-none">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f4f7f5] text-[#718578]">
-              <LuChefHat className="h-8 w-8" />
+              {tableViewFilter === "cleaning" ? (
+                <LuSparkles className="h-8 w-8" />
+              ) : (
+                <LuChefHat className="h-8 w-8" />
+              )}
             </div>
             <h3 className="mt-4 text-lg font-bold text-[#233329]">
-              {isAr ? "لا توجد طاولات حالياً" : "No Tables Configured"}
+              {tableViewFilter === "cleaning"
+                ? isAr
+                  ? "لا توجد طاولات تحتاج تنظيف"
+                  : "No tables need cleaning"
+                : isAr
+                  ? "لا توجد طاولات حالياً"
+                  : "No Tables Configured"}
             </h3>
             <p className="mt-1 text-sm text-[#627367]">
-              {isAr 
-                ? "يرجى الانتقال إلى إعدادات نقاط البيع لإضافة طاولات جديدة وتحديد سعتها."
-                : "Please navigate to POS Settings in the sales register to setup your restaurant tables."}
+              {tableViewFilter === "cleaning"
+                ? isAr
+                  ? "جميع الطاولات جاهزة للخدمة."
+                  : "All tables are ready for service."
+                : isAr
+                  ? "يرجى الانتقال إلى إعدادات نقاط البيع لإضافة طاولات جديدة وتحديد سعتها."
+                  : "Please navigate to POS Settings in the sales register to setup your restaurant tables."}
             </p>
           </Card>
         ) : (
           <div className={posTableFloorGridClass}>
-            {activeTablesList.map((table) => {
+            {displayedTables.map((table) => {
               const activeInvoice = table.activeInvoice;
               const isOccupied = Boolean(activeInvoice);
               const invoiceTotal = activeInvoice ? Number(activeInvoice.totalAmount) : 0;
@@ -616,9 +711,17 @@ export default function TablesPage() {
               return (
                 <div
                   key={table.id}
-                  onClick={() => handleOpenTable(table)}
+                  onClick={() => {
+                    if (!isOccupied && (isCleaning || isWaiting)) {
+                      return;
+                    }
+                    handleOpenTable(table);
+                  }}
                   className={cn(
-                    "group relative flex min-w-0 cursor-pointer flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md sm:rounded-[24px] sm:p-5",
+                    "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 sm:rounded-[24px] sm:p-5",
+                    !isOccupied && (isCleaning || isWaiting)
+                      ? "cursor-default"
+                      : "cursor-pointer hover:-translate-y-1 hover:shadow-md",
                     cardBorder,
                   )}
                 >
@@ -779,6 +882,45 @@ export default function TablesPage() {
                         >
                           {isAr ? "+ حجز وقت آخر" : "+ Book another time slot"}
                         </button>
+                      </div>
+                    ) : isCleaning ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs font-semibold leading-relaxed text-[#3730a3]">
+                          {isAr
+                            ? "تم الدفع — نظّف الطاولة ثم أكّد أنها جاهزة للضيوف التاليين."
+                            : "Bill paid — clean the table, then mark it ready for the next guests."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleMarkTableAvailable(table.id);
+                          }}
+                          disabled={markingAvailableTableId === table.id}
+                          className={cn(
+                            "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#4f46e5] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#4f46e5] hover:to-[#4338ca] disabled:opacity-60 sm:text-xs",
+                            posTouchButtonClass,
+                          )}
+                        >
+                          <LuSparkles className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                          <span>
+                            {markingAvailableTableId === table.id
+                              ? isAr
+                                ? "جاري التحديث…"
+                                : "Updating…"
+                              : isAr
+                                ? "الطاولة جاهزة"
+                                : "Table ready"}
+                          </span>
+                        </button>
+                      </div>
+                    ) : isWaiting ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs font-semibold leading-relaxed text-[#854d0e]">
+                          {isAr
+                            ? "بانتظار الدفع من الكاشير — لا يمكن فتح طلب جديد."
+                            : "Awaiting cashier payment — cannot open a new order yet."}
+                        </p>
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2.5">
