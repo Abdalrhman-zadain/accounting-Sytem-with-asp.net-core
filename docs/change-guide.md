@@ -247,7 +247,7 @@ Where to edit:
 
 What else to check:
 
-- cashier payment UI must not expose manual accounting-account selection; keep it limited to payment method, paid amount, and reference when required
+- cashier payment UI must not expose manual accounting-account selection or cashier-entered payment reference fields; keep it limited to payment method and paid amount
 - POS settings should store payment method mappings in `PosRuntimeSetting`; delivery-company rows in the same POS settings flow should update the linked `DeliveryCompany` receivable, commission, and service-fee accounts
 - third-party delivery orders must distinguish between `restaurant collected` vs `delivery company collected`; only company-collected orders should create `PosPayment(paymentMethod=DELIVERY)` rows and enter delivery-company settlement follow-up
 - payment-method mappings for `CARD`, `CLIQ`, `WALLET`, and `BANK_TRANSFER` should point to active bank/cash registry rows through their linked posting accounts so `PosPayment.bankCashAccountId` can still be stored
@@ -764,10 +764,14 @@ What else to check:
 - if `orderType === "DINE_IN"`, the register should require a selected table before completion and should clear `tableId` when the user switches away from dine-in
 - `mapPosSale`, `posSaleInclude`, and `mapPosSaleToHeldSale` must stay in sync so drafts/held sales resume with the original order type, table, and fee metadata
 - `listDraftSales` / `listHeldSales` return `heldContext` on each sale (`DRAFT`, `HELD`, `RESERVATION_PREORDER`, `TABLE_ORDER`, plus order type/table/reservation window); the held-sales UI uses it for badges and resume links must pass `reservationId` when resuming a reservation pre-order
+- `/pos/held-sales` cards should visually distinguish dine-in, takeaway, and delivery orders and show relevant type-specific details such as table/waiter/service for dine-in, customer/notes for takeaway, and address/company/driver/fee for delivery
+- Resuming a held delivery sale must restore every stored delivery field. Direct-delivery orders should keep and display the saved driver name and phone from the sale when available, even while the current delivery-driver master list is still loading or no longer contains that driver.
+- the register `orderType` cleanup effect in `pos-page.tsx` must only clear dine-in/delivery fields when the cashier **leaves** that order type, not on every render where the current type is not dine-in/delivery. Clearing on mount/resume races with `resumeHeldSale` and wipes restored driver/address/fee data while the cart lines remain.
+- `/pos/held-sales` resume must stash the selected held-sale snapshot in `sessionStorage` before navigating to `/pos/register?resume=...` because the route change remounts `PosPage`. The register modal can call `resumeHeldSale(id, [row])` directly because the cashier is already on `/pos/register`.
 - any frontend total shown to the cashier must include persisted restaurant charges such as `serviceChargeAmount` and `deliveryFeeAmount`, otherwise the pay modal and backend totals drift
-- use `GET /pos/tables` and `GET /pos/kitchen/orders` for live restaurant visibility instead of hardcoded demo state
-- kitchen and delivery boards are feature-owned in `pos-kitchen-page.tsx` (`PosKitchenWorkspace`) and `pos-delivery-page.tsx` (`PosDeliveryWorkspace`); routes `app/(erp)/pos/kitchen/page.tsx` and `app/(erp)/pos/delivery/page.tsx` re-export the main POS page (`../page`) so they render inside `PosPage` like the register
-- POS access role `KITCHEN` (`PosAccessRoleCode` in Prisma) is kitchen-display-only: routes `/pos` + `/pos/kitchen`, permissions `RST_VIEW_KITCHEN_SCREEN` / `RST_UPDATE_KITCHEN_STATUS`. Seed with `npx ts-node prisma/setup-pos-kitchen.ts` in `backend/`
+- use `GET /pos/tables` and `GET /pos/waiter/orders` for live dine-in service visibility instead of hardcoded demo state
+- waiter order board lives in `frontend/features/pos/pos-waiter-orders-page.tsx` at `/pos/waiter/orders`; delivery board remains in `pos-delivery-page.tsx` (`PosDeliveryWorkspace`) at `/pos/delivery`
+- POS role `WAITER` adds permissions `RST_VIEW_WAITER_ORDERS` / `RST_UPDATE_WAITER_ORDER_STATUS`. Re-seed with `npx ts-node prisma/setup-pos-waiter.ts` in `backend/` after permission changes
 - keep KDS / delivery kanban UI changes in those workspace modules, not duplicated in `pos-page.tsx`
 - the register-side table controls, delivery panel, and cashier close-shift modal are feature-owned in `frontend/features/pos/pos-page.tsx`; if they grow further, split them into feature-local components rather than moving them into route files or generic UI
 - accountant review now includes session-grouped cash, inventory, journal, and order-correction flows; when extending that area, keep the review screen tied to backend review/session/journal APIs rather than rebuilding calculations purely in the client
@@ -777,10 +781,11 @@ Must remain compatible:
 - base POS sale completion, held sale resume, and accountant-review flows
 - `SalesInvoice.invoiceType = POS` lifecycle invariants
 - waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx`
-- confirm-to-kitchen: `POST /pos/sales/:id/send-to-kitchen` in `pos.controller.ts` / `PosService.sendSaleToKitchen`; draft saves no longer auto-create kitchen tickets — only explicit send (waiter confirm or cashier incremental send)
-- cashier/kitchen edit rule: lines with `kitchenSentAt` stay editable in the register until the linked `KitchenOrderItem` is `READY` or `SERVED`; saving draft/hold/complete runs `syncKitchenOrderWithInvoice` so removed lines (or an empty cart) drop off the kitchen board and the whole `KitchenOrder` is deleted when no items remain; completed/refunded/voided POS sales cannot be edited
-- register **Update kitchen / تحديث المطبخ** calls `POST /pos/sales/update-kitchen` (`PosService.updateSaleKitchen`): saves the table/cart order, marks current lines for kitchen, then `rebuildKitchenOrderFromInvoice` replaces the whole KOT with that order (removals drop off the board); the order status is **not** reset to `NEW` — it preserves its current status, and `hasUpdateNotification` is set to `true` so the kitchen board shows a persistent "Cashier updated" alert; incremental `send-to-kitchen` on an existing ticket also sets `hasUpdateNotification`; the alert persists until kitchen staff clicks ✕ (`PUT /pos/kitchen/orders/:id/dismiss-notification`); the kitchen board polls every 3s with an audible chime on new alerts; the register auto-syncs kitchen tickets ~2s after cart edits on orders that already have a KOT (silent), and cashiers can still use **Update kitchen** manually
-- opening a dine-in table from `/pos/tables` or the register table picker must resume the table's active draft/held sale (`tableId` + `resume` when `activeInvoice` exists); do not reset the cart before held/draft queries finish loading
+- confirm-to-kitchen: `POST /pos/sales/:id/send-to-kitchen` in `pos.controller.ts` / `PosService.sendSaleToKitchen`; draft saves no longer auto-create kitchen tickets — only explicit send (waiter confirm or cashier incremental send). Sending a draft table order to the kitchen must also promote it to `HELD` and keep the table linked to that invoice so selecting the table later reopens the full submitted order.
+- cart lock rule: once `waiterConfirmedAt` is set on a dine-in sale, register draft/hold edits are blocked until payment; lines with `kitchenSentAt` cannot be removed/changed even before waiter confirm
+- waiter service advance: `PUT /pos/waiter/orders/:id/status` with `RECEIVED` or `DEPARTED`; `DEPARTED` sets the table to `CLEANING` while keeping `activeInvoiceId` for cashier payment
+- KOT print: `frontend/features/pos/pos-kot-print.ts` on waiter confirm; audit via `POST /pos/kitchen/orders/:id/reprint` when the kitchen order id is known
+- opening a dine-in table from `/pos/tables` or the register table picker must resume the table's active draft/held sale (`tableId` + `resume` when `activeInvoice` exists); do not reset the cart before held/draft queries finish loading. The standalone tables route and register must use the shared POS table React Query key so table occupancy refreshes after kitchen/hold actions, and the register should preserve the resumed sale's table number as a display fallback while table metadata refetches.
 - current route ownership under `frontend/features/pos`
 
 Checks to run:
@@ -794,6 +799,10 @@ Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
 - extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
+- shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos/pos-layout-classes.ts`; reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
+- narrow register UX (iPad portrait, phones): `frontend/features/pos/pos-register-mobile-cart.tsx` + `frontend/features/pos/pos-register-layout.tsx` — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full `salePanel`. From `960px` up, catalog and order panel stay side by side. Pass `mobileCartBar` from `pos-page.tsx` when extending the register shell
+- dine-in table floor plan UI: `frontend/app/(erp)/pos/tables/page.tsx` — uses the shared table grid classes and touch-friendly card actions
+- POS routes auto-collapse the ERP sidebar below `1024px` via `frontend/components/app-shell.tsx` so catalog/table views get more horizontal space on tablets and smaller laptops
 
 - category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
@@ -832,6 +841,23 @@ What else to check:
 - `GET /pos/settings` drives `runtime.allowCreditSale`, `runtime.negativeStockAllowed`, `runtime.allowCloseWithDrafts`, and `runtime.cashierDiscountLimitPercent` — align the register with these flags and with POS permission codes (`POS_CREDIT_SALE`, `POS_SELL_NEGATIVE_STOCK`, `POS_CHANGE_UNIT_PRICE`, `POS_HOLD_SALE`, `POS_CLOSE_OWN_SESSION`, etc.)
 - bank transfer in the pay modal must resolve to `BANK_TRANSFER` bank/cash accounts via `normalizePaymentAccountMethod`
 - the category chips (filters) are dynamically loaded from backend inventory item groups, and the Offers chip has been removed in favor of strict Item Group categories
+
+### POS sell-by-weight (kilo)
+
+Where to edit:
+
+- inventory item master flag and minimum weight: `backend/prisma/schema.prisma` (`InventoryItem.allowFractionalQuantity`, `minSalesQuantity`), item-master DTO/service in `backend/src/modules/phase-5-inventory-management/inventory/item-master`, and admin UI in `frontend/features/phase-5-inventory-management/inventory/item-editor-modal.tsx` + `inventory-page.tsx`
+- POS sale-time weight entry and cart behavior: `frontend/features/pos/pos-weight-entry-modal.tsx`, `frontend/features/pos/pos-weight-utils.ts`, and register orchestration in `frontend/features/pos/pos-page.tsx`
+- product grid price suffix: `frontend/features/pos/pos-product-card.tsx`
+- demo KG catalog: `backend/prisma/seed-pos-register.ts`
+
+Rules:
+
+- cashiers cannot enable sell-by-weight from POS settings or the register; only items flagged in `/inventory` prompt for weight at sale time
+- `defaultSalesPrice` is price per base unit (for example per kg); line total = entered weight × unit price
+- weight lines do not merge in the cart; each weigh-in stays a separate line
+- enabling `allowFractionalQuantity` requires the item base unit `unitType` to be `WEIGHT`
+- held/draft/resumed sales preserve decimal `quantity`; resume enriches cart lines from the live catalog for `sellByWeight` display controls
 
 Checks to run:
 

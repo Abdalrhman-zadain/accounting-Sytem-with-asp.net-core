@@ -9,6 +9,8 @@ const waiterPermissionCodes: PosPermissionCode[] = [
   "RST_VIEW_TABLE_SCREEN",
   "RST_OPEN_TABLE_ORDER",
   "RST_SEND_KOT",
+  "RST_VIEW_WAITER_ORDERS",
+  "RST_UPDATE_WAITER_ORDER_STATUS",
   "POS_HOLD_SALE",
   "POS_SEARCH_ITEM",
   "POS_ADD_ITEM_TO_CART",

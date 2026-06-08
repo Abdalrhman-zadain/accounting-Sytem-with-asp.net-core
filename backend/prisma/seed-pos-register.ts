@@ -24,6 +24,10 @@ type PosProductSeed = {
   favorite?: boolean;
   itemImageUrl?: string;
   unitOfMeasure?: string;
+  /** When true, POS prompts for weight; defaults from KG base unit if omitted. */
+  sellByWeight?: boolean;
+  /** Minimum weight per sale when sell-by-weight is enabled (e.g. 0.25 kg). */
+  minSalesQuantity?: number;
 };
 
 const POS_PRODUCTS: PosProductSeed[] = [
@@ -41,6 +45,9 @@ const POS_PRODUCTS: PosProductSeed[] = [
     categoryCode: 'MENU-ASNAF',
     itemImageUrl: '/images/menu/ayot.png',
     unitOfMeasure: 'KG',
+    sellByWeight: true,
+    minSalesQuantity: 0.001,
+    favorite: true,
   },
   {
     id: 'MENU-FOOD-002',
@@ -101,6 +108,9 @@ const POS_PRODUCTS: PosProductSeed[] = [
     categoryCode: 'MENU-ASNAF',
     itemImageUrl: '/images/menu/fawaregh.png',
     unitOfMeasure: 'KG',
+    sellByWeight: true,
+    minSalesQuantity: 0.001,
+    favorite: true,
   },
   {
     id: 'MENU-FOOD-006',
@@ -116,6 +126,9 @@ const POS_PRODUCTS: PosProductSeed[] = [
     categoryCode: 'MENU-ASNAF',
     itemImageUrl: '/images/menu/karshat.png',
     unitOfMeasure: 'KG',
+    sellByWeight: true,
+    minSalesQuantity: 0.25,
+    favorite: true,
   },
   {
     id: 'MENU-FOOD-007',
@@ -490,6 +503,8 @@ export async function seedPosRegisterDemo(
     const totalStock =
       product.stockMain + (product.stockBranch ?? 0);
     const totalValue = totalStock * purchasePrice;
+    const sellByWeight = product.sellByWeight ?? unit.code === 'KG';
+    const minSalesQty = product.minSalesQuantity ?? (sellByWeight ? 0.001 : 1);
 
     const item = await prisma.inventoryItem.upsert({
       where: { code: product.code },
@@ -520,6 +535,8 @@ export async function seedPosRegisterDemo(
         isActive: true,
         onHandQuantity: trackInventory ? new Prisma.Decimal(totalStock) : new Prisma.Decimal(0),
         valuationAmount: trackInventory ? new Prisma.Decimal(totalValue) : new Prisma.Decimal(0),
+        allowFractionalQuantity: sellByWeight,
+        minSalesQuantity: new Prisma.Decimal(minSalesQty),
       },
       create: {
         id: product.id,
@@ -550,6 +567,8 @@ export async function seedPosRegisterDemo(
         isActive: true,
         onHandQuantity: trackInventory ? new Prisma.Decimal(totalStock) : new Prisma.Decimal(0),
         valuationAmount: trackInventory ? new Prisma.Decimal(totalValue) : new Prisma.Decimal(0),
+        allowFractionalQuantity: sellByWeight,
+        minSalesQuantity: new Prisma.Decimal(minSalesQty),
       },
     });
 

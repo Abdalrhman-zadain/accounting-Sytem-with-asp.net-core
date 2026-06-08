@@ -256,7 +256,11 @@ function buildAllReceiptsRollHtml(ctx: RollPrintContext): string {
     // Lines
     for (const line of sale.lines ?? []) {
       const name = (line.itemName || line.description || "—").slice(0, 20);
-      const qty = Number(line.quantity).toFixed(2);
+      const unitCode = line.item?.unitOfMeasure?.trim();
+      const qtyValue = Number(line.quantity);
+      const qty = unitCode
+        ? `${qtyValue.toFixed(3).replace(/\.?0+$/, "")} ${unitCode}`
+        : qtyValue.toFixed(2);
       const price = fmtAmt(line.lineAmount);
       rows.push(`<div class="row"><span class="lbl">${name} x${qty}</span><span class="val">${price}</span></div>`);
     }

@@ -2584,6 +2584,22 @@ export async function getPosKitchenOrders(token?: string | null) {
   return apiRequest<KitchenOrder[]>("/pos/kitchen/orders", { token });
 }
 
+export async function getPosWaiterOrders(token?: string | null) {
+  return apiRequest<KitchenOrder[]>("/pos/waiter/orders", { token });
+}
+
+export async function updateWaiterOrderStatus(
+  id: string,
+  status: import("@/types/api").WaiterFoodStatus,
+  token?: string | null,
+) {
+  return apiRequest<KitchenOrder>(`/pos/waiter/orders/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+    token,
+  });
+}
+
 export async function getPosAddonGroupsAdmin(token?: string | null) {
   return apiRequest<import("@/features/pos/pos-addon-types").PosAddonGroup[]>(
     "/pos/addons/groups",

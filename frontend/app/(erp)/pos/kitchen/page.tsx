@@ -1,20 +1,22 @@
-import dynamic from "next/dynamic";
-import { Suspense } from "react";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 import { RequireAuth } from "@/components/require-auth";
-import { PageSkeleton } from "@/components/ui";
-
-const PosPage = dynamic(
-  () => import("@/features/pos").then((mod) => mod.PosPage),
-  { loading: () => <PageSkeleton /> },
-);
 
 export default function Page() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/pos/waiter/orders");
+  }, [router]);
+
   return (
     <RequireAuth>
-      <Suspense>
-        <PosPage />
-      </Suspense>
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500">
+        Redirecting…
+      </div>
     </RequireAuth>
   );
 }

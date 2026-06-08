@@ -24,6 +24,7 @@ import {
   OrderType,
   DeliveryStatus,
   KitchenStatus,
+  WaiterFoodStatus,
   DeliveryCollectionMethod,
   DeliverySettlementStatus,
 } from "../../../generated/prisma";
@@ -199,18 +200,21 @@ export class PosService {
         data: { kitchenSentAt: sentAt },
       });
 
-      const headerPatch: Prisma.SalesInvoiceUpdateInput = {};
+      const headerPatch: Prisma.SalesInvoiceUpdateInput = {
+        posOperationalStatus: PosOperationalStatus.HELD,
+      };
       if (waiterOnly && !invoice.waiterConfirmedAt) {
         headerPatch.waiterConfirmedAt = sentAt;
         if (user?.userId) {
           headerPatch.waiter = { connect: { id: user.userId } };
         }
       }
-      if (Object.keys(headerPatch).length) {
-        await tx.salesInvoice.update({
-          where: { id: invoice.id },
-          data: headerPatch,
-        });
+      await tx.salesInvoice.update({
+        where: { id: invoice.id },
+        data: headerPatch,
+      });
+      if (invoice.tableId) {
+        await this.updateTableStatus(tx, invoice.tableId, invoice.id, TableStatus.OCCUPIED);
       }
 
       await this.appendKitchenOrderItems(tx, invoice, unsentLines);
@@ -3050,6 +3054,102 @@ export class PosService {
     this.ensurePosPermissionCode("RST_UPDATE_KITCHEN_STATUS", user);
   }
 
+  assertWaiterOrdersViewPermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("RST_VIEW_WAITER_ORDERS", user);
+  }
+
+  assertWaiterOrdersUpdatePermission(user?: AuthorizedUser) {
+    this.ensurePosPermissionCode("RST_UPDATE_WAITER_ORDER_STATUS", user);
+  }
+
+  async listWaiterOrders(user?: AuthorizedUser, status?: WaiterFoodStatus) {
+    this.assertWaiterOrdersViewPermission(user);
+    return this.prisma.kitchenOrder.findMany({
+      where: {
+        orderType: OrderType.DINE_IN,
+        ...(status ? { waiterStatus: status } : {}),
+        salesInvoice: {
+          posOperationalStatus: {
+            in: [PosOperationalStatus.DRAFT, PosOperationalStatus.HELD],
+          },
+        },
+      },
+      include: { items: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async updateWaiterOrderStatus(
+    orderId: string,
+    nextStatus: WaiterFoodStatus,
+    user?: AuthorizedUser,
+  ) {
+    this.assertWaiterOrdersUpdatePermission(user);
+    const order = await this.prisma.kitchenOrder.findUnique({
+      where: { id: orderId.trim() },
+      include: {
+        salesInvoice: {
+          select: {
+            id: true,
+            posOperationalStatus: true,
+            tableId: true,
+          },
+        },
+      },
+    });
+    if (!order) {
+      throw new NotFoundException(`Waiter order with ID ${orderId} was not found.`);
+    }
+    if (order.orderType !== OrderType.DINE_IN) {
+      throw new BadRequestException("Only dine-in orders can be updated on the waiter board.");
+    }
+    if (
+      !order.salesInvoice ||
+      this.isPosSaleDone(order.salesInvoice.posOperationalStatus)
+    ) {
+      throw new BadRequestException("This order is no longer open.");
+    }
+
+    const allowedNext: Record<WaiterFoodStatus, WaiterFoodStatus | null> = {
+      [WaiterFoodStatus.WAITING]: WaiterFoodStatus.RECEIVED,
+      [WaiterFoodStatus.RECEIVED]: WaiterFoodStatus.DEPARTED,
+      [WaiterFoodStatus.DEPARTED]: null,
+    };
+    if (allowedNext[order.waiterStatus] !== nextStatus) {
+      throw new BadRequestException(
+        `Cannot move order from ${order.waiterStatus} to ${nextStatus}.`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const patch: Prisma.KitchenOrderUpdateInput = {
+        waiterStatus: nextStatus,
+      };
+      if (nextStatus === WaiterFoodStatus.RECEIVED) {
+        patch.receivedAt = new Date();
+      }
+      if (nextStatus === WaiterFoodStatus.DEPARTED) {
+        patch.departedAt = new Date();
+        const tableId = order.salesInvoice?.tableId ?? order.tableId;
+        if (tableId && order.salesInvoice?.id) {
+          await tx.posTable.update({
+            where: { id: tableId },
+            data: {
+              status: TableStatus.CLEANING,
+              activeInvoiceId: order.salesInvoice.id,
+            },
+          });
+        }
+      }
+
+      return tx.kitchenOrder.update({
+        where: { id: order.id },
+        data: patch,
+        include: { items: true },
+      });
+    });
+  }
+
   assertPosAddonAdminPermission(user?: AuthorizedUser) {
     if (user?.role === "ADMIN" || user?.role === "MANAGER") return;
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
@@ -5245,7 +5345,18 @@ export class PosService {
       },
       lines: {
         include: {
-          item: { select: { id: true, code: true, name: true, type: true, trackInventory: true } },
+          item: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              type: true,
+              trackInventory: true,
+              unitOfMeasure: true,
+              allowFractionalQuantity: true,
+              unitOfMeasureRef: { select: { decimalPrecision: true } },
+            },
+          },
           warehouse: { select: { id: true, code: true, name: true } },
         },
         orderBy: { lineNumber: "asc" },
@@ -5632,6 +5743,7 @@ export class PosService {
         discountAmount: line.discountAmount.toString(),
         taxAmount: line.taxAmount.toString(),
         lineTotal: line.lineAmount.toString(),
+        unitCode: line.item?.unitOfMeasure ?? null,
       })),
     };
   }
@@ -5864,42 +5976,35 @@ export class PosService {
       );
     }
 
-    const hasKitchenReadyLine = existing.lines.some((line) =>
-      this.isInvoiceLineKitchenLocked(
-        kitchenStatusByLineId,
-        line.id,
-        line.kitchenSentAt,
-      ),
-    );
-    if (hasKitchenReadyLine) {
+    if (existing.waiterConfirmedAt) {
       if (existing.lines.length !== resolvedLines.length) {
         throw new BadRequestException(
-          "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
+          "This order was confirmed by the waiter. No order changes are allowed until payment.",
         );
       }
       for (const line of existing.lines) {
         const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
         if (!dtoLine) {
           throw new BadRequestException(
-            "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
+            "This order was confirmed by the waiter. No order changes are allowed until payment.",
           );
         }
         const nextQty = Number(dtoLine.quantity ?? 0);
         if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
           throw new BadRequestException(
-            "This order has kitchen-ready items marked ready or served. No order changes are allowed until payment.",
+            "This order was confirmed by the waiter. No order changes are allowed until payment.",
           );
         }
         if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
           throw new BadRequestException(
-            "This order has kitchen-ready items. No order changes are allowed until payment.",
+            "This order was confirmed by the waiter. No order changes are allowed until payment.",
           );
         }
       }
       const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
       if (newDtoLines.length > 0) {
         throw new BadRequestException(
-          "This order has kitchen-ready items. No order changes are allowed until payment.",
+          "This order was confirmed by the waiter. No order changes are allowed until payment.",
         );
       }
     }
@@ -5907,34 +6012,21 @@ export class PosService {
     const sentLines = existing.lines.filter((line) => line.kitchenSentAt);
     for (const sentLine of sentLines) {
       const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
-      const kitchenLocked = this.isInvoiceLineKitchenLocked(
-        kitchenStatusByLineId,
-        sentLine.id,
-        sentLine.kitchenSentAt,
-      );
       if (!dtoLine) {
-        if (kitchenLocked) {
-          throw new BadRequestException(
-            "Items marked ready or served on the kitchen screen cannot be removed.",
-          );
-        }
-        continue;
+        throw new BadRequestException(
+          "Items already sent to the kitchen cannot be removed.",
+        );
       }
       const nextQty = Number(dtoLine.quantity ?? 0);
       if (sentLine.itemId && dtoLine.itemId && sentLine.itemId !== dtoLine.itemId) {
-        if (kitchenLocked) {
-          throw new BadRequestException(
-            "Items marked ready or served on the kitchen screen cannot be changed.",
-          );
-        }
-        continue;
+        throw new BadRequestException(
+          "Items already sent to the kitchen cannot be changed.",
+        );
       }
       if (Math.abs(Number(sentLine.quantity) - nextQty) > 0.0001) {
-        if (kitchenLocked) {
-          throw new BadRequestException(
-            "Items marked ready or served on the kitchen screen cannot be changed.",
-          );
-        }
+        throw new BadRequestException(
+          "Items already sent to the kitchen cannot be changed.",
+        );
       }
     }
 
@@ -6156,7 +6248,9 @@ export class PosService {
         waiterName,
         orderType: invoice.orderType,
         notes: invoice.description || null,
-        hasUpdateNotification: true,
+        ...(invoice.orderType === OrderType.DINE_IN
+          ? { waiterStatus: WaiterFoodStatus.WAITING }
+          : {}),
       },
     });
   }
@@ -6255,7 +6349,9 @@ export class PosService {
           waiterName,
           orderType: invoice.orderType,
           notes: invoice.description || null,
-          hasUpdateNotification: true,
+          ...(invoice.orderType === OrderType.DINE_IN
+            ? { waiterStatus: WaiterFoodStatus.WAITING }
+            : {}),
           items: {
             create: linesToSend.map((line) => ({
               salesInvoiceLineId: line.id,
@@ -6282,6 +6378,10 @@ export class PosService {
         waiterName,
         orderType: invoice.orderType,
         notes: invoice.description || null,
+        waiterStatus:
+          invoice.orderType === OrderType.DINE_IN
+            ? WaiterFoodStatus.WAITING
+            : undefined,
         items: {
           create: linesToSend.map((line) => ({
             salesInvoiceLineId: line.id,
@@ -7736,6 +7836,12 @@ export class PosService {
     }
 
     if (table.activeInvoiceId) {
+      if (
+        table.status === TableStatus.CLEANING ||
+        table.status === TableStatus.WAITING_FOR_PAYMENT
+      ) {
+        return;
+      }
       if (table.status !== TableStatus.OCCUPIED) {
         await tx.posTable.update({
           where: { id: tableId },

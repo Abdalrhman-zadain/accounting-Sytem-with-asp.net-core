@@ -85,6 +85,8 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
   RST_COMPLETE_RESTAURANT_PAYMENT: { name: 'Complete restaurant payment', description: 'Complete dine-in, takeaway, or delivery restaurant payments.' },
   RST_CANCEL_RESTAURANT_ORDER: { name: 'Cancel restaurant order', description: 'Cancel a restaurant order under controlled workflow.' },
   RST_VIEW_RESTAURANT_REPORTS: { name: 'View restaurant reports', description: 'Access restaurant-specific reporting and summaries.' },
+  RST_VIEW_WAITER_ORDERS: { name: 'View waiter order board', description: 'View dine-in order tracking for waiters.' },
+  RST_UPDATE_WAITER_ORDER_STATUS: { name: 'Update waiter order status', description: 'Advance dine-in orders through waiter service statuses.' },
   POS_CORRECT_ORDER_TYPE: { name: 'Correct order type', description: 'Correct the restaurant order type after creation when allowed.' },
   POS_APPROVE_CORRECTION: { name: 'Approve order correction', description: 'Approve a restaurant order-type correction request.' },
   POS_REOPEN_SESSION: { name: 'Reopen POS session', description: 'Reopen a submitted or closed POS session when authorized.' },
@@ -379,7 +381,7 @@ export class AuthService {
       !posRoles.includes("KITCHEN") &&
       !posRoles.includes("WAITER");
     const defaultRoute = isKitchenOnly
-      ? "/pos/kitchen"
+      ? "/dashboard"
       : isWaiterOnly
         ? "/pos/waiter/tables"
         : isCashierOnly

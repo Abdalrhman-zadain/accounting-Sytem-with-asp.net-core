@@ -1071,15 +1071,10 @@ export function ItemEditorModal({
                             ))}
                           </Select>
                         </Field>
-                        <Field label={isArabic ? "الحد الأدنى للمبيعات" : "Min Sales Qty"} labelAlign={isArabic ? "end" : "start"}>
-                          <Input
-                            value={editor.minSalesQuantity}
-                            onChange={(e) => updateEditor((current) => ({ ...current, minSalesQuantity: e.target.value }))}
-                            className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
-                            inputMode="numeric"
-                          />
-                        </Field>
-                        <Field label={isArabic ? "السماح بالكسور" : "Allow Fractional Qty"} labelAlign={isArabic ? "end" : "start"}>
+                        <Field
+                          label={isArabic ? "البيع بالوزن" : "Sell by weight"}
+                          labelAlign={isArabic ? "end" : "start"}
+                        >
                           <div className={cn("flex items-center gap-3 h-[46px] border border-slate-200 bg-slate-50/30 rounded-xl px-4", isArabic ? "flex-row-reverse" : "flex-row")}>
                             <button
                               type="button"
@@ -1100,7 +1095,22 @@ export function ItemEditorModal({
                               {editor.allowFractionalQuantity ? (isArabic ? "نعم" : "Yes") : (isArabic ? "لا" : "No")}
                             </span>
                           </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {isArabic
+                              ? "فعّل هذا الخيار للأصناف بوحدة وزن (مثل كغ). سعر البيع الافتراضي = السعر لكل كيلو. الكاشير يدخل الوزن فقط عند البيع في نقطة البيع."
+                              : "Enable for weight-based units (e.g. KG). Default sales price is per kg. Cashiers only enter weight at POS checkout."}
+                          </p>
                         </Field>
+                        {editor.allowFractionalQuantity ? (
+                          <Field label={isArabic ? "الحد الأدنى للوزن" : "Minimum weight"} labelAlign={isArabic ? "end" : "start"}>
+                            <Input
+                              value={editor.minSalesQuantity}
+                              onChange={(e) => updateEditor((current) => ({ ...current, minSalesQuantity: e.target.value }))}
+                              className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                              inputMode="decimal"
+                            />
+                          </Field>
+                        ) : null}
                       </div>
                     </div>
 

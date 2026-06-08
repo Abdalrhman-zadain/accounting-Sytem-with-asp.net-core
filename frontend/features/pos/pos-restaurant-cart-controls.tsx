@@ -19,6 +19,8 @@ type PosRestaurantCartControlsProps = {
   deliveryCollectionMethod: DeliveryCollectionMethod;
   deliveryDriverId: string | null;
   deliveryDrivers: DeliveryDriver[];
+  selectedDeliveryDriverLabel?: string | null;
+  selectedDeliveryDriverPhone?: string | null;
   deliveryFee: number;
   deliveryMode: "DIRECT" | "THIRD_PARTY";
   deliveryNotes: string;
@@ -41,6 +43,7 @@ type PosRestaurantCartControlsProps = {
   orderType: PosOrderType;
   restaurantTables: PosTable[];
   selectedTableId: string | null;
+  selectedTableLabel?: string | null;
   selectedWaiterId: string | null;
   serviceChargeAmount: number;
   waiters: PosWaiter[];
@@ -55,7 +58,6 @@ const ORDER_TYPE_OPTIONS: Array<{ value: PosOrderType; en: string; ar: string }>
   { value: "DINE_IN", en: "Dine-In", ar: "محلي" },
   { value: "TAKEAWAY", en: "Takeaway", ar: "سفري" },
   { value: "DELIVERY", en: "Delivery", ar: "توصيل" },
-  { value: "PICKUP", en: "Pickup", ar: "استلام" },
 ];
 
 export function PosRestaurantCartControls({
@@ -66,6 +68,8 @@ export function PosRestaurantCartControls({
   deliveryCollectionMethod,
   deliveryDriverId,
   deliveryDrivers,
+  selectedDeliveryDriverLabel,
+  selectedDeliveryDriverPhone,
   deliveryFee,
   deliveryMode,
   deliveryNotes,
@@ -88,6 +92,7 @@ export function PosRestaurantCartControls({
   orderType,
   restaurantTables,
   selectedTableId,
+  selectedTableLabel,
   selectedWaiterId,
   serviceChargeAmount,
   waiters,
@@ -99,8 +104,19 @@ export function PosRestaurantCartControls({
 }: PosRestaurantCartControlsProps) {
   const isAr = language === "ar";
   const selectedTable = restaurantTables.find((t) => t.id === selectedTableId) ?? null;
+  const visibleTableLabel = selectedTable
+    ? isAr
+      ? `طاولة ${selectedTable.tableNumber}`
+      : `Table ${selectedTable.tableNumber}`
+    : selectedTableLabel
+      ? isAr
+        ? `طاولة ${selectedTableLabel}`
+        : `Table ${selectedTableLabel}`
+      : null;
   const isTableLocked = Boolean(lockedTableId && lockedTableId === selectedTableId && editingInvoiceId);
   const controlsDisabled = orderLocked;
+  const selectedDeliveryDriver = deliveryDrivers.find((driver) => driver.id === deliveryDriverId) ?? null;
+  const visibleDeliveryDriverLabel = selectedDeliveryDriver?.name ?? selectedDeliveryDriverLabel ?? null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -142,10 +158,8 @@ export function PosRestaurantCartControls({
           <div className="flex items-center gap-2 rounded-xl border border-[#d6d3f0] bg-[#f5f3ff] px-3 py-2">
             <LuUtensils className="h-4 w-4 shrink-0 text-[#4338ca]" />
             <span className="flex-1 text-xs font-bold text-[#4338ca]">
-              {selectedTable
-                ? isAr
-                  ? `طاولة ${selectedTable.tableNumber}`
-                  : `Table ${selectedTable.tableNumber}`
+              {visibleTableLabel
+                ? visibleTableLabel
                 : isAr
                   ? "لم تُختر طاولة"
                   : "No table selected"}
@@ -262,19 +276,38 @@ export function PosRestaurantCartControls({
           </div>
 
           {deliveryMode === "DIRECT" ? (
-            <select
-              value={deliveryDriverId ?? ""}
-              disabled={controlsDisabled}
-              onChange={(e) => onDeliveryDriverChange(e.target.value || null)}
-              className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
-            >
-              <option value="">{isAr ? "اختر السائق" : "Select driver"}</option>
-              {deliveryDrivers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <select
+                value={deliveryDriverId ?? ""}
+                disabled={controlsDisabled}
+                onChange={(e) => onDeliveryDriverChange(e.target.value || null)}
+                className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
+              >
+                <option value="">{isAr ? "اختر السائق" : "Select driver"}</option>
+                {deliveryDriverId && !selectedDeliveryDriver && visibleDeliveryDriverLabel ? (
+                  <option value={deliveryDriverId}>{visibleDeliveryDriverLabel}</option>
+                ) : null}
+                {deliveryDrivers.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              {deliveryDriverId && visibleDeliveryDriverLabel ? (
+                <div className="rounded-xl border border-[#dbeafe] bg-[#eff6ff] px-3 py-2 text-[11px] font-bold text-[#1d4ed8]">
+                  <div>
+                    {isAr ? "السائق: " : "Driver: "}
+                    {visibleDeliveryDriverLabel}
+                  </div>
+                  {selectedDeliveryDriver?.phone || selectedDeliveryDriverPhone ? (
+                    <div className="mt-1 font-semibold opacity-90">
+                      {isAr ? "الهاتف: " : "Phone: "}
+                      {selectedDeliveryDriver?.phone ?? selectedDeliveryDriverPhone}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="space-y-2">
               <select

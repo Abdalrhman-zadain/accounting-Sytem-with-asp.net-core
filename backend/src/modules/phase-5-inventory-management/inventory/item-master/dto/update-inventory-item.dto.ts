@@ -136,4 +136,12 @@ export class UpdateInventoryItemDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowFractionalQuantity?: boolean;
+
+  @IsOptional()
+  @Matches(/^\d+(\.\d{1,4})?$/)
+  minSalesQuantity?: string;
 }

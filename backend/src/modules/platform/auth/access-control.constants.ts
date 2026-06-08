@@ -26,8 +26,6 @@ export const CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
   "RST_APPLY_SERVICE_CHARGE",
   "RST_COMPLETE_RESTAURANT_PAYMENT",
   "RST_PRINT_PRE_BILL",
-  "RST_VIEW_KITCHEN_SCREEN",
-  "RST_UPDATE_KITCHEN_STATUS",
 ];
 
 export const KITCHEN_PERMISSION_CODES: PosPermissionCode[] = [
@@ -41,6 +39,8 @@ export const WAITER_PERMISSION_CODES: PosPermissionCode[] = [
   "RST_VIEW_TABLE_SCREEN",
   "RST_OPEN_TABLE_ORDER",
   "RST_SEND_KOT",
+  "RST_VIEW_WAITER_ORDERS",
+  "RST_UPDATE_WAITER_ORDER_STATUS",
   "POS_HOLD_SALE",
   "POS_SEARCH_ITEM",
   "POS_ADD_ITEM_TO_CART",
@@ -93,12 +93,11 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/held-sales",
     "/pos/receipt",
     "/pos/tables",
-    "/pos/kitchen",
     "/pos/delivery",
     "/pos/returns",
   ],
-  KITCHEN: ["/pos/kitchen"],
-  WAITER: ["/pos/waiter/tables", "/pos/waiter/order"],
+  KITCHEN: [],
+  WAITER: ["/pos/waiter/tables", "/pos/waiter/order", "/pos/waiter/orders"],
   ACCOUNTANT: [
     "/dashboard",
     "/accounts",
@@ -109,7 +108,6 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/accounting-review",
     "/pos/sessions",
     "/pos/completed-sales",
-    "/pos/kitchen",
     "/pos/delivery",
     "/pos/reports",
     "/pos/settings",

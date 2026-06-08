@@ -5355,8 +5355,8 @@ function mapItemToEditor(item: InventoryItem): ItemEditorState {
     valuationAmount: item.valuationAmount ?? "0",
     salesUnitId: item.unitOfMeasureId ?? "",
     purchaseUnitId: item.unitOfMeasureId ?? "",
-    allowFractionalQuantity: false,
-    minSalesQuantity: "1",
+    allowFractionalQuantity: item.allowFractionalQuantity ?? false,
+    minSalesQuantity: item.minSalesQuantity ?? "1",
     minStockLevel: "0",
     maxStockLevel: "0",
     allowNegativeStock: false,
@@ -5600,6 +5600,8 @@ function mapItemEditorToPayload(editor: ItemEditorState) {
       isBaseUnit: row.isBaseUnit,
     })),
     isActive: editor.isActive,
+    allowFractionalQuantity: editor.allowFractionalQuantity,
+    minSalesQuantity: editor.minSalesQuantity?.trim() || undefined,
   };
 }
 

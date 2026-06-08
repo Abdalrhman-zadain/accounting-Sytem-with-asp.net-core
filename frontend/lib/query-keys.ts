@@ -199,6 +199,9 @@ export const queryKeys = {
   posKitchenOrders(token: string | null) {
     return ["pos-kitchen-orders", token] as const;
   },
+  posWaiterOrders(token: string | null) {
+    return ["pos-waiter-orders", token] as const;
+  },
   posAddonGroups(token: string | null) {
     return ["pos-addon-groups", token] as const;
   },

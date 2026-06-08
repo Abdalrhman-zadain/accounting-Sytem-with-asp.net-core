@@ -115,7 +115,6 @@ const navGroups: NavGroup[] = [
         children: [
           { href: "/pos/register", labelKey: "pos.workspace.sales", icon: Monitor },
           { href: "/pos/tables", labelKey: "pos.workspace.tables", icon: Utensils },
-          { href: "/pos/kitchen", labelKey: "pos.workspace.kitchen", icon: ChefHat },
           { href: "/pos/delivery", labelKey: "pos.workspace.delivery", icon: Truck },
           { href: "/pos/sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
           { href: "/pos/held-sales", labelKey: "pos.workspace.held", icon: FileClock },
@@ -495,22 +494,16 @@ export function SiteHeader({
               labelKey: "pos.workspace.tables",
               icon: Utensils,
             },
+            {
+              href: "/pos/waiter/orders",
+              labelKey: "pos.workspace.waiterOrders",
+              icon: ChefHat,
+            },
           ],
         },
       ]
     : kitchenOnly
-      ? [
-          {
-            labelKey: "nav.item.pos",
-            items: [
-              {
-                href: "/pos/kitchen",
-                labelKey: "pos.workspace.kitchen",
-                icon: ChefHat,
-              },
-            ],
-          },
-        ]
+      ? []
       : navGroups
   )
     .map((group) => ({

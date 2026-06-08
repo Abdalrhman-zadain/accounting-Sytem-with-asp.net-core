@@ -62,13 +62,6 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
     return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");
   }
 
-  if (normalizedPath === "/pos/kitchen" || normalizedPath.startsWith("/pos/kitchen/")) {
-    return (
-      (isCashierPosUser(user) || isKitchenOnlyUser(user)) &&
-      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
-    );
-  }
-
   if (allowedRoutes.some((route) => routeMatches(route, normalizedPath))) {
     return true;
   }
@@ -77,8 +70,16 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
     normalizedPath === "/pos/waiter/tables" ||
     normalizedPath.startsWith("/pos/waiter/tables/") ||
     normalizedPath === "/pos/waiter/order" ||
-    normalizedPath.startsWith("/pos/waiter/order/")
+    normalizedPath.startsWith("/pos/waiter/order/") ||
+    normalizedPath === "/pos/waiter/orders" ||
+    normalizedPath.startsWith("/pos/waiter/orders/")
   ) {
+    if (
+      normalizedPath === "/pos/waiter/orders" ||
+      normalizedPath.startsWith("/pos/waiter/orders/")
+    ) {
+      return hasPermission(user, "RST_VIEW_WAITER_ORDERS");
+    }
     return (
       hasPermission(user, "RST_VIEW_TABLE_SCREEN") ||
       hasPermission(user, "RST_OPEN_TABLE_ORDER")

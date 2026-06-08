@@ -11,6 +11,7 @@ import {
   LuTag,
 } from "react-icons/lu";
 
+import { isWeightSaleItem } from "@/features/pos/pos-weight-utils";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { InventoryItem } from "@/types/api";
@@ -125,6 +126,8 @@ export function PosProductCard({
 
   const visuals = getCategoryVisuals(item, language);
   const CategoryIcon = visuals.icon;
+  const sellByWeight = isWeightSaleItem(item);
+  const unitCode = item.unitOfMeasure?.trim() || "KG";
 
   return (
     <div
@@ -183,8 +186,10 @@ export function PosProductCard({
         </span>
 
         {/* Price */}
-        <span className="shrink-0 text-[13px] font-bold text-slate-900 sm:text-[14px]">
-          {formatCurrency(price, currencyCode)}
+        <span className="shrink-0 text-[13px] font-bold text-slate-900 sm:text-[14px]" dir="ltr">
+          {sellByWeight
+            ? `${formatCurrency(price, currencyCode)} / ${unitCode}`
+            : formatCurrency(price, currencyCode)}
         </span>
       </div>
     </div>

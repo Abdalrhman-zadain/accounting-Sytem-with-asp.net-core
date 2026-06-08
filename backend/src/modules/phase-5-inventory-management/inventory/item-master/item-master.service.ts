@@ -90,6 +90,7 @@ export class ItemMasterService {
     id: true,
     code: true,
     name: true,
+    unitType: true,
     decimalPrecision: true,
     isActive: true,
   } as const;
@@ -283,6 +284,8 @@ export class ItemMasterService {
             unitOfMeasure.id,
             uniqueBarcode,
           );
+          const allowFractionalQuantity = dto.allowFractionalQuantity ?? false;
+          this.ensureWeightUnitForFractionalSales(allowFractionalQuantity, unitOfMeasure.unitType);
 
           return tx.inventoryItem.create({
             data: {
@@ -319,6 +322,11 @@ export class ItemMasterService {
               ),
               preferredWarehouseId: preferredWarehouse?.id ?? null,
               preferredWarehouseCode: preferredWarehouse?.code ?? null,
+              allowFractionalQuantity,
+              minSalesQuantity: this.parseDecimal(
+                dto.minSalesQuantity ?? "1",
+                "Minimum sales quantity",
+              ),
               unitConversions: {
                 create: unitConversions.map((row) => ({
                   unitId: row.unitId,
@@ -353,7 +361,7 @@ export class ItemMasterService {
   }
 
   async update(id: string, dto: UpdateInventoryItemDto) {
-    const current = await this.getItemOrThrow(id);
+    const current = await this.getItemWithAccountsOrThrow(id);
     if (!current.isActive) {
       throw new BadRequestException(
         "Deactivated inventory items cannot be edited.",
@@ -440,6 +448,13 @@ export class ItemMasterService {
       dto.unitConversions === undefined
         ? undefined
         : await this.validateUnitConversions(dto.unitConversions, nextBaseUnitId, nextItemBarcode ?? null, id);
+    const nextAllowFractionalQuantity =
+      dto.allowFractionalQuantity ?? current.allowFractionalQuantity;
+    const resolvedUnitType =
+      nextUnit?.unitType ??
+      current.unitOfMeasureRef?.unitType ??
+      null;
+    this.ensureWeightUnitForFractionalSales(nextAllowFractionalQuantity, resolvedUnitType);
 
     const updated = await this.prisma.inventoryItem
       .update({
@@ -517,6 +532,14 @@ export class ItemMasterService {
               ? undefined
               : (preferredWarehouse?.code ?? null),
           isActive: dto.isActive,
+          allowFractionalQuantity:
+            dto.allowFractionalQuantity === undefined
+              ? undefined
+              : dto.allowFractionalQuantity,
+          minSalesQuantity:
+            dto.minSalesQuantity === undefined
+              ? undefined
+              : this.parseDecimal(dto.minSalesQuantity, "Minimum sales quantity"),
           unitConversions:
             unitConversions === undefined
               ? undefined
@@ -740,6 +763,20 @@ export class ItemMasterService {
     return parsed;
   }
 
+  private ensureWeightUnitForFractionalSales(
+    allowFractionalQuantity: boolean,
+    unitType: string | null | undefined,
+  ) {
+    if (!allowFractionalQuantity) {
+      return;
+    }
+    if (unitType !== "WEIGHT") {
+      throw new BadRequestException(
+        "Sell by weight requires a base unit of measure with type WEIGHT (for example KG).",
+      );
+    }
+  }
+
   private parseDecimal(value: string | undefined, label: string) {
     if (!value || !value.trim()) {
       return new Prisma.Decimal(0);
@@ -907,6 +944,8 @@ export class ItemMasterService {
       preferredWarehouse: row.preferredWarehouse,
       onHandQuantity: onHandDisplay.toString(),
       valuationAmount: row.valuationAmount.toString(),
+      allowFractionalQuantity: row.allowFractionalQuantity,
+      minSalesQuantity: row.minSalesQuantity.toString(),
       isActive: row.isActive,
       status: row.isActive ? "ACTIVE" : "INACTIVE",
       inventoryAccount: row.inventoryAccount,

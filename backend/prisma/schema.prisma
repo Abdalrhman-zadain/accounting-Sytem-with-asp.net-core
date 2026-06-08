@@ -193,6 +193,8 @@ enum PosPermissionCode {
   RST_COMPLETE_RESTAURANT_PAYMENT
   RST_CANCEL_RESTAURANT_ORDER
   RST_VIEW_RESTAURANT_REPORTS
+  RST_VIEW_WAITER_ORDERS
+  RST_UPDATE_WAITER_ORDER_STATUS
 
   // Correction permissions
   POS_CORRECT_ORDER_TYPE
@@ -220,6 +222,12 @@ enum KitchenStatus {
   PREPARING
   READY
   SERVED
+}
+
+enum WaiterFoodStatus {
+  WAITING
+  RECEIVED
+  DEPARTED
 }
 
 enum DeliveryStatus {
@@ -1055,9 +1063,11 @@ model InventoryItem {
   preferredWarehouse     InventoryWarehouse?           @relation("InventoryItemPreferredWarehouse", fields: [preferredWarehouseId], references: [id], onDelete: Restrict)
   preferredWarehouseCode String?
   isActive               Boolean                       @default(true)
-  onHandQuantity         Decimal                       @default(0) @db.Decimal(18, 4)
-  valuationAmount        Decimal                       @default(0) @db.Decimal(18, 2)
-  goodsReceiptLines      InventoryGoodsReceiptLine[]
+  onHandQuantity           Decimal                       @default(0) @db.Decimal(18, 4)
+  valuationAmount          Decimal                       @default(0) @db.Decimal(18, 2)
+  allowFractionalQuantity  Boolean                       @default(false)
+  minSalesQuantity         Decimal                       @default(1) @db.Decimal(18, 4)
+  goodsReceiptLines        InventoryGoodsReceiptLine[]
   goodsIssueLines        InventoryGoodsIssueLine[]
   transferLines          InventoryTransferLine[]
   adjustmentLines        InventoryAdjustmentLine[]
@@ -3115,6 +3125,9 @@ model KitchenOrder {
   waiterName             String?
   orderType              OrderType
   status                 KitchenStatus      @default(NEW)
+  waiterStatus           WaiterFoodStatus   @default(WAITING)
+  receivedAt             DateTime?
+  departedAt             DateTime?
   notes                  String?
   hasUpdateNotification  Boolean            @default(false)
   createdAt              DateTime           @default(now())

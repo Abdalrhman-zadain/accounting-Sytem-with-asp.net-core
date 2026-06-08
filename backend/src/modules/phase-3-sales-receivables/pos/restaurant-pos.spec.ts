@@ -1,6 +1,7 @@
-                                                                                                                                            import { PosTableController } from "./pos-table.controller";
+import { PosTableController } from "./pos-table.controller";
 import { PosKitchenController } from "./pos-kitchen.controller";
-import { TableStatus, KitchenStatus, OrderType } from "../../../generated/prisma";
+import { PosWaiterOrdersController } from "./pos-waiter-orders.controller";
+import { TableStatus, KitchenStatus, WaiterFoodStatus } from "../../../generated/prisma";
 import { NotFoundException } from "@nestjs/common";
 
 describe("Restaurant POS Controllers", () => {
@@ -35,16 +36,20 @@ describe("Restaurant POS Controllers", () => {
     auditKotReprint: jest.fn(),
     assertKitchenViewPermission: jest.fn(),
     assertKitchenUpdatePermission: jest.fn(),
+    listWaiterOrders: jest.fn(),
+    updateWaiterOrderStatus: jest.fn(),
   };
 
   let tableController: PosTableController;
   let kitchenController: PosKitchenController;
+  let waiterOrdersController: PosWaiterOrdersController;
 
   beforeEach(() => {
     jest.clearAllMocks();
     prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock as never));
     tableController = new PosTableController(prismaMock as never, posServiceMock as never);
     kitchenController = new PosKitchenController(prismaMock as never, posServiceMock as never);
+    waiterOrdersController = new PosWaiterOrdersController(posServiceMock as never);
   });
 
   describe("PosTableController", () => {
@@ -99,63 +104,41 @@ describe("Restaurant POS Controllers", () => {
     });
   });
 
-  describe("PosKitchenController", () => {
-    it("lists kitchen orders", async () => {
+  describe("PosWaiterOrdersController", () => {
+    it("lists waiter dine-in orders", async () => {
       const mockOrders = [
-        { id: "o1", orderNumber: "KOT-1", status: KitchenStatus.NEW },
+        { id: "o1", orderNumber: "KOT-1", waiterStatus: WaiterFoodStatus.WAITING },
       ];
-      prismaMock.kitchenOrder.findMany.mockResolvedValue(mockOrders);
+      posServiceMock.listWaiterOrders.mockResolvedValue(mockOrders);
 
-      const result = await kitchenController.listOrders({ user: kitchenUser });
+      const result = await waiterOrdersController.listOrders({ user: kitchenUser });
       expect(result).toEqual(mockOrders);
+      expect(posServiceMock.listWaiterOrders).toHaveBeenCalledWith(kitchenUser, undefined);
     });
 
-    it("gets kitchen order by id or throws NotFound", async () => {
-      prismaMock.kitchenOrder.findUnique.mockResolvedValue(null);
-      await expect(kitchenController.getOrder({ user: kitchenUser }, "invalid")).rejects.toThrow(
-        NotFoundException,
-      );
+    it("updates waiter order status", async () => {
+      const mockOrder = {
+        id: "o1",
+        orderNumber: "KOT-1",
+        waiterStatus: WaiterFoodStatus.RECEIVED,
+      };
+      posServiceMock.updateWaiterOrderStatus.mockResolvedValue(mockOrder);
 
-      const mockOrder = { id: "o1", orderNumber: "KOT-1" };
-      prismaMock.kitchenOrder.findUnique.mockResolvedValue(mockOrder);
-      const result = await kitchenController.getOrder({ user: kitchenUser }, "o1");
-      expect(result).toEqual(mockOrder);
-    });
-
-    it("updates kitchen order status and propagates to items", async () => {
-      const mockOrder = { id: "o1", orderNumber: "KOT-1", status: KitchenStatus.NEW };
-      prismaMock.kitchenOrder.findUnique.mockResolvedValue(mockOrder);
-      prismaMock.kitchenOrder.update.mockResolvedValue({ ...mockOrder, status: KitchenStatus.READY });
-
-      const result = await kitchenController.updateOrderStatus("o1", { status: KitchenStatus.READY });
-      expect(result.status).toEqual(KitchenStatus.READY);
-      expect(prismaMock.kitchenOrderItem.updateMany).toHaveBeenCalledWith({
-        where: { kitchenOrderId: "o1" },
-        data: { status: KitchenStatus.READY },
-      });
-    });
-
-    it("updates kitchen order item status and updates order status", async () => {
-      const mockItem = { id: "item1", kitchenOrderId: "o1", status: KitchenStatus.NEW };
-      prismaMock.kitchenOrderItem.findUnique.mockResolvedValue(mockItem);
-      prismaMock.kitchenOrderItem.update.mockResolvedValue({ ...mockItem, status: KitchenStatus.READY });
-      prismaMock.kitchenOrderItem.findMany.mockResolvedValue([
-        { id: "item1", status: KitchenStatus.READY },
-      ]);
-      prismaMock.kitchenOrder.update.mockResolvedValue({ id: "o1", status: KitchenStatus.READY });
-
-      const result = await kitchenController.updateOrderItemStatus(
+      const result = await waiterOrdersController.updateOrderStatus(
         { user: kitchenUser },
-        "item1",
-        { status: KitchenStatus.READY },
+        "o1",
+        { status: WaiterFoodStatus.RECEIVED },
       );
-      expect(result.status).toEqual(KitchenStatus.READY);
-      expect(prismaMock.kitchenOrder.update).toHaveBeenCalledWith({
-        where: { id: "o1" },
-        data: { status: KitchenStatus.READY },
-      });
+      expect(result).toEqual(mockOrder);
+      expect(posServiceMock.updateWaiterOrderStatus).toHaveBeenCalledWith(
+        "o1",
+        WaiterFoodStatus.RECEIVED,
+        kitchenUser,
+      );
     });
+  });
 
+  describe("PosKitchenController", () => {
     it("reprints KOT ticket and logs audit reason", async () => {
       const mockUser = { id: "u1", username: "cashier1" };
       posServiceMock.auditKotReprint.mockResolvedValue({ success: true });

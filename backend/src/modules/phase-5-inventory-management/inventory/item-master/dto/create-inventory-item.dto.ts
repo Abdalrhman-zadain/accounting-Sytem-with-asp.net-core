@@ -154,4 +154,16 @@ export class CreateInventoryItemDto {
   @ValidateNested({ each: true })
   @Type(() => InventoryItemUnitConversionDto)
   unitConversions?: InventoryItemUnitConversionDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  allowFractionalQuantity?: boolean;
+
+  @IsOptional()
+  @Matches(/^\d+(\.\d{1,4})?$/)
+  minSalesQuantity?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

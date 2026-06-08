@@ -34,6 +34,12 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { isWaiterOnlyUser } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  posTableFloorGridClass,
+  posTouchButtonClass,
+  posTouchOrHoverRevealClass,
+} from "@/features/pos/pos-layout-classes";
 import { PosTable } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -242,7 +248,7 @@ export default function TablesPage() {
   const [isSavingTableStatus, setIsSavingTableStatus] = React.useState(false);
 
   const { data: tables, isLoading, refetch } = useQuery({
-    queryKey: ["pos-tables", token],
+    queryKey: queryKeys.posTables(token),
     queryFn: () => getPosTables(token),
     enabled: Boolean(token),
   });
@@ -456,10 +462,10 @@ export default function TablesPage() {
   );
 
   return (
-    <PageShell>
-      <div className="flex flex-col gap-6" dir={isAr ? "rtl" : "ltr"}>
+    <PageShell className="px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
+      <div className="flex flex-col gap-4 sm:gap-6" dir={isAr ? "rtl" : "ltr"}>
         {/* Header Dashboard section */}
-        <div className="relative overflow-hidden rounded-[24px] border border-[#d6e5da] bg-gradient-to-br from-[#f3faf5] via-[#ffffff] to-[#ecf7f0] p-6 shadow-sm">
+        <div className="relative overflow-hidden rounded-[20px] border border-[#d6e5da] bg-gradient-to-br from-[#f3faf5] via-[#ffffff] to-[#ecf7f0] p-4 shadow-sm sm:rounded-[24px] sm:p-6">
           <div className="absolute right-0 top-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-[#e3f4e8]/40 blur-2xl" />
           
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between relative z-10">
@@ -468,10 +474,10 @@ export default function TablesPage() {
                 <LuLayoutGrid className="h-3.5 w-3.5" />
                 <span>{isAr ? "مخطط الصالة والخدمة داخل المطعم" : "Dine-In Floor Plan & Service"}</span>
               </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1e2c23] arabic-heading">
+              <h1 className="mt-2 text-2xl font-black tracking-tight text-[#1e2c23] arabic-heading sm:text-3xl">
                 {isAr ? "صالة الطعام / Dine-In" : "Restaurant Tables / Dine-In"}
               </h1>
-              <p className="max-w-2xl text-sm font-semibold text-[#506055] mt-1">
+              <p className="mt-1 max-w-2xl text-sm font-semibold text-[#506055]">
                 {isAr 
                   ? "اختر طاولة فارغة لبدء طلب جديد، أو اختر طاولة مشغولة لاستكمال الحساب وإضافة الطلبات."
                   : "Select a vacant table to open a new receipt, or select an occupied table to resume the current bill."}
@@ -479,8 +485,8 @@ export default function TablesPage() {
             </div>
 
             {/* Quick stats indicator widget */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2.5 rounded-[16px] border border-[#e2e8e4] bg-white px-4 py-2.5 shadow-sm">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-center lg:gap-3">
+              <div className="flex items-center gap-2.5 rounded-[16px] border border-[#e2e8e4] bg-white px-3 py-2.5 shadow-sm sm:px-4">
                 <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#e6f4ea] text-[#137333]">
                   <span className="h-2 w-2 rounded-full bg-[#1e8e3e]" />
                 </span>
@@ -529,7 +535,10 @@ export default function TablesPage() {
               <button
                 type="button"
                 onClick={() => setIsManageOpen(true)}
-                className="flex items-center gap-2 rounded-[16px] border border-[#d6e5da] bg-[#eef7f1] hover:bg-[#e1f2e5] px-4 py-2.5 shadow-sm text-sm font-bold text-[#1e532d] transition-all"
+                className={cn(
+                  "col-span-2 flex items-center justify-center gap-2 rounded-[16px] border border-[#d6e5da] bg-[#eef7f1] px-4 py-2.5 text-sm font-bold text-[#1e532d] shadow-sm transition-all hover:bg-[#e1f2e5] sm:col-span-1 lg:col-auto",
+                  posTouchButtonClass,
+                )}
               >
                 <LuSettings className="h-4 w-4 shrink-0" />
                 <span>{isAr ? "إدارة الطاولات" : "Manage Tables"}</span>
@@ -559,7 +568,7 @@ export default function TablesPage() {
             </p>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className={posTableFloorGridClass}>
             {activeTablesList.map((table) => {
               const activeInvoice = table.activeInvoice;
               const isOccupied = Boolean(activeInvoice);
@@ -609,7 +618,7 @@ export default function TablesPage() {
                   key={table.id}
                   onClick={() => handleOpenTable(table)}
                   className={cn(
-                    "group relative flex flex-col justify-between overflow-hidden rounded-[24px] border-2 p-5 text-start shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md cursor-pointer",
+                    "group relative flex min-w-0 cursor-pointer flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md sm:rounded-[24px] sm:p-5",
                     cardBorder,
                   )}
                 >
@@ -632,7 +641,10 @@ export default function TablesPage() {
                           setPendingStatus(table.status);
                           setPendingWaiterId(table.assignedWaiterId ?? "");
                         }}
-                        className="flex h-7 w-7 items-center justify-center rounded-full border border-[#e1e7e2] bg-white text-[#68776f] opacity-0 transition group-hover:opacity-100 hover:bg-[#f6faf7] hover:text-[#233329]"
+                        className={cn(
+                          "flex h-9 w-9 items-center justify-center rounded-full border border-[#e1e7e2] bg-white text-[#68776f] transition hover:bg-[#f6faf7] hover:text-[#233329] sm:h-8 sm:w-8",
+                          posTouchOrHoverRevealClass,
+                        )}
                         title={isAr ? "إدارة الطاولة" : "Manage table"}
                       >
                         <LuSettings className="h-3.5 w-3.5" />
@@ -727,12 +739,12 @@ export default function TablesPage() {
                   </div>
 
                   {/* Foot Total & Button */}
-                  <div className="mt-5 border-t border-black/5 pt-4">
+                  <div className="mt-4 border-t border-black/5 pt-3 sm:mt-5 sm:pt-4">
                     {isOccupied ? (
                       <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <div className="text-[10px] font-bold text-[#8c6d4f] uppercase">
+                            <div className="text-[10px] font-bold uppercase text-[#8c6d4f]">
                               {isAr ? "قيمة الفاتورة" : "Amount Due"}
                             </div>
                             <div className="text-lg font-black text-[#78350f]">
@@ -745,9 +757,12 @@ export default function TablesPage() {
                               e.stopPropagation();
                               handleOpenTable(table);
                             }}
-                            className="flex items-center gap-1 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f]"
+                            className={cn(
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto sm:text-xs",
+                              posTouchButtonClass,
+                            )}
                           >
-                            <LuCheck className="h-3.5 w-3.5" />
+                            <LuCheck className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
                             <span>{isAr ? "عرض الطلب" : "Open Bill"}</span>
                           </button>
                         </div>
@@ -757,13 +772,16 @@ export default function TablesPage() {
                             e.stopPropagation();
                             openReserveModal(table, "SPECIAL");
                           }}
-                          className="w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-2 text-xs font-bold text-[#4338ca] hover:bg-[#f6f5ff]"
+                          className={cn(
+                            "w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-2.5 text-xs font-bold text-[#4338ca] hover:bg-[#f6f5ff]",
+                            posTouchButtonClass,
+                          )}
                         >
                           {isAr ? "+ حجز وقت آخر" : "+ Book another time slot"}
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-col gap-2.5">
                         <span className="text-xs font-bold text-[#627367]">
                           {isReserved
                             ? isWithinReservationWindow
@@ -785,22 +803,28 @@ export default function TablesPage() {
                               e.stopPropagation();
                               openReserveModal(table, "SPECIAL");
                             }}
-                            className="flex items-center gap-1 rounded-xl bg-white border border-[#c7c3ff] px-3.5 py-2 text-xs font-bold text-[#4338ca] shadow-sm hover:bg-[#f6f5ff]"
+                            className={cn(
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#c7c3ff] bg-white px-4 py-2.5 text-sm font-bold text-[#4338ca] shadow-sm hover:bg-[#f6f5ff] sm:text-xs",
+                              posTouchButtonClass,
+                            )}
                           >
-                            <LuClock className="h-3.5 w-3.5" />
+                            <LuClock className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
                             <span>{isAr ? "تعديل الحجز" : "Edit"}</span>
                           </button>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openReserveModal(table);
                               }}
-                              className="flex items-center gap-1 rounded-xl bg-white border border-[#d6e1d9] px-3.5 py-2 text-xs font-bold text-[#233329] shadow-sm hover:bg-[#f6faf7]"
+                              className={cn(
+                                "flex items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-bold text-[#233329] shadow-sm hover:bg-[#f6faf7] sm:text-xs",
+                                posTouchButtonClass,
+                              )}
                             >
-                              <LuClock className="h-3.5 w-3.5" />
+                              <LuClock className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
                               <span>{isAr ? "حجز" : "Reserve"}</span>
                             </button>
                             <button
@@ -809,9 +833,12 @@ export default function TablesPage() {
                                 e.stopPropagation();
                                 handleOpenTable(table);
                               }}
-                              className="flex items-center gap-1 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d]"
+                              className={cn(
+                                "flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d] sm:text-xs",
+                                posTouchButtonClass,
+                              )}
                             >
-                              <LuPlus className="h-3.5 w-3.5" />
+                              <LuPlus className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
                               <span>{isAr ? "طلب جديد" : "New Order"}</span>
                             </button>
                           </div>

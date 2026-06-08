@@ -57,7 +57,9 @@ export type PosPermissionCode =
   | "RST_ASSIGN_DRIVER"
   | "RST_APPLY_SERVICE_CHARGE"
   | "RST_COMPLETE_RESTAURANT_PAYMENT"
-  | "RST_PRINT_PRE_BILL";
+  | "RST_PRINT_PRE_BILL"
+  | "RST_VIEW_WAITER_ORDERS"
+  | "RST_UPDATE_WAITER_ORDER_STATUS";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -403,8 +405,10 @@ export type InventoryItem = {
   unitOfMeasureId?: string | null;
   unitOfMeasureRef?: Pick<
     InventoryUnitOfMeasure,
-    "id" | "code" | "name" | "decimalPrecision" | "isActive"
+    "id" | "code" | "name" | "unitType" | "decimalPrecision" | "isActive"
   > | null;
+  allowFractionalQuantity?: boolean;
+  minSalesQuantity?: string;
   category?: string | null;
   itemGroupId?: string | null;
   itemGroup?: Pick<InventoryItemGroup, "id" | "code" | "name" | "isActive"> | null;
@@ -1978,6 +1982,7 @@ export type PosTableStatus =
   | "WAITING_FOR_PAYMENT"
   | "CLEANING";
 export type KitchenStatus = "NEW" | "PREPARING" | "READY" | "SERVED";
+export type WaiterFoodStatus = "WAITING" | "RECEIVED" | "DEPARTED";
 export type DeliveryStatus =
   | "PENDING"
   | "PREPARING"
@@ -3762,7 +3767,12 @@ export type PosSale = {
     kitchenSentAt?: string | null;
     kitchenItemStatus?: KitchenStatus | null;
     modifiers?: unknown;
-    item?: Pick<InventoryItem, "id" | "code" | "name" | "type" | "trackInventory"> | null;
+    item?: Pick<
+      InventoryItem,
+      "id" | "code" | "name" | "type" | "trackInventory" | "unitOfMeasure" | "allowFractionalQuantity"
+    > & {
+      unitOfMeasureRef?: Pick<NonNullable<InventoryItem["unitOfMeasureRef"]>, "decimalPrecision"> | null;
+    } | null;
     warehouse?: Pick<InventoryWarehouse, "id" | "code" | "name"> | null;
   }>;
   payments: Array<{
@@ -3957,6 +3967,9 @@ export type KitchenOrder = {
   waiterName?: string | null;
   orderType: PosOrderType;
   status: KitchenStatus;
+  waiterStatus?: WaiterFoodStatus;
+  receivedAt?: string | null;
+  departedAt?: string | null;
   notes?: string | null;
   hasUpdateNotification: boolean;
   createdAt: string;

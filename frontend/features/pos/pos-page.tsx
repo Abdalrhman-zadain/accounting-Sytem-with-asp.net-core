@@ -126,6 +126,7 @@ import {
 } from "@/features/pos/pos-catalog-chips";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import { DetailTile, DetailedTableCard } from "@/features/pos/pos-detail-cards";
+import { posProductGridClass } from "@/features/pos/pos-layout-classes";
 import { PosRegisterMainGrid } from "@/features/pos/pos-register-layout";
 import { PosRestaurantCartControls } from "@/features/pos/pos-restaurant-cart-controls";
 import { PosAddonAdminPanel } from "@/features/pos/pos-addon-admin-panel";
@@ -138,9 +139,15 @@ import {
   sumAddonPrices,
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
+import { PosWeightEntryModal } from "@/features/pos/pos-weight-entry-modal";
+import {
+  formatWeightQuantity,
+  getQuantityPrecision,
+  getWeightQuantityStep,
+  isWeightSaleItem,
+} from "@/features/pos/pos-weight-utils";
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
-import { PosKitchenWorkspace } from "@/features/pos/pos-kitchen-page";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
 import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
@@ -179,7 +186,6 @@ type PosWorkspace =
   | "returns"
   | "reports"
   | "settings"
-  | "kitchen"
   | "delivery";
 
 type WorkspaceTab = {
@@ -191,36 +197,35 @@ type WorkspaceTab = {
 type DiscountType = "FIXED" | "PERCENT";
 
 function getCartLineKey(
-  line: Pick<CartLine, "salesInvoiceLineId" | "itemId" | "modifiers" | "lineNote">,
+  line: Pick<
+    CartLine,
+    "salesInvoiceLineId" | "clientLineId" | "itemId" | "modifiers" | "lineNote"
+  >,
 ) {
   if (line.salesInvoiceLineId) {
     return line.salesInvoiceLineId;
   }
+  if (line.clientLineId) {
+    return line.clientLineId;
+  }
   return `${line.itemId}:${addonSignature(getAddonsFromModifiers(line.modifiers))}:${line.lineNote ?? ""}`;
 }
 
-function isKitchenLineLocked(
-  line: Pick<CartLine, "kitchenSentAt" | "kitchenItemStatus">,
-) {
-  if (!line.kitchenSentAt) {
-    return false;
-  }
-  return line.kitchenItemStatus === "READY" || line.kitchenItemStatus === "SERVED";
+function isKitchenSentLineLocked(line: Pick<CartLine, "kitchenSentAt">) {
+  return Boolean(line.kitchenSentAt);
 }
 
-function isOrderKitchenLocked(lines: Array<Pick<CartLine, "kitchenSentAt" | "kitchenItemStatus">>) {
-  return lines.some(isKitchenLineLocked);
-}
-
-function getOrderKitchenLockMessage(language: string) {
+function getOrderWaiterLockMessage(language: string) {
   return getLocalizedText(
-    "This order has kitchen-ready items. You cannot add, edit, or change the order until payment. / يحتوي الطلب على أصناف جاهزة من المطبخ. لا يمكن الإضافة أو التعديل أو أي تغيير حتى الدفع.",
+    "This order was confirmed by the waiter. You cannot add, edit, or change the order until payment. / تم تأكيد الطلب من الويتر. لا يمكن الإضافة أو التعديل أو أي تغيير حتى الدفع.",
     language,
   );
 }
 
 type CartLine = {
   salesInvoiceLineId?: string;
+  /** Stable key for new sell-by-weight lines (each weigh-in stays separate). */
+  clientLineId?: string;
   kitchenSentAt?: string | null;
   kitchenItemStatus?: import("@/types/api").KitchenStatus | null;
   itemId: string;
@@ -245,6 +250,8 @@ type CartLine = {
   baseUnitPrice?: number;
   modifiers?: import("@/features/pos/pos-addon-types").PosLineModifiersPayload | null;
   lineNote?: string;
+  sellByWeight?: boolean;
+  quantityPrecision?: number;
 };
 
 type PaymentEntry = {
@@ -275,6 +282,7 @@ type HeldSale = {
   title: string;
   createdAt: string;
   search: string;
+  orderNotes: string;
   activeCategory: string;
   selectedWarehouseId: string;
   invoiceDiscountType: DiscountType;
@@ -284,10 +292,17 @@ type HeldSale = {
   customerId?: string | null;
   orderType: PosOrderType;
   tableId?: string | null;
+  tableNumber?: string | null;
   waiterId?: string | null;
+  waiterName?: string | null;
+  waiterConfirmedAt?: string | null;
+  customerName?: string | null;
   deliveryCompanyId?: string | null;
+  deliveryCompanyName?: string | null;
   deliveryCollectionMethod?: DeliveryCollectionMethod | null;
   driverId?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
   deliveryFeeAmount: number;
   serviceChargeAmount: number;
   deliveryAddress: string;
@@ -331,6 +346,7 @@ type CompletedReceipt = {
     discountAmount: number;
     taxAmount: number;
     lineTotal: number;
+    unitCode?: string;
   }>;
 };
 
@@ -344,7 +360,6 @@ const workspaceTabs: WorkspaceTab[] = [
   { id: "sessions", labelKey: "pos.workspace.sessions", icon: LuTimerReset },
   { id: "held", labelKey: "pos.workspace.held", icon: LuReceipt },
   { id: "review", labelKey: "pos.workspace.review", icon: LuReceipt },
-  { id: "kitchen", labelKey: "pos.workspace.kitchen", icon: LuChefHat },
   { id: "delivery", labelKey: "pos.workspace.delivery", icon: LuTruck },
   { id: "returns", labelKey: "pos.workspace.returns", icon: LuArrowRightLeft },
   { id: "reports", labelKey: "pos.workspace.reports", icon: LuChartColumn },
@@ -358,7 +373,6 @@ const pathnameWorkspaceMap: Record<string, PosWorkspace> = {
   "/pos/held-sales": "held",
   "/pos/accounting-review": "review",
   "/pos/completed-sales": "review",
-  "/pos/kitchen": "kitchen",
   "/pos/delivery": "delivery",
   "/pos/returns": "returns",
   "/pos/reports": "reports",
@@ -395,6 +409,32 @@ function workspaceHref(workspace: PosWorkspace) {
 const HELD_SALES_KEY = "pos-held-sales";
 const SESSION_KEY = "pos-session-state";
 const LAST_RECEIPT_KEY = "pos-last-receipt";
+const POS_RESUME_SNAPSHOT_KEY = "pos-resume-sale-snapshot";
+
+function stashHeldSaleForResume(sale: HeldSale) {
+  try {
+    sessionStorage.setItem(POS_RESUME_SNAPSHOT_KEY, JSON.stringify(sale));
+  } catch {
+    // Ignore storage quota or private-mode failures.
+  }
+}
+
+function consumeStashedHeldSale(saleId: string): HeldSale | null {
+  try {
+    const raw = sessionStorage.getItem(POS_RESUME_SNAPSHOT_KEY);
+    if (!raw) {
+      return null;
+    }
+    const sale = JSON.parse(raw) as HeldSale;
+    if (sale.id !== saleId) {
+      return null;
+    }
+    sessionStorage.removeItem(POS_RESUME_SNAPSHOT_KEY);
+    return sale;
+  } catch {
+    return null;
+  }
+}
 
 function createLocalId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -452,12 +492,6 @@ function getPaymentMethodLabel(
     default:
       return method;
   }
-}
-
-function paymentMethodNeedsReference(
-  method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET",
-) {
-  return method === "CARD" || method === "CLIQ" || method === "BANK_TRANSFER" || method === "WALLET";
 }
 
 function parseAmount(value: string | number | null | undefined) {
@@ -556,8 +590,10 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     itemId: line.itemId ?? line.id,
     name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
     code: line.item?.code ?? line.itemId ?? line.id,
-    unit: "",
+    unit: line.item?.unitOfMeasure ?? "",
     itemType: line.item?.type ?? "SERVICE",
+    sellByWeight: Boolean(line.item?.allowFractionalQuantity),
+    quantityPrecision: line.item?.unitOfMeasureRef?.decimalPrecision ?? 3,
     quantity: parseAmount(line.quantity),
     unitPrice: parseAmount(line.unitPrice),
     discountType: "FIXED",
@@ -586,7 +622,8 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     status: sale.posOperationalStatus === "DRAFT" ? "DRAFT" : "HELD",
     title: sale.reference,
     createdAt: sale.updatedAt,
-    search: sale.description ?? "",
+    search: "",
+    orderNotes: sale.description ?? "",
     activeCategory: "all",
     selectedWarehouseId: cartLines.find((line) => line.warehouseId)?.warehouseId ?? "",
     invoiceDiscountType: "FIXED",
@@ -605,12 +642,20 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     customerId: sale.customer?.id ?? null,
     orderType: sale.orderType ?? "TAKEAWAY",
     tableId: sale.tableId ?? null,
+    tableNumber: sale.table?.tableNumber ?? sale.heldContext?.tableNumber ?? null,
     waiterId: sale.waiterId ?? null,
+    waiterName: sale.waiter?.name ?? sale.waiter?.email ?? null,
+    waiterConfirmedAt: sale.waiterConfirmedAt ?? null,
+    customerName: sale.customer?.name ?? null,
     deliveryCompanyId: sale.deliveryCompanyId ?? null,
+    deliveryCompanyName:
+      sale.deliveryCompany?.arabicName ?? sale.deliveryCompany?.name ?? null,
     deliveryCollectionMethod:
       sale.deliveryCollectionMethod ??
       (sale.deliveryCompanyId ? "RESTAURANT" : null),
     driverId: sale.driverId ?? null,
+    driverName: sale.driver?.name ?? null,
+    driverPhone: sale.driver?.phone ?? null,
     deliveryFeeAmount: parseAmount(sale.deliveryFeeAmount),
     serviceChargeAmount: parseAmount(sale.serviceChargeAmount),
     deliveryAddress: sale.deliveryAddress ?? "",
@@ -754,6 +799,139 @@ function HeldSaleKindBadges({
   );
 }
 
+function getHeldSaleOrderTypeStyles(orderType: PosOrderType) {
+  if (orderType === "DINE_IN") {
+    return {
+      card: "border-[#f7cc9e] bg-[#fffaf4]",
+      panel: "border-[#fed7aa] bg-[#fff7ed] text-[#7c2d12]",
+      badge: "bg-[#ffedd5] text-[#9a3412] border-[#fdba74]",
+      icon: LuStore,
+    };
+  }
+  if (orderType === "DELIVERY") {
+    return {
+      card: "border-[#bfdbfe] bg-[#f8fbff]",
+      panel: "border-[#bfdbfe] bg-[#eff6ff] text-[#1e3a8a]",
+      badge: "bg-[#dbeafe] text-[#1d4ed8] border-[#93c5fd]",
+      icon: LuTruck,
+    };
+  }
+  return {
+    card: "border-[#bbf7d0] bg-[#f7fdf9]",
+    panel: "border-[#bbf7d0] bg-[#f0fdf4] text-[#14532d]",
+    badge: "bg-[#dcfce7] text-[#166534] border-[#86efac]",
+    icon: LuShoppingBasket,
+  };
+}
+
+function HeldSaleOrderTypeInfo({
+  sale,
+  language,
+}: {
+  sale: HeldSale;
+  language: string;
+}) {
+  const isAr = language === "ar";
+  const styles = getHeldSaleOrderTypeStyles(sale.orderType);
+  const Icon = styles.icon;
+  const rows: Array<{ label: string; value: string | null | undefined }> = [];
+
+  if (sale.orderType === "DINE_IN") {
+    rows.push(
+      {
+        label: isAr ? "الطاولة" : "Table",
+        value: sale.tableNumber ?? sale.tableId ?? null,
+      },
+      {
+        label: isAr ? "النادل" : "Waiter",
+        value: sale.waiterName,
+      },
+      {
+        label: isAr ? "رسوم الخدمة" : "Service",
+        value: sale.serviceChargeAmount > 0 ? formatCurrency(sale.serviceChargeAmount) : null,
+      },
+    );
+  } else if (sale.orderType === "DELIVERY") {
+    rows.push(
+      {
+        label: isAr ? "التحصيل" : "Collection",
+        value:
+          sale.deliveryCollectionMethod === "COMPANY"
+            ? isAr
+              ? "شركة التوصيل"
+              : "Delivery company"
+            : sale.deliveryCollectionMethod
+              ? isAr
+                ? "المطعم"
+                : "Restaurant"
+              : null,
+      },
+      {
+        label: isAr ? "الشركة" : "Company",
+        value: sale.deliveryCompanyName,
+      },
+      {
+        label: isAr ? "السائق" : "Driver",
+        value: sale.driverName,
+      },
+      {
+        label: isAr ? "هاتف السائق" : "Driver phone",
+        value: sale.driverPhone,
+      },
+      {
+        label: isAr ? "العنوان" : "Address",
+        value: sale.deliveryAddress,
+      },
+      {
+        label: isAr ? "رسوم التوصيل" : "Delivery fee",
+        value: sale.deliveryFeeAmount > 0 ? formatCurrency(sale.deliveryFeeAmount) : null,
+      },
+    );
+  } else {
+    rows.push(
+      {
+        label: isAr ? "العميل" : "Customer",
+        value: sale.customerName,
+      },
+      {
+        label: isAr ? "ملاحظات الطلب" : "Order notes",
+        value: sale.orderNotes,
+      },
+      {
+        label: isAr ? "القناة" : "Channel",
+        value: isAr ? "سفري" : "Takeaway",
+      },
+    );
+  }
+
+  const visibleRows = rows.filter((row) => row.value);
+
+  return (
+    <div className={cn("mt-4 rounded-[18px] border px-4 py-3", styles.panel)}>
+      <div className="mb-2 flex items-center gap-2 text-xs font-black">
+        <Icon className="h-4 w-4" />
+        <span>{isAr ? "تفاصيل نوع الطلب" : "Order type details"}</span>
+      </div>
+      {visibleRows.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {visibleRows.map((row) => (
+            <div key={row.label} className="min-w-0">
+              <div className="text-[10px] font-black uppercase opacity-70">
+                {row.label}
+              </div>
+              <div className="truncate text-xs font-bold">{row.value}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs font-bold opacity-80">
+          {isAr ? "لا توجد تفاصيل إضافية" : "No extra details"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function mapReceiptResponse(receipt: {
   receiptNumber: string;
   soldAt: string;
@@ -778,6 +956,7 @@ function mapReceiptResponse(receipt: {
     discountAmount: string;
     taxAmount: string;
     lineTotal: string;
+    unitCode?: string | null;
   }>;
 }): CompletedReceipt {
   return {
@@ -804,8 +983,16 @@ function mapReceiptResponse(receipt: {
       discountAmount: parseAmount(line.discountAmount),
       taxAmount: parseAmount(line.taxAmount),
       lineTotal: parseAmount(line.lineTotal),
+      unitCode: line.unitCode ?? undefined,
     })),
   };
+}
+
+function formatReceiptQuantity(line: CompletedReceipt["lines"][number]) {
+  if (line.unitCode) {
+    return formatWeightQuantity(line.quantity, line.unitCode, 3);
+  }
+  return String(line.quantity);
 }
 
 function buildReceiptHtml(receipt: CompletedReceipt) {
@@ -814,7 +1001,7 @@ function buildReceiptHtml(receipt: CompletedReceipt) {
       (line) => `
         <tr>
           <td>${line.name}</td>
-          <td>${line.quantity}</td>
+          <td>${formatReceiptQuantity(line)}</td>
           <td>${line.unitPrice.toFixed(2)}</td>
           <td>${line.discountAmount.toFixed(2)}</td>
           <td>${line.taxAmount.toFixed(2)}</td>
@@ -915,6 +1102,8 @@ export function PosPage() {
   const [addonModalItem, setAddonModalItem] = useState<InventoryItem | null>(null);
   const [addonModalConfig, setAddonModalConfig] = useState<PosItemAddonConfig | null>(null);
   const [addonEditLine, setAddonEditLine] = useState<CartLine | null>(null);
+  const [weightModalItem, setWeightModalItem] = useState<InventoryItem | null>(null);
+  const [pendingEntryWeight, setPendingEntryWeight] = useState<number | null>(null);
   const deferredSearch = useDeferredValue(search);
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
@@ -926,6 +1115,8 @@ export function PosPage() {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
+  // Stable ref so mutations defined before resetSale() can still invoke it
+  const resetSaleRef = useRef<() => void>(() => {});
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
@@ -956,6 +1147,7 @@ export function PosPage() {
   const messageTimeoutRef = useRef<number | null>(null);
   const resumedSaleRef = useRef<string | null>(null);
   const resumedTableIdRef = useRef<string | null>(null);
+  const prevOrderTypeRef = useRef<PosOrderType>("TAKEAWAY");
   const [activeReservationId, setActiveReservationId] = useState<string | null>(null);
   const [preOrderCompletedTableId, setPreOrderCompletedTableId] = useState<string | null>(null);
 
@@ -973,12 +1165,15 @@ export function PosPage() {
   // Restaurant Cart details
   const [orderType, setOrderType] = useState<PosOrderType>("TAKEAWAY");
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
   const [selectedWaiterId, setSelectedWaiterId] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<"DIRECT" | "THIRD_PARTY">("DIRECT");
   const [deliveryCompanyId, setDeliveryCompanyId] = useState<string | null>(null);
   const [deliveryCollectionMethod, setDeliveryCollectionMethod] =
     useState<DeliveryCollectionMethod>("RESTAURANT");
   const [deliveryDriverId, setDeliveryDriverId] = useState<string | null>(null);
+  const [selectedDeliveryDriverName, setSelectedDeliveryDriverName] = useState<string | null>(null);
+  const [selectedDeliveryDriverPhone, setSelectedDeliveryDriverPhone] = useState<string | null>(null);
   const [serviceChargeAmount, setServiceChargeAmount] = useState(0);
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -1218,14 +1413,6 @@ export function PosPage() {
     },
   });
 
-  const salesShiftReportQuery = useQuery({
-    queryKey: queryKeys.posSessionReport(token, activeSessionQuery.data?.id ?? ""),
-    queryFn: () => getPosSessionReport(activeSessionQuery.data!.id, token),
-    enabled: Boolean(
-      token && workspace === "sales" && activeSessionQuery.data?.id,
-    ),
-  });
-
   const posSessionsQuery = useQuery({
     queryKey: queryKeys.posSessions(token),
     queryFn: () => getPosSessions(token),
@@ -1413,7 +1600,7 @@ export function PosPage() {
         queryKey: queryKeys.posDraftSales(token, activeSessionQuery.data?.id ?? null),
       }),
       queryClient.invalidateQueries({ queryKey: queryKeys.posTables(token) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.posKitchenOrders(token) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.posWaiterOrders(token) }),
     ]);
   };
 
@@ -1493,9 +1680,6 @@ export function PosPage() {
     onSuccess: async (sale) => {
       const mapped = mapPosSaleToHeldSale(sale);
       hadKitchenTicketRef.current = mapped.cartLines.some((line) => line.kitchenSentAt);
-      setCartLines(mapped.cartLines);
-      setSelectedTableId(mapped.tableId ?? null);
-      setSelectedWaiterId(mapped.waiterId ?? null);
       await refreshPosData();
       pushMessage(
         getLocalizedText(
@@ -1503,6 +1687,8 @@ export function PosPage() {
           language,
         ),
       );
+      // Auto-start a new order so the cashier is ready for the next customer
+      resetSaleRef.current();
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1547,6 +1733,7 @@ export function PosPage() {
         mapped.cartLines.some((line) => line.kitchenSentAt) || hadKitchenTicketRef.current;
       setCartLines(mapped.cartLines);
       setSelectedTableId(mapped.tableId ?? null);
+      setSelectedTableNumber(mapped.tableNumber ?? null);
       setSelectedWaiterId(mapped.waiterId ?? null);
       lastKitchenSyncFingerprintRef.current = JSON.stringify(
         mapped.cartLines.map((line) => ({
@@ -1556,7 +1743,7 @@ export function PosPage() {
         })),
       );
       await refreshPosData();
-      await queryClient.refetchQueries({ queryKey: queryKeys.posKitchenOrders(token) });
+      await queryClient.refetchQueries({ queryKey: queryKeys.posWaiterOrders(token) });
       if (!variables?.silent) {
         pushMessage(
           getLocalizedText(
@@ -1602,14 +1789,14 @@ export function PosPage() {
       // Capture reservation context before reset
       const wasPreOrder = Boolean(activeReservationId);
       const tableIdForHandoff = wasPreOrder ? selectedTableId : null;
-      setEditingInvoiceId(null);
-      setActiveReservationId(null);
       const receipt = mapReceiptResponse(response.receipt);
       setLastReceipt(receipt);
       setPayFlowStep("success");
       if (wasPreOrder && tableIdForHandoff) {
         setPreOrderCompletedTableId(tableIdForHandoff);
       }
+      // Clear the cart immediately so returning to register starts fresh
+      resetSaleRef.current();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.saleCompleted"));
       if (autoPrintReceipt) {
@@ -1903,7 +2090,18 @@ export function PosPage() {
   const taxPolicy = posSettings?.runtime.invoiceDiscountTaxPolicy ?? "BEFORE_TAX";
   const completedSales = completedSalesQuery.data ?? [];
   const favoriteIdSet = useMemo(() => new Set(favoriteItemIds), [favoriteItemIds]);
-  const shiftReportForRegister = salesShiftReportQuery.data ?? null;
+  useEffect(() => {
+    if (!deliveryDriverId) {
+      return;
+    }
+    const driver = deliveryDrivers.find((row) => row.id === deliveryDriverId);
+    if (driver?.name) {
+      setSelectedDeliveryDriverName(driver.name);
+    }
+    if (driver?.phone) {
+      setSelectedDeliveryDriverPhone(driver.phone);
+    }
+  }, [deliveryDriverId, deliveryDrivers]);
   const reviewSessionGroups = useMemo(
     () =>
       Array.from(
@@ -1937,12 +2135,6 @@ export function PosPage() {
       }
       if (tab.id === "held") return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
       if (tab.id === "review") return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
-      if (tab.id === "kitchen") {
-        return (
-          (isCashierPosUser(user) || user?.posRoles.includes("KITCHEN")) &&
-          hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
-        );
-      }
       if (tab.id === "delivery") {
         return (
           hasPermission(user, "POS_VIEW_POS_SCREEN") ||
@@ -1960,12 +2152,6 @@ export function PosPage() {
 
     if (visible.length) {
       return visible;
-    }
-    if (
-      (isCashierPosUser(user) || user?.posRoles.includes("KITCHEN")) &&
-      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN")
-    ) {
-      return workspaceTabs.filter((tab) => tab.id === "kitchen");
     }
     return workspaceTabs.filter((tab) => tab.id === "sales");
   }, [user]);
@@ -2014,6 +2200,7 @@ export function PosPage() {
       setTimeout(() => {
         setOrderType("DINE_IN");
         setSelectedTableId(urlTableId);
+        setSelectedTableNumber(table?.tableNumber ?? null);
         if (table?.assignedWaiter) {
           setSelectedWaiterId(table.assignedWaiter.id);
         } else {
@@ -2078,13 +2265,18 @@ export function PosPage() {
       draftSalesQuery.data,
       heldSalesQuery.data,
     );
-    const target = openSales.find((row) => row.id === resumeSaleId);
+    const stashedSale = consumeStashedHeldSale(resumeSaleId);
+    const target =
+      openSales.find((row) => row.id === resumeSaleId) ?? stashedSale;
     if (!target) {
       return;
     }
 
     resumedSaleRef.current = resumeSaleId;
-    resumeHeldSale(resumeSaleId, openSales);
+    resumeHeldSale(
+      resumeSaleId,
+      stashedSale ? [stashedSale, ...openSales] : openSales,
+    );
     if (urlReservationId) {
       setActiveReservationId(urlReservationId);
     }
@@ -2154,15 +2346,25 @@ export function PosPage() {
   }, [reviewSessionGroups, reviewSessionId]);
 
   useEffect(() => {
-    if (orderType !== "DINE_IN") {
+    const previousOrderType = prevOrderTypeRef.current;
+    if (previousOrderType === orderType) {
+      return;
+    }
+    prevOrderTypeRef.current = orderType;
+
+    if (previousOrderType === "DINE_IN" && orderType !== "DINE_IN") {
       setSelectedTableId(null);
+      setSelectedTableNumber(null);
       if (orderType === "TAKEAWAY") {
         setSelectedWaiterId(null);
       }
     }
-    if (orderType !== "DELIVERY") {
+    if (previousOrderType === "DELIVERY" && orderType !== "DELIVERY") {
       setDeliveryCompanyId(null);
+      setDeliveryCollectionMethod("RESTAURANT");
       setDeliveryDriverId(null);
+      setSelectedDeliveryDriverName(null);
+      setSelectedDeliveryDriverPhone(null);
       setDeliveryMode("DIRECT");
       setDeliveryAddress("");
       setDeliveryNotes("");
@@ -2465,6 +2667,11 @@ export function PosPage() {
     );
   }, [editingInvoiceId, draftSales, heldSales]);
 
+  const isCartLockedByWaiter = useMemo(
+    () => orderType === "DINE_IN" && Boolean(activeEditingSale?.waiterConfirmedAt),
+    [orderType, activeEditingSale?.waiterConfirmedAt],
+  );
+
   const selectedReturnSale =
     completedSales.find((sale) => sale.id === selectedReturnSaleId) ?? null;
 
@@ -2560,7 +2767,6 @@ export function PosPage() {
         bankCashAccountId: entry.bankCashAccountId,
         paymentMethod: entry.paymentMethod,
         amount: Number(entry.amountValue.toFixed(2)),
-        reference: entry.reference || undefined,
       }));
 
   const buildRestaurantPayload = () => ({
@@ -2601,7 +2807,7 @@ export function PosPage() {
           paymentMethod: method,
           bankCashAccountId: resolveMappedBankCashAccountId(method),
           amount: currentAmount || cartMetrics.total.toFixed(2),
-          reference: firstEntry?.reference ?? "",
+          reference: "",
         },
       ];
     });
@@ -2614,9 +2820,7 @@ export function PosPage() {
     updatePaymentEntry(entryId, {
       paymentMethod: method,
       bankCashAccountId: resolveMappedBankCashAccountId(method),
-      reference: paymentMethodNeedsReference(method)
-        ? paymentEntries.find((entry) => entry.id === entryId)?.reference ?? ""
-        : "",
+      reference: "",
     });
   };
 
@@ -2653,6 +2857,7 @@ export function PosPage() {
     setEditingInvoiceId(null);
     hadKitchenTicketRef.current = false;
     lastKitchenSyncFingerprintRef.current = null;
+    prevOrderTypeRef.current = "TAKEAWAY";
     setCartLines([]);
     setInvoiceDiscountType("FIXED");
     setInvoiceDiscountValue(0);
@@ -2661,11 +2866,14 @@ export function PosPage() {
     setSelectedCustomerId(null);
     setOrderType("TAKEAWAY");
     setSelectedTableId(null);
+    setSelectedTableNumber(null);
     setSelectedWaiterId(null);
     setDeliveryMode("DIRECT");
     setDeliveryCompanyId(null);
     setDeliveryCollectionMethod("RESTAURANT");
     setDeliveryDriverId(null);
+    setSelectedDeliveryDriverName(null);
+    setSelectedDeliveryDriverPhone(null);
     setServiceChargeAmount(0);
     setDeliveryFee(0);
     setDeliveryAddress("");
@@ -2689,19 +2897,23 @@ export function PosPage() {
         : [],
     );
   };
+  // Sync the ref every render so mutations (defined earlier in the component)
+  // always have a pointer to the latest resetSale closure.
+  resetSaleRef.current = resetSale;
 
   const appendCartLine = (
     item: InventoryItem,
     addons: PosLineAddonSelection[],
     lineNote: string,
     replaceLine?: CartLine | null,
+    entryWeight?: number | null,
   ) => {
     if (!sessionState.isOpen) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     const taxRate = parseAmount(item.defaultTax?.rate);
@@ -2714,6 +2926,9 @@ export function PosPage() {
     const baseUnitPrice = parseAmount(item.defaultSalesPrice);
     const unitPrice = baseUnitPrice + sumAddonPrices(addons);
     const modifiers = buildModifiersPayload(addons);
+    const sellByWeight = isWeightSaleItem(item);
+    const quantityPrecision = getQuantityPrecision(item);
+    const quantity = sellByWeight ? (entryWeight ?? 0) : 1;
 
     setCartLines((current) => {
       if (replaceLine) {
@@ -2731,6 +2946,10 @@ export function PosPage() {
         );
       }
 
+      if (sellByWeight && quantity <= 0) {
+        return current;
+      }
+
       const draftLine: CartLine = {
         itemId: item.id,
         name: item.name,
@@ -2738,7 +2957,7 @@ export function PosPage() {
         barcode: item.barcode,
         unit: item.unitOfMeasure,
         itemType: item.type,
-        quantity: 1,
+        quantity,
         unitPrice,
         baseUnitPrice,
         discountType: "FIXED",
@@ -2754,7 +2973,25 @@ export function PosPage() {
         onHandQuantity: onHand,
         modifiers,
         lineNote,
+        sellByWeight,
+        quantityPrecision,
+        clientLineId: sellByWeight ? createLocalId() : undefined,
       };
+
+      if (sellByWeight) {
+        if (item.trackInventory && !negOk && quantity > onHand) {
+          queueMicrotask(() =>
+            pushMessage(
+              t("pos.sales.alert.stockExceeded", {
+                item: item.name,
+              }),
+            ),
+          );
+          return current;
+        }
+        return [...current, draftLine];
+      }
+
       const existingIndex = current.findIndex(
         (line) => getCartLineKey(line) === getCartLineKey(draftLine) && !line.kitchenSentAt,
       );
@@ -2791,15 +3028,11 @@ export function PosPage() {
     });
   };
 
-  const addItemToCart = async (item: InventoryItem) => {
-    if (!sessionState.isOpen) {
-      pushMessage(t("pos.sales.alert.sessionClosed"));
-      return;
-    }
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
-      return;
-    }
+  const openAddonModalForItem = async (
+    item: InventoryItem,
+    entryWeight?: number | null,
+  ) => {
+    setPendingEntryWeight(entryWeight ?? null);
     const cachedConfig = addonCatalogByItemId.get(item.id);
     if (cachedConfig) {
       setAddonModalItem(item);
@@ -2812,7 +3045,6 @@ export function PosPage() {
       setAddonModalItem(item);
       setAddonModalConfig(config);
       setAddonEditLine(null);
-      return;
     } catch (error) {
       pushMessage(
         getErrorMessage(
@@ -2826,9 +3058,25 @@ export function PosPage() {
     }
   };
 
+  const addItemToCart = async (item: InventoryItem) => {
+    if (!sessionState.isOpen) {
+      pushMessage(t("pos.sales.alert.sessionClosed"));
+      return;
+    }
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
+      return;
+    }
+    if (isWeightSaleItem(item)) {
+      setWeightModalItem(item);
+      return;
+    }
+    await openAddonModalForItem(item);
+  };
+
   const openLineAddonEditor = async (line: CartLine) => {
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     const item = items.find((row) => row.id === line.itemId);
@@ -2888,14 +3136,14 @@ export function PosPage() {
     targetLine: CartLine,
     updater: (line: CartLine) => CartLine | null,
   ) => {
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     const lineKey = getCartLineKey(targetLine);
     const target = cartLines.find((line) => getCartLineKey(line) === lineKey);
-    if (target && isKitchenLineLocked(target)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (target && isKitchenSentLineLocked(target)) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     setCartLines((current) =>
@@ -2906,17 +3154,20 @@ export function PosPage() {
   };
 
   const bumpLineQty = (line: CartLine, delta: number) => {
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
-    if (isKitchenLineLocked(line)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isKitchenSentLineLocked(line)) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
-    if (delta > 0) {
+    const qtyDelta = line.sellByWeight
+      ? delta * getWeightQuantityStep(line.quantityPrecision ?? 3)
+      : delta;
+    if (qtyDelta > 0) {
       const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
-      const nextQty = line.quantity + delta;
+      const nextQty = Number((line.quantity + qtyDelta).toFixed(line.quantityPrecision ?? 3));
       if (line.trackInventory && !negOk && nextQty > line.onHandQuantity) {
         pushMessage(
           t("pos.sales.alert.stockExceeded", {
@@ -2926,13 +3177,33 @@ export function PosPage() {
         return;
       }
     }
-    updateLine(line, (current) =>
-      delta > 0
-        ? { ...current, quantity: current.quantity + delta }
-        : current.quantity + delta <= 0
-          ? current
-          : { ...current, quantity: current.quantity + delta },
-    );
+    updateLine(line, (current) => {
+      const nextQty = Number(
+        (current.quantity + qtyDelta).toFixed(current.quantityPrecision ?? 3),
+      );
+      if (nextQty <= 0) {
+        return current;
+      }
+      return { ...current, quantity: nextQty };
+    });
+  };
+
+  const setLineWeight = (line: CartLine, nextWeight: number) => {
+    if (!line.sellByWeight || nextWeight <= 0) {
+      return;
+    }
+    const precision = line.quantityPrecision ?? 3;
+    const normalized = Number(nextWeight.toFixed(precision));
+    const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
+    if (line.trackInventory && !negOk && normalized > line.onHandQuantity) {
+      pushMessage(
+        t("pos.sales.alert.stockExceeded", {
+          item: line.name,
+        }),
+      );
+      return;
+    }
+    updateLine(line, (current) => ({ ...current, quantity: normalized }));
   };
 
   const updatePaymentEntry = (
@@ -2991,7 +3262,7 @@ export function PosPage() {
   };
 
   const autoSaveCurrentTableOrderIfAny = async (tableIdToExclude?: string | null) => {
-    if (isOrderKitchenLocked(cartLines)) {
+    if (isCartLockedByWaiter) {
       return;
     }
     if (
@@ -3025,8 +3296,8 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     if (cartLines.length === 0) {
@@ -3056,8 +3327,8 @@ export function PosPage() {
       resetSale();
       return;
     }
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     setIsCancelSaleOpen(true);
@@ -3087,8 +3358,8 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isOrderKitchenLocked(cartLines)) {
-      pushError(getOrderKitchenLockMessage(language));
+    if (isCartLockedByWaiter) {
+      pushError(getOrderWaiterLockMessage(language));
       return;
     }
     if (cartLines.length === 0) {
@@ -3112,22 +3383,43 @@ export function PosPage() {
       catalog?.find((row) => row.id === heldSaleId) ??
       [...draftSales, ...heldSales].find((row) => row.id === heldSaleId);
     if (!target) return;
-    setCartLines(target.cartLines);
+    const enrichCartLine = (line: CartLine): CartLine => {
+      const catalogItem = items.find((row) => row.id === line.itemId);
+      const sellByWeight = catalogItem
+        ? isWeightSaleItem(catalogItem)
+        : Boolean(line.sellByWeight);
+      const enriched: CartLine = {
+        ...line,
+        unit: catalogItem?.unitOfMeasure ?? line.unit,
+        sellByWeight,
+        quantityPrecision: catalogItem
+          ? getQuantityPrecision(catalogItem)
+          : line.quantityPrecision,
+        clientLineId:
+          line.clientLineId ??
+          (sellByWeight && !line.salesInvoiceLineId ? createLocalId() : undefined),
+      };
+      return enriched;
+    };
+    setCartLines(target.cartLines.map(enrichCartLine));
     setPaymentEntries(target.paymentEntries);
     setInvoiceDiscountType(target.invoiceDiscountType);
     setInvoiceDiscountValue(target.invoiceDiscountValue);
     setSelectedWarehouseId(target.selectedWarehouseId);
     setSearch(target.search);
-    setOrderNotes(target.search);
+    setOrderNotes(target.orderNotes);
     setActiveCategory(normalizeResumeCategory(target.activeCategory));
     setEditingInvoiceId(target.id);
     setSelectedCustomerId(target.customerId ?? null);
     setOrderType(target.orderType);
     setSelectedTableId(target.tableId ?? null);
+    setSelectedTableNumber(target.tableNumber ?? null);
     setSelectedWaiterId(target.waiterId ?? null);
     setDeliveryCompanyId(target.deliveryCompanyId ?? null);
     setDeliveryCollectionMethod(target.deliveryCollectionMethod ?? "RESTAURANT");
     setDeliveryDriverId(target.driverId ?? null);
+    setSelectedDeliveryDriverName(target.driverName ?? null);
+    setSelectedDeliveryDriverPhone(target.driverPhone ?? null);
     setServiceChargeAmount(target.serviceChargeAmount ?? 0);
     setDeliveryFee(target.deliveryFeeAmount ?? 0);
     setDeliveryAddress(target.deliveryAddress ?? "");
@@ -3155,7 +3447,7 @@ export function PosPage() {
     if (!hadKitchenTicketRef.current || !editingInvoiceId || !activeSession?.id) {
       return;
     }
-    if (isOrderKitchenLocked(cartLines)) {
+    if (isCartLockedByWaiter) {
       return;
     }
     if (cartLines.length === 0) {
@@ -3329,24 +3621,6 @@ export function PosPage() {
     );
     if (unmappedPayment) {
       pushError("طريقة الدفع غير مربوطة بحساب محاسبي");
-      return;
-    }
-
-    const missingReference = companyCollectedByDelivery
-      ? null
-      : paymentEntriesResolved.find(
-      (entry) =>
-        entry.amountValue > 0 &&
-        paymentMethodNeedsReference(entry.paymentMethod) &&
-        !entry.reference.trim(),
-    );
-    if (missingReference) {
-      pushError(
-        getLocalizedText(
-          "Reference number is required for the selected payment method / رقم المرجع مطلوب لطريقة الدفع المختارة",
-          language,
-        ),
-      );
       return;
     }
 
@@ -3530,7 +3804,6 @@ export function PosPage() {
       );
     }
 
-    const shiftReportLive = shiftReportForRegister;
     const heldListCount = heldSales.length + draftSales.length;
     const catalogTotalPages = Math.max(itemsQuery.data?.totalPages ?? 1, 1);
     const payCannotCompleteCredit =
@@ -3539,31 +3812,18 @@ export function PosPage() {
     const hasValidPayments = paymentEntriesResolved.some(
       (entry) => entry.bankCashAccountId && entry.amountValue > 0,
     );
-    const hasMissingReference = paymentEntriesResolved.some(
-      (entry) =>
-        entry.amountValue > 0 &&
-        paymentMethodNeedsReference(entry.paymentMethod) &&
-        !entry.reference.trim(),
-    );
     const canCompleteThisSale =
       hasPermission(user, "POS_COMPLETE_SALE") &&
       hasPermission(user, "POS_SELECT_PAYMENT_METHOD") &&
       !payCannotCompleteCredit &&
-      hasValidPayments &&
-      !hasMissingReference;
-    const isCartLineLocked = (line: CartLine) => isKitchenLineLocked(line);
-    const orderKitchenLocked = isOrderKitchenLocked(cartLines);
+      hasValidPayments;
+    const isCartLineLocked = (line: CartLine) =>
+      isCartLockedByWaiter || isKitchenSentLineLocked(line);
+    const orderKitchenLocked = isCartLockedByWaiter;
 
     return (
-      <div className="flex min-h-dvh flex-col bg-[#f6f7f8] lg:h-dvh lg:overflow-hidden">
+      <div className="flex h-dvh flex-col overflow-hidden bg-[#f6f7f8]">
         <PosSessionBar
-          session={activeSession}
-          cashierLabel={cashierLabel}
-          warehouses={warehouses}
-          selectedWarehouseId={selectedWarehouseId}
-          onWarehouseChange={setSelectedWarehouseId}
-          shiftReport={shiftReportLive}
-          currencyCode={currencyCode}
           canCloseSession={hasPermission(user, "POS_CLOSE_OWN_SESSION")}
           onCloseSession={() => {
             const blockDrafts =
@@ -3584,7 +3844,7 @@ export function PosPage() {
 
         <PosRegisterMainGrid
           catalog={
-            <section className="space-y-3">
+            <section className="flex flex-col gap-3 pb-3">
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                   <Field
@@ -3664,7 +3924,7 @@ export function PosPage() {
               </Card>
 
               {itemsQuery.isLoading ? (
-                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className={posProductGridClass}>
                   {Array.from({ length: 10 }).map((_, index) => (
                     <div
                       key={index}
@@ -3706,7 +3966,7 @@ export function PosPage() {
                   </button>
                 </Card>
               ) : (
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className={posProductGridClass}>
                   {filteredItems.map((item) => (
                     <PosProductCard
                       key={item.id}
@@ -3821,88 +4081,90 @@ export function PosPage() {
                 </div>
               </div>
 
-              {/* 2. Customer */}
-              <div className="shrink-0 border-b border-[#eef1ef] px-3 py-2.5">
-                {selectedCustomer ? (
-                  <div className="flex h-9 items-center justify-between gap-2 rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
-                      <span className="truncate text-xs font-semibold text-[#111827]">
-                        {selectedCustomer.name}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={orderKitchenLocked}
-                      onClick={() => setSelectedCustomerId(null)}
-                      className="shrink-0 text-[11px] font-medium text-[#9ca3af] transition hover:text-[#dc2626] disabled:opacity-40"
-                      title="Remove customer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <LuUser className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9ca3af]" />
-                    <input
-                      type="text"
-                      placeholder={getLocalizedText(
-                        "Search customer / ابحث عن عميل...",
-                        language,
-                      )}
-                      value={searchCustomer}
-                      onChange={(e) => setSearchCustomer(e.target.value)}
-                      readOnly={orderKitchenLocked}
-                      className="h-9 w-full rounded-[10px] border border-[#e5e7eb] bg-white py-2 ps-8 pe-9 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
-                    />
-                    <button
-                      type="button"
-                      disabled={orderKitchenLocked}
-                      onClick={() => setIsAddCustomerOpen(true)}
-                      title={getLocalizedText("Add customer / إضافة عميل", language)}
-                      className="absolute end-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[#6b7280] transition hover:bg-[#f3f4f6] disabled:opacity-40"
-                    >
-                      <LuUserPlus className="h-3.5 w-3.5" />
-                    </button>
-                    {searchCustomer && customers.length > 0 && (
-                      <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[10px] border border-[#e5e7eb] bg-white shadow-lg">
-                        <div className="max-h-48 divide-y divide-[#f3f4f6] overflow-y-auto">
-                          {customers
-                            .filter((c: Customer) =>
-                              c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                            )
-                            .slice(0, 8)
-                            .map((c: Customer) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomerId(c.id);
-                                  setSearchCustomer("");
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#111827] hover:bg-[#f9fafb]"
-                              >
-                                <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
-                                <span className="truncate font-medium">{c.name}</span>
-                              </button>
-                            ))}
-                          {customers.filter((c: Customer) =>
-                            c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                          ).length === 0 && (
-                            <div className="px-3 py-2 text-[11px] text-[#9ca3af]">
-                              {getLocalizedText("No customer found / لا يوجد عميل", language)}
-                            </div>
-                          )}
-                        </div>
+              {/* Scrollable middle container to allow cart items to be visible without squishing */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {/* 2. Customer */}
+                <div className="border-b border-[#eef1ef] px-3 py-2.5">
+                  {selectedCustomer ? (
+                    <div className="flex h-9 items-center justify-between gap-2 rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
+                        <span className="truncate text-xs font-semibold text-[#111827]">
+                          {selectedCustomer.name}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                      <button
+                        type="button"
+                        disabled={orderKitchenLocked}
+                        onClick={() => setSelectedCustomerId(null)}
+                        className="shrink-0 text-[11px] font-medium text-[#9ca3af] transition hover:text-[#dc2626] disabled:opacity-40"
+                        title="Remove customer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <LuUser className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9ca3af]" />
+                      <input
+                        type="text"
+                        placeholder={getLocalizedText(
+                          "Search customer / ابحث عن عميل...",
+                          language,
+                        )}
+                        value={searchCustomer}
+                        onChange={(e) => setSearchCustomer(e.target.value)}
+                        readOnly={orderKitchenLocked}
+                        className="h-9 w-full rounded-[10px] border border-[#e5e7eb] bg-white py-2 ps-8 pe-9 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
+                      />
+                      <button
+                        type="button"
+                        disabled={orderKitchenLocked}
+                        onClick={() => setIsAddCustomerOpen(true)}
+                        title={getLocalizedText("Add customer / إضافة عميل", language)}
+                        className="absolute end-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[#6b7280] transition hover:bg-[#f3f4f6] disabled:opacity-40"
+                      >
+                        <LuUserPlus className="h-3.5 w-3.5" />
+                      </button>
+                      {searchCustomer && customers.length > 0 && (
+                        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[10px] border border-[#e5e7eb] bg-white shadow-lg">
+                          <div className="max-h-48 divide-y divide-[#f3f4f6] overflow-y-auto">
+                            {customers
+                              .filter((c: Customer) =>
+                                c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                              )
+                              .slice(0, 8)
+                              .map((c: Customer) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCustomerId(c.id);
+                                    setSearchCustomer("");
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#111827] hover:bg-[#f9fafb]"
+                                >
+                                  <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
+                                  <span className="truncate font-medium">{c.name}</span>
+                                </button>
+                              ))}
+                            {customers.filter((c: Customer) =>
+                              c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                            ).length === 0 && (
+                              <div className="px-3 py-2 text-[11px] text-[#9ca3af]">
+                                {getLocalizedText("No customer found / لا يوجد عميل", language)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-              {/* 3–4. Order type + restaurant details + notes */}
-              <div className="shrink-0 space-y-2.5 border-b border-[#eef1ef] px-3 py-2.5">
-                <PosRestaurantCartControls
+                {/* 3–4. Order type + restaurant details + notes */}
+                <div className="space-y-2.5 border-b border-[#eef1ef] px-3 py-2.5">
+                  <PosRestaurantCartControls
                     cartLinesCount={cartLines.length}
                     deliveryAddress={deliveryAddress}
                     deliveryCompanies={deliveryCompanies}
@@ -3917,7 +4179,12 @@ export function PosPage() {
                     onDeliveryAddressChange={setDeliveryAddress}
                     onDeliveryCompanyChange={setDeliveryCompanyId}
                     onDeliveryCollectionMethodChange={setDeliveryCollectionMethod}
-                    onDeliveryDriverChange={setDeliveryDriverId}
+                    onDeliveryDriverChange={(driverId) => {
+                      const driver = deliveryDrivers.find((entry) => entry.id === driverId);
+                      setDeliveryDriverId(driverId);
+                      setSelectedDeliveryDriverName(driver?.name ?? null);
+                      setSelectedDeliveryDriverPhone(driver?.phone ?? null);
+                    }}
                     onDeliveryFeeChange={(value) => setDeliveryFee(parseAmount(value))}
                     onDeliveryModeChange={setDeliveryMode}
                     onDeliveryNotesChange={setDeliveryNotes}
@@ -3932,10 +4199,12 @@ export function PosPage() {
                       }
                       const loaded = loadOpenTableOrder(tableId);
                       if (!loaded) {
+                        const table = restaurantTables.find((entry) => entry.id === tableId);
                         setEditingInvoiceId(null);
                         resetSale();
                         setOrderType("DINE_IN");
                         setSelectedTableId(tableId);
+                        setSelectedTableNumber(table?.tableNumber ?? null);
                         setSelectedWaiterId(waiterId);
                         resumedTableIdRef.current = `new:${tableId}`;
                       } else if (waiterId) {
@@ -3945,6 +4214,7 @@ export function PosPage() {
                     onBackToTables={async () => {
                       await autoSaveCurrentTableOrderIfAny();
                       setSelectedTableId(null);
+                      setSelectedTableNumber(null);
                       setSelectedWaiterId(null);
                       setEditingInvoiceId(null);
                       resetSale();
@@ -3956,7 +4226,10 @@ export function PosPage() {
                     onWaiterChange={setSelectedWaiterId}
                     orderType={orderType}
                     restaurantTables={restaurantTables}
+                    selectedDeliveryDriverLabel={selectedDeliveryDriverName}
+                    selectedDeliveryDriverPhone={selectedDeliveryDriverPhone}
                     selectedTableId={selectedTableId}
+                    selectedTableLabel={selectedTableNumber}
                     selectedWaiterId={selectedWaiterId}
                     serviceChargeAmount={serviceChargeAmount}
                     waiters={waiters}
@@ -3964,180 +4237,186 @@ export function PosPage() {
                     orderLocked={orderKitchenLocked}
                   />
 
-                {orderKitchenLocked ? (
-                  <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-2 text-[10px] font-medium leading-snug text-[#c2410c]">
-                    {getOrderKitchenLockMessage(language)}
-                  </div>
-                ) : null}
-
-                {activeReservationId && (
-                  <div className="flex items-start gap-2 rounded-[10px] border border-[#c4b5fd] bg-[#f5f3ff] px-2.5 py-2">
-                    <span className="mt-0.5 text-[#7c3aed]">⏰</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold text-[#6d28d9]">
-                        {language === "ar"
-                          ? "وضع الطلب المسبق — الطاولة لم تُفتح بعد"
-                          : "Pre-order mode — table not occupied yet"}
-                      </div>
-                      <div className="text-[10px] text-[#7c3aed]">
-                        {language === "ar"
-                          ? "ستُحفظ الأصناف. تظل الطاولة متاحة حتى وقت الحجز."
-                          : "Items will be held. Table stays Available until the reservation window."}
-                      </div>
+                  {orderKitchenLocked ? (
+                    <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-2 text-[10px] font-medium leading-snug text-[#c2410c]">
+                      {getOrderWaiterLockMessage(language)}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveReservationId(null)}
-                      className="text-xs font-bold text-[#9f7aea] hover:text-[#6d28d9]"
-                      title="Dismiss banner"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
+                  ) : null}
 
-                <div>
-                  <label className="mb-1 block text-[10px] font-semibold text-[#6b7280]">
-                    {getLocalizedText("Order note / ملاحظة الطلب", language)}
-                  </label>
-                  <textarea
-                    value={orderNotes}
-                    onChange={(e) => setOrderNotes(e.target.value)}
-                    readOnly={orderKitchenLocked}
-                    rows={2}
-                    placeholder={getLocalizedText(
-                      "Order notes... / ملاحظات على الطلب...",
-                      language,
-                    )}
-                    className="min-h-[52px] w-full resize-none rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5 py-2 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
-                  />
+                  {activeReservationId && (
+                    <div className="flex items-start gap-2 rounded-[10px] border border-[#c4b5fd] bg-[#f5f3ff] px-2.5 py-2">
+                      <span className="mt-0.5 text-[#7c3aed]">⏰</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-bold text-[#6d28d9]">
+                          {language === "ar"
+                            ? "وضع الطلب المسبق — الطاولة لم تُفتح بعد"
+                            : "Pre-order mode — table not occupied yet"}
+                        </div>
+                        <div className="text-[10px] text-[#7c3aed]">
+                          {language === "ar"
+                            ? "ستُحفظ الأصناف. تظل الطاولة متاحة حتى وقت الحجز."
+                            : "Items will be held. Table stays Available until the reservation window."}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveReservationId(null)}
+                        className="text-xs font-bold text-[#9f7aea] hover:text-[#6d28d9]"
+                        title="Dismiss banner"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold text-[#6b7280]">
+                      {getLocalizedText("Order note / ملاحظة الطلب", language)}
+                    </label>
+                    <textarea
+                      value={orderNotes}
+                      onChange={(e) => setOrderNotes(e.target.value)}
+                      readOnly={orderKitchenLocked}
+                      rows={2}
+                      placeholder={getLocalizedText(
+                        "Order notes... / ملاحظات على الطلب...",
+                        language,
+                      )}
+                      className="min-h-[52px] w-full resize-none rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5 py-2 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* 5. Order items (scrollable) */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-                {cartLines.length === 0 ? (
-                  <div className="rounded-[10px] border border-dashed border-[#e5e7eb] bg-[#fafafa] px-3 py-5 text-center">
-                    <p className="text-xs font-semibold text-[#374151]">
-                      {t("pos.sales.cartEmptyTitle")}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-5 text-[#9ca3af]">
-                      {t("pos.sales.cartEmptyDescription")}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-[#f3f4f6]">
-                    {cartLines.map((line) => (
-                      <CompactCartLine
-                        key={getCartLineKey(line)}
-                        line={line}
-                        language={language}
-                        currencyCode={currencyCode}
-                        taxFreeEnabled={Boolean(posSettings?.runtime.taxFreeEnabled)}
-                        locked={orderKitchenLocked || isCartLineLocked(line)}
-                        onEditAddons={
-                          !isCartLineLocked(line) ? () => openLineAddonEditor(line) : undefined
-                        }
-                        canEditUnitPrice={
-                          !isCartLineLocked(line) &&
-                          hasPermission(user, "POS_CHANGE_UNIT_PRICE")
-                        }
-                        canEditLineDiscount={
-                          !isCartLineLocked(line) &&
-                          hasPermission(user, "POS_COMPLETE_SALE") &&
-                          hasPermission(user, "POS_UPDATE_ITEM_QUANTITY")
-                        }
-                        onIncrease={() => bumpLineQty(line, 1)}
-                        onDecrease={() => bumpLineQty(line, -1)}
-                        onRemove={() => updateLine(line, () => null)}
-                        onUnitPriceChange={(next) =>
-                          updateLine(line, (current) => ({
-                            ...current,
-                            unitPrice: Math.max(0, next),
-                          }))
-                        }
-                        onDiscountChange={(type, value) =>
-                          updateLine(line, (current) => ({
-                            ...current,
-                            discountType: type,
-                            discountValue: value,
-                          }))
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 6. Invoice discount */}
-              {hasPermission(user, "POS_COMPLETE_SALE") && !orderKitchenLocked ? (
-                <div className="shrink-0 border-t border-[#eef1ef] px-3 py-2">
-                  {!isInvoiceDiscountOpen && invoiceDiscountValue === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsInvoiceDiscountOpen(true)}
-                      className="flex w-full items-center justify-end gap-1 text-[11px] font-semibold text-[#059669] transition hover:text-[#047857]"
-                    >
-                      <LuPlus className="h-3 w-3" />
-                      {getLocalizedText("Add invoice discount + / إضافة خصم الفاتورة +", language)}
-                    </button>
+                {/* 5. Order items */}
+                <div className="px-3 py-2">
+                  {cartLines.length === 0 ? (
+                    <div className="rounded-[10px] border border-dashed border-[#e5e7eb] bg-[#fafafa] px-3 py-5 text-center">
+                      <p className="text-xs font-semibold text-[#374151]">
+                        {t("pos.sales.cartEmptyTitle")}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-5 text-[#9ca3af]">
+                        {t("pos.sales.cartEmptyDescription")}
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold text-[#6b7280]">
-                          {getLocalizedText("Invoice discount / خصم الفاتورة", language)}
-                        </span>
-                        {invoiceDiscountValue === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setIsInvoiceDiscountOpen(false)}
-                            className="text-[10px] text-[#9ca3af] hover:text-[#6b7280]"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setInvoiceDiscountType((current) =>
-                              current === "FIXED" ? "PERCENT" : "FIXED",
-                            )
+                    <div className="divide-y divide-[#f3f4f6]">
+                      {cartLines.map((line) => (
+                        <CompactCartLine
+                          key={getCartLineKey(line)}
+                          line={line}
+                          language={language}
+                          currencyCode={currencyCode}
+                          taxFreeEnabled={Boolean(posSettings?.runtime.taxFreeEnabled)}
+                          locked={orderKitchenLocked || isCartLineLocked(line)}
+                          onEditAddons={
+                            !isCartLineLocked(line) ? () => openLineAddonEditor(line) : undefined
                           }
-                          className="rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1.5 text-[10px] font-semibold text-[#374151]"
-                        >
-                          {invoiceDiscountType === "FIXED" ? "Fixed" : "%"}
-                        </button>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={invoiceDiscountValue === 0 ? "" : invoiceDiscountValue}
-                          onChange={(e) =>
-                            setInvoiceDiscountValue(Math.max(0, Number(e.target.value) || 0))
+                          canEditUnitPrice={
+                            !isCartLineLocked(line) &&
+                            hasPermission(user, "POS_CHANGE_UNIT_PRICE")
                           }
-                          className="min-w-0 flex-1 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1.5 text-xs font-semibold text-[#111827]"
-                          placeholder="0"
+                          canEditLineDiscount={
+                            !isCartLineLocked(line) &&
+                            hasPermission(user, "POS_COMPLETE_SALE") &&
+                            hasPermission(user, "POS_UPDATE_ITEM_QUANTITY")
+                          }
+                          onIncrease={() => bumpLineQty(line, 1)}
+                          onDecrease={() => bumpLineQty(line, -1)}
+                          onWeightChange={
+                            line.sellByWeight
+                              ? (nextWeight) => setLineWeight(line, nextWeight)
+                              : undefined
+                          }
+                          onRemove={() => updateLine(line, () => null)}
+                          onUnitPriceChange={(next) =>
+                            updateLine(line, (current) => ({
+                              ...current,
+                              unitPrice: Math.max(0, next),
+                            }))
+                          }
+                          onDiscountChange={(type, value) =>
+                            updateLine(line, (current) => ({
+                              ...current,
+                              discountType: type,
+                              discountValue: value,
+                            }))
+                          }
                         />
-                      </div>
-                      {invoiceDiscountType === "PERCENT" &&
-                      invoiceDiscountValue >
-                        (posSettings?.runtime.cashierDiscountLimitPercent ?? 15) ? (
-                        <p className="text-[10px] text-[#d97706]">
-                          {getLocalizedText(
-                            "Above cashier discount limit / فوق حد خصم الكاشير",
-                            language,
-                          )}
-                        </p>
-                      ) : null}
+                      ))}
                     </div>
                   )}
                 </div>
-              ) : null}
+
+                {/* 6. Invoice discount */}
+                {hasPermission(user, "POS_COMPLETE_SALE") && !orderKitchenLocked ? (
+                  <div className="border-t border-[#eef1ef] px-3 py-2">
+                    {!isInvoiceDiscountOpen && invoiceDiscountValue === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsInvoiceDiscountOpen(true)}
+                        className="flex w-full items-center justify-end gap-1 text-[11px] font-semibold text-[#059669] transition hover:text-[#047857]"
+                      >
+                        <LuPlus className="h-3 w-3" />
+                        {getLocalizedText("Add invoice discount + / إضافة خصم الفاتورة +", language)}
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-semibold text-[#6b7280]">
+                            {getLocalizedText("Invoice discount / خصم الفاتورة", language)}
+                          </span>
+                          {invoiceDiscountValue === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setIsInvoiceDiscountOpen(false)}
+                              className="text-[10px] text-[#9ca3af] hover:text-[#6b7280]"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setInvoiceDiscountType((current) =>
+                                current === "FIXED" ? "PERCENT" : "FIXED",
+                              )
+                            }
+                            className="rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1.5 text-[10px] font-semibold text-[#374151]"
+                          >
+                            {invoiceDiscountType === "FIXED" ? "Fixed" : "%"}
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={invoiceDiscountValue === 0 ? "" : invoiceDiscountValue}
+                            onChange={(e) =>
+                              setInvoiceDiscountValue(Math.max(0, Number(e.target.value) || 0))
+                            }
+                            className="min-w-0 flex-1 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1.5 text-xs font-semibold text-[#111827]"
+                            placeholder="0"
+                          />
+                        </div>
+                        {invoiceDiscountType === "PERCENT" &&
+                        invoiceDiscountValue >
+                          (posSettings?.runtime.cashierDiscountLimitPercent ?? 15) ? (
+                          <p className="text-[10px] text-[#d97706]">
+                            {getLocalizedText(
+                              "Above cashier discount limit / فوق حد خصم الكاشير",
+                              language,
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
 
               {/* 7–8. Payment summary + sticky actions */}
-              <div className="shrink-0 border-t border-[#eef1ef] bg-white">
+              <div className="shrink-0 border-t border-[#eef1ef] bg-white pb-[env(safe-area-inset-bottom,0px)]">
                 <PosPaymentSummaryCard
                   subtotal={formatCurrency(cartMetrics.subtotalBeforeDiscount, currencyCode)}
                   discounts={formatCurrency(cartMetrics.discountTotal, currencyCode)}
@@ -4264,6 +4543,18 @@ export function PosPage() {
               </div>
             </div>
           }
+          mobileCartBar={{
+            itemCount: cartLines.length,
+            totalLabel: formatCurrency(cartMetrics.total, currencyCode),
+            itemsLabel:
+              cartLines.length === 0
+                ? getLocalizedText("No items / لا أصناف", language)
+                : cartLines.length === 1
+                  ? getLocalizedText("1 item / صنف واحد", language)
+                  : getLocalizedText(`${cartLines.length} items / ${cartLines.length} أصناف`, language),
+            viewOrderLabel: getLocalizedText("View order / عرض الطلب", language),
+            orderTitle: t("pos.sales.orderSummary"),
+          }}
         />
 
         <Modal
@@ -4453,16 +4744,6 @@ export function PosPage() {
                             placeholder={getLocalizedText("Amount / المبلغ", language)}
                             className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                           />
-                          {paymentMethodNeedsReference(entryMethod) ? (
-                            <Input
-                              value={entry.reference}
-                              onChange={(event) =>
-                                updatePaymentEntry(entry.id, { reference: event.target.value })
-                              }
-                              placeholder={getLocalizedText("Reference number / رقم المرجع", language)}
-                              className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                            />
-                          ) : null}
                         </div>
                         {!entry.bankCashAccountId ? (
                           <div className="rounded-[14px] border border-[#f2c9c1] bg-[#fff4f1] px-4 py-3 text-xs font-bold text-[#9a4338] arabic-auto">
@@ -4504,21 +4785,6 @@ export function PosPage() {
                       className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
                     />
                   </Field>
-                  {singlePaymentEntry && paymentMethodNeedsReference(singlePaymentEntry.paymentMethod) ? (
-                    <Field label={getLocalizedText("Reference number / رقم المرجع", language)} className="mb-0">
-                      <Input
-                        value={singlePaymentEntry?.reference ?? ""}
-                        onChange={(event) =>
-                          singlePaymentEntry
-                            ? updatePaymentEntry(singlePaymentEntry.id, {
-                              reference: event.target.value,
-                            })
-                            : undefined
-                        }
-                        className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
-                      />
-                    </Field>
-                  ) : null}
                 </div>
               )}
 
@@ -4612,8 +4878,8 @@ export function PosPage() {
                         type="button"
                         disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
                         onClick={() => {
-                          resumeHeldSale(row.id);
                           setIsHeldOrdersOpen(false);
+                          resumeHeldSale(row.id, [row]);
                         }}
                         className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
                       >
@@ -4654,8 +4920,8 @@ export function PosPage() {
                         type="button"
                         disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
                         onClick={() => {
-                          resumeHeldSale(row.id);
                           setIsHeldOrdersOpen(false);
+                          resumeHeldSale(row.id, [row]);
                         }}
                         className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
                       >
@@ -4802,6 +5068,7 @@ export function PosPage() {
                       resetSale();
                       setOrderType("DINE_IN");
                       setSelectedTableId(table.id);
+                      setSelectedTableNumber(table.tableNumber);
                       setSelectedWaiterId(table.assignedWaiter?.id ?? null);
                       resumedTableIdRef.current = `new:${table.id}`;
                     }
@@ -5006,6 +5273,21 @@ export function PosPage() {
           </div>
         </Modal>
 
+        <PosWeightEntryModal
+          isOpen={Boolean(weightModalItem)}
+          item={weightModalItem}
+          language={language}
+          currencyCode={currencyCode}
+          onClose={() => setWeightModalItem(null)}
+          onConfirm={(weight) => {
+            const item = weightModalItem;
+            setWeightModalItem(null);
+            if (item) {
+              void openAddonModalForItem(item, weight);
+            }
+          }}
+        />
+
         <PosLineAddonModal
           isOpen={Boolean(addonModalItem)}
           itemName={addonModalItem?.name ?? ""}
@@ -5019,14 +5301,22 @@ export function PosPage() {
             setAddonModalItem(null);
             setAddonModalConfig(null);
             setAddonEditLine(null);
+            setPendingEntryWeight(null);
           }}
           onConfirm={({ addons, lineNote }) => {
             if (addonModalItem) {
-              appendCartLine(addonModalItem, addons, lineNote, addonEditLine);
+              appendCartLine(
+                addonModalItem,
+                addons,
+                lineNote,
+                addonEditLine,
+                pendingEntryWeight,
+              );
             }
             setAddonModalItem(null);
             setAddonModalConfig(null);
             setAddonEditLine(null);
+            setPendingEntryWeight(null);
           }}
         />
       </div>
@@ -5147,57 +5437,77 @@ export function PosPage() {
     const renderHeldSaleCard = (
       heldSale: HeldSale,
       resumeLabelKey: "pos.held.resumeDraft" | "pos.sales.resumeHeld",
-    ) => (
-      <Card key={heldSale.id} className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
-            <div className="mt-1 text-sm text-[#66756d]">
-              {new Date(heldSale.createdAt).toLocaleString()}
+    ) => {
+      const orderTypeStyles = getHeldSaleOrderTypeStyles(heldSale.orderType);
+      return (
+        <Card
+          key={heldSale.id}
+          className={cn("rounded-[28px] p-6", orderTypeStyles.card)}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
+              <div className="mt-1 text-sm text-[#66756d]">
+                {new Date(heldSale.createdAt).toLocaleString()}
+              </div>
+              <div className="mt-3">
+                <HeldSaleKindBadges sale={heldSale} t={t} />
+              </div>
             </div>
-            <div className="mt-3">
-              <HeldSaleKindBadges sale={heldSale} t={t} />
-            </div>
-          </div>
-          <div className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
-            {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
-          </div>
-        </div>
-        <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
-          {heldSale.cartLines.slice(0, 4).map((line) => (
-            <div
-              key={`${heldSale.id}-${line.itemId}`}
-              className="flex items-center justify-between gap-3"
-            >
-              <span>{getLocalizedText(line.name, language)}</span>
-              <span>
-                {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
+            <div className="flex flex-col items-end gap-2">
+              <span
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-black",
+                  orderTypeStyles.badge,
+                )}
+              >
+                {t(`pos.orderType.${heldSale.orderType}`)}
+              </span>
+              <span className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
+                {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
               </span>
             </div>
-          ))}
-        </div>
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              startRoutingTransition(() => {
-                router.replace(buildPosRegisterResumePath(heldSale));
-              });
-            }}
-            className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-          >
-            {t(resumeLabelKey)}
-          </button>
-          <button
-            type="button"
-            onClick={() => voidSaleMutation.mutate(heldSale.id)}
-            className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-          >
-            {t("pos.sales.voidAction")}
-          </button>
-        </div>
-      </Card>
-    );
+          </div>
+
+          <HeldSaleOrderTypeInfo sale={heldSale} language={language} />
+
+          <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
+            {heldSale.cartLines.slice(0, 4).map((line) => (
+              <div
+                key={`${heldSale.id}-${line.itemId}`}
+                className="flex items-center justify-between gap-3"
+              >
+                <span>{getLocalizedText(line.name, language)}</span>
+                <span>
+                  {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                stashHeldSaleForResume(heldSale);
+                startRoutingTransition(() => {
+                  router.replace(buildPosRegisterResumePath(heldSale));
+                });
+              }}
+              className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
+            >
+              {t(resumeLabelKey)}
+            </button>
+            <button
+              type="button"
+              onClick={() => voidSaleMutation.mutate(heldSale.id)}
+              className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
+            >
+              {t("pos.sales.voidAction")}
+            </button>
+          </div>
+        </Card>
+      );
+    };
 
     return (
       <div className="space-y-6">
@@ -5836,10 +6146,6 @@ export function PosPage() {
       );
     }
 
-    if (workspace === "kitchen") {
-      return <PosKitchenWorkspace embedded />;
-    }
-
     if (workspace === "delivery") {
       return <PosDeliveryWorkspace embedded />;
     }
@@ -5851,7 +6157,6 @@ export function PosPage() {
       returns: t("pos.placeholder.returns"),
       reports: t("pos.placeholder.reports"),
       settings: t("pos.placeholder.settings"),
-      kitchen: t("pos.placeholder.kitchen") || "Kitchen Display System",
     };
 
     return (
@@ -6208,6 +6513,7 @@ function CompactCartLine({
   onIncrease,
   onDecrease,
   onRemove,
+  onWeightChange,
   onDiscountChange: _onDiscountChange,
   canEditUnitPrice,
   canEditLineDiscount: _canEditLineDiscount,
@@ -6222,6 +6528,7 @@ function CompactCartLine({
   onIncrease: () => void;
   onDecrease: () => void;
   onRemove: () => void;
+  onWeightChange?: (nextWeight: number) => void;
   onDiscountChange: (type: DiscountType, value: number) => void;
   canEditUnitPrice?: boolean;
   canEditLineDiscount?: boolean;
@@ -6230,11 +6537,18 @@ function CompactCartLine({
   taxFreeEnabled?: boolean;
 }) {
   const [isEditingPrice, setIsEditingPrice] = useState(false);
+  const [isEditingWeight, setIsEditingWeight] = useState(false);
+  const [weightDraft, setWeightDraft] = useState("");
   const lineTotal = getLineTotal(line, 0, "BEFORE_TAX", taxFreeEnabled);
   const lineTax = getLineTaxAmount(line, 0, "BEFORE_TAX", taxFreeEnabled);
   const hasDiscount = line.discountValue > 0;
   const addonsLabel = formatAddonsForDisplay(line.modifiers, language);
   const unitsLabel = getLocalizedText("Units / وحدات", language);
+  const weightPrecision = line.quantityPrecision ?? 3;
+  const weightStep = getWeightQuantityStep(weightPrecision);
+  const quantityLabel = line.sellByWeight
+    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+    : `${formatCount(line.quantity)} ${unitsLabel}`;
 
   return (
     <div
@@ -6255,10 +6569,8 @@ function CompactCartLine({
             <p className="mt-0.5 text-[10px] italic text-amber-700">{line.lineNote}</p>
           ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-[#9ca3af]">
-            <span>
-              {formatCount(line.quantity)} {unitsLabel}
-            </span>
-            <span>/</span>
+            <span dir="ltr">{quantityLabel}</span>
+            <span>×</span>
             {canEditUnitPrice && onUnitPriceChange ? (
               isEditingPrice ? (
                 <input
@@ -6353,9 +6665,53 @@ function CompactCartLine({
               >
                 <LuMinus className="h-3 w-3" />
               </button>
-              <span className="min-w-[1.25rem] text-center text-[11px] font-bold text-[#111827]">
-                {formatCount(line.quantity)}
-              </span>
+              {line.sellByWeight && onWeightChange && isEditingWeight ? (
+                <input
+                  type="number"
+                  min={weightStep}
+                  step={weightStep}
+                  autoFocus
+                  value={weightDraft}
+                  onBlur={() => {
+                    const next = Number(weightDraft);
+                    if (Number.isFinite(next) && next > 0) {
+                      onWeightChange(next);
+                    }
+                    setIsEditingWeight(false);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      const next = Number(weightDraft);
+                      if (Number.isFinite(next) && next > 0) {
+                        onWeightChange(next);
+                      }
+                      setIsEditingWeight(false);
+                    }
+                  }}
+                  onChange={(event) => setWeightDraft(event.target.value)}
+                  className="w-14 border-b border-[#d1d5db] bg-transparent text-center text-[11px] font-bold focus:outline-none"
+                  dir="ltr"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (line.sellByWeight && onWeightChange) {
+                      setWeightDraft(String(line.quantity));
+                      setIsEditingWeight(true);
+                    }
+                  }}
+                  className={cn(
+                    "min-w-[1.25rem] text-center text-[11px] font-bold text-[#111827]",
+                    line.sellByWeight && onWeightChange ? "hover:text-[#059669]" : "",
+                  )}
+                  dir="ltr"
+                >
+                  {line.sellByWeight
+                    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+                    : formatCount(line.quantity)}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onIncrease}
@@ -6365,8 +6721,11 @@ function CompactCartLine({
               </button>
             </div>
           ) : (
-            <span className="text-[11px] font-semibold text-[#6b7280]">
-              ×{formatCount(line.quantity)}
+            <span className="text-[11px] font-semibold text-[#6b7280]" dir="ltr">
+              ×
+              {line.sellByWeight
+                ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+                : formatCount(line.quantity)}
             </span>
           )}
           {!locked ? (

@@ -30,6 +30,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.body.style.overflow = "";
   }, [pathname]);
 
+  useEffect(() => {
+    if (!isPosPage) return;
+    const media = window.matchMedia("(max-width: 1023px)");
+    const collapseForViewport = () => {
+      if (media.matches) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    collapseForViewport();
+    media.addEventListener("change", collapseForViewport);
+    return () => media.removeEventListener("change", collapseForViewport);
+  }, [isPosPage, pathname]);
+
   return (
     <>
       <DevRoutePerf />
@@ -47,12 +60,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             : isSidebarCollapsed
               ? "ltr:pl-20 rtl:pr-20"
               : "ltr:pl-60 rtl:pr-60",
+          isPosPage && "pb-[env(safe-area-inset-bottom,0px)]",
         )}
       >
         <div
           className={cn(
             "mx-auto w-full",
-            isPosPage ? "p-0 max-w-none" : "max-w-[1800px] px-3 pb-6 pt-0 md:px-4 md:pb-8 md:pt-0"
+            isPosPage
+              ? "max-w-none p-0"
+              : "max-w-[1800px] px-3 pb-6 pt-0 md:px-4 md:pb-8 md:pt-0",
           )}
         >
           {children}

@@ -11,6 +11,7 @@ import { InventoryPostingModule } from '../phase-5-inventory-management/inventor
 import { PosController } from './pos/pos.controller';
 import { PosTableController } from './pos/pos-table.controller';
 import { PosKitchenController } from './pos/pos-kitchen.controller';
+import { PosWaiterOrdersController } from './pos/pos-waiter-orders.controller';
 import { PosAddonController } from './pos/pos-addon.controller';
 import { PosAddonService } from './pos/pos-addon.service';
 import { PosService } from './pos/pos.service';
@@ -24,6 +25,7 @@ import { SalesReceivablesService } from './sales-receivables.service';
     PosController,
     PosTableController,
     PosKitchenController,
+    PosWaiterOrdersController,
     PosAddonController,
   ],
   providers: [SalesReceivablesService, PosService, PosAddonService],

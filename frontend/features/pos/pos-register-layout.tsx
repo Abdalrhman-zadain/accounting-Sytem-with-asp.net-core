@@ -1,26 +1,76 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+
+import {
+  posRegisterCartPanelClass,
+  posRegisterCatalogClass,
+  posRegisterGridClass,
+} from "@/features/pos/pos-layout-classes";
+import {
+  PosRegisterMobileOrderSheet,
+  PosRegisterStickyCartBar,
+  useRegisterWideLayout,
+  type PosRegisterMobileCartBarProps,
+} from "@/features/pos/pos-register-mobile-cart";
+
+function SalePanelShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-[#e8ece9] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
+      {children}
+    </div>
+  );
+}
 
 /**
- * Premium main register grid:
- * Optimizes space for the product catalog and styles the cart panel with high-fidelity borders.
+ * Register layout:
+ * - Wide (≥960px): catalog + order panel side by side
+ * - Narrow (iPad portrait, phones): full-screen catalog + sticky cart bar + slide-up order sheet
  */
 export function PosRegisterMainGrid({
   catalog,
   salePanel,
+  mobileCartBar,
 }: {
   catalog: ReactNode;
   salePanel: ReactNode;
+  mobileCartBar: Omit<PosRegisterMobileCartBarProps, "isOpen" | "onToggle">;
 }) {
+  const isWide = useRegisterWideLayout();
+  const [isMobileOrderOpen, setIsMobileOrderOpen] = useState(false);
+
+  useEffect(() => {
+    if (isWide) setIsMobileOrderOpen(false);
+  }, [isWide]);
+
   return (
-    <div className="grid min-h-0 flex-1 gap-4 overflow-visible bg-[#fafafc] p-3 sm:gap-5 sm:p-4 lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
-      <section className="order-1 min-w-0 lg:overflow-y-auto pr-1">{catalog}</section>
-      <aside className="order-2 flex min-h-0 flex-col lg:order-2 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-6rem)] xl:self-start">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-[#e8ece9] bg-white shadow-[0_4px_20px_-8px_rgba(0,0,0,0.06)]">
-          {salePanel}
-        </div>
-      </aside>
-    </div>
+    <>
+      <div className={posRegisterGridClass}>
+        <section className={posRegisterCatalogClass}>{catalog}</section>
+
+        {isWide ? (
+          <aside className={posRegisterCartPanelClass}>
+            <SalePanelShell>{salePanel}</SalePanelShell>
+          </aside>
+        ) : null}
+      </div>
+
+      {!isWide ? (
+        <>
+          <PosRegisterStickyCartBar
+            {...mobileCartBar}
+            isOpen={isMobileOrderOpen}
+            onToggle={() => setIsMobileOrderOpen((open) => !open)}
+          />
+          <PosRegisterMobileOrderSheet
+            isOpen={isMobileOrderOpen}
+            onClose={() => setIsMobileOrderOpen(false)}
+            orderTitle={mobileCartBar.orderTitle}
+          >
+            <SalePanelShell>{salePanel}</SalePanelShell>
+          </PosRegisterMobileOrderSheet>
+        </>
+      ) : null}
+    </>
   );
 }

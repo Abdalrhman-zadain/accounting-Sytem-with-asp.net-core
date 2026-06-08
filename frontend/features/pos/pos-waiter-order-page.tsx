@@ -29,9 +29,12 @@ import {
   getPosAddonCatalog,
   getPosItemAddonConfig,
   getPosTables,
+  getPosWaiterOrders,
+  reprintKot,
   savePosDraft,
   sendPosSaleToKitchen,
 } from "@/lib/api";
+import { printKitchenOrderTicket } from "@/features/pos/pos-kot-print";
 import { hasPermission } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { cn, getLocalizedText } from "@/lib/utils";
@@ -259,8 +262,19 @@ export function PosWaiterOrderPage() {
       setWaiterConfirmedAt(sale.waiterConfirmedAt ?? new Date().toISOString());
       setCartLines(mapSaleToCart(sale));
       setNotice(isAr ? "تم تأكيد الطلب وإرساله للمطبخ" : "Order confirmed and sent to kitchen.");
+      printKitchenOrderTicket(sale, language);
+      try {
+        const waiterOrders = await getPosWaiterOrders(token);
+        const kitchenOrder = waiterOrders.find((row) => row.salesInvoiceId === sale.id);
+        if (kitchenOrder) {
+          await reprintKot(kitchenOrder.id, "WAITER_SEND", token);
+        }
+      } catch {
+        // Audit reprint is best-effort after client print
+      }
       await queryClient.invalidateQueries({ queryKey: ["pos-drafts"] });
       await queryClient.invalidateQueries({ queryKey: ["pos-tables"] });
+      await queryClient.invalidateQueries({ queryKey: ["pos-waiter-orders"] });
     },
     onError: (error) => {
       setNotice(getErrorMessage(error, isAr ? "فشل الإرسال" : "Send failed"));

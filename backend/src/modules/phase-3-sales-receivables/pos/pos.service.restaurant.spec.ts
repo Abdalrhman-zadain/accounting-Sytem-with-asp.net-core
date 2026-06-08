@@ -22,6 +22,7 @@ describe("PosService restaurant operations", () => {
     salesInvoiceLine: {
       deleteMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     customer: {
       findFirst: jest.fn(),
@@ -68,6 +69,7 @@ describe("PosService restaurant operations", () => {
       delete: jest.fn(),
     },
     kitchenOrderItem: {
+      createMany: jest.fn(),
       delete: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
@@ -778,8 +780,8 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
-    salesInvoice: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
-    salesInvoiceLine: { deleteMany: jest.fn(), update: jest.fn() },
+    salesInvoice: { findUnique: jest.fn(), findFirst: jest.fn(), findUniqueOrThrow: jest.fn(), update: jest.fn(), create: jest.fn() },
+    salesInvoiceLine: { deleteMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     posSession: { findFirst: jest.fn(), findUnique: jest.fn() },
     posTable: { findUnique: jest.fn(), update: jest.fn() },
     customer: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
@@ -787,7 +789,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
     user: { findUnique: jest.fn() },
     journalEntry: { findFirst: jest.fn() },
     salesInvoiceCounter: { upsert: jest.fn() },
-    kitchenOrder: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    kitchenOrder: { findUnique: jest.fn(), update: jest.fn(), create: jest.fn(), delete: jest.fn() },
     kitchenOrderItem: { delete: jest.fn(), update: jest.fn(), count: jest.fn() },
     posPayment: { deleteMany: jest.fn() },
     posRuntimeSetting: { findMany: jest.fn().mockResolvedValue([]) },
@@ -982,7 +984,92 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       );
     });
 
-    it("rejects cashier saveDraft that removes a kitchen line marked ready", async () => {
+    it("promotes sent table drafts to held and keeps the table linked", async () => {
+      const draftInvoice = {
+        id: "inv1",
+        reference: "POS-1",
+        invoiceType: "POS",
+        posOperationalStatus: "DRAFT",
+        waiterConfirmedAt: null,
+        orderType: "DINE_IN",
+        tableId: "t1",
+        waiterId: "waiter1",
+        description: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            itemName: "Burger",
+            quantity: { toString: () => "1" },
+            lineNumber: 1,
+            description: null,
+            modifiers: null,
+            kitchenSentAt: null,
+          },
+        ],
+        kitchenOrder: null,
+      };
+      prismaMock.salesInvoice.findUnique.mockResolvedValue(draftInvoice);
+      prismaMock.user.findUnique.mockResolvedValue({ id: "waiter1", name: "Waiter" });
+      prismaMock.posTable.findUnique.mockResolvedValue({ id: "t1", tableNumber: "T1" });
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue(null);
+      prismaMock.salesInvoice.findUniqueOrThrow.mockResolvedValue({
+        ...draftInvoice,
+        posOperationalStatus: "HELD",
+        lines: [
+          {
+            ...draftInvoice.lines[0],
+            kitchenSentAt: new Date("2026-06-03T10:00:00.000Z"),
+            quantity: { toString: () => "1" },
+            unitPrice: { toString: () => "5" },
+            discountAmount: { toString: () => "0" },
+            taxAmount: { toString: () => "0" },
+            lineSubtotalAmount: { toString: () => "5" },
+            lineAmount: { toString: () => "5" },
+            revenueAccountId: "rev-1",
+            taxId: null,
+            item: null,
+            warehouse: null,
+          },
+        ],
+        subtotalAmount: { toString: () => "5" },
+        discountAmount: { toString: () => "0" },
+        taxAmount: { toString: () => "0" },
+        totalAmount: { toString: () => "5" },
+        allocatedAmount: { toString: () => "0" },
+        outstandingAmount: { toString: () => "0" },
+        allocationStatus: "UNALLOCATED",
+        status: "DRAFT",
+        invoiceDate: new Date("2026-06-03T10:00:00.000Z"),
+        currencyCode: "JOD",
+        posPayments: [],
+        posSession: null,
+        customer: null,
+        table: { id: "t1", tableNumber: "T1", status: "OCCUPIED" },
+        waiter: null,
+        deliveryCompany: null,
+        driver: null,
+        journalEntry: null,
+        createdAt: new Date("2026-06-03T10:00:00.000Z"),
+        updatedAt: new Date("2026-06-03T10:00:00.000Z"),
+      });
+
+      await service.sendSaleToKitchen("inv1", cashierUser);
+
+      expect(prismaMock.salesInvoice.update).toHaveBeenCalledWith({
+        where: { id: "inv1" },
+        data: { posOperationalStatus: PosOperationalStatus.HELD },
+      });
+      expect(prismaMock.posTable.update).toHaveBeenCalledWith({
+        where: { id: "t1" },
+        data: {
+          status: TableStatus.OCCUPIED,
+          activeInvoiceId: "inv1",
+        },
+      });
+    });
+
+    it("rejects cashier saveDraft after waiter confirmed the order", async () => {
       const salesReceivablesMock = {
         resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
           { itemId: "item2", quantity: 1 },
@@ -1016,7 +1103,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         isActive: true,
       });
       prismaMock.kitchenOrder.findUnique.mockResolvedValue({
-        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.READY }],
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.NEW }],
       });
       prismaMock.salesInvoice.findUnique.mockResolvedValue({
         id: "inv1",
@@ -1024,7 +1111,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         posSessionId: "s1",
         posOperationalStatus: "DRAFT",
         journalEntryId: null,
-        waiterConfirmedAt: null,
+        waiterConfirmedAt: new Date(),
         lines: [
           {
             id: "line1",
@@ -1044,10 +1131,10 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           } as any,
           cashierUser,
         ),
-      ).rejects.toThrow("ready or served");
+      ).rejects.toThrow("confirmed by the waiter");
     });
 
-    it("rejects any cart change when the order already has a kitchen-ready line", async () => {
+    it("rejects any cart change when waiter already confirmed the dine-in order", async () => {
       const salesReceivablesMock = {
         resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
           { salesInvoiceLineId: "line1", itemId: "item1", quantity: 3 },
@@ -1082,7 +1169,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         isActive: true,
       });
       prismaMock.kitchenOrder.findUnique.mockResolvedValue({
-        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.READY }],
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.NEW }],
       });
       prismaMock.salesInvoice.findUnique.mockResolvedValue({
         id: "inv1",
@@ -1090,7 +1177,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         posSessionId: "s1",
         posOperationalStatus: "DRAFT",
         journalEntryId: null,
-        waiterConfirmedAt: null,
+        waiterConfirmedAt: new Date(),
         lines: [
           {
             id: "line1",
@@ -1119,7 +1206,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           } as any,
           cashierUser,
         ),
-      ).rejects.toThrow("kitchen-ready items");
+      ).rejects.toThrow("confirmed by the waiter");
     });
 
     it("updates kept lines to tax-free when taxFreeEnabled is true", async () => {

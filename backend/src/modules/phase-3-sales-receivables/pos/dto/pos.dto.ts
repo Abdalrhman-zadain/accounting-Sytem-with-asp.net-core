@@ -26,6 +26,7 @@ import {
   DeliveryCollectionMethod,
   TableStatus,
   KitchenStatus,
+  WaiterFoodStatus,
 } from "../../../../generated/prisma";
 import { SalesLineDto } from "../../dto/sales-receivables.dto";
 
@@ -433,6 +434,11 @@ export class UpdateKitchenOrderStatusDto {
 export class UpdateKitchenOrderItemStatusDto {
   @IsEnum(KitchenStatus)
   status!: KitchenStatus;
+}
+
+export class UpdateWaiterOrderStatusDto {
+  @IsEnum(WaiterFoodStatus)
+  status!: WaiterFoodStatus;
 }
 
 export class TransferTableDto {
