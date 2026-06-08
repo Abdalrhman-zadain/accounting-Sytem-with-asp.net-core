@@ -26,6 +26,7 @@ import {
   getActivePosSession,
   getDraftPosSales,
   getInventoryItems,
+  getPosAddonCatalog,
   getPosItemAddonConfig,
   getPosTables,
   savePosDraft,
@@ -135,6 +136,23 @@ export function PosWaiterOrderPage() {
     enabled: Boolean(token && sessionQuery.data?.warehouse.id),
   });
 
+  const visibleItemIds = React.useMemo(
+    () => (itemsQuery.data?.data ?? []).map((item) => item.id).filter(Boolean),
+    [itemsQuery.data],
+  );
+
+  const visibleItemIdsKey = React.useMemo(
+    () => [...visibleItemIds].sort().join(","),
+    [visibleItemIds],
+  );
+
+  const addonCatalogQuery = useQuery({
+    queryKey: ["waiter-addon-catalog", token, visibleItemIdsKey],
+    queryFn: () => getPosAddonCatalog(visibleItemIds, token),
+    enabled: Boolean(token && sessionQuery.data?.warehouse.id && visibleItemIds.length),
+    staleTime: 30_000,
+  });
+
   const draftsQuery = useQuery({
     queryKey: ["pos-drafts", token, sessionQuery.data?.id, tableId],
     queryFn: () => getDraftPosSales(sessionQuery.data!.id, token),
@@ -174,6 +192,17 @@ export function PosWaiterOrderPage() {
         (item.barcode?.toLowerCase().includes(q) ?? false),
     );
   }, [itemsQuery.data, search]);
+
+  const addonCatalogByItemId = React.useMemo(
+    () =>
+      new Map(
+        (addonCatalogQuery.data?.items ?? []).map((itemConfig) => [
+          itemConfig.itemId,
+          itemConfig,
+        ]),
+      ),
+    [addonCatalogQuery.data],
+  );
 
   const currencyCode =
     sessionQuery.data?.cashAccount.currencyCode ??
@@ -285,12 +314,19 @@ export function PosWaiterOrderPage() {
       setNotice(isAr ? "لا توجد وردية مفتوحة — اطلب من الكاشير فتح وردية" : "No open session — ask cashier to open shift.");
       return;
     }
+    const cachedConfig = addonCatalogByItemId.get(item.id);
+    if (cachedConfig) {
+      setAddonModalItem(item);
+      setAddonModalConfig(cachedConfig);
+      return;
+    }
     try {
       const config = await getPosItemAddonConfig(item.id, token);
       setAddonModalItem(item);
       setAddonModalConfig(config);
       return;
-    } catch {
+    } catch (error) {
+      setNotice(getErrorMessage(error, isAr ? "تعذر تحميل الإضافات" : "Could not load add-ons."));
       setAddonModalItem(item);
       setAddonModalConfig({ itemId: item.id, groups: [] });
     }

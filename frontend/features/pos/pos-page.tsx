@@ -111,6 +111,7 @@ import {
   updateDeliveryStatus,
   getPosWaiters,
   getJournalEntryById,
+  getPosAddonCatalog,
   getPosItemAddonConfig,
   getInventoryItemGroups,
 } from "@/lib/api";
@@ -1140,6 +1141,28 @@ export function PosPage() {
     placeholderData: (previousData) => previousData,
   });
 
+  const visibleItemIds = useMemo(
+    () => (itemsQuery.data?.data ?? []).map((item) => item.id).filter(Boolean),
+    [itemsQuery.data],
+  );
+
+  const visibleItemIdsKey = useMemo(
+    () => [...visibleItemIds].sort().join(","),
+    [visibleItemIds],
+  );
+
+  const addonCatalogQuery = useQuery({
+    queryKey: queryKeys.posAddonCatalog(token, visibleItemIdsKey),
+    queryFn: () => getPosAddonCatalog(visibleItemIds, token),
+    enabled: Boolean(
+      token &&
+      workspace === "sales" &&
+      activeSessionQuery.data?.id &&
+      visibleItemIds.length,
+    ),
+    staleTime: 30_000,
+  });
+
   const settingsQuery = useQuery({
     queryKey: queryKeys.posSettings(token),
     queryFn: () => getPosSettings(token),
@@ -1856,6 +1879,16 @@ export function PosPage() {
   });
 
   const items = itemsQuery.data?.data ?? [];
+  const addonCatalogByItemId = useMemo(
+    () =>
+      new Map(
+        (addonCatalogQuery.data?.items ?? []).map((itemConfig) => [
+          itemConfig.itemId,
+          itemConfig,
+        ]),
+      ),
+    [addonCatalogQuery.data],
+  );
   const warehouses = warehousesQuery.data ?? [];
   const paymentAccounts = paymentAccountsQuery.data ?? [];
   const activeSession = activeSessionQuery.data;
@@ -2767,13 +2800,26 @@ export function PosPage() {
       pushError(getOrderKitchenLockMessage(language));
       return;
     }
+    const cachedConfig = addonCatalogByItemId.get(item.id);
+    if (cachedConfig) {
+      setAddonModalItem(item);
+      setAddonModalConfig(cachedConfig);
+      setAddonEditLine(null);
+      return;
+    }
     try {
       const config = await getPosItemAddonConfig(item.id, token);
       setAddonModalItem(item);
       setAddonModalConfig(config);
       setAddonEditLine(null);
       return;
-    } catch {
+    } catch (error) {
+      pushMessage(
+        getErrorMessage(
+          error,
+          getLocalizedText("Could not load add-ons / تعذر تحميل الإضافات", language),
+        ),
+      );
       setAddonModalItem(item);
       setAddonModalConfig({ itemId: item.id, groups: [] });
       setAddonEditLine(null);
@@ -2787,13 +2833,25 @@ export function PosPage() {
     }
     const item = items.find((row) => row.id === line.itemId);
     if (!item) return;
+    const cachedConfig = addonCatalogByItemId.get(item.id);
+    if (cachedConfig) {
+      setAddonModalItem(item);
+      setAddonModalConfig(cachedConfig);
+      setAddonEditLine(line);
+      return;
+    }
     try {
       const config = await getPosItemAddonConfig(item.id, token);
       setAddonModalItem(item);
       setAddonModalConfig(config);
       setAddonEditLine(line);
-    } catch {
-      pushMessage(getLocalizedText("Could not load add-ons / تعذر تحميل الإضافات", language));
+    } catch (error) {
+      pushMessage(
+        getErrorMessage(
+          error,
+          getLocalizedText("Could not load add-ons / تعذر تحميل الإضافات", language),
+        ),
+      );
     }
   };
 

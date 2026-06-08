@@ -3,7 +3,7 @@
 import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { LuChevronDown, LuChevronRight, LuPlus } from "react-icons/lu";
+import { LuCheck, LuChevronDown, LuChevronRight, LuPlus } from "react-icons/lu";
 
 import { Card } from "@/components/ui";
 import type { PosAddonGroup, PosAddonSelectionType } from "@/features/pos/pos-addon-types";
@@ -45,8 +45,8 @@ export function PosAddonAdminPanel() {
   });
 
   const itemsQuery = useQuery({
-    queryKey: queryKeys.inventoryItems(token, { isActive: "true", page: 1, limit: 500 }),
-    queryFn: () => getInventoryItems({ isActive: "true", page: 1, limit: 500 }, token),
+    queryKey: queryKeys.inventoryItems(token, { isActive: "true", page: 1, limit: 100 }),
+    queryFn: () => getInventoryItems({ isActive: "true", page: 1, limit: 100 }, token),
     enabled: Boolean(token),
   });
 
@@ -116,6 +116,21 @@ export function PosAddonAdminPanel() {
 
   const items = itemsQuery.data?.data ?? [];
   const groups = groupsQuery.data ?? [];
+  const productSelectPlaceholder = itemsQuery.isLoading
+    ? isAr
+      ? "جاري تحميل المنتجات..."
+      : "Loading products..."
+    : itemsQuery.isError
+      ? isAr
+        ? "تعذر تحميل المنتجات"
+        : "Failed to load products"
+      : items.length === 0
+        ? isAr
+          ? "لا توجد منتجات نشطة لربط الإضافات بها"
+          : "No active products available for add-ons"
+        : isAr
+          ? "اختر منتجاً..."
+          : "Select a product...";
 
   return (
     <div className="space-y-6">
@@ -300,42 +315,62 @@ export function PosAddonAdminPanel() {
                 dir={isAr ? "rtl" : "ltr"}
                 value={selectedItemId}
                 onChange={(e) => setSelectedItemId(e.target.value)}
+                disabled={itemsQuery.isLoading || itemsQuery.isError || items.length === 0}
                 className={cn(
-                  "h-11 w-full max-w-xl rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2 text-sm font-bold text-[#233329] outline-none transition-colors focus:border-[#46644b]",
+                  "h-11 w-full max-w-xl rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2 text-sm font-bold text-[#233329] outline-none transition-colors focus:border-[#46644b] disabled:cursor-not-allowed disabled:opacity-70",
                   isAr ? "text-right arabic-auto" : "text-left",
                 )}
               >
-                <option value="">{isAr ? "اختر منتجاً…" : "Select a product…"}</option>
+                <option value="">{productSelectPlaceholder}</option>
                 {items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.code} — {item.name}
                   </option>
                 ))}
               </select>
+              {!itemsQuery.isLoading && !itemsQuery.isError && items.length === 0 ? (
+                <p className="text-sm text-[#64736b] arabic-auto">
+                  {isAr
+                    ? "هذه القائمة تعرض المنتجات النشطة فقط. أنشئ منتجاً من بطاقة الأصناف أو أعد تشغيل البذور التي تحتوي على كتالوج POS."
+                    : "This list shows active inventory items only. Create an item in Item Master or reseed the POS demo catalog."}
+                </p>
+              ) : null}
 
               {selectedItemId ? (
-                <div className="flex flex-wrap gap-2">
-                  {groups
-                    .filter((g) => g.isActive !== false)
-                    .map((group) => {
-                      const assigned = itemConfigQuery.data?.groups.some((g) => g.id === group.id);
-                      return (
-                        <button
-                          key={group.id}
-                          type="button"
-                          onClick={() => toggleGroupOnItem(group.id)}
-                          disabled={assignMutation.isPending}
-                          className={cn(
-                            "min-h-[44px] rounded-xl border px-4 py-2 text-sm font-bold transition",
-                            assigned
-                              ? "border-[#0f8f67] bg-[#e6f4ea] text-[#0f8f67]"
-                              : "border-[#d4ddd7] bg-white text-[#64736b] hover:bg-[#fbfcfb]",
-                          )}
-                        >
-                          {group.name}
-                        </button>
-                      );
-                    })}
+                <div className="space-y-3">
+                  <p className="text-sm text-[#64736b] arabic-auto">
+                    {itemConfigQuery.isLoading
+                      ? isAr
+                        ? "جاري تحميل المجموعات المرتبطة بهذا المنتج..."
+                        : "Loading assigned groups for this product..."
+                      : isAr
+                        ? `اضغط على مجموعات الإضافات أدناه لربطها بهذا المنتج أو فك الربط عنه. الأخضر = مربوط. الحالي: ${itemConfigQuery.data?.groups.length ?? 0} مجموعة`
+                        : `Tap the add-on groups below to assign or unassign them for this product. Green = assigned. Current: ${itemConfigQuery.data?.groups.length ?? 0} group(s)`}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {groups
+                      .filter((g) => g.isActive !== false)
+                      .map((group) => {
+                        const assigned = itemConfigQuery.data?.groups.some((g) => g.id === group.id);
+                        return (
+                          <button
+                            key={group.id}
+                            type="button"
+                            onClick={() => toggleGroupOnItem(group.id)}
+                            disabled={assignMutation.isPending}
+                            className={cn(
+                              "inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60",
+                              assigned
+                                ? "border-[#0f8f67] bg-[#e6f4ea] text-[#0f8f67]"
+                                : "border-[#d4ddd7] bg-white text-[#64736b] hover:bg-[#fbfcfb]",
+                            )}
+                          >
+                            {assigned ? <LuCheck className="h-4 w-4" /> : null}
+                            {group.name}
+                          </button>
+                        );
+                      })}
+                  </div>
                 </div>
               ) : null}
             </div>
