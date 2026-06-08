@@ -123,6 +123,20 @@ cd backend
 npm run db:up
 ```
 
+### Database Backup
+
+Create a PostgreSQL backup file from the project root:
+
+```bash
+./backup-db.sh
+```
+
+Optionally pass a custom output path:
+
+```bash
+./backup-db.sh backups/my-manual-backup.dump
+```
+
 ### Backend Setup Commands
 
 Use these after dependency or schema changes:

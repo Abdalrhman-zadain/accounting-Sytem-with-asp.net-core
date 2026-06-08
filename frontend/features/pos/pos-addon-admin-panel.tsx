@@ -153,18 +153,30 @@ export function PosAddonAdminPanel() {
                 value={newGroupCode}
                 onChange={(e) => setNewGroupCode(e.target.value)}
                 placeholder={isAr ? "رمز" : "Code"}
-                className="h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b] transition-colors"
+                dir={isAr ? "rtl" : "ltr"}
+                className={cn(
+                  "h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-semibold text-[#233329] outline-none transition-colors focus:border-[#46644b]",
+                  isAr ? "text-right arabic-auto" : "text-left",
+                )}
               />
               <input
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 placeholder={isAr ? "اسم المجموعة" : "Group name"}
-                className="h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b] transition-colors md:col-span-2"
+                dir={isAr ? "rtl" : "ltr"}
+                className={cn(
+                  "h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-semibold text-[#233329] outline-none transition-colors focus:border-[#46644b] md:col-span-2",
+                  isAr ? "text-right arabic-auto" : "text-left",
+                )}
               />
               <select
+                dir={isAr ? "rtl" : "ltr"}
                 value={newGroupType}
                 onChange={(e) => setNewGroupType(e.target.value as PosAddonSelectionType)}
-                className="h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-bold text-[#233329] outline-none focus:border-[#46644b] transition-colors"
+                className={cn(
+                  "h-11 rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 text-sm font-bold text-[#233329] outline-none transition-colors focus:border-[#46644b]",
+                  isAr ? "text-right arabic-auto" : "text-left",
+                )}
               >
                 <option value="SINGLE">{isAr ? "اختيار واحد" : "Single"}</option>
                 <option value="MULTIPLE">{isAr ? "متعدد" : "Multiple"}</option>
@@ -280,14 +292,18 @@ export function PosAddonAdminPanel() {
 
             <hr className="border-[#e1e7e2]" />
 
-            <div className="space-y-4">
-              <h3 className="text-xl font-black text-[#233329] arabic-heading">
+            <div className={cn("space-y-4", isAr && "text-right")}>
+              <h3 className={cn("text-xl font-black text-[#233329] arabic-heading", isAr && "text-right")}>
                 {isAr ? "ربط الإضافات بمنتج" : "Assign add-ons to a product"}
               </h3>
               <select
+                dir={isAr ? "rtl" : "ltr"}
                 value={selectedItemId}
                 onChange={(e) => setSelectedItemId(e.target.value)}
-                className="h-11 w-full max-w-xl rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2 text-sm font-bold text-[#233329] outline-none focus:border-[#46644b] transition-colors"
+                className={cn(
+                  "h-11 w-full max-w-xl rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2 text-sm font-bold text-[#233329] outline-none transition-colors focus:border-[#46644b]",
+                  isAr ? "text-right arabic-auto" : "text-left",
+                )}
               >
                 <option value="">{isAr ? "اختر منتجاً…" : "Select a product…"}</option>
                 {items.map((item) => (
