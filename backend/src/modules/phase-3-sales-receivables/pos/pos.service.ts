@@ -5105,7 +5105,7 @@ export class PosService {
       ),
       taxFreeEnabled: this.parseBoolean(
         overrides.get("POS_TAX_FREE_ENABLED") ?? process.env.POS_TAX_FREE_ENABLED,
-        false,
+        true,
       ),
     };
   }
