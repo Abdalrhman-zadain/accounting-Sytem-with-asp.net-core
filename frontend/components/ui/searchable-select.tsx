@@ -16,6 +16,7 @@ interface SearchableSelectProps {
   className?: string;
   placeholder?: string;
   searchPlaceholder?: string;
+  disabled?: boolean;
 }
 
 export function SearchableSelect({
@@ -25,6 +26,7 @@ export function SearchableSelect({
   className,
   placeholder = "Select...",
   searchPlaceholder = "Search...",
+  disabled = false,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -53,8 +55,12 @@ export function SearchableSelect({
   return (
     <div className={cn("relative", className)} ref={containerRef}>
       <div
-        className="flex h-full w-full cursor-pointer items-center justify-between"
+        className={cn(
+          "flex h-full w-full items-center justify-between",
+          disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"
+        )}
         onClick={() => {
+          if (disabled) return;
           setIsOpen(!isOpen);
           if (!isOpen) setSearchTerm("");
         }}
@@ -65,7 +71,7 @@ export function SearchableSelect({
         <LuChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </div>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div className="absolute z-50 mt-1 max-h-60 w-full min-w-full overflow-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg ltr:left-0 rtl:right-0">
           <div className="sticky top-0 mb-1 flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5">
             <LuSearch className="mr-2 h-4 w-4 shrink-0 text-gray-500" />

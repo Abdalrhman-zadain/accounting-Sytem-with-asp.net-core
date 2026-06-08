@@ -16,6 +16,7 @@ import {
   LuNotebook,
   LuDollarSign,
   LuTriangleAlert,
+  LuPlus,
 } from "react-icons/lu";
 
 import { Button } from "@/components/ui";
@@ -23,7 +24,13 @@ import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import { getSuppliers } from "@/lib/api";
+import {
+  getSuppliers,
+  getPosAddonGroupsAdmin,
+  getPosItemAddonConfig,
+  setPosItemAddonGroups,
+} from "@/lib/api";
+import type { PosAddonGroup } from "@/features/pos/pos-addon-types";
 import type {
   InventoryItem,
   InventoryItemCategory,
@@ -386,6 +393,11 @@ export function ItemEditorModal({
   const [localErrors, setLocalErrors] = useState<FormErrors>({});
   const [pendingFocusField, setPendingFocusField] = useState<keyof FormErrors | null>(null);
 
+  const [addonGroups, setAddonGroups] = useState<PosAddonGroup[]>([]);
+  const [linkedGroups, setLinkedGroups] = useState<PosAddonGroup[]>([]);
+  const [isAddonLoading, setIsAddonLoading] = useState(false);
+  const [addonError, setAddonError] = useState<string | null>(null);
+
   const clearFieldError = (field: keyof FormErrors) => {
     if (localErrors[field]) {
       setLocalErrors((prev) => {
@@ -595,6 +607,61 @@ export function ItemEditorModal({
     }
   }, [token]);
 
+  useEffect(() => {
+    if (activeTab === "pos_addons" && editor.id && token) {
+      setIsAddonLoading(true);
+      setAddonError(null);
+      Promise.all([
+        getPosAddonGroupsAdmin(token),
+        getPosItemAddonConfig(editor.id, token),
+      ])
+        .then(([allGroups, config]) => {
+          setAddonGroups(allGroups || []);
+          setLinkedGroups(config?.groups || []);
+        })
+        .catch((err) => {
+          console.error("Failed to load addons mapping", err);
+          setAddonError(isArabic ? "فشل تحميل إعدادات الإضافات" : "Failed to load add-ons configuration");
+        })
+        .finally(() => {
+          setIsAddonLoading(false);
+        });
+    }
+  }, [activeTab, editor.id, token, isArabic]);
+
+  const handleLinkGroup = async (groupId: string) => {
+    if (!editor.id || !token) return;
+    setAddonError(null);
+    try {
+      const currentIds = linkedGroups.map((g) => g.id);
+      if (currentIds.includes(groupId)) return;
+      const nextIds = [...currentIds, groupId];
+      const res = await setPosItemAddonGroups(editor.id, { groupIds: nextIds }, token);
+      setLinkedGroups(res?.groups || []);
+    } catch (err) {
+      console.error("Failed to link addon group", err);
+      setAddonError(isArabic ? "فشل ربط مجموعة الإضافات" : "Failed to link add-on group");
+    }
+  };
+
+  const handleUnlinkGroup = async (groupId: string) => {
+    if (!editor.id || !token) return;
+    setAddonError(null);
+    try {
+      const nextIds = linkedGroups.map((g) => g.id).filter((id) => id !== groupId);
+      const res = await setPosItemAddonGroups(editor.id, { groupIds: nextIds }, token);
+      setLinkedGroups(res?.groups || []);
+    } catch (err) {
+      console.error("Failed to unlink addon group", err);
+      setAddonError(isArabic ? "فشل إلغاء ربط مجموعة الإضافات" : "Failed to unlink add-on group");
+    }
+  };
+
+  const linkableGroups = useMemo(() => {
+    const linkedIds = linkedGroups.map((g) => g.id);
+    return addonGroups.filter((g) => g.isActive !== false && !linkedIds.includes(g.id));
+  }, [addonGroups, linkedGroups]);
+
   // Safeguard against active tab being hidden when type changes
   useEffect(() => {
     if (editor.type === "SERVICE" && activeTab === "inventory") {
@@ -683,6 +750,7 @@ export function ItemEditorModal({
     { id: "tax", labelAr: "الضريبة", labelEn: "Tax", icon: LuPercent },
     { id: "suppliers", labelAr: "الموردين", labelEn: "Suppliers", icon: LuTruck },
     { id: "images_attachments", labelAr: "الصور والمرفقات", labelEn: "Images & Attachments", icon: ImageIcon },
+    { id: "pos_addons", labelAr: "إضافات نقاط البيع", labelEn: "POS Add-ons", icon: LuPlus, hide: !editor.sellable || !editor.id },
     { id: "notes", labelAr: "ملاحظات", labelEn: "Notes", icon: LuNotebook },
   ];
 
@@ -1806,6 +1874,139 @@ export function ItemEditorModal({
                       </Field>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Tab 8: pos_addons */}
+              {activeTab === "pos_addons" && editor.id && (
+                <div className="space-y-5 animate-fadeIn">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <LuPlus className="h-5 w-5 text-emerald-600" />
+                      <h3 className="font-bold text-slate-900">
+                        {isArabic ? "مجموعات إضافات نقاط البيع" : "POS Add-on Groups"}
+                      </h3>
+                    </div>
+
+                    <p className={cn("text-sm text-slate-500 mb-6", isArabic ? "text-right" : "text-left")}>
+                      {isArabic
+                        ? "اربط مجموعات الإضافات النشطة بهذا المنتج. ستظهر هذه الإضافات للكاشير عند إضافة المنتج للسلة."
+                        : "Link active add-on groups to this product. These add-ons will be presented to the cashier when adding this item to the cart."}
+                    </p>
+
+                    {addonError && (
+                      <div className={cn("mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-semibold text-red-700", isArabic ? "text-right" : "text-left")}>
+                        {addonError}
+                      </div>
+                    )}
+
+                    {isAddonLoading ? (
+                      <div className="py-12 text-center text-sm text-slate-400">
+                        {isArabic ? "جاري التحميل..." : "Loading..."}
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {/* Dropdown to add link */}
+                        <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-end", isArabic ? "sm:flex-row-reverse" : "")}>
+                          <div className="flex-1">
+                            <Field
+                              label={isArabic ? "اختر مجموعة إضافات لربطها" : "Select Add-on Group to Link"}
+                              labelAlign={isArabic ? "end" : "start"}
+                            >
+                              <Select
+                                value=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleLinkGroup(e.target.value);
+                                  }
+                                }}
+                                className={cn("bg-white border-slate-200", isArabic ? "text-right" : "text-left")}
+                              >
+                                <option value="">
+                                  {isArabic ? "-- اختر مجموعة إضافات نشطة --" : "-- Select Active Add-on Group --"}
+                                </option>
+                                {linkableGroups.map((g) => (
+                                  <option key={g.id} value={g.id}>
+                                    {g.code} — {isArabic ? (g.nameAr || g.name) : g.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </div>
+                        </div>
+
+                        {/* Linked Groups List */}
+                        <div className="space-y-3">
+                          <h4 className={cn("text-sm font-bold text-slate-900", isArabic ? "text-right" : "text-left")}>
+                            {isArabic ? "مجموعات الإضافات المرتبطة حالياً" : "Currently Linked Add-on Groups"}
+                          </h4>
+
+                          {linkedGroups.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+                              {isArabic
+                                ? "لا توجد مجموعات إضافات مرتبطة بهذا المنتج حالياً."
+                                : "No add-on groups are linked to this product currently."}
+                            </div>
+                          ) : (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {linkedGroups.map((group) => (
+                                <div
+                                  key={group.id}
+                                  className={cn(
+                                    "flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 transition hover:bg-slate-50",
+                                    isArabic ? "flex-row-reverse" : ""
+                                  )}
+                                >
+                                  <div className={cn("min-w-0 space-y-1", isArabic ? "text-right" : "text-left")}>
+                                    <div className="font-bold text-slate-900">
+                                      {isArabic ? (group.nameAr || group.name) : group.name}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 text-xs text-slate-500">
+                                      <span className="font-mono bg-slate-100 px-1 py-0.5 rounded">
+                                        {group.code}
+                                      </span>
+                                      <span>•</span>
+                                      <span>
+                                        {group.selectionType === "SINGLE"
+                                          ? (isArabic ? "اختيار واحد" : "Single Choice")
+                                          : (isArabic ? "اختيار متعدد" : "Multiple Choice")}
+                                      </span>
+                                      {group.isRequired && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="font-semibold text-red-600">
+                                            {isArabic ? "إجباري" : "Required"}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleUnlinkGroup(group.id)}
+                                    className="h-8 w-8 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "pos_addons" && !editor.id && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500">
+                  {isArabic
+                    ? "الرجاء حفظ المنتج أولاً قبل ربط مجموعات الإضافات."
+                    : "Please save the product first before linking add-on groups."}
                 </div>
               )}
             </div>

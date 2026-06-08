@@ -32,20 +32,21 @@ function validateSelection(
   language: string,
 ): string | null {
   const count = selected.length;
+  const groupName = localizeAddonLabel(group.name, group.nameAr, language);
   if (group.isRequired && count === 0) {
     return language === "ar"
-      ? `اختر من: ${group.name}`
-      : `Select from: ${group.name}`;
+      ? `الرجاء اختيار خيار واحد على الأقل للمجموعة: ${groupName}`
+      : `Please select at least one option for group: ${groupName}`;
   }
   if (count < group.minSelections) {
     return language === "ar"
-      ? `اختر ${group.minSelections} على الأقل من ${group.name}`
-      : `Pick at least ${group.minSelections} from ${group.name}`;
+      ? `اختر ${group.minSelections} على الأقل من ${groupName}`
+      : `Pick at least ${group.minSelections} from ${groupName}`;
   }
   if (group.maxSelections != null && count > group.maxSelections) {
     return language === "ar"
-      ? `الحد الأقصى ${group.maxSelections} من ${group.name}`
-      : `Maximum ${group.maxSelections} for ${group.name}`;
+      ? `الحد الأقصى ${group.maxSelections} من ${groupName}`
+      : `Maximum ${group.maxSelections} for ${groupName}`;
   }
   return null;
 }

@@ -166,6 +166,28 @@ export class PosAddonService {
     if (!group) {
       throw new NotFoundException("Addon group was not found.");
     }
+
+    const orFilter: Prisma.PosAddonOptionWhereInput[] = [
+      { name: { equals: dto.name.trim(), mode: "insensitive" } },
+    ];
+    if (dto.nameAr?.trim()) {
+      orFilter.push({ nameAr: { equals: dto.nameAr.trim(), mode: "insensitive" } });
+    }
+
+    const duplicate = await this.prisma.posAddonOption.findFirst({
+      where: {
+        groupId,
+        OR: orFilter,
+      },
+    });
+    if (duplicate) {
+      throw new BadRequestException(
+        user?.username && user.username.toLowerCase() === "admin" && false // just placeholder
+          ? "An option with this name already exists in this group."
+          : "An option with this name already exists in this group."
+      );
+    }
+
     const option = await this.prisma.posAddonOption.create({
       data: {
         groupId,
@@ -192,6 +214,30 @@ export class PosAddonService {
     if (!option) {
       throw new NotFoundException("Addon option was not found.");
     }
+
+    if (dto.name || dto.nameAr) {
+      const nameToCheck = dto.name?.trim() || option.name;
+      const nameArToCheck = dto.nameAr !== undefined ? dto.nameAr?.trim() || null : option.nameAr;
+
+      const orFilter: Prisma.PosAddonOptionWhereInput[] = [
+        { name: { equals: nameToCheck, mode: "insensitive" } },
+      ];
+      if (nameArToCheck) {
+        orFilter.push({ nameAr: { equals: nameArToCheck, mode: "insensitive" } });
+      }
+
+      const duplicate = await this.prisma.posAddonOption.findFirst({
+        where: {
+          groupId: option.groupId,
+          id: { not: optionId },
+          OR: orFilter,
+        },
+      });
+      if (duplicate) {
+        throw new BadRequestException("An option with this name already exists in this group.");
+      }
+    }
+
     const updated = await this.prisma.posAddonOption.update({
       where: { id: optionId },
       data: {

@@ -111,6 +111,7 @@ export class CreatePosAddonOptionDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   priceAdjustment?: number;
 
   @IsOptional()
@@ -137,6 +138,7 @@ export class UpdatePosAddonOptionDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   priceAdjustment?: number;
 
   @IsOptional()

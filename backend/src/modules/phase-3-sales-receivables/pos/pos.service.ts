@@ -3051,10 +3051,12 @@ export class PosService {
   }
 
   assertPosAddonAdminPermission(user?: AuthorizedUser) {
+    if (user?.role === "ADMIN" || user?.role === "MANAGER") return;
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
   }
 
   assertPosAddonReadPermission(user?: AuthorizedUser) {
+    if (user?.role === "ADMIN" || user?.role === "MANAGER") return;
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
   }
 
