@@ -6488,13 +6488,13 @@ function SettingToggleCard({
   onToggle?: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-[24px] border border-[#e1e7e2] bg-white p-6 shadow-sm transition-all hover:border-[#c5d0c9]">
-      <div className="font-bold text-[#233329] text-lg">{label}</div>
+    <div className="flex items-center justify-between rounded-[20px] border border-[#e1e7e2] bg-[#fbfcfb] p-5 transition-colors hover:bg-[#f6f7f8]">
+      <div className="font-bold text-[#233329] text-base">{label}</div>
       <div>
         {isToggle ? (
           <Switch checked={!!enabled} onChange={onToggle ?? (() => {})} />
         ) : (
-          <div className="text-lg font-black tracking-wider text-[#46644b]">{value}</div>
+          <div className="text-base font-black tracking-wider text-[#46644b]">{value}</div>
         )}
       </div>
     </div>
@@ -6735,6 +6735,7 @@ function SettingsWorkspace({
       delivery: true,
       posting: true
     });
+    const [isRuntimeExpanded, setIsRuntimeExpanded] = useState(true);
     const { language } = useTranslation();
     const isArabic = language === "ar";
 
@@ -6906,17 +6907,30 @@ function SettingsWorkspace({
 
     return (
       <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 py-6 md:px-8">
-        <PosAddonAdminPanel />
-
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-2xl font-black text-[#233329] arabic-heading">
-                {t("pos.workspace.settings")}
+          <div className="flex items-center justify-between">
+            <div 
+              className="flex-1 flex items-center justify-between cursor-pointer select-none"
+              onClick={() => setIsRuntimeExpanded(!isRuntimeExpanded)}
+            >
+              <div>
+                <div className="text-2xl font-black text-[#233329] arabic-heading flex items-center gap-2">
+                  {t("pos.workspace.settings")}
+                </div>
+                <p className="mt-2 text-sm text-[#64736b] arabic-auto">
+                  {t("pos.settings.description")}
+                </p>
               </div>
-              <p className="mt-2 text-sm text-[#64736b] arabic-auto">
-                {t("pos.settings.description")}
-              </p>
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-gray-100 transition-colors mr-4"
+              >
+                {isRuntimeExpanded ? (
+                  <LuChevronDown className="h-6 w-6 text-[#64736b]" />
+                ) : (
+                  <LuChevronRight className="h-6 w-6 text-[#64736b] rtl:rotate-180" />
+                )}
+              </button>
             </div>
             {(runtimeDirty || accountMappingsDirty) && (
               <button
@@ -6949,94 +6963,99 @@ function SettingsWorkspace({
                   })
                 }
                 disabled={isSavingRuntimeSettings}
-                className="flex items-center gap-2 rounded-full bg-[#0f8f67] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex items-center gap-2 rounded-full bg-[#0f8f67] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:cursor-not-allowed disabled:opacity-60 ml-4 rtl:mr-4 rtl:ml-0"
               >
                 <LuSave className="h-4 w-4" />
                 {isSavingRuntimeSettings ? t("pos.settings.saving") : t("pos.settings.saveRuntime")}
               </button>
             )}
           </div>
-        </Card>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="flex items-center justify-between rounded-[24px] border border-[#e1e7e2] bg-white p-6 shadow-sm transition-all hover:border-[#c5d0c9]">
-            <div>
-              <div className="font-bold text-[#233329] text-lg">{t("pos.settings.postingMode")}</div>
-              <div className="mt-1 text-sm text-[#64736b]">{t("pos.settings.postingMode.help")}</div>
-            </div>
-            <select
-              value={localRuntime.postingMode}
-              onChange={(event) =>
-                setLocalRuntime((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        postingMode: event.target.value as "BY_INVOICE" | "BY_SESSION",
-                      }
-                    : prev,
-                )
-              }
-              className="rounded-[16px] border border-[#d4ddd7] bg-[#fbfcfb] px-4 py-2.5 text-sm font-bold text-[#233329]"
-            >
-              <option value="BY_SESSION">{t("pos.settings.postingMode.BY_SESSION")}</option>
-              <option value="BY_INVOICE">{t("pos.settings.postingMode.BY_INVOICE")}</option>
-            </select>
-          </div>
-          <SettingToggleCard
-            label={t("pos.settings.cogsPostingEnabled")}
-            enabled={localRuntime.cogsPostingEnabled}
-            onToggle={() =>
-              setLocalRuntime((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      cogsPostingEnabled: !prev.cogsPostingEnabled,
+          {isRuntimeExpanded && (
+            <>
+              <hr className="my-6 border-[#e1e7e2]" />
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="flex items-center justify-between rounded-[20px] border border-[#e1e7e2] bg-[#fbfcfb] p-5 transition-colors hover:bg-[#f6f7f8]">
+                  <div>
+                    <div className="font-bold text-[#233329] text-base">{t("pos.settings.postingMode")}</div>
+                    <div className="mt-1 text-xs text-[#64736b]">{t("pos.settings.postingMode.help")}</div>
+                  </div>
+                  <select
+                    value={localRuntime.postingMode}
+                    onChange={(event) =>
+                      setLocalRuntime((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              postingMode: event.target.value as "BY_INVOICE" | "BY_SESSION",
+                            }
+                          : prev,
+                      )
                     }
-                  : prev,
-              )
-            }
-          />
-          <SettingToggleCard
-            label={t("pos.settings.taxFreeEnabled")}
-            enabled={localRuntime.taxFreeEnabled}
-            onToggle={() =>
-              setLocalRuntime((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      taxFreeEnabled: !prev.taxFreeEnabled,
-                    }
-                  : prev,
-              )
-            }
-          />
-          <SettingToggleCard
-            label={t("pos.settings.discountTaxPolicy")}
-            value={settings.runtime.invoiceDiscountTaxPolicy}
-            isToggle={false}
-          />
-          <SettingToggleCard
-            label={t("pos.settings.creditSale")}
-            enabled={settings.runtime.allowCreditSale}
-          />
-          <SettingToggleCard
-            label={t("pos.settings.autoPost")}
-            enabled={settings.runtime.autoPost}
-          />
-          <SettingToggleCard
-            label={t("pos.settings.allowCloseWithDrafts")}
-            enabled={settings.runtime.allowCloseWithDrafts}
-          />
-          <SettingToggleCard
-            label={t("pos.settings.negativeStock")}
-            enabled={settings.runtime.negativeStockAllowed}
-          />
-          <SettingToggleCard
-            label={t("pos.settings.cashierDiscountLimit")}
-            value={`${settings.runtime.cashierDiscountLimitPercent}%`}
-            isToggle={false}
-          />
-        </div>
+                    className="rounded-[12px] border border-[#d4ddd7] bg-[#fbfcfb] px-3 py-2 text-sm font-bold text-[#233329] outline-none focus:border-[#46644b]"
+                  >
+                    <option value="BY_SESSION">{t("pos.settings.postingMode.BY_SESSION")}</option>
+                    <option value="BY_INVOICE">{t("pos.settings.postingMode.BY_INVOICE")}</option>
+                  </select>
+                </div>
+                <SettingToggleCard
+                  label={t("pos.settings.cogsPostingEnabled")}
+                  enabled={localRuntime.cogsPostingEnabled}
+                  onToggle={() =>
+                    setLocalRuntime((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            cogsPostingEnabled: !prev.cogsPostingEnabled,
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.taxFreeEnabled")}
+                  enabled={localRuntime.taxFreeEnabled}
+                  onToggle={() =>
+                    setLocalRuntime((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            taxFreeEnabled: !prev.taxFreeEnabled,
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.discountTaxPolicy")}
+                  value={settings.runtime.invoiceDiscountTaxPolicy}
+                  isToggle={false}
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.creditSale")}
+                  enabled={settings.runtime.allowCreditSale}
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.autoPost")}
+                  enabled={settings.runtime.autoPost}
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.allowCloseWithDrafts")}
+                  enabled={settings.runtime.allowCloseWithDrafts}
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.negativeStock")}
+                  enabled={settings.runtime.negativeStockAllowed}
+                />
+                <SettingToggleCard
+                  label={t("pos.settings.cashierDiscountLimit")}
+                  value={`${settings.runtime.cashierDiscountLimitPercent}%`}
+                  isToggle={false}
+                />
+              </div>
+            </>
+          )}
+        </Card>
 
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-0 overflow-hidden">
           <div className="flex flex-col gap-4 border-b border-[#e1e7e2] p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -7393,6 +7412,8 @@ function SettingsWorkspace({
             </table>
           </div>
         </Card>
+
+        <PosAddonAdminPanel />
 
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-0 overflow-hidden">
           <div className="flex flex-col gap-4 border-b border-[#e1e7e2] p-6 sm:flex-row sm:items-center sm:justify-between">
