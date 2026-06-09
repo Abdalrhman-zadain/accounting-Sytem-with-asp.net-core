@@ -52,6 +52,7 @@ const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { id: 'cmq5h0dqd01mvetf56a7ghpxo', itemCode: 'MENU-FOOD-010', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
   { id: 'cmq5h0kiv01mwetf54gze5jke', itemCode: 'MENU-FOOD-014', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5h0kiv01mxetf5q0u35fgs', itemCode: 'MENU-FOOD-014', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
+  { itemCode: 'MENU-FOOD-015', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5hnoul01yuetf59gbi3qm4', itemCode: 'MENU-FOOD-009', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5hnoul01yvetf5cp25nxji', itemCode: 'MENU-FOOD-009', groupCode: 'RICE_FRIKEH', sortOrder: 1 },
   { id: 'cmq5ho6mi01ywetf52xdbmqrv', itemCode: 'MENU-FOOD-008', groupCode: 'RICE_FRIKEH', sortOrder: 0 },
@@ -62,9 +63,9 @@ const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { id: 'cmq5hskf901z8etf57qgqvezg', itemCode: 'MENU-FATTAH-005', groupCode: 'S_W_K', sortOrder: 0 },
   { id: 'cmq5hw4xj01zwetf5bgvwdq21', itemCode: 'MENU-FATTAH-001', groupCode: 'S_W_K_F', sortOrder: 0 },
   { itemCode: 'MENU-MEAL-001', groupCode: 'COOKING_TYPE', sortOrder: 0 },
-  { itemCode: 'MENU-MEAL-001', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
+  { itemCode: 'MENU-MEAL-001', groupCode: 'YOGURT_ADDON_MEALS', sortOrder: 1 },
   { itemCode: 'MENU-MEAL-002', groupCode: 'COOKING_TYPE', sortOrder: 0 },
-  { itemCode: 'MENU-MEAL-002', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
+  { itemCode: 'MENU-MEAL-002', groupCode: 'YOGURT_ADDON_MEALS', sortOrder: 1 },
 ];
 
 const ADDON_GROUPS: AddonGroupSeed[] = [
@@ -154,6 +155,18 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     minSelections: 0,
     sortOrder: 0,
     options: [
+      { name: 'Add yogurt', nameAr: 'إضافة لبن', priceAdjustment: 0.5 },
+    ],
+  },
+  {
+    code: 'YOGURT_ADDON_MEALS',
+    name: 'Yogurt add-on (meals)',
+    nameAr: 'إضافة لبن للوجبات',
+    selectionType: PosAddonSelectionType.SINGLE,
+    isRequired: false,
+    minSelections: 0,
+    sortOrder: 1,
+    options: [
       { name: 'Add yogurt', nameAr: 'إضافة لبن', priceAdjustment: 1 },
     ],
   },
@@ -189,17 +202,16 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
   {
     id: 'cmq5htjrt01z9etf5pq8nd9bs',
     code: 'S_W_K_F',
-    name: 'Small, Medium, Large, Crumbs',
-    nameAr: 'صغير، وسط، كبير، فتات',
+    name: 'Small, Medium, Large',
+    nameAr: 'صغير، وسط، كبير',
     selectionType: PosAddonSelectionType.SINGLE,
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
     options: [
       { name: 'Small', nameAr: 'صغير', priceAdjustment: 0 },
-      { name: 'Medium', nameAr: 'وسط', priceAdjustment: 2.5 },
-      { name: 'Large', nameAr: 'كبير', priceAdjustment: 5 },
-      { name: 'Crumbs', nameAr: 'فتات', priceAdjustment: 0 },
+      { name: 'Medium', nameAr: 'وسط', priceAdjustment: 1 },
+      { name: 'Large', nameAr: 'كبير', priceAdjustment: 2 },
     ],
   },
   {
