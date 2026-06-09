@@ -1194,6 +1194,13 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
         description: 'مجموعة المشروبات في المنيو',
         isActive: true,
       },
+      {
+        id: 'GRP-MENU-MEALS',
+        code: 'MENU-MEALS',
+        name: 'الوجبات',
+        description: 'مجموعة الوجبات في المنيو',
+        isActive: true,
+      },
     ],
   });
 
@@ -1237,6 +1244,14 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
         name: 'المشروبات',
         description: 'فئة المشروبات في المنيو',
         itemGroupId: 'GRP-MENU-DRINKS',
+        isActive: true,
+      },
+      {
+        id: 'CAT-MENU-MEALS',
+        code: 'MENU-MEALS',
+        name: 'الوجبات',
+        description: 'فئة الوجبات في المنيو',
+        itemGroupId: 'GRP-MENU-MEALS',
         isActive: true,
       },
     ],
