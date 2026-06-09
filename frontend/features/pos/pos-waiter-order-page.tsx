@@ -57,6 +57,7 @@ type WaiterCartLine = {
   quantityPrecision?: number;
   quantity: number;
   unitPrice: number;
+  baseUnitPrice?: number;
   taxRate: number;
   trackInventory: boolean;
   warehouseId?: string | null;
@@ -113,7 +114,10 @@ function formatMoney(value: number, currency = "JOD") {
 }
 
 function computeLineMetrics(line: WaiterCartLine) {
-  const subtotal = line.quantity * line.unitPrice;
+  const addonTotal = sumAddonPrices(getAddonsFromModifiers(line.modifiers));
+  const subtotal = line.sellByWeight
+    ? line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal
+    : line.quantity * line.unitPrice;
   const taxAmount = subtotal * (line.taxRate / 100);
   return {
     subtotal: Number(subtotal.toFixed(2)),
@@ -147,6 +151,9 @@ function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
     quantityPrecision: line.item?.unitOfMeasureRef?.decimalPrecision ?? 3,
     quantity: parseAmount(line.quantity),
     unitPrice: parseAmount(line.unitPrice),
+    baseUnitPrice: Boolean(line.item?.allowFractionalQuantity)
+      ? parseAmount(line.unitPrice)
+      : parseAmount(line.unitPrice) - sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
     taxRate:
       parseAmount(line.lineSubtotalAmount) > 0
         ? (parseAmount(line.taxAmount) / parseAmount(line.lineSubtotalAmount)) * 100
@@ -283,18 +290,17 @@ export function PosWaiterOrderPage() {
 
   const buildLinesPayload = () =>
     cartLines.map((line) => {
-      const subtotal = line.quantity * line.unitPrice;
-      const taxAmount = subtotal * (line.taxRate / 100);
+      const metrics = computeLineMetrics(line);
       return {
         salesInvoiceLineId: line.salesInvoiceLineId,
         itemId: line.itemId,
         warehouseId: line.trackInventory && line.warehouseId ? line.warehouseId : undefined,
         itemName: line.name,
         quantity: line.quantity,
-        unitPrice: line.unitPrice,
+        unitPrice: line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
         discountAmount: 0,
-        taxAmount: Number(taxAmount.toFixed(2)),
-        lineAmount: Number((subtotal + taxAmount).toFixed(2)),
+        taxAmount: metrics.taxAmount,
+        lineAmount: metrics.total,
         description: line.lineNote?.trim() || undefined,
         modifiers: line.modifiers ?? undefined,
         revenueAccountId: line.salesAccountId ?? undefined,
@@ -361,7 +367,8 @@ export function PosWaiterOrderPage() {
     if (sellByWeight && quantity <= 0) {
       return;
     }
-    const unitPrice = parseAmount(item.defaultSalesPrice) + sumAddonPrices(addons);
+    const baseUnitPrice = parseAmount(item.defaultSalesPrice);
+    const unitPrice = sellByWeight ? baseUnitPrice : baseUnitPrice + sumAddonPrices(addons);
     const modifiers = buildModifiersPayload(addons);
     setCartLines((current) => {
       if (sellByWeight) {
@@ -375,6 +382,7 @@ export function PosWaiterOrderPage() {
             quantityPrecision: getQuantityPrecision(item),
             quantity,
             unitPrice,
+            baseUnitPrice,
             taxRate: parseAmount(item.defaultTax?.rate),
             trackInventory: Boolean(item.trackInventory),
             warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
@@ -408,6 +416,7 @@ export function PosWaiterOrderPage() {
           quantityPrecision: getQuantityPrecision(item),
           quantity,
           unitPrice,
+          baseUnitPrice,
           taxRate: parseAmount(item.defaultTax?.rate),
           trackInventory: Boolean(item.trackInventory),
           warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
@@ -593,7 +602,11 @@ export function PosWaiterOrderPage() {
                                 line.quantityPrecision ?? 3,
                               )
                             : line.quantity}{" "}
-                          × {formatMoney(line.unitPrice, currencyCode)}
+                          ×{" "}
+                          {formatMoney(
+                            line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
+                            currencyCode,
+                          )}
                         </p>
                         {line.kitchenSentAt ? (
                           <div className="mt-0.5 text-[10px] font-bold text-emerald-700">

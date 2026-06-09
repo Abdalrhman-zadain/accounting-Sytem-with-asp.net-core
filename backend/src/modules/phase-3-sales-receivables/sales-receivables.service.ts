@@ -2715,6 +2715,7 @@ export class SalesReceivablesService {
             name: true,
             type: true,
             trackInventory: true,
+            allowFractionalQuantity: true,
             preferredWarehouseId: true,
           },
         })
@@ -2765,6 +2766,16 @@ export class SalesReceivablesService {
       const discountAmount = rawLine.discountAmount ?? 0;
       const taxAmount = taxId ? 0 : rawLine.taxAmount ?? 0;
       const lineAmount = rawLine.lineAmount;
+      const modifierAddonTotal =
+        item?.allowFractionalQuantity &&
+        rawLine.modifiers &&
+        typeof rawLine.modifiers === 'object' &&
+        Array.isArray((rawLine.modifiers as { addons?: Array<{ priceAdjustment?: number }> }).addons)
+          ? (rawLine.modifiers as { addons: Array<{ priceAdjustment?: number }> }).addons.reduce(
+              (sum, addon) => sum + Number(addon.priceAdjustment ?? 0),
+              0,
+            )
+          : 0;
 
       if (quantity <= 0) {
         throw new BadRequestException(
@@ -2784,7 +2795,7 @@ export class SalesReceivablesService {
 
       const computedSubtotal =
         unitPrice !== undefined
-          ? Number((quantity * unitPrice - discountAmount).toFixed(2))
+          ? Number((quantity * unitPrice + modifierAddonTotal - discountAmount).toFixed(2))
           : undefined;
       const lineSubtotalAmount =
         computedSubtotal ??
@@ -2816,7 +2827,7 @@ export class SalesReceivablesService {
       const finalLineTotalAmount =
         lineAmount !== undefined
           ? Number(lineAmount.toFixed(2))
-          : Number((lineSubtotalAmount + taxAmount).toFixed(2));
+          : Number((lineSubtotalAmount + computedTaxAmount).toFixed(2));
       const finalUnitPrice =
         unitPrice !== undefined
           ? Number(unitPrice.toFixed(2))

@@ -518,6 +518,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function getLineBase(line: CartLine) {
+  const addonTotal = sumAddonPrices(getAddonsFromModifiers(line.modifiers));
+  if (line.sellByWeight) {
+    return line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal;
+  }
   return line.quantity * line.unitPrice;
 }
 
@@ -608,7 +612,9 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     warehouseId: line.warehouse?.id ?? undefined,
     onHandQuantity: 0,
     baseUnitPrice:
-      parseAmount(line.unitPrice) - sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
+      Boolean(line.item?.allowFractionalQuantity)
+        ? parseAmount(line.unitPrice)
+        : parseAmount(line.unitPrice) - sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
     modifiers: (line.modifiers as CartLine["modifiers"]) ?? null,
     lineNote:
       line.description && line.description !== (line.itemName ?? "")
@@ -1229,9 +1235,9 @@ export function PosPage() {
   const itemGroups = itemGroupsQuery.data ?? [];
   const catalogChips = useMemo(() => {
     return [
-      { id: "all", name: language === "ar" ? "الكل" : "All / الكل" },
       ...itemGroups.map((g) => ({ id: g.id, name: g.name })),
       { id: "favorites", name: language === "ar" ? "المفضلة" : "Favorites / المفضلة" },
+      { id: "all", name: language === "ar" ? "الكل" : "All / الكل" },
     ];
   }, [itemGroups, language]);
 
@@ -2679,7 +2685,7 @@ export function PosPage() {
           line.trackInventory && line.warehouseId ? line.warehouseId : undefined,
         itemName: line.name,
         quantity: line.quantity,
-        unitPrice: line.unitPrice,
+        unitPrice: line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
         discountAmount: Number(
           (getLineDiscountAmount(line) + (taxPolicy === "AFTER_TAX" ? afterTaxShare : invoiceShare)).toFixed(2),
         ),
@@ -2862,9 +2868,9 @@ export function PosPage() {
     const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
     const onHand = parseAmount(item.onHandQuantity);
     const baseUnitPrice = parseAmount(item.defaultSalesPrice);
-    const unitPrice = baseUnitPrice + sumAddonPrices(addons);
-    const modifiers = buildModifiersPayload(addons);
     const sellByWeight = isWeightSaleItem(item);
+    const unitPrice = sellByWeight ? baseUnitPrice : baseUnitPrice + sumAddonPrices(addons);
+    const modifiers = buildModifiersPayload(addons);
     const quantityPrecision = getQuantityPrecision(item);
     const quantity = sellByWeight ? (entryWeight ?? 0) : 1;
 
@@ -6523,7 +6529,12 @@ function CompactCartLine({
                 </button>
               )
             ) : (
-              <span dir="ltr">{formatCurrency(line.unitPrice, currencyCode)}</span>
+              <span dir="ltr">
+                {formatCurrency(
+                  line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
+                  currencyCode,
+                )}
+              </span>
             )}
             {line.taxRate > 0 && !taxFreeEnabled ? (
               <>
