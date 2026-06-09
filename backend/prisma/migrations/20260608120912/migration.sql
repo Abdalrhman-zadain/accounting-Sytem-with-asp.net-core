@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "DeliveryCompanySettlement_deliveryCompanyId_periodFrom_periodTo" RENAME TO "DeliveryCompanySettlement_deliveryCompanyId_periodFrom_peri_idx";
