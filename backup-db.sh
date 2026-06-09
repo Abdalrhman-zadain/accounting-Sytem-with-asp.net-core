@@ -24,6 +24,6 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
 fi
 
 echo "Creating backup at: $OUTPUT_PATH"
-docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$OUTPUT_PATH"
+docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > pwd/backup/"$OUTPUT_PATH"
 echo "Backup complete."
 
