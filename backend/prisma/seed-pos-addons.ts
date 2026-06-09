@@ -56,6 +56,7 @@ const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { itemCode: 'MENU-FOOD-015', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5hnoul01yuetf59gbi3qm4', itemCode: 'MENU-FOOD-009', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5hnoul01yvetf5cp25nxji', itemCode: 'MENU-FOOD-009', groupCode: 'RICE_FRIKEH', sortOrder: 1 },
+  { itemCode: 'MENU-FOOD-009', groupCode: 'EXTRA_WEIGHT', sortOrder: 2 },
   { id: 'cmq5ho6mi01ywetf52xdbmqrv', itemCode: 'MENU-FOOD-008', groupCode: 'RICE_FRIKEH', sortOrder: 0 },
   { id: 'cmq5hrylk01z4etf5zg11kha2', itemCode: 'MENU-FATTAH-006', groupCode: 'S_W_K', sortOrder: 0 },
   { id: 'cmq5hs7tl01z5etf5587vh8fr', itemCode: 'MENU-FATTAH-002', groupCode: 'S_W_K', sortOrder: 0 },
@@ -183,6 +184,19 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     options: [
       { name: 'Rice', nameAr: 'رز', priceAdjustment: 0 },
       { name: 'Freekeh', nameAr: 'فريكة', priceAdjustment: 0 },
+    ],
+  },
+  {
+    code: 'EXTRA_WEIGHT',
+    name: 'Extra weight',
+    nameAr: 'إضافة وزن',
+    selectionType: PosAddonSelectionType.SINGLE,
+    isRequired: false,
+    minSelections: 0,
+    sortOrder: 2,
+    options: [
+      { name: 'No extra weight', nameAr: 'بدون إضافة وزن', priceAdjustment: 0 },
+      { name: 'Add weight', nameAr: 'إضافة وزن', priceAdjustment: 1.8 },
     ],
   },
   {

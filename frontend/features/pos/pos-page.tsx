@@ -225,6 +225,28 @@ function getOrderWaiterLockMessage(language: string) {
   );
 }
 
+function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
+  if (item.code === "MENU-001") {
+    return [
+      {
+        value: 0.125,
+        labelAr: "آبوات عدد واحد",
+        labelEn: "Aywat single piece",
+      },
+    ];
+  }
+  if (item.code === "MENU-006") {
+    return [
+      {
+        value: 0.125,
+        labelAr: "كرشات عدد واحد",
+        labelEn: "Karshat single piece",
+      },
+    ];
+  }
+  return [];
+}
+
 type CartLine = {
   salesInvoiceLineId?: string;
   /** Stable key for new sell-by-weight lines (each weigh-in stays separate). */
@@ -5177,13 +5199,17 @@ export function PosPage() {
                   enabled: true,
                   unitCode: addonModalItem.unitOfMeasure,
                   precision: getQuantityPrecision(addonModalItem),
-                  minWeight: getMinSalesQuantity(addonModalItem),
+                  minWeight:
+                    addonModalItem.code === "MENU-001" || addonModalItem.code === "MENU-006"
+                      ? 0.125
+                      : getMinSalesQuantity(addonModalItem),
                   maxWeight:
                     addonModalItem.trackInventory &&
                     !Boolean(posSettings?.runtime.negativeStockAllowed)
                       ? parseAmount(addonModalItem.onHandQuantity)
                       : null,
                   pricePerUnit: parseAmount(addonModalItem.defaultSalesPrice),
+                  presets: getCustomWeightPresets(addonModalItem),
                   initialWeight:
                     pendingEntryWeight ??
                     (addonEditLine?.itemId === addonModalItem.id && addonEditLine.sellByWeight

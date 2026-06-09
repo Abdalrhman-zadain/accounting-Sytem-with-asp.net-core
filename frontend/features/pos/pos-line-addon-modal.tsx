@@ -26,6 +26,11 @@ type PosLineAddonModalProps = {
     maxWeight?: number | null;
     pricePerUnit?: number;
     initialWeight?: number | null;
+    presets?: Array<{
+      value: number;
+      labelAr?: string;
+      labelEn?: string;
+    }>;
   };
   initialAddons?: PosLineAddonSelection[];
   initialLineNote?: string;
@@ -44,7 +49,19 @@ function getWeightPresetLabel(
   unitCode: string,
   precision: number,
   language: string,
+  customLabel?: {
+    value?: number;
+    labelAr?: string;
+    labelEn?: string;
+  },
 ) {
+  if (language === "ar" && customLabel?.labelAr?.trim()) {
+    return customLabel.labelAr.trim();
+  }
+  if (language !== "ar" && customLabel?.labelEn?.trim()) {
+    return customLabel.labelEn.trim();
+  }
+
   const normalizedUnit = unitCode.trim().toLowerCase();
   const isKiloUnit =
     normalizedUnit === "kg" ||
@@ -120,17 +137,24 @@ export function PosLineAddonModal({
     }
     const seen = new Set<number>();
     const roundWeight = (value: number) => Number(value.toFixed(weightSelection.precision));
-    const values = [...DEFAULT_WEIGHT_PRESETS];
+    const presets = DEFAULT_WEIGHT_PRESETS.map((value) => ({ value }));
+    if (Array.isArray(weightSelection.presets)) {
+      presets.push(...weightSelection.presets);
+    }
     if (
       typeof weightSelection.initialWeight === "number" &&
       weightSelection.initialWeight > 0
     ) {
-      values.push(weightSelection.initialWeight);
+      presets.push({ value: weightSelection.initialWeight });
     }
 
-    return values
-      .map(roundWeight)
-      .filter((value) => {
+    return presets
+      .map((preset) => ({
+        ...preset,
+        value: roundWeight(preset.value),
+      }))
+      .filter((preset) => {
+        const value = preset.value;
         if (!Number.isFinite(value) || value <= 0 || value < weightSelection.minWeight) {
           return false;
         }
@@ -143,7 +167,7 @@ export function PosLineAddonModal({
         seen.add(value);
         return true;
       })
-      .sort((a, b) => a - b);
+      .sort((a, b) => a.value - b.value);
   }, [weightSelection]);
 
   React.useEffect(() => {
@@ -241,27 +265,28 @@ export function PosLineAddonModal({
               </div>
               <div className="flex flex-wrap gap-2">
                 {weightPresets.map((preset) => {
-                  const selected = selectedWeight === preset;
+                  const selected = selectedWeight === preset.value;
                   const exceedsOnHand =
                     typeof weightSelection.maxWeight === "number" &&
-                    preset > weightSelection.maxWeight;
+                    preset.value > weightSelection.maxWeight;
                   const label = getWeightPresetLabel(
-                    preset,
+                    preset.value,
                     weightSelection.unitCode,
                     weightSelection.precision,
                     language,
+                    preset,
                   );
                   const estimatedPrice =
                     typeof weightSelection.pricePerUnit === "number"
-                      ? Number((weightSelection.pricePerUnit * preset).toFixed(2))
+                      ? Number((weightSelection.pricePerUnit * preset.value).toFixed(2))
                       : null;
 
                   return (
                     <button
-                      key={preset}
+                      key={preset.value}
                       type="button"
                       disabled={exceedsOnHand}
-                      onClick={() => setSelectedWeight(preset)}
+                      onClick={() => setSelectedWeight(preset.value)}
                       className={cn(
                         "min-h-[44px] rounded-xl border px-4 py-2.5 text-sm font-bold transition",
                         selected

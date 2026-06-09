@@ -46,7 +46,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     itemImageUrl: '/images/menu/ayot.png',
     unitOfMeasure: 'KG',
     sellByWeight: true,
-    minSalesQuantity: 0.25,
+    minSalesQuantity: 0.125,
     favorite: true,
   },
   {
@@ -127,7 +127,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
     itemImageUrl: '/images/menu/karshat.png',
     unitOfMeasure: 'KG',
     sellByWeight: true,
-    minSalesQuantity: 0.25,
+    minSalesQuantity: 0.125,
     favorite: true,
   },
   {

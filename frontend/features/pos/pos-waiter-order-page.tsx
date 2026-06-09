@@ -81,6 +81,28 @@ function parseAmount(value: string | number | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
+  if (item.code === "MENU-001") {
+    return [
+      {
+        value: 0.125,
+        labelAr: "آبوات عدد واحد",
+        labelEn: "Aywat single piece",
+      },
+    ];
+  }
+  if (item.code === "MENU-006") {
+    return [
+      {
+        value: 0.125,
+        labelAr: "كرشات عدد واحد",
+        labelEn: "Karshat single piece",
+      },
+    ];
+  }
+  return [];
+}
+
 function formatMoney(value: number, currency = "JOD") {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -726,8 +748,12 @@ export function PosWaiterOrderPage() {
                 enabled: true,
                 unitCode: addonModalItem.unitOfMeasure,
                 precision: getQuantityPrecision(addonModalItem),
-                minWeight: getMinSalesQuantity(addonModalItem),
+                minWeight:
+                  addonModalItem.code === "MENU-001" || addonModalItem.code === "MENU-006"
+                    ? 0.125
+                    : getMinSalesQuantity(addonModalItem),
                 pricePerUnit: parseAmount(addonModalItem.defaultSalesPrice),
+                presets: getCustomWeightPresets(addonModalItem),
               }
             : undefined
         }
