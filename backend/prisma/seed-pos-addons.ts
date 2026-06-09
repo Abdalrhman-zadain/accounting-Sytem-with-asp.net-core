@@ -64,7 +64,7 @@ const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { id: 'cmq5hsgj001z7etf54p4whekj', itemCode: 'MENU-FATTAH-003', groupCode: 'S_W_K', sortOrder: 0 },
   { id: 'cmq5hskf901z8etf57qgqvezg', itemCode: 'MENU-FATTAH-005', groupCode: 'S_W_K', sortOrder: 0 },
   { id: 'cmq5hw4xj01zwetf5bgvwdq21', itemCode: 'MENU-FATTAH-001', groupCode: 'S_W_K_F', sortOrder: 0 },
-};
+];
 
 const ADDON_GROUPS: AddonGroupSeed[] = [
   {
@@ -257,7 +257,7 @@ export async function seedPosAddons(prisma: PrismaClient) {
 
   let linkedProducts = 0;
 
-  for (const [itemCode, links] of linksByItemCode.entries()) {
+  for (const [itemCode, links] of Array.from(linksByItemCode.entries())) {
     const item = await prisma.inventoryItem.findUnique({
       where: { code: itemCode },
       select: { id: true, name: true },
@@ -283,12 +283,14 @@ export async function seedPosAddons(prisma: PrismaClient) {
       })
       .filter((link): link is { id?: string; itemId: string; groupId: string; sortOrder: number } => Boolean(link));
 
-    const desiredGroupIds = new Set(validLinks.map((link) => link.groupId));
+    const desiredGroupIds = Array.from(
+      new Set(validLinks.map((link) => link.groupId)),
+    ) as string[];
 
     await prisma.posItemAddonGroup.deleteMany({
       where: {
         itemId: item.id,
-        groupId: { notIn: Array.from(desiredGroupIds) },
+        groupId: { notIn: desiredGroupIds },
       },
     });
 

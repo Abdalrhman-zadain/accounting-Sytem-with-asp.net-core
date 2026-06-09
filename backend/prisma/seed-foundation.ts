@@ -1180,6 +1180,20 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
         description: 'مجموعة الفتات في المنيو',
         isActive: true,
       },
+      {
+        id: 'GRP-MENU-APPETIZERS',
+        code: 'MENU-APPETIZERS',
+        name: 'المقبلات',
+        description: 'مجموعة المقبلات في المنيو',
+        isActive: true,
+      },
+      {
+        id: 'GRP-MENU-DRINKS',
+        code: 'MENU-DRINKS',
+        name: 'المشروبات',
+        description: 'مجموعة المشروبات في المنيو',
+        isActive: true,
+      },
     ],
   });
 
@@ -1207,6 +1221,22 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
         name: 'الفتات',
         description: 'فئة الفتات في المنيو',
         itemGroupId: 'GRP-MENU-FATTAH',
+        isActive: true,
+      },
+      {
+        id: 'CAT-MENU-APPETIZERS',
+        code: 'MENU-APPETIZERS',
+        name: 'المقبلات',
+        description: 'فئة المقبلات في المنيو',
+        itemGroupId: 'GRP-MENU-APPETIZERS',
+        isActive: true,
+      },
+      {
+        id: 'CAT-MENU-DRINKS',
+        code: 'MENU-DRINKS',
+        name: 'المشروبات',
+        description: 'فئة المشروبات في المنيو',
+        itemGroupId: 'GRP-MENU-DRINKS',
         isActive: true,
       },
     ],
