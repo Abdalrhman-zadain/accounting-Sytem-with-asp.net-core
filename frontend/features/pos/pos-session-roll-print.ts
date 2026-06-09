@@ -12,7 +12,7 @@ export type SessionRollPrintType =
   | "INVOICE_LIST_ROLL"
   | "ALL_RECEIPTS_ROLL";
 
-interface RollPrintContext {
+export interface RollPrintContext {
   session: PosSession;
   report: PosSessionReport | null;
   printedBy: string;
@@ -288,7 +288,7 @@ function buildAllReceiptsRollHtml(ctx: RollPrintContext): string {
 
 // ─── Main print function ──────────────────────────────────────────────────────
 
-export function printSessionRollReport(ctx: RollPrintContext): void {
+export function buildSessionRollReportDocumentHtml(ctx: RollPrintContext): string {
   let bodyHtml: string;
   let titleAr: string;
 
@@ -308,7 +308,7 @@ export function printSessionRollReport(ctx: RollPrintContext): void {
       break;
   }
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8"/>
@@ -403,7 +403,10 @@ export function printSessionRollReport(ctx: RollPrintContext): void {
 ${bodyHtml}
 </body>
 </html>`;
+}
 
+export function printSessionRollReport(ctx: RollPrintContext): void {
+  const html = buildSessionRollReportDocumentHtml(ctx);
   const win = window.open("", "_blank", "width=400,height=700");
   if (!win) {
     alert("يرجى السماح بفتح نوافذ منبثقة لطباعة التقرير");

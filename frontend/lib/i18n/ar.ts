@@ -2778,7 +2778,9 @@ Object.assign(arTranslations, {
   "pos.workspace.review": "مراجعة المحاسب",
   "pos.workspace.returns": "المرتجعات",
   "pos.workspace.reports": "التقارير",
+  "pos.workspace.printers": "الطابعات",
   "pos.workspace.settings": "الإعدادات",
+  "pos.placeholder.printers": "تهيئة طابعة المطبخ وطابعة الإيصال لهذا الجهاز.",
   "pos.sales.kicker": "نقطة بيع متكاملة",
   "pos.sales.title": "شاشة بيع POS بتصميم تشغيلي هادئ ومتكامل",
   "pos.sales.description":

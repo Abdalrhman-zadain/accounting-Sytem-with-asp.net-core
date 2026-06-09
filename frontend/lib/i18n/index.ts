@@ -1499,7 +1499,9 @@ Object.assign(enTranslations, {
   "pos.workspace.review": "Accountant Review",
   "pos.workspace.returns": "Returns",
   "pos.workspace.reports": "Reports",
+  "pos.workspace.printers": "Printers",
   "pos.workspace.settings": "Settings",
+  "pos.placeholder.printers": "Configure kitchen and receipt printers for this cashier computer.",
   "pos.sales.kicker": "Integrated POS",
   "pos.sales.title": "POS sales terminal with a soft operational workspace",
   "pos.sales.description":

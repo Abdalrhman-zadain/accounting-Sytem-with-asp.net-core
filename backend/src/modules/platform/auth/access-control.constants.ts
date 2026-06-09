@@ -95,6 +95,7 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos/tables",
     "/pos/delivery",
     "/pos/returns",
+    "/pos/printers",
   ],
   KITCHEN: [],
   WAITER: ["/pos/waiter/tables", "/pos/waiter/order", "/pos/waiter/orders"],

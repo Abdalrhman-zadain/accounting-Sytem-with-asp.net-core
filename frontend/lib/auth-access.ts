@@ -98,6 +98,13 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
     );
   }
 
+  if (normalizedPath === "/pos/printers" || normalizedPath.startsWith("/pos/printers/")) {
+    return (
+      hasPermission(user, "POS_VIEW_POS_SCREEN") ||
+      hasPermission(user, "POS_PRINT_RECEIPT")
+    );
+  }
+
   if (
     normalizedPath === "/pos/register" ||
     normalizedPath.startsWith("/pos/register/") ||

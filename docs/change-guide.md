@@ -262,6 +262,29 @@ Checks to run:
 - backend build
 - frontend typecheck
 
+## Add Or Change POS Thermal Printing
+
+Where to edit:
+
+- frontend `features/pos/pos-print-service.ts` for print routing decisions
+- frontend `features/pos/pos-print-bridge.ts` for QZ Tray/browser bridge behavior
+- frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences
+- frontend `features/pos/pos-printer-settings-panel.tsx` for cashier-side printer setup
+- frontend `features/pos/pos-kot-print.ts`, `pos-receipt-print.ts`, and `pos-session-roll-print.ts` for the actual 80mm receipt HTML templates
+- `docs/pos/printer-setup.md` when setup requirements change
+
+What else to check:
+
+- kitchen KOT and customer receipt templates are intentionally separate; do not merge kitchen notes/table routing into the customer receipt template unless the business explicitly asks for it
+- OS printer names are machine-local, so kitchen/receipt printer names should stay in browser-local configuration unless a network/IP print service is introduced
+- QZ Tray named-printer routing should fall back to browser `window.print()` when QZ is unavailable so sale completion and kitchen send are not blocked by printer setup
+
+Checks to run:
+
+- frontend typecheck
+- manual browser fallback print for KOT and customer receipt
+- QZ Tray printer list/test print on a cashier PC with the configured XPrinter devices
+
 ## POS Tax-Free Sales Mode
 
 Where to edit:

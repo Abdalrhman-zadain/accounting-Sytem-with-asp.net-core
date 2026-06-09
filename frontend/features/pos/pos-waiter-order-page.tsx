@@ -40,7 +40,7 @@ import {
   savePosDraft,
   sendPosSaleToKitchen,
 } from "@/lib/api";
-import { printKitchenOrderTicket } from "@/features/pos/pos-kot-print";
+import { printKitchenTicket } from "@/features/pos/pos-print-service";
 import { hasPermission } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { cn, getLocalizedText } from "@/lib/utils";
@@ -337,7 +337,15 @@ export function PosWaiterOrderPage() {
       setWaiterConfirmedAt(sale.waiterConfirmedAt ?? new Date().toISOString());
       setCartLines(mapSaleToCart(sale));
       setNotice(isAr ? "تم تأكيد الطلب وإرساله للمطبخ" : "Order confirmed and sent to kitchen.");
-      printKitchenOrderTicket(sale, language);
+      try {
+        await printKitchenTicket(sale, language);
+      } catch {
+        setNotice(
+          isAr
+            ? "تم إرسال الطلب للمطبخ، لكن تعذرت الطباعة."
+            : "Order was sent to kitchen, but printing failed.",
+        );
+      }
       try {
         const waiterOrders = await getPosWaiterOrders(token);
         const kitchenOrder = waiterOrders.find((row) => row.salesInvoiceId === sale.id);

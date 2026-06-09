@@ -6,10 +6,14 @@
 
 import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
 
+/** Default customer-receipt logo served from `frontend/public/pos/`. */
+export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
+
 export type PosReceiptData = {
   receiptNumber: string;
   soldAt: string;
   companyName: string;
+  logoUrl?: string | null;
   branchName?: string | null;
   taxNumber?: string | null;
   cashierName: string;
@@ -64,10 +68,27 @@ function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
   return String(line.quantity);
 }
 
+function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
+  const path = receipt.logoUrl?.trim() || POS_RECEIPT_LOGO_PATH;
+  if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+    return path;
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
-  const rows: string[] = [
-    `<div class="center title">${receipt.companyName}</div>`,
-  ];
+  const rows: string[] = [];
+
+  const logoUrl = resolveReceiptLogoUrl(receipt);
+  if (logoUrl) {
+    rows.push(`<div class="center"><img class="logo" src="${logoUrl}" alt="Logo"/></div>`);
+  }
+
+  rows.push(`<div class="center title">${receipt.companyName}</div>`);
 
   if (receipt.branchName) {
     rows.push(`<div class="center sub">${receipt.branchName}</div>`);
@@ -133,7 +154,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   return rows.join("\n");
 }
 
-function buildPosReceiptHtml(receipt: PosReceiptData): string {
+export function buildPosReceiptHtml(receipt: PosReceiptData): string {
   const bodyHtml = buildPosReceiptBodyHtml(receipt);
 
   return `<!DOCTYPE html>
@@ -149,7 +170,7 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12pt;
+      font-size: 14pt;
       font-weight: 700;
       color: #000;
       background: #fff;
@@ -160,13 +181,13 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
     }
     .center { text-align: center; }
     .title {
-      font-size: 16pt;
+      font-size: 20pt;
       font-weight: 900;
       margin-bottom: 4pt;
       letter-spacing: 0.02em;
     }
     .sub {
-      font-size: 10pt;
+      font-size: 12pt;
       font-weight: 700;
       color: #000;
       margin-bottom: 3pt;
@@ -175,7 +196,7 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
       text-align: center;
       color: #000;
       margin: 5pt 0;
-      font-size: 11pt;
+      font-size: 13pt;
       font-weight: 900;
       white-space: pre;
       letter-spacing: -0.05em;
@@ -188,13 +209,13 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
       line-height: 1.55;
     }
     .sub-line .lbl {
-      font-size: 10pt;
+      font-size: 12pt;
       font-weight: 600;
       color: #000;
     }
     .lbl {
       flex: 0 0 55%;
-      font-size: 11pt;
+      font-size: 13pt;
       font-weight: 700;
       white-space: pre-wrap;
       word-break: break-word;
@@ -202,19 +223,30 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
     .val {
       flex: 0 0 45%;
       text-align: left;
-      font-size: 11pt;
+      font-size: 13pt;
       font-weight: 700;
     }
     .bold { font-weight: 900; }
     .muted {
       color: #000;
-      font-size: 12pt;
+      font-size: 14pt;
       font-weight: 700;
       margin: 6pt 0;
+    }
+    .logo {
+      display: block;
+      max-width: 52mm;
+      max-height: 28mm;
+      margin: 0 auto 6pt;
+      object-fit: contain;
     }
     @media print {
       html, body {
         width: 76mm;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .logo {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }

@@ -45,7 +45,8 @@ import {
   LuDollarSign,
   LuChevronDown,
 } from "react-icons/lu";
-import { printSessionRollReport, type SessionRollPrintType } from "@/features/pos/pos-session-roll-print";
+import type { SessionRollPrintType } from "@/features/pos/pos-session-roll-print";
+import { printSessionRoll } from "@/features/pos/pos-print-service";
 import { printPosSessionRollReport } from "@/lib/api";
 
 type ReviewTab = "overview" | "invoices" | "cash" | "inventory" | "journal";
@@ -211,12 +212,16 @@ export function PosReviewWorkspace({
     } catch {
       // Non-critical – proceed with client-side print even if audit call fails
     }
-    printSessionRollReport({
-      session: selectedSession,
-      report,
-      printedBy: user?.name || user?.username || "—",
-      printType,
-    });
+    try {
+      await printSessionRoll({
+        session: selectedSession,
+        report,
+        printedBy: user?.name || user?.username || "—",
+        printType,
+      });
+    } catch (error) {
+      console.error("Failed to print POS session roll:", error);
+    }
   };
 
   const [startDate, setStartDate] = useState("");

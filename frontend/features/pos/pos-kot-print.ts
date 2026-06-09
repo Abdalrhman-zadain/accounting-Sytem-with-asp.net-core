@@ -10,7 +10,7 @@ function fmtDate(val?: string | Date | null): string {
 
 const SEP = "─".repeat(32);
 
-export function printKitchenOrderTicket(sale: PosSale, language: string): void {
+export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): string {
   const isAr = language === "ar";
   const tableLabel = sale.table?.tableNumber
     ? `${isAr ? "طاولة" : "Table"} ${sale.table.tableNumber}`
@@ -50,7 +50,7 @@ export function printKitchenOrderTicket(sale: PosSale, language: string): void {
     ${sale.description ? `<div class="note">${sale.description}</div>` : ""}
   `;
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html dir="${isAr ? "rtl" : "ltr"}" lang="${isAr ? "ar" : "en"}">
 <head>
   <meta charset="UTF-8"/>
@@ -77,7 +77,10 @@ export function printKitchenOrderTicket(sale: PosSale, language: string): void {
 </head>
 <body>${bodyHtml}</body>
 </html>`;
+}
 
+export function printKitchenOrderTicket(sale: PosSale, language: string): void {
+  const html = buildKitchenOrderTicketHtml(sale, language);
   const printWindow = window.open("", "_blank", "width=400,height=600");
   if (!printWindow) return;
   printWindow.document.write(html);

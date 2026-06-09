@@ -75,6 +75,20 @@ What this means for future edits:
 
 - keep the enum bootstrap in sync with any future `PosAccessRoleCode` additions so legacy databases can still hydrate POS roles without a manual enum migration step.
 
+## POS Dual Printer Routing
+
+Current behavior:
+
+- POS kitchen KOT, customer receipt, and session roll prints route through a client-side print service.
+- Silent named-printer routing requires QZ Tray to be installed and running on each cashier computer.
+- Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
+- If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
+
+What this means for future edits:
+
+- do not move local OS printer names into global POS settings unless printing is changed to a network/IP or local-agent model with stable printer identifiers.
+- keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, or fallback changes.
+
 ## Local Docker Port Reservation On Windows
 
 Current limitation:

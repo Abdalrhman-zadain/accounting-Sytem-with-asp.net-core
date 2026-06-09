@@ -29,9 +29,10 @@ import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
+import { printKitchenTicket } from "@/features/pos/pos-print-service";
 import { useAuth } from "@/providers/auth-provider";
 import { useKdsMode } from "@/providers/kds-mode-provider";
-import type { KitchenOrder, KitchenStatus, PosOrderType } from "@/types/api";
+import type { KitchenOrder, KitchenStatus, PosOrderType, PosSale } from "@/types/api";
 
 const MAIN_COLUMNS: Array<{
   status: KitchenStatus;
@@ -596,6 +597,33 @@ export function PosKitchenWorkspace({ embedded = false }: { embedded?: boolean }
 
   const reprintMutation = useMutation({
     mutationFn: (orderId: string) => reprintKot(orderId, "KDS_REPRINT", token),
+    onSuccess: async (_result, orderId) => {
+      const order = orders.find((row) => row.id === orderId);
+      if (!order) return;
+      try {
+        await printKitchenTicket(
+          {
+            reference: order.orderNumber,
+            table: order.tableName ? { tableNumber: order.tableName } : null,
+            waiter: order.waiterName ? { name: order.waiterName } : null,
+            description: order.notes ?? null,
+            lines: order.items.map((item, index) => ({
+              id: item.id,
+              lineNumber: index + 1,
+              itemId: item.itemId,
+              itemName: item.itemName,
+              description: item.notes || item.itemName,
+              quantity: item.quantity,
+              modifiers: item.modifiers,
+              kitchenSentAt: item.createdAt,
+            })),
+          } as PosSale,
+          language,
+        );
+      } catch {
+        // Audit succeeded; the operator can retry physical printing after fixing the printer.
+      }
+    },
   });
 
   React.useEffect(() => {

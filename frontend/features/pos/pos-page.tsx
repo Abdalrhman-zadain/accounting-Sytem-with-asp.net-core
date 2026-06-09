@@ -147,8 +147,14 @@ import {
   getWeightQuantityStep,
   isWeightSaleItem,
 } from "@/features/pos/pos-weight-utils";
-import { printPosReceipt, type PosReceiptData } from "@/features/pos/pos-receipt-print";
-import { printSessionRollReport } from "@/features/pos/pos-session-roll-print";
+import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
+import {
+  printCustomerReceipt,
+  printKitchenTicket,
+  printSessionRoll,
+} from "@/features/pos/pos-print-service";
+import { loadPosPrinterConfig, updatePosPrinterConfig } from "@/features/pos/pos-printer-config";
+import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-panel";
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
@@ -189,6 +195,7 @@ type PosWorkspace =
   | "returns"
   | "reports"
   | "settings"
+  | "printers"
   | "delivery";
 
 type WorkspaceTab = {
@@ -362,6 +369,7 @@ const workspaceTabs: WorkspaceTab[] = [
   { id: "delivery", labelKey: "pos.workspace.delivery", icon: LuTruck },
   { id: "returns", labelKey: "pos.workspace.returns", icon: LuArrowRightLeft },
   { id: "reports", labelKey: "pos.workspace.reports", icon: LuChartColumn },
+  { id: "printers", labelKey: "pos.workspace.printers", icon: LuPrinter },
   { id: "settings", labelKey: "pos.workspace.settings", icon: LuSettings2 },
 ];
 
@@ -375,6 +383,7 @@ const pathnameWorkspaceMap: Record<string, PosWorkspace> = {
   "/pos/delivery": "delivery",
   "/pos/returns": "returns",
   "/pos/reports": "reports",
+  "/pos/printers": "printers",
   "/pos/settings": "settings",
 };
 
@@ -1074,7 +1083,9 @@ export function PosPage() {
   const [selectedPayMethod, setSelectedPayMethod] = useState<
     "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" | "MIXED"
   >("CASH");
-  const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(
+    () => loadPosPrinterConfig().autoPrintReceiptOnPay,
+  );
   const messageTimeoutRef = useRef<number | null>(null);
   const resumedSaleRef = useRef<string | null>(null);
   const resumedTableIdRef = useRef<string | null>(null);
@@ -1572,11 +1583,14 @@ export function PosPage() {
       } catch {
         // Non-critical — proceed with client-side print even if audit call fails
       }
-      printSessionRollReport({
+      printSessionRoll({
         session,
         report,
         printedBy: user?.name || user?.username || "—",
         printType: "SESSION_ROLL_REPORT",
+      }).catch((err) => {
+        console.error("Failed to print session roll:", err);
+        pushMessage(t("pos.sales.alert.printBlocked"));
       });
     },
     onError: (error) => {
@@ -1631,6 +1645,21 @@ export function PosPage() {
           language,
         ),
       );
+      if (loadPosPrinterConfig().autoPrintKotOnSend) {
+        printKitchenTicket(sale, language).then((result) => {
+          if (result.fallback) {
+            pushMessage(
+              getLocalizedText(
+                "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
+                language,
+              ),
+            );
+          }
+        }).catch((err) => {
+          console.error("Failed to print kitchen ticket:", err);
+          pushMessage(t("pos.sales.alert.printBlocked"));
+        });
+      }
       // Auto-start a new order so the cashier is ready for the next customer
       resetSaleRef.current();
     },
@@ -1743,7 +1772,7 @@ export function PosPage() {
       resetSaleRef.current();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.saleCompleted"));
-      if (autoPrintReceipt) {
+      if (loadPosPrinterConfig().autoPrintReceiptOnPay) {
         printReceipt(receipt);
       }
     },
@@ -2090,6 +2119,12 @@ export function PosPage() {
         return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");
       }
       if (tab.id === "reports") return hasPermission(user, "POS_VIEW_POS_REPORTS");
+      if (tab.id === "printers") {
+        return (
+          hasPermission(user, "POS_VIEW_POS_SCREEN") ||
+          hasPermission(user, "POS_PRINT_RECEIPT")
+        );
+      }
       if (tab.id === "settings") return hasPermission(user, "POS_VIEW_POS_REPORTS");
       return false;
     });
@@ -3449,12 +3484,19 @@ export function PosPage() {
   };
 
   const printReceipt = (receipt: CompletedReceipt) => {
-    try {
-      printPosReceipt(receipt);
-    } catch (err) {
+    printCustomerReceipt(receipt).then((result) => {
+      if (result.fallback) {
+        pushMessage(
+          getLocalizedText(
+            "Receipt printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
+            language,
+          ),
+        );
+      }
+    }).catch((err) => {
       console.error("Failed to print receipt:", err);
       pushMessage(t("pos.sales.alert.printBlocked"));
-    }
+    });
   };
 
   const completeSale = () => {
@@ -4741,7 +4783,11 @@ export function PosPage() {
                 <input
                   type="checkbox"
                   checked={autoPrintReceipt}
-                  onChange={(event) => setAutoPrintReceipt(event.target.checked)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setAutoPrintReceipt(checked);
+                    updatePosPrinterConfig({ autoPrintReceiptOnPay: checked });
+                  }}
                   className="h-4 w-4 rounded border-[#c8d7cc] text-[#5f8a67] focus:ring-[#5f8a67]/20"
                 />
                 {t("pos.sales.printReceiptLabel")}
@@ -6063,6 +6109,14 @@ export function PosPage() {
       return renderReportsWorkspace();
     }
 
+    if (workspace === "printers") {
+      return (
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8">
+          <PosPrinterSettingsPanel />
+        </div>
+      );
+    }
+
     if (workspace === "settings") {
       return (
         <SettingsWorkspace
@@ -6087,6 +6141,7 @@ export function PosPage() {
       review: t("pos.placeholder.review"),
       returns: t("pos.placeholder.returns"),
       reports: t("pos.placeholder.reports"),
+      printers: t("pos.placeholder.printers"),
       settings: t("pos.placeholder.settings"),
     };
 
@@ -7260,6 +7315,8 @@ function SettingsWorkspace({
 
     return (
       <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 py-6 md:px-8">
+        <PosPrinterSettingsPanel />
+
         <Card className="rounded-[28px] border-[#d7ddd8] bg-white p-6">
           <div className="flex items-center justify-between">
             <div 
