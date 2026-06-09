@@ -34,7 +34,7 @@ export type PosReceiptData = {
   }>;
 };
 
-const SEP = "─".repeat(32);
+const SEP = "─".repeat(28);
 
 function fmtDate(val?: string | Date | null): string {
   if (!val) return "—";
@@ -51,7 +51,7 @@ function fmtAmt(val: number): string {
 }
 
 function rowLine(label: string, value: string): string {
-  const maxLabel = 18;
+  const maxLabel = 16;
   const truncLabel = label.length > maxLabel ? label.slice(0, maxLabel) : label;
   const padLabel = truncLabel.padEnd(maxLabel, " ");
   return `<div class="row"><span class="lbl">${padLabel}</span><span class="val">${value}</span></div>`;
@@ -88,7 +88,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   );
 
   for (const line of receipt.lines) {
-    const name = line.name.slice(0, 22);
+    const name = line.name.slice(0, 18);
     const qty = formatReceiptQuantity(line);
     rows.push(
       `<div class="row"><span class="lbl bold">${name}</span><span class="val bold">${fmtAmt(line.lineTotal)}</span></div>`,
@@ -114,7 +114,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(
     rowLine("الضريبة", fmtAmt(receipt.tax)),
     rowLine("الإجمالي", fmtAmt(receipt.total)),
-    `<div class="sep">${"-".repeat(32)}</div>`,
+    `<div class="sep">${"-".repeat(28)}</div>`,
     rowLine("المبلغ المقبوض", fmtAmt(receipt.tendered)),
     rowLine("المدفوع", fmtAmt(receipt.paid)),
   );
@@ -149,57 +149,78 @@ function buildPosReceiptHtml(receipt: PosReceiptData): string {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 9pt;
+      font-size: 12pt;
+      font-weight: 700;
       color: #000;
       background: #fff;
       width: 76mm;
       padding: 4mm 2mm;
       direction: rtl;
+      -webkit-font-smoothing: antialiased;
     }
     .center { text-align: center; }
     .title {
-      font-size: 11pt;
-      font-weight: bold;
-      margin-bottom: 2pt;
+      font-size: 16pt;
+      font-weight: 900;
+      margin-bottom: 4pt;
+      letter-spacing: 0.02em;
     }
     .sub {
-      font-size: 8pt;
-      color: #333;
-      margin-bottom: 2pt;
+      font-size: 10pt;
+      font-weight: 700;
+      color: #000;
+      margin-bottom: 3pt;
     }
     .sep {
       text-align: center;
-      color: #666;
-      margin: 3pt 0;
-      font-size: 8pt;
+      color: #000;
+      margin: 5pt 0;
+      font-size: 11pt;
+      font-weight: 900;
       white-space: pre;
+      letter-spacing: -0.05em;
     }
     .row {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin: 1.5pt 0;
-      line-height: 1.3;
+      margin: 3pt 0;
+      line-height: 1.55;
     }
     .sub-line .lbl {
-      font-size: 8pt;
-      color: #444;
+      font-size: 10pt;
+      font-weight: 600;
+      color: #000;
     }
     .lbl {
       flex: 0 0 55%;
-      font-size: 8.5pt;
+      font-size: 11pt;
+      font-weight: 700;
       white-space: pre-wrap;
       word-break: break-word;
     }
     .val {
       flex: 0 0 45%;
       text-align: left;
-      font-size: 8.5pt;
+      font-size: 11pt;
+      font-weight: 700;
     }
-    .bold { font-weight: bold; }
-    .muted { color: #444; font-size: 9pt; margin: 4pt 0; }
+    .bold { font-weight: 900; }
+    .muted {
+      color: #000;
+      font-size: 12pt;
+      font-weight: 700;
+      margin: 6pt 0;
+    }
     @media print {
-      html, body { width: 76mm; }
+      html, body {
+        width: 76mm;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      * {
+        color: #000 !important;
+      }
     }
   </style>
 </head>
