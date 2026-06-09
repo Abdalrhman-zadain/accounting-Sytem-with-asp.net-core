@@ -26,17 +26,14 @@ type ItemAddonLinkSeed = {
   sortOrder: number;
 };
 
+type ResolvedItemAddonLink = {
+  id?: string;
+  itemId: string;
+  groupId: string;
+  sortOrder: number;
+};
+
 const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
-  { itemCode: 'POS-FOD-001', groupCode: 'EXTRAS', sortOrder: 0 },
-  { itemCode: 'POS-FOD-001', groupCode: 'COOKING', sortOrder: 1 },
-  { itemCode: 'POS-FOD-002', groupCode: 'SNACK_EXTRAS', sortOrder: 0 },
-  { itemCode: 'POS-FOD-003', groupCode: 'SNACK_EXTRAS', sortOrder: 0 },
-  { itemCode: 'POS-DRK-001', groupCode: 'DRINK_SIZE', sortOrder: 0 },
-  { itemCode: 'POS-DRK-002', groupCode: 'DRINK_SIZE', sortOrder: 0 },
-  { itemCode: 'POS-DRK-003', groupCode: 'DRINK_SIZE', sortOrder: 0 },
-  { itemCode: 'POS-DRK-004', groupCode: 'DRINK_SIZE', sortOrder: 0 },
-  { itemCode: 'OFFER-SUMMER', groupCode: 'EXTRAS', sortOrder: 0 },
-  { itemCode: 'OFFER-SUMMER', groupCode: 'DRINK_SIZE', sortOrder: 1 },
   { id: 'cmq5gy4qq01mfetf5gm1f2bsy', itemCode: 'MENU-FOOD-003', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5gy4qq01mgetf5dc7r3ttp', itemCode: 'MENU-FOOD-003', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
   { id: 'cmq5gyk2e01mietf5kmypn8iq', itemCode: 'MENU-FOOD-002', groupCode: 'YOGURT_ADDON', sortOrder: 0 },
@@ -142,28 +139,37 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     isRequired: true,
     minSelections: 1,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Grilled', nameAr: 'شوي', priceAdjustment: 0 },
+      { name: 'Boiled', nameAr: 'سلق', priceAdjustment: 0 },
+    ],
   },
   {
     id: 'cmq5gve9i01mcetf50reagtng',
     code: 'YOGURT_ADDON',
-    name: 'Add yogurt',
-    nameAr: 'اضافة لبن',
+    name: 'Yogurt add-on',
+    nameAr: 'إضافة لبن',
     selectionType: PosAddonSelectionType.SINGLE,
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Add yogurt', nameAr: 'إضافة لبن', priceAdjustment: 1 },
+    ],
   },
   {
     id: 'cmq5hk1ol01ypetf51jdno8c6',
     code: 'RICE_FRIKEH',
     name: 'Rice and freekeh',
+    nameAr: 'رز و فريكة',
     selectionType: PosAddonSelectionType.SINGLE,
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Rice', nameAr: 'رز', priceAdjustment: 0 },
+      { name: 'Freekeh', nameAr: 'فريكة', priceAdjustment: 0 },
+    ],
   },
   {
     id: 'cmq5hq5mh01yxetf5xkv0zgsf',
@@ -174,7 +180,11 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Small', nameAr: 'صغير', priceAdjustment: 0 },
+      { name: 'Medium', nameAr: 'وسط', priceAdjustment: 2.5 },
+      { name: 'Large', nameAr: 'كبير', priceAdjustment: 5 },
+    ],
   },
   {
     id: 'cmq5htjrt01z9etf5pq8nd9bs',
@@ -185,7 +195,12 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Small', nameAr: 'صغير', priceAdjustment: 0 },
+      { name: 'Medium', nameAr: 'وسط', priceAdjustment: 2.5 },
+      { name: 'Large', nameAr: 'كبير', priceAdjustment: 5 },
+      { name: 'Crumbs', nameAr: 'فتات', priceAdjustment: 0 },
+    ],
   },
   {
     id: 'cmq5hzlq3020letf5m2ju6hme',
@@ -262,8 +277,10 @@ export async function seedPosAddons(prisma: PrismaClient) {
   let linkedProducts = 0;
 
   for (const [itemCode, links] of Array.from(linksByItemCode.entries())) {
-    const item = await prisma.inventoryItem.findUnique({
-      where: { code: itemCode },
+    const item = await prisma.inventoryItem.findFirst({
+      where: {
+        OR: [{ id: itemCode }, { code: itemCode }],
+      },
       select: { id: true, name: true },
     });
     if (!item) {
@@ -271,25 +288,25 @@ export async function seedPosAddons(prisma: PrismaClient) {
       continue;
     }
 
-    const validLinks = links
-      .map((link) => {
-        const groupId = groupByCode.get(link.groupCode);
-        if (!groupId) {
-          console.warn(`  Skipping missing addon group ${link.groupCode} for item ${itemCode}`);
-          return null;
-        }
-        return {
-          id: link.id,
-          itemId: item.id,
-          groupId,
-          sortOrder: link.sortOrder,
-        };
-      })
-      .filter((link): link is { id?: string; itemId: string; groupId: string; sortOrder: number } => Boolean(link));
+    const validLinks: ResolvedItemAddonLink[] = [];
+    for (const link of links) {
+      const groupId = groupByCode.get(link.groupCode);
+      if (!groupId) {
+        console.warn(`  Skipping missing addon group ${link.groupCode} for item ${itemCode}`);
+        continue;
+      }
+
+      validLinks.push({
+        id: link.id,
+        itemId: item.id,
+        groupId,
+        sortOrder: link.sortOrder,
+      });
+    }
 
     const desiredGroupIds = Array.from(
       new Set(validLinks.map((link) => link.groupId)),
-    ) as string[];
+    );
 
     await prisma.posItemAddonGroup.deleteMany({
       where: {
