@@ -35,6 +35,7 @@ type ResolvedItemAddonLink = {
 
 const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { id: 'cmq5gy4qq01mfetf5gm1f2bsy', itemCode: 'MENU-FOOD-003', groupCode: 'COOKING_TYPE', sortOrder: 0 },
+  { itemCode: 'MENU-FOOD-003', groupCode: 'HALF_HEAD', sortOrder: 1 },
   { id: 'cmq5gy4qq01mgetf5dc7r3ttp', itemCode: 'MENU-FOOD-003', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
   { id: 'cmq5gyk2e01mietf5kmypn8iq', itemCode: 'MENU-FOOD-002', groupCode: 'YOGURT_ADDON', sortOrder: 0 },
   { id: 'cmq5gynpg01mjetf5s658eo2c', itemCode: 'MENU-FOOD-001', groupCode: 'COOKING_TYPE', sortOrder: 0 },
@@ -223,7 +224,10 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     isRequired: false,
     minSelections: 0,
     sortOrder: 0,
-    options: [],
+    options: [
+      { name: 'Full head', nameAr: 'رأس كامل', priceAdjustment: 0 },
+      { name: 'Half head', nameAr: 'نص رأس', priceAdjustment: -3.5 },
+    ],
   },
 ];
 
