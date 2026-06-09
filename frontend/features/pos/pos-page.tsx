@@ -140,8 +140,8 @@ import {
   sumAddonPrices,
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
-import { PosWeightEntryModal } from "@/features/pos/pos-weight-entry-modal";
 import {
+  getMinSalesQuantity,
   formatWeightQuantity,
   getQuantityPrecision,
   getWeightQuantityStep,
@@ -1006,7 +1006,6 @@ export function PosPage() {
   const [addonModalItem, setAddonModalItem] = useState<InventoryItem | null>(null);
   const [addonModalConfig, setAddonModalConfig] = useState<PosItemAddonConfig | null>(null);
   const [addonEditLine, setAddonEditLine] = useState<CartLine | null>(null);
-  const [weightModalItem, setWeightModalItem] = useState<InventoryItem | null>(null);
   const [pendingEntryWeight, setPendingEntryWeight] = useState<number | null>(null);
   const deferredSearch = useDeferredValue(search);
   const [activeCategory, setActiveCategory] = useState<string>("all");
@@ -2982,10 +2981,6 @@ export function PosPage() {
     }
     if (isCartLockedByWaiter) {
       pushError(getOrderWaiterLockMessage(language));
-      return;
-    }
-    if (isWeightSaleItem(item)) {
-      setWeightModalItem(item);
       return;
     }
     await openAddonModalForItem(item);
@@ -5171,26 +5166,32 @@ export function PosPage() {
           </div>
         </Modal>
 
-        <PosWeightEntryModal
-          isOpen={Boolean(weightModalItem)}
-          item={weightModalItem}
-          language={language}
-          currencyCode={currencyCode}
-          onClose={() => setWeightModalItem(null)}
-          onConfirm={(weight) => {
-            const item = weightModalItem;
-            setWeightModalItem(null);
-            if (item) {
-              void openAddonModalForItem(item, weight);
-            }
-          }}
-        />
-
         <PosLineAddonModal
           isOpen={Boolean(addonModalItem)}
           itemName={addonModalItem?.name ?? ""}
           config={addonModalConfig}
           language={language}
+          weightSelection={
+            addonModalItem && isWeightSaleItem(addonModalItem)
+              ? {
+                  enabled: true,
+                  unitCode: addonModalItem.unitOfMeasure,
+                  precision: getQuantityPrecision(addonModalItem),
+                  minWeight: getMinSalesQuantity(addonModalItem),
+                  maxWeight:
+                    addonModalItem.trackInventory &&
+                    !Boolean(posSettings?.runtime.negativeStockAllowed)
+                      ? parseAmount(addonModalItem.onHandQuantity)
+                      : null,
+                  pricePerUnit: parseAmount(addonModalItem.defaultSalesPrice),
+                  initialWeight:
+                    pendingEntryWeight ??
+                    (addonEditLine?.itemId === addonModalItem.id && addonEditLine.sellByWeight
+                      ? addonEditLine.quantity
+                      : null),
+                }
+              : undefined
+          }
           initialAddons={
             addonEditLine ? getAddonsFromModifiers(addonEditLine.modifiers) : []
           }
@@ -5201,14 +5202,14 @@ export function PosPage() {
             setAddonEditLine(null);
             setPendingEntryWeight(null);
           }}
-          onConfirm={({ addons, lineNote }) => {
+          onConfirm={({ addons, lineNote, selectedWeight }) => {
             if (addonModalItem) {
               appendCartLine(
                 addonModalItem,
                 addons,
                 lineNote,
                 addonEditLine,
-                pendingEntryWeight,
+                selectedWeight ?? pendingEntryWeight,
               );
             }
             setAddonModalItem(null);

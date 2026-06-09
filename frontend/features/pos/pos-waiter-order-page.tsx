@@ -23,6 +23,12 @@ import {
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
 import {
+  formatWeightQuantity,
+  getMinSalesQuantity,
+  getQuantityPrecision,
+  isWeightSaleItem,
+} from "@/features/pos/pos-weight-utils";
+import {
   getActivePosSession,
   getDraftPosSales,
   getInventoryItems,
@@ -46,6 +52,9 @@ type WaiterCartLine = {
   kitchenSentAt?: string | null;
   itemId: string;
   name: string;
+  unit?: string;
+  sellByWeight?: boolean;
+  quantityPrecision?: number;
   quantity: number;
   unitPrice: number;
   taxRate: number;
@@ -111,6 +120,9 @@ function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
     kitchenSentAt: line.kitchenSentAt ?? null,
     itemId: line.itemId ?? line.id,
     name: line.itemName ?? line.description ?? "Item",
+    unit: line.item?.unitOfMeasure ?? "",
+    sellByWeight: Boolean(line.item?.allowFractionalQuantity),
+    quantityPrecision: line.item?.unitOfMeasureRef?.decimalPrecision ?? 3,
     quantity: parseAmount(line.quantity),
     unitPrice: parseAmount(line.unitPrice),
     taxRate:
@@ -320,10 +332,38 @@ export function PosWaiterOrderPage() {
     item: InventoryItem,
     addons: PosLineAddonSelection[],
     lineNote: string,
+    selectedWeight?: number | null,
   ) => {
+    const sellByWeight = isWeightSaleItem(item);
+    const quantity = sellByWeight ? (selectedWeight ?? 0) : 1;
+    if (sellByWeight && quantity <= 0) {
+      return;
+    }
     const unitPrice = parseAmount(item.defaultSalesPrice) + sumAddonPrices(addons);
     const modifiers = buildModifiersPayload(addons);
     setCartLines((current) => {
+      if (sellByWeight) {
+        return [
+          ...current,
+          {
+            itemId: item.id,
+            name: item.name,
+            unit: item.unitOfMeasure,
+            sellByWeight,
+            quantityPrecision: getQuantityPrecision(item),
+            quantity,
+            unitPrice,
+            taxRate: parseAmount(item.defaultTax?.rate),
+            trackInventory: Boolean(item.trackInventory),
+            warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
+            salesAccountId: item.salesAccount?.id ?? null,
+            onHandQuantity: parseAmount(item.onHandQuantity),
+            modifiers,
+            lineNote,
+          },
+        ];
+      }
+
       const idx = current.findIndex(
         (line) =>
           line.itemId === item.id &&
@@ -341,7 +381,10 @@ export function PosWaiterOrderPage() {
         {
           itemId: item.id,
           name: item.name,
-          quantity: 1,
+          unit: item.unitOfMeasure,
+          sellByWeight,
+          quantityPrecision: getQuantityPrecision(item),
+          quantity,
           unitPrice,
           taxRate: parseAmount(item.defaultTax?.rate),
           trackInventory: Boolean(item.trackInventory),
@@ -521,7 +564,14 @@ export function PosWaiterOrderPage() {
                           <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
                         ) : null}
                         <p className="mt-1 text-xs font-semibold text-[#506054]">
-                          {line.quantity} × {formatMoney(line.unitPrice, currencyCode)}
+                          {line.sellByWeight
+                            ? formatWeightQuantity(
+                                line.quantity,
+                                line.unit ?? "",
+                                line.quantityPrecision ?? 3,
+                              )
+                            : line.quantity}{" "}
+                          × {formatMoney(line.unitPrice, currencyCode)}
                         </p>
                         {line.kitchenSentAt ? (
                           <div className="mt-0.5 text-[10px] font-bold text-emerald-700">
@@ -555,7 +605,13 @@ export function PosWaiterOrderPage() {
                           <LuMinus className="h-4 w-4" />
                         </button>
                         <span className="min-w-[2rem] text-center text-sm font-black">
-                          {line.quantity}
+                          {line.sellByWeight
+                            ? formatWeightQuantity(
+                                line.quantity,
+                                line.unit ?? "",
+                                line.quantityPrecision ?? 3,
+                              )
+                            : line.quantity}
                         </span>
                         <button
                           type="button"
@@ -566,7 +622,16 @@ export function PosWaiterOrderPage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="mt-1 text-sm font-black text-[#506054]">× {line.quantity}</div>
+                      <div className="mt-1 text-sm font-black text-[#506054]">
+                        ×{" "}
+                        {line.sellByWeight
+                          ? formatWeightQuantity(
+                              line.quantity,
+                              line.unit ?? "",
+                              line.quantityPrecision ?? 3,
+                            )
+                          : line.quantity}
+                      </div>
                     )}
                   </div>
                 );
@@ -655,13 +720,24 @@ export function PosWaiterOrderPage() {
         itemName={addonModalItem?.name ?? ""}
         config={addonModalConfig}
         language={language}
+        weightSelection={
+          addonModalItem && isWeightSaleItem(addonModalItem)
+            ? {
+                enabled: true,
+                unitCode: addonModalItem.unitOfMeasure,
+                precision: getQuantityPrecision(addonModalItem),
+                minWeight: getMinSalesQuantity(addonModalItem),
+                pricePerUnit: parseAmount(addonModalItem.defaultSalesPrice),
+              }
+            : undefined
+        }
         onClose={() => {
           setAddonModalItem(null);
           setAddonModalConfig(null);
         }}
-        onConfirm={({ addons, lineNote }) => {
+        onConfirm={({ addons, lineNote, selectedWeight }) => {
           if (addonModalItem) {
-            appendLine(addonModalItem, addons, lineNote);
+            appendLine(addonModalItem, addons, lineNote, selectedWeight);
           }
           setAddonModalItem(null);
           setAddonModalConfig(null);

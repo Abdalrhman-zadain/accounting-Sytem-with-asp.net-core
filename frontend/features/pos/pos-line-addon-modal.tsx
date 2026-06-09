@@ -10,6 +10,7 @@ import type {
   PosLineAddonSelection,
 } from "@/features/pos/pos-addon-types";
 import { localizeAddonLabel } from "@/features/pos/pos-addon-utils";
+import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
 import { cn } from "@/lib/utils";
 
 type PosLineAddonModalProps = {
@@ -17,14 +18,57 @@ type PosLineAddonModalProps = {
   itemName: string;
   config: PosItemAddonConfig | null;
   language: string;
+  weightSelection?: {
+    enabled: boolean;
+    unitCode: string;
+    precision: number;
+    minWeight: number;
+    maxWeight?: number | null;
+    pricePerUnit?: number;
+    initialWeight?: number | null;
+  };
   initialAddons?: PosLineAddonSelection[];
   initialLineNote?: string;
   onClose: () => void;
   onConfirm: (payload: {
     addons: PosLineAddonSelection[];
     lineNote: string;
+    selectedWeight?: number | null;
   }) => void;
 };
+
+const DEFAULT_WEIGHT_PRESETS = [0.25, 0.5, 0.75, 1];
+
+function getWeightPresetLabel(
+  preset: number,
+  unitCode: string,
+  precision: number,
+  language: string,
+) {
+  const normalizedUnit = unitCode.trim().toLowerCase();
+  const isKiloUnit =
+    normalizedUnit === "kg" ||
+    normalizedUnit === "kgs" ||
+    normalizedUnit === "كيلو" ||
+    normalizedUnit === "كغم";
+
+  if (isKiloUnit) {
+    if (preset === 0.25) {
+      return language === "ar" ? "ربع كيلو" : "Quarter kilo";
+    }
+    if (preset === 0.5) {
+      return language === "ar" ? "نص كيلو" : "Half kilo";
+    }
+    if (preset === 0.75) {
+      return language === "ar" ? "750غم" : "750 g";
+    }
+    if (preset === 1) {
+      return language === "ar" ? "كيلو" : "1 kilo";
+    }
+  }
+
+  return formatWeightQuantity(preset, unitCode, precision);
+}
 
 function validateSelection(
   group: PosAddonGroup,
@@ -56,6 +100,7 @@ export function PosLineAddonModal({
   itemName,
   config,
   language,
+  weightSelection,
   initialAddons = [],
   initialLineNote = "",
   onClose,
@@ -63,15 +108,49 @@ export function PosLineAddonModal({
 }: PosLineAddonModalProps) {
   const isAr = language === "ar";
   const [lineNote, setLineNote] = React.useState(initialLineNote);
+  const [selectedWeight, setSelectedWeight] = React.useState<number | null>(null);
   const [selectedByGroup, setSelectedByGroup] = React.useState<
     Record<string, PosLineAddonSelection[]>
   >({});
   const [error, setError] = React.useState<string | null>(null);
 
+  const weightPresets = React.useMemo(() => {
+    if (!weightSelection?.enabled) {
+      return [];
+    }
+    const seen = new Set<number>();
+    const roundWeight = (value: number) => Number(value.toFixed(weightSelection.precision));
+    const values = [...DEFAULT_WEIGHT_PRESETS];
+    if (
+      typeof weightSelection.initialWeight === "number" &&
+      weightSelection.initialWeight > 0
+    ) {
+      values.push(weightSelection.initialWeight);
+    }
+
+    return values
+      .map(roundWeight)
+      .filter((value) => {
+        if (!Number.isFinite(value) || value <= 0 || value < weightSelection.minWeight) {
+          return false;
+        }
+        if (typeof weightSelection.maxWeight === "number" && value > weightSelection.maxWeight) {
+          return false;
+        }
+        if (seen.has(value)) {
+          return false;
+        }
+        seen.add(value);
+        return true;
+      })
+      .sort((a, b) => a - b);
+  }, [weightSelection]);
+
   React.useEffect(() => {
     if (!isOpen) return;
     setLineNote(initialLineNote);
     setError(null);
+    setSelectedWeight(weightSelection?.enabled ? (weightSelection.initialWeight ?? null) : null);
     const next: Record<string, PosLineAddonSelection[]> = {};
     for (const addon of initialAddons) {
       const bucket = next[addon.groupId] ?? [];
@@ -79,9 +158,10 @@ export function PosLineAddonModal({
       next[addon.groupId] = bucket;
     }
     setSelectedByGroup(next);
-  }, [isOpen, initialAddons, initialLineNote]);
+  }, [isOpen, initialAddons, initialLineNote, weightSelection]);
 
   const groups = config?.groups ?? [];
+  const hasSelectableContent = groups.length > 0 || Boolean(weightSelection?.enabled);
 
   const toggleOption = (group: PosAddonGroup, optionId: string) => {
     const option = group.options.find((row) => row.id === optionId);
@@ -112,6 +192,14 @@ export function PosLineAddonModal({
 
   const handleConfirm = () => {
     const allAddons = Object.values(selectedByGroup).flat();
+    if (weightSelection?.enabled && selectedWeight == null) {
+      setError(
+        isAr
+          ? "الرجاء اختيار الوزن أولاً"
+          : "Please choose a weight first",
+      );
+      return;
+    }
     for (const group of groups) {
       const selected = selectedByGroup[group.id] ?? [];
       const validationError = validateSelection(group, selected, language);
@@ -121,7 +209,11 @@ export function PosLineAddonModal({
       }
     }
     setError(null);
-    onConfirm({ addons: allAddons, lineNote: lineNote.trim() });
+    onConfirm({
+      addons: allAddons,
+      lineNote: lineNote.trim(),
+      selectedWeight,
+    });
   };
 
   return (
@@ -134,7 +226,64 @@ export function PosLineAddonModal({
     >
       <div className="flex max-h-[calc(90vh-5rem)] flex-col">
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-1 pb-2">
-          {groups.length === 0 ? (
+          {weightSelection?.enabled ? (
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-black text-slate-900">
+                  {isAr ? "الوزن" : "Weight"}
+                </h3>
+                <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">
+                  {isAr ? "مطلوب" : "Required"}
+                </span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {isAr ? "اختر الوزن" : "Choose weight"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {weightPresets.map((preset) => {
+                  const selected = selectedWeight === preset;
+                  const exceedsOnHand =
+                    typeof weightSelection.maxWeight === "number" &&
+                    preset > weightSelection.maxWeight;
+                  const label = getWeightPresetLabel(
+                    preset,
+                    weightSelection.unitCode,
+                    weightSelection.precision,
+                    language,
+                  );
+                  const estimatedPrice =
+                    typeof weightSelection.pricePerUnit === "number"
+                      ? Number((weightSelection.pricePerUnit * preset).toFixed(2))
+                      : null;
+
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={exceedsOnHand}
+                      onClick={() => setSelectedWeight(preset)}
+                      className={cn(
+                        "min-h-[44px] rounded-xl border px-4 py-2.5 text-sm font-bold transition",
+                        selected
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                        exceedsOnHand && "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {label}
+                      {estimatedPrice != null ? (
+                        <span className="ms-1 opacity-80">
+                          {estimatedPrice.toFixed(2)}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {!hasSelectableContent ? (
             <p className="text-sm text-slate-500">
               {isAr ? "لا توجد إضافات لهذا المنتج." : "No add-ons configured for this product."}
             </p>
