@@ -190,6 +190,76 @@ export const queryKeys = {
   posFavoriteItems(token: string | null) {
     return ["pos-favorite-items", token] as const;
   },
+  posMarketHealth: ["pos-market", "health"] as const,
+  posMarketDestinationMarkets(token: string | null) {
+    return ["pos-market", "destination-markets", token] as const;
+  },
+  posMarketActiveSession(token: string | null) {
+    return ["pos-market-active-session", token] as const;
+  },
+  posMarketSettings(token: string | null) {
+    return ["pos-market-settings", token] as const;
+  },
+  posMarketFavoriteItems(token: string | null) {
+    return ["pos-market-favorite-items", token] as const;
+  },
+  posMarketSessions(token: string | null) {
+    return ["pos-market-sessions", token] as const;
+  },
+  posMarketHeldSales(token: string | null, sessionId: string | null) {
+    return ["pos-market-held-sales", token, sessionId] as const;
+  },
+  posMarketDraftSales(token: string | null, sessionId: string | null) {
+    return ["pos-market-draft-sales", token, sessionId] as const;
+  },
+  posMarketCompletedSales(token: string | null) {
+    return ["pos-market-completed-sales", token] as const;
+  },
+  posMarketReview(token: string | null) {
+    return ["pos-market-review", token] as const;
+  },
+  posMarketReturns(token: string | null) {
+    return ["pos-market-returns", token] as const;
+  },
+  posMarketReceivables(
+    token: string | null,
+    filters?: { salesRepId?: string; search?: string },
+  ) {
+    return ["pos-market-receivables", token, filters ?? {}] as const;
+  },
+  posMarketReceivableInvoices(token: string | null, customerId: string | null) {
+    return ["pos-market-receivable-invoices", token, customerId] as const;
+  },
+  posMarketReceivableDetail(token: string | null, customerId: string | null) {
+    return ["pos-market-receivable-detail", token, customerId] as const;
+  },
+  posMarketReceivableSalesReps(token: string | null) {
+    return ["pos-market-receivable-sales-reps", token] as const;
+  },
+  posMarketReportsOverview(token: string | null) {
+    return ["pos-market-reports-overview", token] as const;
+  },
+  posMarketSessionReport(token: string | null, sessionId: string | null) {
+    return ["pos-market-session-report", token, sessionId] as const;
+  },
+  posMarketSalesByPaymentMethod(token: string | null) {
+    return ["pos-market-sales-by-payment-method", token] as const;
+  },
+  posMarketSalesByCashier(token: string | null) {
+    return ["pos-market-sales-by-cashier", token] as const;
+  },
+  posMarketSalesByBranch(token: string | null) {
+    return ["pos-market-sales-by-branch", token] as const;
+  },
+  posMarketSalesByItem(token: string | null) {
+    return ["pos-market-sales-by-item", token] as const;
+  },
+  posMarketInventoryImpact(token: string | null) {
+    return ["pos-market-inventory-impact", token] as const;
+  },
+  posMarketTaxSummary(token: string | null) {
+    return ["pos-market-tax-summary", token] as const;
+  },
   posSessions(token: string | null) {
     return ["pos-sessions", token] as const;
   },

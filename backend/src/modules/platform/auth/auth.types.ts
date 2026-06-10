@@ -1,4 +1,10 @@
-export type PosAccessRoleCode = "CASHIER" | "ACCOUNTANT" | "KITCHEN" | "WAITER";
+export type PosAccessRoleCode =
+  | "CASHIER"
+  | "ACCOUNTANT"
+  | "KITCHEN"
+  | "WAITER"
+  | "MARKET_CASHIER"
+  | "MARKET_REP";
 
 export type PosPermissionCode =
   | "POS_OPEN_SESSION"
@@ -59,7 +65,9 @@ export type PosPermissionCode =
   | "RST_UPDATE_WAITER_ORDER_STATUS"
   | "POS_CORRECT_ORDER_TYPE"
   | "POS_APPROVE_CORRECTION"
-  | "POS_REOPEN_SESSION";
+  | "POS_REOPEN_SESSION"
+  | "POS_MARKET_VIEW_RECEIVABLES"
+  | "POS_MARKET_COLLECT_RECEIVABLE";
 
 
 export type AuthorizedUser = {
@@ -74,6 +82,10 @@ export type AuthorizedUser = {
   allowedRoutes: string[];
   defaultRoute: string;
   isCashierOnly: boolean;
+  isMarketCashierOnly: boolean;
+  isMarketRepOnly: boolean;
+  isMarketPosOperatorOnly: boolean;
+  salesRepId: string | null;
   isKitchenOnly: boolean;
   isWaiterOnly: boolean;
 };

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { SiQuickbooks } from "react-icons/si";
 import {
   LuBookOpen as BookOpen,
   LuFileText as FileText,
@@ -27,6 +26,7 @@ import {
   LuChartPie as ChartPie,
   LuUsers as Users,
   LuStore as Store,
+  LuShoppingBasket as ShoppingBasket,
   LuPrinter as Printer,
   LuClock3 as Clock3,
   LuFileClock as FileClock,
@@ -40,6 +40,7 @@ import {
   LuMinimize2 as Minimize2,
 } from "react-icons/lu";
 
+import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { useTranslation, TranslationKey } from "@/lib/i18n";
@@ -124,6 +125,22 @@ const navGroups: NavGroup[] = [
           { href: "/pos/printers", labelKey: "pos.workspace.printers", icon: Printer },
           { href: "/pos/reports", labelKey: "pos.workspace.reports", icon: ChartNoAxesColumn },
           { href: "/pos/settings", labelKey: "pos.workspace.settings", icon: Settings2 },
+        ],
+      },
+      {
+        href: "/pos-market",
+        labelKey: "nav.item.posMarket",
+        icon: ShoppingBasket,
+        children: [
+          { href: "/pos-market/register", labelKey: "posMarket.workspace.register", icon: Monitor },
+          { href: "/pos-market/sessions", labelKey: "posMarket.workspace.sessions", icon: Clock3 },
+          { href: "/pos-market/held-sales", labelKey: "posMarket.workspace.held", icon: FileClock },
+          { href: "/pos-market/receivables", labelKey: "posMarket.workspace.receivables", icon: WalletMinimal },
+          { href: "/pos-market/accounting-review", labelKey: "posMarket.workspace.review", icon: ClipboardCheck },
+          { href: "/pos-market/returns", labelKey: "posMarket.workspace.returns", icon: Undo2 },
+          { href: "/pos-market/printers", labelKey: "posMarket.workspace.printers", icon: Printer },
+          { href: "/pos-market/reports", labelKey: "posMarket.workspace.reports", icon: ChartNoAxesColumn },
+          { href: "/pos-market/settings", labelKey: "posMarket.workspace.settings", icon: Settings2 },
         ],
       },
       {
@@ -232,9 +249,7 @@ export function SiteHeader({
         <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
             <div className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-gray-900">
-              <div className="text-primary">
-                <SiQuickbooks size={24} />
-              </div>
+              <AppLogo height={28} priority />
               {t("app.title")}
             </div>
           </div>
@@ -248,8 +263,8 @@ export function SiteHeader({
           isCollapsed ? "w-20" : "w-60",
         )}
       >
-        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-4")}>
-          <SiQuickbooks className="h-10 w-10 text-primary" />
+        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-3")}>
+          <AppLogo height={isCollapsed ? 36 : 40} priority className="shrink-0" />
           <div className={cn(isCollapsed && "sr-only")}>
             <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">{t("app.subtitle")}</div>
@@ -265,9 +280,7 @@ export function SiteHeader({
       <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-gray-900">
-            <div className="text-primary">
-              <SiQuickbooks size={24} />
-            </div>
+            <AppLogo height={28} priority />
             {t("app.title")}
           </Link>
         </div>
@@ -562,8 +575,8 @@ export function SiteHeader({
         isCollapsed ? "w-20" : "w-60",
       )}
     >
-      <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-4")}>
-        <SiQuickbooks className="h-10 w-10 text-primary" />
+      <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-3")}>
+        <AppLogo height={isCollapsed ? 36 : 40} priority className="shrink-0" />
         <div className={cn(isCollapsed && "sr-only")}>
           <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
           <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">{t("app.subtitle")}</div>

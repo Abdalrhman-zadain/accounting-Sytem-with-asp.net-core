@@ -1,0 +1,643 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
+import { LuScanLine, LuSearch } from "react-icons/lu";
+
+import { Card, Modal } from "@/components/ui";
+import { Field, Input } from "@/components/ui/forms";
+import {
+  buildSaleLinesPayload,
+  consumeStashedHeldSale,
+  formatCurrency,
+  getErrorMessage,
+  mapPosReceiptToPrintData,
+  parseAmount,
+} from "@/features/pos-market/pos-market-cart-utils";
+import { PosMarketCartPanel } from "@/features/pos-market/pos-market-cart-panel";
+import { PosMarketCheckoutModal } from "@/features/pos-market/pos-market-checkout-modal";
+import { PosMarketDestinationPicker } from "@/features/pos-market/pos-market-destination-picker";
+import { PosMarketOpenShiftPanel } from "@/features/pos-market/pos-market-open-shift-panel";
+import {
+  printMarketCustomerReceipt,
+  shouldAutoPrintReceiptOnPay,
+} from "@/features/pos-market/pos-market-print-service";
+import { PosMarketProductCard } from "@/features/pos-market/pos-market-product-card";
+import { PosMarketRegisterLayout } from "@/features/pos-market/pos-market-register-layout";
+import { PosMarketSessionBar } from "@/features/pos-market/pos-market-session-bar";
+import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
+import { usePosMarketCatalog } from "@/features/pos-market/use-pos-market-catalog";
+import { usePosMarketCart } from "@/features/pos-market/use-pos-market-cart";
+import { usePosMarketSession } from "@/features/pos-market/use-pos-market-session";
+import { PosMarketWeightEntryModal } from "@/features/pos-market/pos-market-weight-entry-modal";
+import { isWeightSaleItem } from "@/features/pos-market/pos-market-weight-utils";
+import {
+  completePosMarketSale,
+  getBankCashAccounts,
+  getDraftPosMarketSales,
+  getHeldPosMarketSales,
+  getPosMarketDestinationMarkets,
+  getPosMarketSettings,
+  getInventoryWarehouses,
+  holdPosMarketSale,
+  voidPosMarketSale,
+} from "@/lib/api";
+import { hasPermission } from "@/lib/auth-access";
+import { useTranslation } from "@/lib/i18n";
+import { queryKeys } from "@/lib/query-keys";
+import { getLocalizedText } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import type { InventoryItem } from "@/types/api";
+
+const POS_MARKET_LAST_CUSTOMER_KEY = "pos-market-last-customer-id";
+
+export function PosMarketRegisterWorkspace() {
+  const { token, user } = useAuth();
+  const { t, language } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [sessionForm, setSessionForm] = useState({
+    terminalName: "Market-1",
+    branchName: "Main Market",
+    openingCash: "0",
+  });
+  const [search, setSearch] = useState("");
+  const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const [flashTone, setFlashTone] = useState<"success" | "error">("success");
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [actualCashCount, setActualCashCount] = useState("");
+  const [closingNotes, setClosingNotes] = useState("");
+  const [weightModalItem, setWeightModalItem] = useState<InventoryItem | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  const session = usePosMarketSession(token);
+  const activeSession = session.activeSession;
+  const catalog = usePosMarketCatalog(token, activeSession?.warehouse?.id);
+
+  const warehousesQuery = useQuery({
+    queryKey: queryKeys.inventoryWarehouses(token ?? null, { isActive: "true" }),
+    queryFn: () => getInventoryWarehouses({ isActive: "true" }, token),
+    enabled: Boolean(token),
+  });
+
+  const paymentAccountsQuery = useQuery({
+    queryKey: queryKeys.bankCashAccounts(token ?? null, { isActive: "true" }),
+    queryFn: () => getBankCashAccounts({ isActive: "true" }, token),
+    enabled: Boolean(token),
+  });
+
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.posMarketSettings(token ?? null),
+    queryFn: () => getPosMarketSettings(token),
+    enabled: Boolean(token),
+  });
+
+  const destinationMarketsQuery = useQuery({
+    queryKey: queryKeys.posMarketDestinationMarkets(token ?? null),
+    queryFn: () => getPosMarketDestinationMarkets(token),
+    enabled: Boolean(token),
+  });
+
+  const paymentAccounts = paymentAccountsQuery.data ?? [];
+  const destinationMarkets = destinationMarketsQuery.data ?? [];
+  const selectedCustomer =
+    destinationMarkets.find((customer) => customer.id === selectedCustomerId) ?? null;
+  const hasDestinationMarket = Boolean(selectedCustomerId);
+  const posSettings = settingsQuery.data ?? null;
+
+  const cart = usePosMarketCart({
+    sessionWarehouseId: activeSession?.warehouse?.id,
+    paymentAccounts,
+    posSettings,
+    defaultCashAccountId: activeSession?.cashAccount?.id,
+  });
+
+  const currencyCode = activeSession?.cashAccount?.currencyCode ?? "JOD";
+
+  const pushMessage = useCallback((message: string, tone: "success" | "error" = "success") => {
+    setFlashMessage(message);
+    setFlashTone(tone);
+    if (tone === "success") {
+      window.setTimeout(() => setFlashMessage(null), 3600);
+    }
+  }, []);
+
+  const persistSelectedCustomer = useCallback((customerId: string | null) => {
+    setSelectedCustomerId(customerId);
+    try {
+      if (customerId) {
+        sessionStorage.setItem(POS_MARKET_LAST_CUSTOMER_KEY, customerId);
+      } else {
+        sessionStorage.removeItem(POS_MARKET_LAST_CUSTOMER_KEY);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeSession || destinationMarkets.length === 0 || selectedCustomerId) return;
+    try {
+      const savedId = sessionStorage.getItem(POS_MARKET_LAST_CUSTOMER_KEY);
+      if (savedId && destinationMarkets.some((customer) => customer.id === savedId)) {
+        setSelectedCustomerId(savedId);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, [activeSession, destinationMarkets, selectedCustomerId]);
+
+  const allowCreditSale = Boolean(posSettings?.runtime.allowCreditSale);
+
+  const completeSaleMutation = useMutation({
+    mutationFn: (payLater: boolean) => {
+      if (!activeSession) throw new Error("No active session");
+      if (!selectedCustomerId) {
+        throw new Error(t("posMarket.destination.requiredHint"));
+      }
+      const paymentPayload = payLater
+        ? []
+        : cart.paymentEntries
+            .filter((entry) => entry.bankCashAccountId && parseAmount(entry.amount) > 0)
+            .map((entry) => ({
+              bankCashAccountId: entry.bankCashAccountId,
+              amount: Number(parseAmount(entry.amount).toFixed(2)),
+            }));
+
+      if (!payLater && paymentPayload.length === 0) {
+        throw new Error(t("posMarket.checkout.noPaymentAccount"));
+      }
+
+      if (
+        !payLater &&
+        cart.cartMetrics.amountDue > 0.009 &&
+        !allowCreditSale
+      ) {
+        throw new Error(t("posMarket.checkout.insufficientPayment"));
+      }
+
+      return completePosMarketSale(
+        {
+          sessionId: activeSession.id,
+          invoiceId: cart.editingInvoiceId ?? undefined,
+          customerId: selectedCustomerId,
+          lines: buildSaleLinesPayload({
+            cartLines: cart.cartLines,
+            cartMetrics: cart.cartMetrics,
+            taxPolicy: posSettings?.runtime.invoiceDiscountTaxPolicy,
+            taxFreeEnabled: posSettings?.runtime.taxFreeEnabled,
+          }),
+          payments: paymentPayload,
+        },
+        token,
+      );
+    },
+    onSuccess: async (response) => {
+      if (shouldAutoPrintReceiptOnPay()) {
+        try {
+          await printMarketCustomerReceipt(
+            mapPosReceiptToPrintData(response.receipt, {
+              destinationMarketName: selectedCustomer?.name ?? response.sale.customer?.name ?? null,
+            }),
+          );
+        } catch {
+          // printing failure should not block sale completion
+        }
+      }
+      cart.clearCart();
+      setIsCheckoutOpen(false);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketActiveSession(token ?? null) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketCompletedSales(token ?? null) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketHeldSales(token ?? null, activeSession?.id ?? null) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketDraftSales(token ?? null, activeSession?.id ?? null) });
+      void queryClient.invalidateQueries({
+        queryKey: ["inventory-items", token],
+      });
+      pushMessage(t("posMarket.checkout.success"));
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("posMarket.checkout.error")), "error");
+    },
+  });
+
+  const holdSaleMutation = useMutation({
+    mutationFn: () => {
+      if (!activeSession) throw new Error("No active session");
+      if (!selectedCustomerId) {
+        throw new Error(t("posMarket.destination.requiredHint"));
+      }
+      return holdPosMarketSale(
+        {
+          sessionId: activeSession.id,
+          invoiceId: cart.editingInvoiceId ?? undefined,
+          customerId: selectedCustomerId,
+          lines: buildSaleLinesPayload({
+            cartLines: cart.cartLines,
+            cartMetrics: cart.cartMetrics,
+            taxPolicy: posSettings?.runtime.invoiceDiscountTaxPolicy,
+            taxFreeEnabled: posSettings?.runtime.taxFreeEnabled,
+          }),
+          payments: cart.paymentEntries
+            .filter((entry) => entry.bankCashAccountId && parseAmount(entry.amount) > 0)
+            .map((entry) => ({
+              bankCashAccountId: entry.bankCashAccountId,
+              amount: Number(parseAmount(entry.amount).toFixed(2)),
+            })),
+        },
+        token,
+      );
+    },
+    onSuccess: () => {
+      cart.clearCart();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketHeldSales(token ?? null, activeSession?.id ?? null) });
+      pushMessage(t("posMarket.cart.holdSuccess"));
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("posMarket.cart.holdError")), "error");
+    },
+  });
+
+  const voidSaleMutation = useMutation({
+    mutationFn: (saleId: string) => voidPosMarketSale(saleId, {}, token),
+    onSuccess: () => {
+      cart.clearCart();
+      pushMessage(t("pos.sales.voidSuccess"));
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.voidError")), "error");
+    },
+  });
+
+  const filteredItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return catalog.items;
+    return catalog.items.filter(
+      (item) =>
+        item.code.toLowerCase().includes(term) ||
+        item.name.toLowerCase().includes(term) ||
+        item.barcode?.toLowerCase().includes(term),
+    );
+  }, [catalog.items, search]);
+
+  const addItemToCart = useCallback(
+    (
+      item: InventoryItem,
+      entry?: { quantity: number; unitPrice: number },
+    ) => {
+      if (!hasPermission(user, "POS_ADD_ITEM_TO_CART")) return;
+      if (!activeSession) {
+        pushMessage(t("pos.sales.alert.sessionClosed"), "error");
+        return;
+      }
+      const result = entry
+        ? cart.addItem(item, { quantity: entry.quantity, unitPrice: entry.unitPrice })
+        : cart.addItem(item);
+      if (result === "STOCK_EXCEEDED") {
+        pushMessage(t("pos.sales.alert.stockExceeded", { item: item.name }), "error");
+      }
+    },
+    [activeSession, cart, pushMessage, t, user],
+  );
+
+  const handleSelectItem = useCallback(
+    (item: InventoryItem) => {
+      if (!hasPermission(user, "POS_ADD_ITEM_TO_CART")) return;
+      if (!activeSession) {
+        pushMessage(t("pos.sales.alert.sessionClosed"), "error");
+        return;
+      }
+      if (isWeightSaleItem(item)) {
+        setWeightModalItem(item);
+        return;
+      }
+      addItemToCart(item);
+    },
+    [activeSession, addItemToCart, pushMessage, t, user],
+  );
+
+  const handleBarcodeSubmit = useCallback(() => {
+    const term = search.trim();
+    if (!term) return;
+    const exact =
+      catalog.items.find((item) => item.barcode === term) ??
+      catalog.items.find((item) => item.code.toLowerCase() === term.toLowerCase());
+    if (exact) {
+      handleSelectItem(exact);
+      setSearch("");
+    }
+  }, [catalog.items, handleSelectItem, search]);
+
+  useEffect(() => {
+    const resumeId = searchParams.get("resume");
+    if (!resumeId || !activeSession) return;
+    const stashed = consumeStashedHeldSale(resumeId);
+    if (stashed) {
+      cart.loadHeldSale(stashed);
+      if (stashed.customerId) {
+        persistSelectedCustomer(stashed.customerId);
+      }
+      router.replace("/pos-market/register");
+    }
+  }, [activeSession, cart, persistSelectedCustomer, router, searchParams]);
+
+  const heldQuery = useQuery({
+    queryKey: queryKeys.posMarketHeldSales(token ?? null, activeSession?.id ?? null),
+    queryFn: () => getHeldPosMarketSales(activeSession!.id, token),
+    enabled: Boolean(token && activeSession?.id),
+  });
+
+  const draftQuery = useQuery({
+    queryKey: queryKeys.posMarketDraftSales(token ?? null, activeSession?.id ?? null),
+    queryFn: () => getDraftPosMarketSales(activeSession!.id, token),
+    enabled: Boolean(token && activeSession?.id),
+  });
+
+  const cashierLabel = user?.name?.trim() || user?.email || "Cashier";
+
+  if (session.isLoading) {
+    return (
+      <div className="flex h-dvh items-center justify-center" style={{ backgroundColor: POS_MARKET_THEME.colors.pageSurface }}>
+        <p className="text-sm font-semibold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+          {t("posMarket.session.loading")}
+        </p>
+      </div>
+    );
+  }
+
+  if (!session.isOpen || !activeSession) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 p-4">
+        <Card className="rounded-[32px] border border-[#d5deea] p-6 sm:p-8">
+          <div className="mx-auto max-w-3xl space-y-8">
+            <div className="space-y-3 text-center">
+              <div
+                className="inline-flex items-center rounded-full border px-4 py-2 text-xs font-black tracking-[0.18em]"
+                style={{
+                  borderColor: POS_MARKET_THEME.colors.outline,
+                  backgroundColor: POS_MARKET_THEME.colors.primarySoft,
+                  color: POS_MARKET_THEME.colors.primary,
+                }}
+              >
+                {t("posMarket.session.openTitle")}
+              </div>
+              <h1 className="text-3xl font-black tracking-tight arabic-heading" style={{ color: POS_MARKET_THEME.colors.text }}>
+                {t("pos.sessions.openShiftAction")}
+              </h1>
+              <p className="text-sm leading-7 arabic-auto" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+                {t("posMarket.session.openDescription")}
+              </p>
+            </div>
+            <PosMarketOpenShiftPanel
+              sessionState={sessionForm}
+              cashierLabel={cashierLabel}
+              warehouses={warehousesQuery.data ?? []}
+              paymentAccounts={paymentAccounts}
+              canOpenShift={hasPermission(user, "POS_OPEN_SESSION")}
+              onSessionStateChange={(patch) => setSessionForm((current) => ({ ...current, ...patch }))}
+              onOpenSession={(openingCash, warehouseId, cashAccountId) => {
+                session.openSessionMutation.mutate({
+                  openingCash: parseAmount(openingCash),
+                  warehouseId,
+                  cashAccountId,
+                  terminalName: sessionForm.terminalName,
+                  branchName: sessionForm.branchName || undefined,
+                });
+              }}
+              isPending={session.openSessionMutation.isPending}
+            />
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden" style={{ backgroundColor: POS_MARKET_THEME.colors.pageSurface }}>
+      <PosMarketSessionBar
+        session={activeSession}
+        canCloseSession={hasPermission(user, "POS_CLOSE_OWN_SESSION")}
+        isPending={session.closeSessionMutation.isPending}
+        onCloseSession={() => {
+          const blockDrafts =
+            ((draftQuery.data?.length ?? 0) > 0 || (heldQuery.data?.length ?? 0) > 0) &&
+            !posSettings?.runtime.allowCloseWithDrafts;
+          if (blockDrafts) {
+            pushMessage(t("posMarket.session.closeBlocked"), "error");
+            return;
+          }
+          setActualCashCount("");
+          setClosingNotes("");
+          setIsCloseModalOpen(true);
+        }}
+      />
+
+      {flashMessage ? (
+        <div
+          className={`mx-3 mt-2 rounded-xl border px-4 py-2 text-sm font-semibold ${
+            flashTone === "error"
+              ? "border-red-200 bg-red-50 text-red-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {flashMessage}
+        </div>
+      ) : null}
+
+      <div className="mx-3 mt-2 shrink-0 sm:mx-4">
+        <PosMarketDestinationPicker
+          customers={destinationMarkets}
+          selectedCustomerId={selectedCustomerId}
+          onSelect={persistSelectedCustomer}
+          onClear={() => persistSelectedCustomer(null)}
+          isLoading={destinationMarketsQuery.isLoading}
+          isError={destinationMarketsQuery.isError}
+          compact
+        />
+      </div>
+
+      <PosMarketRegisterLayout
+        catalog={
+          <section className="flex h-full flex-col gap-3">
+            <Card className="rounded-xl border border-[#d5deea] p-3 shadow-none">
+              <Field label={t("pos.sales.barcodeSearch")} className="mb-0">
+                <div className="relative">
+                  <LuScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 rtl:left-auto rtl:right-3" />
+                  <Input
+                    ref={searchInputRef}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleBarcodeSubmit();
+                      }
+                    }}
+                    placeholder={t("pos.sales.barcodePlaceholder")}
+                    className="h-10 rounded-lg py-2 pl-9 pr-3 text-sm rtl:pl-3 rtl:pr-9"
+                    style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+                  />
+                </div>
+              </Field>
+            </Card>
+
+            <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+              {catalog.isLoading ? (
+                <Card className="p-6 text-sm text-slate-500">{t("common.loading")}</Card>
+              ) : catalog.isError ? (
+                <Card className="p-6 text-sm text-red-600">{t("posMarket.catalogError")}</Card>
+              ) : filteredItems.length === 0 ? (
+                <Card className="flex flex-col items-center gap-2 p-8 text-sm text-slate-500">
+                  <LuSearch className="h-8 w-8 opacity-40" />
+                  {t("posMarket.catalogEmpty")}
+                </Card>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
+                  {filteredItems.map((item) => (
+                    <PosMarketProductCard
+                      key={item.id}
+                      item={item}
+                      currencyCode={currencyCode}
+                      onSelectWeight={(selectedItem) => {
+                        if (!hasPermission(user, "POS_ADD_ITEM_TO_CART")) return;
+                        if (!activeSession) {
+                          pushMessage(t("pos.sales.alert.sessionClosed"), "error");
+                          return;
+                        }
+                        setWeightModalItem(selectedItem);
+                      }}
+                      onAdd={addItemToCart}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        }
+        cart={
+          <PosMarketCartPanel
+            lines={cart.cartLines}
+            metrics={cart.cartMetrics}
+            currencyCode={currencyCode}
+            canHold={hasPermission(user, "POS_HOLD_SALE")}
+            canVoid={Boolean(cart.editingInvoiceId) && hasPermission(user, "POS_VOID_DRAFT_SALE")}
+            onUpdateQuantity={cart.updateLineQuantity}
+            onRemoveLine={cart.removeLine}
+            onHold={() => holdSaleMutation.mutate()}
+            onVoid={() => cart.editingInvoiceId && voidSaleMutation.mutate(cart.editingInvoiceId)}
+            onClear={cart.clearCart}
+            onCheckout={() => {
+              if (!hasDestinationMarket) {
+                pushMessage(t("posMarket.destination.requiredHint"), "error");
+                return;
+              }
+              cart.syncPaymentTotal();
+              cart.ensureDefaultPayment(cart.cartMetrics.total);
+              setIsCheckoutOpen(true);
+            }}
+            isCheckoutDisabled={!hasPermission(user, "POS_COMPLETE_SALE") || !hasDestinationMarket}
+            isHoldDisabled={!hasDestinationMarket}
+          />
+        }
+      />
+
+      <PosMarketCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        metrics={cart.cartMetrics}
+        paymentEntry={cart.paymentEntries[0] ?? null}
+        currencyCode={currencyCode}
+        isPending={completeSaleMutation.isPending}
+        allowCreditSale={allowCreditSale}
+        hasDestinationMarket={hasDestinationMarket}
+        onPaymentMethodChange={cart.setSinglePaymentMethod}
+        onAmountChange={cart.updatePaymentAmount}
+        onComplete={() => completeSaleMutation.mutate(false)}
+        onPayLater={() => completeSaleMutation.mutate(true)}
+      />
+
+      <PosMarketWeightEntryModal
+        isOpen={Boolean(weightModalItem)}
+        item={weightModalItem}
+        language={language}
+        currencyCode={currencyCode}
+        onClose={() => setWeightModalItem(null)}
+        onConfirm={(weight) => {
+          if (!weightModalItem) return;
+          const result = cart.addItem(weightModalItem, { weight });
+          if (result === "STOCK_EXCEEDED") {
+            pushMessage(
+              t("pos.sales.alert.stockExceeded", { item: weightModalItem.name }),
+              "error",
+            );
+          }
+          setWeightModalItem(null);
+        }}
+      />
+
+      <Modal
+        isOpen={isCloseModalOpen}
+        onClose={() => {
+          setIsCloseModalOpen(false);
+          setActualCashCount("");
+          setClosingNotes("");
+        }}
+        title={getLocalizedText("Close shift / إغلاق الوردية", language)}
+      >
+        <div className="space-y-4">
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={actualCashCount}
+            onChange={(event) => setActualCashCount(event.target.value)}
+            placeholder={t("posMarket.session.actualCashPlaceholder")}
+            className="rounded-xl py-3"
+          />
+          <Input
+            value={closingNotes}
+            onChange={(event) => setClosingNotes(event.target.value)}
+            placeholder={t("posMarket.session.closingNotesPlaceholder")}
+            className="rounded-xl py-3"
+          />
+          <button
+            type="button"
+            disabled={
+              !activeSession?.id ||
+              session.closeSessionMutation.isPending ||
+              actualCashCount.trim() === ""
+            }
+            onClick={() =>
+              activeSession
+                ? session.closeSessionMutation.mutate(
+                    {
+                      sessionId: activeSession.id,
+                      actualCash: parseAmount(actualCashCount),
+                      notes: closingNotes.trim() || undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setIsCloseModalOpen(false);
+                        pushMessage(t("posMarket.session.closeSuccess"));
+                      },
+                      onError: (error) => {
+                        pushMessage(getErrorMessage(error, t("posMarket.session.closeError")), "error");
+                      },
+                    },
+                  )
+                : undefined
+            }
+            className="w-full rounded-xl px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+            style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
+          >
+            {t("posMarket.session.confirmClose")}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}

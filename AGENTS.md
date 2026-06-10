@@ -19,6 +19,17 @@
 - If functionality is added, removed, renamed, moved, or behavior changes, check whether `docs/change-guide.md` or `docs/known-issues.md` also need updates.
 - Do not document future ERP phases as implemented unless the code actually exists.
 
+## POS Product Isolation
+
+This repository has two POS products:
+
+- **Restaurant POS** — `frontend/features/pos/`, routes `/pos/*`, API `/api/pos/*`. Maintenance mode for new features unless the user explicitly requests restaurant POS work. See `frontend/features/pos/FROZEN.md`.
+- **Market POS** — `frontend/features/pos-market/`, routes `/pos-market/*`, API `/api/pos-market/*`. All new market/retail POS work goes here. See `docs/pos-market/README.md`.
+
+Never import across `features/pos` and `features/pos-market`.
+
+Shared POS hooks and helpers belong in `frontend/features/pos-shared`. Shared API fetchers belong in `frontend/lib/api` (not inside `features/pos`). See `frontend/features/pos-shared/README.md`.
+
 ## Edit Placement Rules
 
 - Reusable UI primitives belong in `frontend/components/ui`.

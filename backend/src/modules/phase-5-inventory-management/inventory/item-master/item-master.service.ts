@@ -904,10 +904,9 @@ export class ItemMasterService {
     row: InventoryItemWithAccounts & { warehouseBalances?: { onHandQuantity: Prisma.Decimal }[] },
     warehouseId?: string | null,
   ) {
-    const warehouseOnHand =
-      warehouseId?.trim() && row.warehouseBalances?.length
-        ? row.warehouseBalances[0]?.onHandQuantity ?? new Prisma.Decimal(0)
-        : null;
+    const warehouseOnHand = warehouseId?.trim()
+      ? (row.warehouseBalances?.[0]?.onHandQuantity ?? new Prisma.Decimal(0))
+      : null;
 
     const onHandDisplay = warehouseOnHand ?? row.onHandQuantity;
 

@@ -8,6 +8,9 @@ import { JournalEntriesModule } from '../phase-1-accounting-foundation/accountin
 import { PostingLogicModule } from '../phase-1-accounting-foundation/accounting-core/posting-logic/posting-logic.module';
 import { ReversalControlModule } from '../phase-1-accounting-foundation/accounting-core/reversal-control/reversal-control.module';
 import { InventoryPostingModule } from '../phase-5-inventory-management/inventory/shared/inventory-posting.module';
+import { PosTerminalService } from './pos-core/pos-terminal.service';
+import { PosMarketController } from './pos-market/pos-market.controller';
+import { PosMarketService } from './pos-market/pos-market.service';
 import { PosController } from './pos/pos.controller';
 import { PosTableController } from './pos/pos-table.controller';
 import { PosKitchenController } from './pos/pos-kitchen.controller';
@@ -23,12 +26,13 @@ import { SalesReceivablesService } from './sales-receivables.service';
   controllers: [
     SalesReceivablesController,
     PosController,
+    PosMarketController,
     PosTableController,
     PosKitchenController,
     PosWaiterOrdersController,
     PosAddonController,
   ],
-  providers: [SalesReceivablesService, PosService, PosAddonService],
-  exports: [SalesReceivablesService, PosService, PosAddonService],
+  providers: [SalesReceivablesService, PosService, PosAddonService, PosTerminalService, PosMarketService],
+  exports: [SalesReceivablesService, PosService, PosAddonService, PosTerminalService, PosMarketService],
 })
 export class SalesReceivablesModule {}

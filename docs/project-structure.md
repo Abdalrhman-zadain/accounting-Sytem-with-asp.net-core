@@ -81,7 +81,8 @@ Current feature areas:
 - `features/phase-2-bank-cash-management/bank-cash-accounts`
 - `features/phase-2-bank-cash-management/bank-cash-transactions`
 - `features/phase-3-sales-receivables`
-- `features/pos`
+- `features/pos` (restaurant POS — frozen for new features; see `frontend/features/pos/FROZEN.md`)
+- `features/pos-market` (market/retail POS — all new market checkout work)
 - `features/phase-4-procure-to-pay`
 - `features/phase-5-inventory-management`
 - `features/phase-6-payroll-management`
@@ -93,7 +94,9 @@ Put code here when:
 - the component is not reusable across unrelated features
 - the logic depends on accounting or auth behavior
 
-`features/pos` owns the POS frontend workspace under `/pos`. Keep the route entry thin in `frontend/app/(erp)/pos/page.tsx` and place POS-specific terminal UI, tab switching, and future POS business screens inside the feature folder. When extending POS UI, reuse the palette in `frontend/features/pos/pos-theme.ts` and the design note in `docs/pos/POS_UI_Color_Reference.md`.
+`features/pos` owns the **restaurant** POS frontend workspace under `/pos`. Keep route entries thin in `frontend/app/(erp)/pos/` and place restaurant POS terminal UI inside the feature folder. When extending restaurant POS UI, reuse the palette in `frontend/features/pos/pos-theme.ts` and the design note in `docs/pos/POS_UI_Color_Reference.md`. Do not add market POS features here.
+
+`features/pos-market` owns the **market/retail** POS frontend workspace under `/pos-market`. Keep route entries thin in `frontend/app/(erp)/pos-market/` and place all new market POS screens in this folder. Use `frontend/features/pos-market/pos-market-theme.ts` for market-specific styling. Never import across `features/pos` and `features/pos-market`.
 
 For larger features, prefer an internal module layout so ownership is easy to scan:
 
@@ -224,7 +227,7 @@ Current root:
 
 - `sales-receivables`
 
-`sales-receivables` owns customers, sales representatives, quotations, sales orders, sales invoices, customer receipts, credit notes, receipt allocations, customer transaction history, and aging report endpoints. Its frontend workspace sections are navigated from sidebar children using the same query-driven `?tab=` pattern used by Purchases. The POS backend slice (`pos/`) persists `invoiceType = POS` draft/held/completed sales, sessions, payments, returns/refunds, receipt reprint/reversal/reporting actions, and accounting-review workflows including session-level approval while reusing Phase 1 journal/posting/reversal services for accounting impact.
+`sales-receivables` owns customers, sales representatives, quotations, sales orders, sales invoices, customer receipts, credit notes, receipt allocations, customer transaction history, and aging report endpoints. Its frontend workspace sections are navigated from sidebar children using the same query-driven `?tab=` pattern used by Purchases. The restaurant POS backend slice (`pos/`) persists `invoiceType = POS` draft/held/completed sales, sessions, payments, returns/refunds, receipt reprint/reversal/reporting actions, and accounting-review workflows including session-level approval while reusing Phase 1 journal/posting/reversal services for accounting impact. The market POS backend slice (`pos-market/`) is a separate API namespace (`/api/pos-market`) for retail/market checkout; keep new market POS domain logic there instead of extending `pos/`.
 
 ### `backend/src/modules/phase-4-procure-to-pay`
 

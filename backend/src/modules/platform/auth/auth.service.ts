@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PosAccessRoleCode, PosPermissionCode, Prisma, UserRole } from '../../../generated/prisma';
 import * as bcrypt from 'bcrypt';
@@ -21,13 +21,17 @@ const POS_ACCESS_ROLE_NAMES: Record<PosAccessRoleCode, string> = {
   ACCOUNTANT: 'Accountant',
   KITCHEN: 'Kitchen',
   WAITER: 'Waiter',
+  MARKET_CASHIER: 'Market Cashier',
+  MARKET_REP: 'Market Sales Rep',
 };
 
 const POS_ACCESS_ROLE_DESCRIPTIONS: Record<PosAccessRoleCode, string> = {
-  CASHIER: 'Operational POS sales access limited to cashier workflows.',
+  CASHIER: 'Operational restaurant POS sales access limited to cashier workflows.',
   ACCOUNTANT: 'POS accounting review, reporting, and posting access.',
   KITCHEN: 'Kitchen display only — view and update order preparation status.',
   WAITER: 'Table ordering and send-to-kitchen only — no payment.',
+  MARKET_CASHIER: 'Operational market/retail POS sales access limited to market cashier workflows.',
+  MARKET_REP: 'Market field sales rep — sell on credit and collect receivables for assigned destination markets.',
 };
 
 const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; description: string }> = {
@@ -90,6 +94,14 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
   POS_CORRECT_ORDER_TYPE: { name: 'Correct order type', description: 'Correct the restaurant order type after creation when allowed.' },
   POS_APPROVE_CORRECTION: { name: 'Approve order correction', description: 'Approve a restaurant order-type correction request.' },
   POS_REOPEN_SESSION: { name: 'Reopen POS session', description: 'Reopen a submitted or closed POS session when authorized.' },
+  POS_MARKET_VIEW_RECEIVABLES: {
+    name: 'View market receivables',
+    description: 'View outstanding balances for market destination customers.',
+  },
+  POS_MARKET_COLLECT_RECEIVABLE: {
+    name: 'Collect market receivables',
+    description: 'Record customer receipts against market POS open invoices.',
+  },
 };
 
 @Injectable()
@@ -125,6 +137,7 @@ export class AuthService {
           select: { id: true, code: true },
         })
       : [];
+    const salesRepId = await this.resolveRegisterSalesRepId(dto.salesRepId, requestedPosRoles);
 
     const user = await this.prisma.user.create({
       data: {
@@ -133,6 +146,7 @@ export class AuthService {
         password: hashedPassword,
         name: dto.name?.trim() || null,
         role: UserRole.USER,
+        salesRepId,
         posAccessRoles: roleRecords.length
           ? {
               create: roleRecords.map((roleRecord) => ({
@@ -197,6 +211,10 @@ export class AuthService {
       allowedRoutes: accessUser.allowedRoutes,
       defaultRoute: accessUser.defaultRoute,
       isCashierOnly: accessUser.isCashierOnly,
+      isMarketCashierOnly: accessUser.isMarketCashierOnly,
+      isMarketRepOnly: accessUser.isMarketRepOnly,
+      isMarketPosOperatorOnly: accessUser.isMarketPosOperatorOnly,
+      salesRepId: accessUser.salesRepId,
       isKitchenOnly: accessUser.isKitchenOnly,
       isWaiterOnly: accessUser.isWaiterOnly,
     };
@@ -220,6 +238,7 @@ export class AuthService {
         permissions: accessUser.permissions,
         allowedRoutes: accessUser.allowedRoutes,
         defaultRoute: accessUser.defaultRoute,
+        salesRepId: accessUser.salesRepId,
       },
     };
   }
@@ -229,10 +248,37 @@ export class AuthService {
       .map((role) => role.trim().toUpperCase())
       .filter(
         (role): role is PosAccessRoleCode =>
-          role === 'CASHIER' || role === 'ACCOUNTANT' || role === 'KITCHEN' || role === 'WAITER',
+          role === 'CASHIER' ||
+          role === 'ACCOUNTANT' ||
+          role === 'KITCHEN' ||
+          role === 'WAITER' ||
+          role === 'MARKET_CASHIER' ||
+          role === 'MARKET_REP',
       );
 
     return normalized.length ? Array.from(new Set(normalized)) : [PosAccessRoleCode.ACCOUNTANT];
+  }
+
+  private async resolveRegisterSalesRepId(
+    salesRepId: string | undefined,
+    posRoles: PosAccessRoleCode[],
+  ) {
+    const normalizedId = salesRepId?.trim();
+    if (!normalizedId) {
+      if (posRoles.includes(PosAccessRoleCode.MARKET_REP)) {
+        throw new BadRequestException('MARKET_REP users require an active salesRepId.');
+      }
+      return null;
+    }
+
+    const salesRep = await this.prisma.salesRepresentative.findFirst({
+      where: { id: normalizedId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!salesRep) {
+      throw new BadRequestException('Sales representative was not found or is inactive.');
+    }
+    return salesRep.id;
   }
 
   private async ensurePosAccessBaseline() {
@@ -244,6 +290,8 @@ export class AuthService {
         PosAccessRoleCode.ACCOUNTANT,
         PosAccessRoleCode.KITCHEN,
         PosAccessRoleCode.WAITER,
+        PosAccessRoleCode.MARKET_CASHIER,
+        PosAccessRoleCode.MARKET_REP,
       ] as const) {
         await tx.posAccessRole.upsert({
           where: { code: roleCode },
@@ -282,6 +330,8 @@ export class AuthService {
               PosAccessRoleCode.ACCOUNTANT,
               PosAccessRoleCode.KITCHEN,
               PosAccessRoleCode.WAITER,
+              PosAccessRoleCode.MARKET_CASHIER,
+              PosAccessRoleCode.MARKET_REP,
             ],
           },
         },
@@ -334,6 +384,18 @@ export class AuthService {
     await this.prisma.$executeRawUnsafe(
       `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'WAITER'`,
     );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'MARKET_CASHIER'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'MARKET_REP'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_VIEW_RECEIVABLES'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_COLLECT_RECEIVABLE'`,
+    );
   }
 
   private buildAuthorizedUser(user: Prisma.UserGetPayload<{ include: ReturnType<AuthService['userAccessInclude']> }>): AuthorizedUser {
@@ -375,8 +437,25 @@ export class AuthService {
       !posRoles.includes("CASHIER") &&
       !posRoles.includes("ACCOUNTANT") &&
       !posRoles.includes("KITCHEN");
+    const isMarketCashierOnly =
+      posRoles.includes("MARKET_CASHIER") &&
+      !posRoles.includes("MARKET_REP") &&
+      !posRoles.includes("CASHIER") &&
+      !posRoles.includes("ACCOUNTANT") &&
+      !posRoles.includes("KITCHEN") &&
+      !posRoles.includes("WAITER");
+    const isMarketRepOnly =
+      posRoles.includes("MARKET_REP") &&
+      !posRoles.includes("MARKET_CASHIER") &&
+      !posRoles.includes("CASHIER") &&
+      !posRoles.includes("ACCOUNTANT") &&
+      !posRoles.includes("KITCHEN") &&
+      !posRoles.includes("WAITER");
+    const isMarketPosOperatorOnly = isMarketCashierOnly || isMarketRepOnly;
     const isCashierOnly =
       posRoles.includes("CASHIER") &&
+      !posRoles.includes("MARKET_CASHIER") &&
+      !posRoles.includes("MARKET_REP") &&
       !posRoles.includes("ACCOUNTANT") &&
       !posRoles.includes("KITCHEN") &&
       !posRoles.includes("WAITER");
@@ -384,9 +463,13 @@ export class AuthService {
       ? "/dashboard"
       : isWaiterOnly
         ? "/pos/waiter/tables"
-        : isCashierOnly
-          ? "/pos/register"
-          : "/dashboard";
+        : isMarketRepOnly
+          ? "/pos-market/receivables"
+          : isMarketCashierOnly
+            ? "/pos-market/register"
+            : isCashierOnly
+              ? "/pos/register"
+              : "/dashboard";
 
     return {
       userId: user.id,
@@ -400,6 +483,10 @@ export class AuthService {
       allowedRoutes,
       defaultRoute,
       isCashierOnly,
+      isMarketCashierOnly,
+      isMarketRepOnly,
+      isMarketPosOperatorOnly,
+      salesRepId: user.salesRepId ?? null,
       isKitchenOnly,
       isWaiterOnly,
     };

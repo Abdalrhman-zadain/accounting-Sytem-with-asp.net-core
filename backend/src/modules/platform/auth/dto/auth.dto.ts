@@ -24,8 +24,15 @@ export class RegisterDto {
     @ApiProperty({ example: ['ACCOUNTANT'], required: false, isArray: true })
     @IsOptional()
     @IsArray()
-    @IsIn(['CASHIER', 'ACCOUNTANT', 'KITCHEN', 'WAITER'], { each: true })
+    @IsIn(['CASHIER', 'ACCOUNTANT', 'KITCHEN', 'WAITER', 'MARKET_CASHIER', 'MARKET_REP'], {
+      each: true,
+    })
     posRoles?: string[];
+
+    @ApiProperty({ required: false, description: 'Required when posRoles includes MARKET_REP' })
+    @IsString()
+    @IsOptional()
+    salesRepId?: string;
 }
 
 export class LoginDto {

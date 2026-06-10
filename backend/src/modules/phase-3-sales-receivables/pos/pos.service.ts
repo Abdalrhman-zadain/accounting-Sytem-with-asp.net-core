@@ -9,11 +9,14 @@ import {
   AccountType,
   AllocationStatus,
   AuditAction,
+  BankCashTransactionKind,
+  BankCashTransactionStatus,
   InventoryStockMovementType,
   JournalEntryStatus,
   PosAccountingStatus,
   PosOperationalStatus,
   PosPaymentMethod,
+  PosProduct,
   PosRefundMethod,
   PosReturnStatus,
   PosSessionStatus,
@@ -98,11 +101,15 @@ export class PosService {
     private readonly salesReceivablesService: SalesReceivablesService,
   ) {}
 
-  async getActiveSession(user?: AuthorizedUser) {
+  async getActiveSession(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     const waiterOnly = this.isWaiterOnlyUser(user);
     const session = await this.prisma.posSession.findFirst({
       where: {
         status: PosSessionStatus.OPEN,
+        posProduct,
         ...(waiterOnly ? {} : { cashierUserId: user?.userId ?? undefined }),
       },
       include: this.posSessionInclude(),
@@ -240,7 +247,10 @@ export class PosService {
     return this.mapPosSale(result);
   }
 
-  async getSettings(user?: AuthorizedUser) {
+  async getSettings(
+    user?: AuthorizedUser,
+    _posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     const runtimeConfig = await this.getPosRuntimeConfig();
     const accountMappings = await this.getPosAccountMappings();
     return {
@@ -269,7 +279,11 @@ export class PosService {
     };
   }
 
-  async updateSettings(dto: UpdatePosSettingsDto, user?: AuthorizedUser) {
+  async updateSettings(
+    dto: UpdatePosSettingsDto,
+    user?: AuthorizedUser,
+    _posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     await this.prisma.$transaction(async (tx) => {
       if (dto.postingMode) {
@@ -358,6 +372,7 @@ export class PosService {
   async getTimeWindowReport(
     dto: { from: string; to: string },
     user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
   ) {
     // Keep this aligned with the tables/report screens access.
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
@@ -371,22 +386,26 @@ export class PosService {
       throw new BadRequestException("Time window end must be after start.");
     }
 
-    const reservations = await this.prisma.posTableReservation.findMany({
-      where: {
-        status: "ACTIVE",
-        reservedFrom: { lt: to },
-        reservedTo: { gt: from },
-      },
-      include: {
-        table: { select: { id: true, tableNumber: true } },
-      },
-      orderBy: [{ reservedFrom: "asc" }, { reservedTo: "asc" }],
-      take: 500,
-    });
+    const reservations =
+      posProduct === PosProduct.MARKET
+        ? []
+        : await this.prisma.posTableReservation.findMany({
+            where: {
+              status: "ACTIVE",
+              reservedFrom: { lt: to },
+              reservedTo: { gt: from },
+            },
+            include: {
+              table: { select: { id: true, tableNumber: true } },
+            },
+            orderBy: [{ reservedFrom: "asc" }, { reservedTo: "asc" }],
+            take: 500,
+          });
 
     const sales = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
+        posSession: { posProduct },
         OR: [
           // Completed/refunded: use completed timestamp
           {
@@ -394,11 +413,20 @@ export class PosService {
             posCompletedAt: { gte: from, lte: to },
           },
           // Draft/held: treat "activity" as updatedAt, but only for dine-in (table-linked)
-          {
-            posOperationalStatus: { in: [PosOperationalStatus.DRAFT, PosOperationalStatus.HELD] },
-            tableId: { not: null },
-            updatedAt: { gte: from, lte: to },
-          },
+          ...(posProduct === PosProduct.MARKET
+            ? [
+                {
+                  posOperationalStatus: { in: [PosOperationalStatus.DRAFT, PosOperationalStatus.HELD] },
+                  updatedAt: { gte: from, lte: to },
+                },
+              ]
+            : [
+                {
+                  posOperationalStatus: { in: [PosOperationalStatus.DRAFT, PosOperationalStatus.HELD] },
+                  tableId: { not: null },
+                  updatedAt: { gte: from, lte: to },
+                },
+              ]),
         ],
       },
       include: {
@@ -617,7 +645,10 @@ export class PosService {
       };
     });
   }
-  async listFavoriteItemIds(user?: AuthorizedUser) {
+  async listFavoriteItemIds(
+    user?: AuthorizedUser,
+    _posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
     if (!user?.userId) {
       return { itemIds: [] as string[] };
@@ -630,7 +661,11 @@ export class PosService {
     return { itemIds: rows.map((row) => row.itemId) };
   }
 
-  async setFavoriteItemIds(dto: SetPosFavoriteItemsDto, user?: AuthorizedUser) {
+  async setFavoriteItemIds(
+    dto: SetPosFavoriteItemsDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
     if (!user?.userId) {
       throw new BadRequestException("User context is required to sync favorites.");
@@ -656,12 +691,18 @@ export class PosService {
       }
     });
 
-    return this.listFavoriteItemIds(user);
+    return this.listFavoriteItemIds(user, posProduct);
   }
 
-  async listSessions(user?: AuthorizedUser) {
+  async listSessions(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     const rows = await this.prisma.posSession.findMany({
-      where: this.canReviewAllSessions(user) ? undefined : user?.userId ? { cashierUserId: user.userId } : undefined,
+      where: {
+        posProduct,
+        ...(this.canReviewAllSessions(user) ? {} : user?.userId ? { cashierUserId: user.userId } : {}),
+      },
       include: this.posSessionInclude(),
       orderBy: [{ status: "asc" }, { openedAt: "desc" }],
       take: 20,
@@ -670,7 +711,11 @@ export class PosService {
     return rows.map((row) => this.mapSession(row));
   }
 
-  async openSession(dto: OpenPosSessionDto, user?: AuthorizedUser) {
+  async openSession(
+    dto: OpenPosSessionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("OPEN_SESSION", user);
     if (user?.userId) {
       await this.ensureUserExists(user.userId);
@@ -681,6 +726,7 @@ export class PosService {
     const activeSession = await this.prisma.posSession.findFirst({
       where: {
         status: PosSessionStatus.OPEN,
+        posProduct,
         cashierUserId: user?.userId ?? undefined,
       },
       select: { id: true, sessionNumber: true },
@@ -695,7 +741,8 @@ export class PosService {
     const created = await this.prisma.posSession.create({
       data: {
         sessionNumber,
-        terminalName: dto.terminalName?.trim() || "POS Terminal 01",
+        posProduct,
+        terminalName: dto.terminalName?.trim() || (posProduct === PosProduct.MARKET ? "Market POS 01" : "POS Terminal 01"),
         branchName: dto.branchName?.trim() || null,
         warehouseId: dto.warehouseId,
         cashierUserId: user?.userId ?? null,
@@ -723,8 +770,14 @@ export class PosService {
     return this.mapSession(created);
   }
 
-  async closeSession(id: string, dto: ClosePosSessionDto, user?: AuthorizedUser) {
+  async closeSession(
+    id: string,
+    dto: ClosePosSessionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("CLOSE_SESSION", user);
+    await this.ensureSessionProduct(id, posProduct);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       include: {
@@ -798,26 +851,36 @@ export class PosService {
     };
   }
 
-  async getSessionReport(id: string, user?: AuthorizedUser) {
+  async getSessionReport(
+    id: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     if (this.canReviewAllSessions(user)) {
       this.ensurePosPermissionCode("POS_VIEW_SESSION_REPORT", user);
     } else {
       this.ensurePosPermissionCode("POS_VIEW_OWN_SESSION_REPORT", user);
     }
     await this.ensureSessionExists(id);
+    await this.ensureSessionProduct(id, posProduct);
     return this.buildSessionReport(id);
   }
 
-  async listHeldSales(sessionId: string, user?: AuthorizedUser) {
-    await this.ensureSessionAccess(sessionId, user);
+  async listHeldSales(
+    sessionId: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
+    await this.ensureSessionAccess(sessionId, user, posProduct);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
         posOperationalStatus: PosOperationalStatus.HELD,
-        OR: [
-          { posSessionId: sessionId },
-          { tableId: { not: null } }
-        ]
+        ...(posProduct === PosProduct.MARKET
+          ? { posSessionId: sessionId }
+          : {
+              OR: [{ posSessionId: sessionId }, { tableId: { not: null } }],
+            }),
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
@@ -826,16 +889,21 @@ export class PosService {
     return this.mapPosSalesWithHeldContext(rows);
   }
 
-  async listDraftSales(sessionId: string, user?: AuthorizedUser) {
-    await this.ensureSessionAccess(sessionId, user);
+  async listDraftSales(
+    sessionId: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
+    await this.ensureSessionAccess(sessionId, user, posProduct);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
         posOperationalStatus: PosOperationalStatus.DRAFT,
-        OR: [
-          { posSessionId: sessionId },
-          { tableId: { not: null } }
-        ]
+        ...(posProduct === PosProduct.MARKET
+          ? { posSessionId: sessionId }
+          : {
+              OR: [{ posSessionId: sessionId }, { tableId: { not: null } }],
+            }),
       },
       include: this.posSaleInclude(),
       orderBy: { updatedAt: "desc" },
@@ -844,7 +912,10 @@ export class PosService {
     return this.mapPosSalesWithHeldContext(rows);
   }
 
-  async listCompletedSales(user?: AuthorizedUser) {
+  async listCompletedSales(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
     const canSeeAll = this.canReviewAllSessions(user);
     const rows = await this.prisma.salesInvoice.findMany({
@@ -853,7 +924,10 @@ export class PosService {
         posOperationalStatus: {
           in: [PosOperationalStatus.COMPLETED, PosOperationalStatus.REFUNDED],
         },
-        ...(canSeeAll ? {} : { posSession: { cashierUserId: user?.userId ?? undefined } }),
+        posSession: {
+          posProduct,
+          ...(canSeeAll ? {} : { cashierUserId: user?.userId ?? undefined }),
+        },
       },
       include: this.posSaleInclude(),
       orderBy: [{ posCompletedAt: "desc" }, { updatedAt: "desc" }],
@@ -863,7 +937,10 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async listPendingReview(user?: AuthorizedUser) {
+  async listPendingReview(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_PENDING_ACCOUNTING", user);
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
@@ -872,6 +949,7 @@ export class PosService {
         posAccountingStatus: {
           in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.REJECTED],
         },
+        posSession: { posProduct },
       },
       include: this.posSaleInclude(),
       orderBy: [{ posCompletedAt: "desc" }, { updatedAt: "desc" }],
@@ -880,14 +958,22 @@ export class PosService {
     return rows.map((row) => this.mapPosSale(row));
   }
 
-  async holdSale(dto: HoldPosSaleDto, user?: AuthorizedUser) {
+  async holdSale(
+    dto: HoldPosSaleDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("HOLD_SALE", user);
-    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.HELD);
+    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.HELD, { posProduct });
   }
 
-  async saveDraft(dto: SavePosDraftDto, user?: AuthorizedUser) {
+  async saveDraft(
+    dto: SavePosDraftDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensureCanSavePosDraft(user);
-    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.DRAFT);
+    return this.saveDraftLikeSale(dto, user, PosOperationalStatus.DRAFT, { posProduct });
   }
 
   /** Persist cart changes, then replace the kitchen ticket with the full current order. */
@@ -973,9 +1059,10 @@ export class PosService {
     dto: HoldPosSaleDto | SavePosDraftDto,
     user: AuthorizedUser | undefined,
     status: PosOperationalStatus,
-    options?: { skipKitchenSync?: boolean },
+    options?: { skipKitchenSync?: boolean; posProduct?: PosProduct },
   ) {
-    const session = await this.ensureOpenSession(dto.sessionId);
+    const session = await this.ensureOpenSession(dto.sessionId, options?.posProduct);
+    const isMarketSession = session.posProduct === PosProduct.MARKET;
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({
@@ -984,23 +1071,14 @@ export class PosService {
         taxAmount: 0,
       }));
     }
-    const walkInCustomer = await this.ensureWalkInCustomer();
-    let customerId = walkInCustomer.id;
-    if (dto.customerId?.trim()) {
-      const cust = await this.prisma.customer.findUnique({
-        where: { id: dto.customerId.trim(), isActive: true },
-        select: { id: true },
-      });
-      if (!cust) {
-        throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
-      }
-      customerId = cust.id;
-    }
+    const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
-    const serviceCharge = dto.serviceChargeAmount ?? 0;
-    const deliveryFee = dto.deliveryFeeAmount ?? 0;
-    totals.totalAmount += serviceCharge + deliveryFee;
+    if (!isMarketSession) {
+      const serviceCharge = dto.serviceChargeAmount ?? 0;
+      const deliveryFee = dto.deliveryFeeAmount ?? 0;
+      totals.totalAmount += serviceCharge + deliveryFee;
+    }
 
     const accountMappings = await this.getPosAccountMappings();
     if (dto.payments?.length) {
@@ -1037,22 +1115,24 @@ export class PosService {
         await tx.posPayment.deleteMany({ where: { salesInvoiceId: existing.id } });
       }
 
-      const restaurantFields = {
-        orderType: dto.orderType || null,
-        tableId: dto.tableId?.trim() || null,
-        waiterId: dto.waiterId?.trim() || null,
-        serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
-        deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
-        driverId: dto.driverId?.trim() || null,
-        deliveryStatus: dto.deliveryStatus || null,
-        deliveryAddress: dto.deliveryAddress?.trim() || null,
-        deliveryNotes: dto.deliveryNotes?.trim() || null,
-        deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
-        deliveryCollectionMethod: dto.deliveryCompanyId?.trim() ? DeliveryCollectionMethod.COMPANY : null,
-        deliverySettlementStatus: null,
-        deliverySettledAmount: this.toAmount(0),
-        originalOrderType: dto.orderType || null,
-      };
+      const restaurantFields = isMarketSession
+        ? this.emptyRestaurantFields()
+        : {
+            orderType: dto.orderType || null,
+            tableId: dto.tableId?.trim() || null,
+            waiterId: dto.waiterId?.trim() || null,
+            serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
+            deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
+            driverId: dto.driverId?.trim() || null,
+            deliveryStatus: dto.deliveryStatus || null,
+            deliveryAddress: dto.deliveryAddress?.trim() || null,
+            deliveryNotes: dto.deliveryNotes?.trim() || null,
+            deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+            deliveryCollectionMethod: dto.deliveryCompanyId?.trim() ? DeliveryCollectionMethod.COMPANY : null,
+            deliverySettlementStatus: null,
+            deliverySettledAmount: this.toAmount(0),
+            originalOrderType: dto.orderType || null,
+          };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
       const invoice = existing
@@ -1119,18 +1199,20 @@ export class PosService {
               include: this.posSaleInclude(),
             });
 
-      // Manage dine-in tables
-      const isPreOrder = Boolean(dto.reservationId?.trim());
-      if (existing && existing.tableId && existing.tableId !== dto.tableId) {
-        await this.updateTableStatus(tx, existing.tableId, null, null);
-      }
-      if (dto.tableId?.trim() && !isPreOrder) {
-        await this.updateTableStatus(tx, dto.tableId.trim(), invoice.id, TableStatus.OCCUPIED);
-      }
+      if (!isMarketSession) {
+        // Manage dine-in tables
+        const isPreOrder = Boolean(dto.reservationId?.trim());
+        if (existing && existing.tableId && existing.tableId !== dto.tableId) {
+          await this.updateTableStatus(tx, existing.tableId, null, null);
+        }
+        if (dto.tableId?.trim() && !isPreOrder) {
+          await this.updateTableStatus(tx, dto.tableId.trim(), invoice.id, TableStatus.OCCUPIED);
+        }
 
-      // Keep the reservation preOrderSaleId in sync when this is a pre-order save
-      if (isPreOrder && dto.reservationId) {
-        await this.syncReservationPreOrder(tx, dto.reservationId, invoice.id);
+        // Keep the reservation preOrderSaleId in sync when this is a pre-order save
+        if (isPreOrder && dto.reservationId) {
+          await this.syncReservationPreOrder(tx, dto.reservationId, invoice.id);
+        }
       }
 
       if (dto.payments?.length) {
@@ -1153,7 +1235,7 @@ export class PosService {
         });
       }
 
-      if (existing && !options?.skipKitchenSync) {
+      if (!isMarketSession && existing && !options?.skipKitchenSync) {
         const kitchenOrder = await tx.kitchenOrder.findUnique({
           where: { salesInvoiceId: invoice.id },
           select: { id: true },
@@ -1184,12 +1266,17 @@ export class PosService {
     return this.mapPosSale(result);
   }
 
-  async completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
+  async completeSale(
+    dto: CompletePosSaleDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("SELL", user);
     if (this.isWaiterOnlyUser(user)) {
       throw new ForbiddenException("Waiters cannot complete sales or take payment.");
     }
-    const session = await this.ensureOpenSession(dto.sessionId);
+    const session = await this.ensureOpenSession(dto.sessionId, posProduct);
+    const isMarketSession = session.posProduct === PosProduct.MARKET;
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({
@@ -1198,20 +1285,9 @@ export class PosService {
         taxAmount: 0,
       }));
     }
-    const walkInCustomer = await this.ensureWalkInCustomer();
-    let customerId = walkInCustomer.id;
-    if (dto.customerId?.trim()) {
-      const cust = await this.prisma.customer.findUnique({
-        where: { id: dto.customerId.trim(), isActive: true },
-        select: { id: true },
-      });
-      if (!cust) {
-        throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
-      }
-      customerId = cust.id;
-    }
+    const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
     let deliveryCompany = null;
-    if (dto.deliveryCompanyId?.trim()) {
+    if (!isMarketSession && dto.deliveryCompanyId?.trim()) {
       deliveryCompany = await this.prisma.deliveryCompany.findUnique({
         where: { id: dto.deliveryCompanyId.trim(), isActive: true },
       });
@@ -1222,7 +1298,7 @@ export class PosService {
       }
     }
     const deliveryCollectionMethod =
-      dto.deliveryCompanyId?.trim()
+      !isMarketSession && dto.deliveryCompanyId?.trim()
         ? DeliveryCollectionMethod.COMPANY
         : null;
     if (deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY) {
@@ -1240,10 +1316,12 @@ export class PosService {
     await this.ensurePriceChangePermission(dto.lines, user);
     this.ensureDiscountPermission(resolvedLines, user);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
-    
-    const serviceCharge = dto.serviceChargeAmount ?? 0;
-    const deliveryFee = dto.deliveryFeeAmount ?? 0;
-    totals.totalAmount += serviceCharge + deliveryFee;
+
+    if (!isMarketSession) {
+      const serviceCharge = dto.serviceChargeAmount ?? 0;
+      const deliveryFee = dto.deliveryFeeAmount ?? 0;
+      totals.totalAmount += serviceCharge + deliveryFee;
+    }
 
     if (totals.totalAmount <= 0) {
       throw new BadRequestException("POS sale total must be greater than zero.");
@@ -1252,7 +1330,7 @@ export class PosService {
     const accountMappings = await this.getPosAccountMappings();
 
     const paymentDtos =
-      deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
+      !isMarketSession && deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
         ? [
             {
               amount: Number(totals.totalAmount.toFixed(2)),
@@ -1265,36 +1343,42 @@ export class PosService {
       await this.resolvePaymentDtoAccounts(paymentDtos, accountMappings, this.prisma, session.cashAccountId);
     }
 
+    const allowCreditSale =
+      this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
+      this.hasPosPermissionCode("POS_CREDIT_SALE", user);
     const bankCashIds = Array.from(
-      new Set((paymentDtos ?? []).map((payment) => payment.bankCashAccountId!.trim())),
+      new Set(
+        (paymentDtos ?? [])
+          .map((payment) => payment.bankCashAccountId?.trim())
+          .filter((id): id is string => Boolean(id)),
+      ),
     );
-    const bankCashAccounts = await this.prisma.bankCashAccount.findMany({
-      where: { id: { in: bankCashIds }, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        currencyCode: true,
-        accountId: true,
-        account: {
+    const bankCashAccounts = bankCashIds.length
+      ? await this.prisma.bankCashAccount.findMany({
+          where: { id: { in: bankCashIds }, isActive: true },
           select: {
             id: true,
-            code: true,
             name: true,
-            isActive: true,
-            isPosting: true,
-            allowManualPosting: true,
+            type: true,
+            currencyCode: true,
+            accountId: true,
+            account: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                isActive: true,
+                isPosting: true,
+                allowManualPosting: true,
+              },
+            },
           },
-        },
-      },
-    });
+        })
+      : [];
     if (bankCashAccounts.length !== bankCashIds.length) {
       throw new BadRequestException("Every POS payment must use an active bank/cash account.");
     }
     const accountMap = new Map(bankCashAccounts.map((account) => [account.id, account]));
-    const allowCreditSale =
-      this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
-      this.hasPosPermissionCode("POS_CREDIT_SALE", user);
     const allowNegativeStockIssue =
       this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
       this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user);
@@ -1306,10 +1390,13 @@ export class PosService {
       totals.totalAmount,
       allowCreditSale,
     );
-    if (normalizedPayments.outstandingAmount > 0 && customerId === walkInCustomer.id && !dto.deliveryCompanyId) {
-      throw new BadRequestException(
-        "Partial payment / credit sales require a customer other than POS walk-in.",
-      );
+    if (!isMarketSession) {
+      const walkInCustomer = await this.ensureWalkInCustomer();
+      if (normalizedPayments.outstandingAmount > 0 && customerId === walkInCustomer.id && !dto.deliveryCompanyId) {
+        throw new BadRequestException(
+          "Partial payment / credit sales require a customer other than POS walk-in.",
+        );
+      }
     }
     const autoPost =
       posPostingMode === "BY_INVOICE"
@@ -1342,25 +1429,27 @@ export class PosService {
         }
       }
 
-      const restaurantFields = {
-        orderType: dto.orderType || null,
-        tableId: dto.tableId?.trim() || null,
-        waiterId: dto.waiterId?.trim() || null,
-        serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
-        deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
-        driverId: dto.driverId?.trim() || null,
-        deliveryStatus: dto.deliveryStatus || null,
-        deliveryAddress: dto.deliveryAddress?.trim() || null,
-        deliveryNotes: dto.deliveryNotes?.trim() || null,
-        deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
-        deliveryCollectionMethod,
-        deliverySettlementStatus:
-          deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
-            ? DeliverySettlementStatus.PENDING
-            : null,
-        deliverySettledAmount: this.toAmount(0),
-        originalOrderType: dto.orderType || null,
-      };
+      const restaurantFields = isMarketSession
+        ? this.emptyRestaurantFields()
+        : {
+            orderType: dto.orderType || null,
+            tableId: dto.tableId?.trim() || null,
+            waiterId: dto.waiterId?.trim() || null,
+            serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
+            deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
+            driverId: dto.driverId?.trim() || null,
+            deliveryStatus: dto.deliveryStatus || null,
+            deliveryAddress: dto.deliveryAddress?.trim() || null,
+            deliveryNotes: dto.deliveryNotes?.trim() || null,
+            deliveryCompanyId: dto.deliveryCompanyId?.trim() || null,
+            deliveryCollectionMethod,
+            deliverySettlementStatus:
+              deliveryCollectionMethod === DeliveryCollectionMethod.COMPANY
+                ? DeliverySettlementStatus.PENDING
+                : null,
+            deliverySettledAmount: this.toAmount(0),
+            originalOrderType: dto.orderType || null,
+          };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
       const receiptNumber = await this.generateReceiptNumber(tx);
@@ -1444,54 +1533,56 @@ export class PosService {
             include: this.posSaleInclude(),
           });
 
-      // Manage dine-in tables
-      if (existing && existing.tableId && existing.tableId !== dto.tableId) {
-        await this.updateTableStatus(tx, existing.tableId, null, null);
-      }
-      if (dto.tableId?.trim()) {
-        const paidTableId = dto.tableId.trim();
-        const isDineIn =
-          dto.orderType === OrderType.DINE_IN ||
-          existing?.orderType === OrderType.DINE_IN ||
-          invoice.orderType === OrderType.DINE_IN;
-        if (isDineIn) {
-          await tx.posTable.update({
-            where: { id: paidTableId },
-            data: {
-              activeInvoiceId: null,
-              status: TableStatus.CLEANING,
-            },
+      if (!isMarketSession) {
+        // Manage dine-in tables
+        if (existing && existing.tableId && existing.tableId !== dto.tableId) {
+          await this.updateTableStatus(tx, existing.tableId, null, null);
+        }
+        if (dto.tableId?.trim()) {
+          const paidTableId = dto.tableId.trim();
+          const isDineIn =
+            dto.orderType === OrderType.DINE_IN ||
+            existing?.orderType === OrderType.DINE_IN ||
+            invoice.orderType === OrderType.DINE_IN;
+          if (isDineIn) {
+            await tx.posTable.update({
+              where: { id: paidTableId },
+              data: {
+                activeInvoiceId: null,
+                status: TableStatus.CLEANING,
+              },
+            });
+          } else {
+            await this.updateTableStatus(tx, paidTableId, null, null);
+          }
+        }
+
+        if (existing) {
+          const kitchenOrder = await tx.kitchenOrder.findUnique({
+            where: { salesInvoiceId: invoice.id },
+            select: { id: true },
           });
-        } else {
-          await this.updateTableStatus(tx, paidTableId, null, null);
+          if (kitchenOrder) {
+            await this.rebuildKitchenOrderFromInvoice(tx, invoice.id);
+          }
         }
-      }
 
-      if (existing) {
-        const kitchenOrder = await tx.kitchenOrder.findUnique({
-          where: { salesInvoiceId: invoice.id },
-          select: { id: true },
+        const unsentAtComplete = await tx.salesInvoiceLine.findMany({
+          where: { salesInvoiceId: invoice.id, kitchenSentAt: null },
+          orderBy: { lineNumber: "asc" },
         });
-        if (kitchenOrder) {
-          await this.rebuildKitchenOrderFromInvoice(tx, invoice.id);
+        if (unsentAtComplete.length && dto.orderType) {
+          const sentAt = new Date();
+          await tx.salesInvoiceLine.updateMany({
+            where: { id: { in: unsentAtComplete.map((line) => line.id) } },
+            data: { kitchenSentAt: sentAt },
+          });
+          const invoiceForKot = await tx.salesInvoice.findUniqueOrThrow({
+            where: { id: invoice.id },
+            include: { lines: true },
+          });
+          await this.appendKitchenOrderItems(tx, invoiceForKot, unsentAtComplete);
         }
-      }
-
-      const unsentAtComplete = await tx.salesInvoiceLine.findMany({
-        where: { salesInvoiceId: invoice.id, kitchenSentAt: null },
-        orderBy: { lineNumber: "asc" },
-      });
-      if (unsentAtComplete.length && dto.orderType) {
-        const sentAt = new Date();
-        await tx.salesInvoiceLine.updateMany({
-          where: { id: { in: unsentAtComplete.map((line) => line.id) } },
-          data: { kitchenSentAt: sentAt },
-        });
-        const invoiceForKot = await tx.salesInvoice.findUniqueOrThrow({
-          where: { id: invoice.id },
-          include: { lines: true },
-        });
-        await this.appendKitchenOrderItems(tx, invoiceForKot, unsentAtComplete);
       }
 
       await tx.posPayment.createMany({
@@ -1684,13 +1775,31 @@ export class PosService {
       },
     });
 
+    const accountOutstanding =
+      result.customer?.id != null
+        ? await this.sumMarketCustomerOutstanding(result.customer.id)
+        : null;
+
     return {
       sale: this.mapPosSale(result),
-      receipt: this.mapReceipt(result),
+      receipt: {
+        ...this.mapReceipt(result),
+        deliveryOutstanding:
+          Number(result.outstandingAmount) > 0
+            ? Number(result.outstandingAmount).toFixed(2)
+            : null,
+        accountOutstanding:
+          accountOutstanding != null ? accountOutstanding.toFixed(2) : null,
+      },
     };
   }
 
-  async voidSale(id: string, dto: VoidPosSaleDto, user?: AuthorizedUser) {
+  async voidSale(
+    id: string,
+    dto: VoidPosSaleDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("VOID_SALE", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
@@ -1699,6 +1808,7 @@ export class PosService {
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
     }
+    this.ensureSalePosProduct(sale, posProduct);
     if (
       sale.posOperationalStatus !== PosOperationalStatus.DRAFT &&
       sale.posOperationalStatus !== PosOperationalStatus.HELD
@@ -1718,7 +1828,7 @@ export class PosService {
         include: this.posSaleInclude(),
       });
 
-      if (sale.tableId) {
+      if (sale.tableId && posProduct !== PosProduct.MARKET) {
         await this.updateTableStatus(tx, sale.tableId, null, null);
       }
 
@@ -1740,7 +1850,12 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async approveAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async approveAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
@@ -1756,6 +1871,9 @@ export class PosService {
     });
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
+    }
+    if (sale.posSessionId) {
+      await this.ensureSessionProduct(sale.posSessionId, posProduct);
     }
 
     if (sale.posSessionId) {
@@ -1809,9 +1927,15 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async approveSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async approveSessionAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_POST_BY_SESSION", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
+    await this.ensureSessionProduct(id, posProduct);
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       select: {
@@ -2108,7 +2232,13 @@ export class PosService {
     };
   }
 
-  async rejectSessionAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async rejectSessionAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
+    await this.ensureSessionProduct(id, posProduct);
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     const session = await this.prisma.posSession.findUnique({
@@ -2181,7 +2311,12 @@ export class PosService {
     };
   }
 
-  async rejectAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async rejectAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
@@ -2194,6 +2329,7 @@ export class PosService {
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
     }
+    this.ensureSalePosProduct(sale, posProduct);
     if (sale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
       throw new BadRequestException("Only completed POS sales can be rejected accounting-wise.");
     }
@@ -2227,7 +2363,12 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async reverseAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
+  async reverseAccounting(
+    id: string,
+    dto: PosReverseAccountingDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     if ((await this.getPosPostingMode()) === "BY_SESSION") {
@@ -2239,6 +2380,7 @@ export class PosService {
         id: true,
         reference: true,
         invoiceType: true,
+        posSessionId: true,
         posOperationalStatus: true,
         posAccountingStatus: true,
         journalEntryId: true,
@@ -2246,6 +2388,9 @@ export class PosService {
     });
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
+    }
+    if (sale.posSessionId) {
+      await this.ensureSessionProduct(sale.posSessionId, posProduct);
     }
     if (sale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
       throw new BadRequestException("Only completed POS sales can be reversed.");
@@ -2285,7 +2430,11 @@ export class PosService {
     return this.mapPosSale(updated);
   }
 
-  async reprintReceipt(id: string, user?: AuthorizedUser) {
+  async reprintReceipt(
+    id: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("REPRINT_RECEIPT", user);
     const sale = await this.prisma.salesInvoice.findUnique({
       where: { id },
@@ -2294,6 +2443,7 @@ export class PosService {
     if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
       throw new BadRequestException(`POS sale ${id} was not found.`);
     }
+    this.ensureSalePosProduct(sale, posProduct);
     if (sale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
       throw new BadRequestException("Only completed POS sales can be reprinted.");
     }
@@ -2319,8 +2469,10 @@ export class PosService {
     sessionId: string,
     printType: "SESSION_ROLL_REPORT" | "INVOICE_LIST_ROLL" | "ALL_RECEIPTS_ROLL",
     user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
   ) {
     this.ensurePosPermissionCode("POS_VIEW_SESSION_REPORT", user);
+    await this.ensureSessionProduct(sessionId, posProduct);
     const session = await this.prisma.posSession.findUnique({
       where: { id: sessionId },
       select: {
@@ -2357,16 +2509,24 @@ export class PosService {
     };
   }
 
-  async listReturns(user?: AuthorizedUser) {
+  async listReturns(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
     const rows = await this.prisma.posReturn.findMany({
+      where: { posSession: { posProduct } },
       include: this.posReturnInclude(),
       orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
     });
     return rows.map((row) => this.mapPosReturn(row));
   }
 
-  async createReturn(dto: CreatePosReturnDto, user?: AuthorizedUser) {
+  async createReturn(
+    dto: CreatePosReturnDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermission("RETURN_SALE", user);
     this.ensurePosPermission("REFUND", user);
     const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
@@ -2376,7 +2536,7 @@ export class PosService {
         where: { id: dto.salesInvoiceId },
         include: {
           customer: { select: { id: true, receivableAccountId: true } },
-          posSession: { select: { id: true } },
+          posSession: { select: { id: true, posProduct: true } },
           lines: {
             include: {
               item: {
@@ -2401,6 +2561,7 @@ export class PosService {
       if (!originalSale || originalSale.invoiceType !== SalesInvoiceType.POS) {
         throw new BadRequestException("Original POS sale was not found.");
       }
+      this.ensureSalePosProduct(originalSale, posProduct);
       if (originalSale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
         throw new BadRequestException("Only completed POS sales can be returned.");
       }
@@ -2542,18 +2703,25 @@ export class PosService {
     return this.mapPosReturn(result);
   }
 
-  async approveReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async approveReturnAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
       where: { id },
       include: {
         journalEntry: { select: { id: true, status: true, postedAt: true } },
+        posSession: { select: { posProduct: true } },
       },
     });
     if (!posReturn) {
       throw new BadRequestException(`POS return ${id} was not found.`);
     }
+    this.ensureReturnPosProduct(posReturn, posProduct);
     if (!posReturn.journalEntryId) {
       throw new BadRequestException("POS return does not have a draft journal entry to review.");
     }
@@ -2589,7 +2757,12 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async rejectReturnAccounting(id: string, dto: PosReviewDecisionDto, user?: AuthorizedUser) {
+  async rejectReturnAccounting(
+    id: string,
+    dto: PosReviewDecisionDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_REJECT_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
@@ -2599,6 +2772,7 @@ export class PosService {
     if (!posReturn) {
       throw new BadRequestException(`POS return ${id} was not found.`);
     }
+    this.ensureReturnPosProduct(posReturn, posProduct);
     if (posReturn.accountingStatus === PosAccountingStatus.POSTED) {
       throw new BadRequestException("Posted POS returns cannot be rejected without reversal.");
     }
@@ -2629,7 +2803,12 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async reverseReturnAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
+  async reverseReturnAccounting(
+    id: string,
+    dto: PosReverseAccountingDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_APPROVE_ACCOUNTING", user);
     const actorUserId = await this.resolveExistingUserId(user?.userId);
     const posReturn = await this.prisma.posReturn.findUnique({
@@ -2639,10 +2818,14 @@ export class PosService {
         reference: true,
         accountingStatus: true,
         journalEntryId: true,
+        posSessionId: true,
       },
     });
     if (!posReturn) {
       throw new BadRequestException(`POS return ${id} was not found.`);
+    }
+    if (posReturn.posSessionId) {
+      await this.ensureSessionProduct(posReturn.posSessionId, posProduct);
     }
     if (!posReturn.journalEntryId || posReturn.accountingStatus !== PosAccountingStatus.POSTED) {
       throw new BadRequestException("Only accounting-posted POS returns can be reversed.");
@@ -2680,15 +2863,18 @@ export class PosService {
     return this.mapPosReturn(updated);
   }
 
-  async getReportsOverview(user?: AuthorizedUser) {
+  async getReportsOverview(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const [salesByPaymentMethod, salesByCashier, salesByBranch, pendingReview, taxSummary] =
       await Promise.all([
-        this.getSalesByPaymentMethodReport(user),
-        this.getSalesByCashierReport(user),
-        this.getSalesByBranchReport(user),
-        this.listPendingReview(user),
-        this.getTaxSummaryReport(user),
+        this.getSalesByPaymentMethodReport(user, posProduct),
+        this.getSalesByCashierReport(user, posProduct),
+        this.getSalesByBranchReport(user, posProduct),
+        this.listPendingReview(user, posProduct),
+        this.getTaxSummaryReport(user, posProduct),
       ]);
 
     return {
@@ -2700,9 +2886,12 @@ export class PosService {
     };
   }
 
-  async getSalesByPaymentMethodReport(user?: AuthorizedUser) {
+  async getSalesByPaymentMethodReport(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
-    const sales = await this.loadCompletedPosSalesForReports(user);
+    const sales = await this.loadCompletedPosSalesForReports(user, posProduct);
     const totals = new Map<string, { method: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
       for (const payment of sale.posPayments) {
@@ -2722,9 +2911,12 @@ export class PosService {
     }));
   }
 
-  async getSalesByCashierReport(user?: AuthorizedUser) {
+  async getSalesByCashierReport(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
-    const sales = await this.loadCompletedPosSalesForReports(user);
+    const sales = await this.loadCompletedPosSalesForReports(user, posProduct);
     const totals = new Map<string, { cashierId: string | null; cashierName: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
       const key = sale.posSession?.cashierUser?.id ?? "unassigned";
@@ -2744,9 +2936,12 @@ export class PosService {
     }));
   }
 
-  async getSalesByBranchReport(user?: AuthorizedUser) {
+  async getSalesByBranchReport(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
-    const sales = await this.loadCompletedPosSalesForReports(user);
+    const sales = await this.loadCompletedPosSalesForReports(user, posProduct);
     const totals = new Map<string, { branchName: string; salesAmount: number; invoiceCount: number }>();
     for (const sale of sales) {
       const key = sale.posSession?.branchName ?? "Unassigned";
@@ -2761,9 +2956,12 @@ export class PosService {
     }));
   }
 
-  async getSalesByItemReport(user?: AuthorizedUser) {
+  async getSalesByItemReport(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
-    const sales = await this.loadCompletedPosSalesForReports(user);
+    const sales = await this.loadCompletedPosSalesForReports(user, posProduct);
     const totals = new Map<string, { itemId: string | null; itemName: string; quantity: number; salesAmount: number; taxAmount: number }>();
     for (const sale of sales) {
       for (const line of sale.lines) {
@@ -2789,7 +2987,10 @@ export class PosService {
     }));
   }
 
-  async getInventoryImpactReport(user?: AuthorizedUser) {
+  async getInventoryImpactReport(
+    user?: AuthorizedUser,
+    _posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_INVENTORY_MOVEMENTS", user);
     const rows = await this.prisma.inventoryStockMovement.findMany({
       where: {
@@ -2822,7 +3023,10 @@ export class PosService {
     }));
   }
 
-  async getTaxSummaryReport(user?: AuthorizedUser) {
+  async getTaxSummaryReport(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     this.ensurePosPermissionCode("POS_VIEW_POS_REPORTS", user);
     const [salesLines, returnLines] = await Promise.all([
       this.prisma.salesInvoiceLine.findMany({
@@ -2830,6 +3034,7 @@ export class PosService {
           salesInvoice: {
             invoiceType: SalesInvoiceType.POS,
             posOperationalStatus: PosOperationalStatus.COMPLETED,
+            posSession: { posProduct },
           },
         },
         include: { tax: { select: { id: true, taxCode: true, taxName: true, rate: true } } },
@@ -2838,6 +3043,7 @@ export class PosService {
         where: {
           posReturn: {
             status: { not: PosReturnStatus.REVERSED },
+            posSession: { posProduct },
           },
         },
         include: { tax: { select: { id: true, taxCode: true, taxName: true, rate: true } } },
@@ -3215,6 +3421,8 @@ export class PosService {
       "POS_CREDIT_SALE",
       "POS_SELL_NEGATIVE_STOCK",
       "POS_CHANGE_UNIT_PRICE",
+      "POS_MARKET_VIEW_RECEIVABLES",
+      "POS_MARKET_COLLECT_RECEIVABLE",
     ];
   }
 
@@ -4031,13 +4239,19 @@ export class PosService {
     });
   }
 
-  private async loadCompletedPosSalesForReports(user?: AuthorizedUser) {
+  private async loadCompletedPosSalesForReports(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     const canSeeAll = this.canReviewAllSessions(user);
     return this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
         posOperationalStatus: PosOperationalStatus.COMPLETED,
-        ...(canSeeAll ? {} : { posSession: { cashierUserId: user?.userId ?? undefined } }),
+        posSession: {
+          posProduct,
+          ...(canSeeAll ? {} : { cashierUserId: user?.userId ?? undefined }),
+        },
       },
       include: {
         posPayments: true,
@@ -4088,10 +4302,22 @@ export class PosService {
     allowCreditSale = false,
   ) {
     if (!payments.length) {
-      throw new BadRequestException("At least one payment method is required.");
+      if (!allowCreditSale) {
+        throw new BadRequestException("At least one payment method is required.");
+      }
+      return {
+        payments: [],
+        totalTendered: 0,
+        changeAmount: 0,
+        cashAppliedAmount: 0,
+        totalApplied: 0,
+        outstandingAmount: Number(invoiceTotal.toFixed(2)),
+      };
     }
 
-    const normalized = payments.map((payment) => {
+    const normalized = payments
+      .filter((payment) => Number(payment.amount) > 0)
+      .map((payment) => {
       const account = accountMap.get(payment.bankCashAccountId!);
       if (!account) {
         throw new BadRequestException("Payment account is missing or inactive.");
@@ -4109,6 +4335,20 @@ export class PosService {
         accountId: account.accountId,
       };
     });
+
+    if (!normalized.length) {
+      if (!allowCreditSale) {
+        throw new BadRequestException("At least one payment method is required.");
+      }
+      return {
+        payments: [],
+        totalTendered: 0,
+        changeAmount: 0,
+        cashAppliedAmount: 0,
+        totalApplied: 0,
+        outstandingAmount: Number(invoiceTotal.toFixed(2)),
+      };
+    }
 
     const totalTendered = Number(
       normalized.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2),
@@ -4816,6 +5056,601 @@ export class PosService {
     return account?.id ?? null;
   }
 
+  private isMarketRepScopedUser(user?: AuthorizedUser) {
+    return Boolean(
+      user?.posRoles?.includes("MARKET_REP" as AuthorizedUser["posRoles"][number]) &&
+        !user?.posRoles?.includes("ACCOUNTANT") &&
+        user?.role !== "ADMIN" &&
+        user?.role !== "MANAGER",
+    );
+  }
+
+  private resolveMarketSalesRepScope(
+    user?: AuthorizedUser,
+    querySalesRepId?: string,
+  ): string | null | undefined {
+    if (this.isMarketRepScopedUser(user)) {
+      if (!user?.salesRepId) {
+        throw new ForbiddenException("Market sales rep account is not linked to a sales representative.");
+      }
+      return user.salesRepId;
+    }
+    const normalized = querySalesRepId?.trim();
+    return normalized || undefined;
+  }
+
+  private async assertMarketCustomerAccess(
+    customerId: string,
+    user?: AuthorizedUser,
+    querySalesRepId?: string,
+  ) {
+    const salesRepScope = this.resolveMarketSalesRepScope(user, querySalesRepId);
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+      },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException("Destination market customer was not found.");
+    }
+  }
+
+  private marketOpenInvoiceWhere(salesRepScope?: string | null) {
+    return {
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.COMPLETED,
+      outstandingAmount: { gt: 0 },
+      customer: {
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+      },
+      posSession: {
+        posProduct: PosProduct.MARKET,
+      },
+    } satisfies Prisma.SalesInvoiceWhereInput;
+  }
+
+  async listMarketReceivables(
+    user?: AuthorizedUser,
+    query: { salesRepId?: string; search?: string } = {},
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables are only available for market POS.");
+    }
+
+    const salesRepScope = this.resolveMarketSalesRepScope(user, query.salesRepId);
+    const search = query.search?.trim();
+    const invoices = await this.prisma.salesInvoice.findMany({
+      where: {
+        ...this.marketOpenInvoiceWhere(salesRepScope),
+        ...(search
+          ? {
+              customer: {
+                isActive: true,
+                code: { not: POS_WALK_IN_CUSTOMER_CODE },
+                ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+                OR: [
+                  { name: { contains: search, mode: "insensitive" } },
+                  { code: { contains: search, mode: "insensitive" } },
+                ],
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        outstandingAmount: true,
+        customer: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            contactInfo: true,
+            salesRepId: true,
+            salesRep: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ customer: { name: "asc" } }, { invoiceDate: "desc" }],
+    });
+
+    const byCustomer = new Map<
+      string,
+      {
+        customerId: string;
+        customerCode: string;
+        customerName: string;
+        contactInfo: string | null;
+        salesRepId: string | null;
+        salesRepCode: string | null;
+        salesRepName: string | null;
+        outstandingBalance: number;
+        openInvoiceCount: number;
+      }
+    >();
+
+    for (const invoice of invoices) {
+      const outstanding = Number(invoice.outstandingAmount);
+      if (outstanding <= 0) {
+        continue;
+      }
+      const current = byCustomer.get(invoice.customer.id) ?? {
+        customerId: invoice.customer.id,
+        customerCode: invoice.customer.code,
+        customerName: invoice.customer.name,
+        contactInfo: invoice.customer.contactInfo,
+        salesRepId: invoice.customer.salesRepId,
+        salesRepCode: invoice.customer.salesRep?.code ?? null,
+        salesRepName: invoice.customer.salesRep?.name ?? null,
+        outstandingBalance: 0,
+        openInvoiceCount: 0,
+      };
+      current.outstandingBalance = Number((current.outstandingBalance + outstanding).toFixed(2));
+      current.openInvoiceCount += 1;
+      byCustomer.set(invoice.customer.id, current);
+    }
+
+    const rows = Array.from(byCustomer.values()).sort((a, b) =>
+      a.customerName.localeCompare(b.customerName),
+    );
+    const totalOutstanding = Number(
+      rows.reduce((sum, row) => sum + row.outstandingBalance, 0).toFixed(2),
+    );
+
+    return {
+      totals: {
+        customerCount: rows.length,
+        totalOutstanding: totalOutstanding.toFixed(2),
+      },
+      customers: rows.map((row) => ({
+        ...row,
+        outstandingBalance: row.outstandingBalance.toFixed(2),
+      })),
+    };
+  }
+
+  async listMarketReceivableInvoices(
+    customerId: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables are only available for market POS.");
+    }
+
+    await this.assertMarketCustomerAccess(customerId, user);
+    const invoices = await this.prisma.salesInvoice.findMany({
+      where: {
+        ...this.marketOpenInvoiceWhere(this.resolveMarketSalesRepScope(user)),
+        customerId,
+      },
+      select: {
+        id: true,
+        reference: true,
+        invoiceDate: true,
+        totalAmount: true,
+        allocatedAmount: true,
+        outstandingAmount: true,
+        status: true,
+        posReceiptNumber: true,
+        posCompletedAt: true,
+      },
+      orderBy: { invoiceDate: "desc" },
+    });
+
+    return invoices.map((invoice) => ({
+      id: invoice.id,
+      reference: invoice.reference,
+      invoiceDate: invoice.invoiceDate.toISOString(),
+      totalAmount: invoice.totalAmount.toString(),
+      allocatedAmount: invoice.allocatedAmount.toString(),
+      outstandingAmount: invoice.outstandingAmount.toString(),
+      status: invoice.status,
+      posReceiptNumber: invoice.posReceiptNumber,
+      posCompletedAt: invoice.posCompletedAt?.toISOString() ?? null,
+    }));
+  }
+
+  private marketCompletedPosInvoiceWhere(
+    customerId: string,
+    salesRepScope?: string | null,
+  ) {
+    return {
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.COMPLETED,
+      customerId,
+      customer: {
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+      },
+      posSession: {
+        posProduct: PosProduct.MARKET,
+      },
+    } satisfies Prisma.SalesInvoiceWhereInput;
+  }
+
+  private async sumMarketCustomerOutstanding(customerId: string) {
+    const result = await this.prisma.salesInvoice.aggregate({
+      where: {
+        invoiceType: SalesInvoiceType.POS,
+        posOperationalStatus: PosOperationalStatus.COMPLETED,
+        outstandingAmount: { gt: 0 },
+        customerId,
+        posSession: { posProduct: PosProduct.MARKET },
+      },
+      _sum: { outstandingAmount: true },
+    });
+    return Number(Number(result._sum.outstandingAmount ?? 0).toFixed(2));
+  }
+
+  async getMarketReceivableDetail(
+    customerId: string,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables are only available for market POS.");
+    }
+
+    const salesRepScope = this.resolveMarketSalesRepScope(user);
+    await this.assertMarketCustomerAccess(customerId, user);
+
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        contactInfo: true,
+        creditLimit: true,
+        currentBalance: true,
+        salesRep: { select: { id: true, code: true, name: true } },
+      },
+    });
+    if (!customer) {
+      throw new NotFoundException("Destination market customer was not found.");
+    }
+
+    const [deliveries, payments] = await Promise.all([
+      this.prisma.salesInvoice.findMany({
+        where: this.marketCompletedPosInvoiceWhere(customerId, salesRepScope),
+        select: {
+          id: true,
+          reference: true,
+          invoiceDate: true,
+          totalAmount: true,
+          allocatedAmount: true,
+          outstandingAmount: true,
+          posReceiptNumber: true,
+          posCompletedAt: true,
+          lines: {
+            select: {
+              id: true,
+              lineNumber: true,
+              itemName: true,
+              description: true,
+              quantity: true,
+              unitPrice: true,
+              lineAmount: true,
+              item: { select: { code: true, unitOfMeasure: true } },
+            },
+            orderBy: { lineNumber: "asc" },
+          },
+        },
+        orderBy: [{ posCompletedAt: "desc" }, { invoiceDate: "desc" }],
+      }),
+      this.prisma.bankCashTransaction.findMany({
+        where: {
+          customerId,
+          kind: BankCashTransactionKind.RECEIPT,
+          status: BankCashTransactionStatus.POSTED,
+        },
+        select: {
+          id: true,
+          reference: true,
+          transactionDate: true,
+          amount: true,
+          description: true,
+          bankCashAccount: { select: { id: true, name: true } },
+        },
+        orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
+      }),
+    ]);
+
+    const totalDelivered = Number(
+      deliveries.reduce((sum, row) => sum + Number(row.totalAmount), 0).toFixed(2),
+    );
+    const totalPaid = Number(
+      payments.reduce((sum, row) => sum + Number(row.amount), 0).toFixed(2),
+    );
+    const outstandingBalance = await this.sumMarketCustomerOutstanding(customerId);
+
+    return {
+      customer: {
+        customerId: customer.id,
+        customerCode: customer.code,
+        customerName: customer.name,
+        contactInfo: customer.contactInfo,
+        creditLimit: customer.creditLimit.toString(),
+        currentBalance: customer.currentBalance.toString(),
+        salesRepId: customer.salesRep?.id ?? null,
+        salesRepCode: customer.salesRep?.code ?? null,
+        salesRepName: customer.salesRep?.name ?? null,
+      },
+      summary: {
+        totalDelivered: totalDelivered.toFixed(2),
+        totalPaid: totalPaid.toFixed(2),
+        outstandingBalance: outstandingBalance.toFixed(2),
+        deliveryCount: deliveries.length,
+        paymentCount: payments.length,
+      },
+      deliveries: deliveries.map((invoice) => ({
+        id: invoice.id,
+        reference: invoice.reference,
+        receiptNumber: invoice.posReceiptNumber,
+        deliveredAt: invoice.posCompletedAt?.toISOString() ?? invoice.invoiceDate.toISOString(),
+        totalAmount: invoice.totalAmount.toString(),
+        allocatedAmount: invoice.allocatedAmount.toString(),
+        outstandingAmount: invoice.outstandingAmount.toString(),
+        lines: invoice.lines.map((line) => ({
+          id: line.id,
+          lineNumber: line.lineNumber,
+          itemCode: line.item?.code ?? null,
+          itemName: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
+          quantity: line.quantity.toString(),
+          unitOfMeasure: line.item?.unitOfMeasure ?? null,
+          unitPrice: line.unitPrice.toString(),
+          lineAmount: line.lineAmount.toString(),
+        })),
+      })),
+      payments: payments.map((payment) => ({
+        id: payment.id,
+        reference: payment.reference,
+        receiptDate: payment.transactionDate.toISOString(),
+        amount: payment.amount.toString(),
+        description: payment.description,
+        bankCashAccountName: payment.bankCashAccount?.name ?? null,
+      })),
+    };
+  }
+
+  async listMarketReceivableSalesReps(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables are only available for market POS.");
+    }
+    if (this.isMarketRepScopedUser(user)) {
+      throw new ForbiddenException("Sales rep filter is not available for market rep accounts.");
+    }
+
+    const invoices = await this.prisma.salesInvoice.findMany({
+      where: this.marketOpenInvoiceWhere(),
+      select: {
+        customer: {
+          select: {
+            salesRep: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const reps = new Map<string, { id: string; code: string; name: string }>();
+    for (const invoice of invoices) {
+      const rep = invoice.customer.salesRep;
+      if (rep) {
+        reps.set(rep.id, rep);
+      }
+    }
+
+    return Array.from(reps.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async collectMarketReceivables(
+    dto: {
+      customerId: string;
+      receiptDate: string;
+      amount: number;
+      bankCashAccountId: string;
+      description?: string;
+      allocations?: Array<{ salesInvoiceId: string; amount: number }>;
+    },
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_COLLECT_RECEIVABLE", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables collection is only available for market POS.");
+    }
+
+    await this.assertMarketCustomerAccess(dto.customerId, user);
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: dto.customerId },
+      select: { id: true, code: true, name: true },
+    });
+    if (!customer) {
+      throw new NotFoundException("Destination market customer was not found.");
+    }
+
+    const balanceBefore = await this.sumMarketCustomerOutstanding(dto.customerId);
+    const paymentAmount = Number(dto.amount.toFixed(2));
+    if (paymentAmount > balanceBefore) {
+      throw new BadRequestException(
+        `Payment amount cannot exceed the outstanding balance (${balanceBefore.toFixed(2)}).`,
+      );
+    }
+
+    const manualAllocations = dto.allocations ?? [];
+    const allocationTotal = Number(
+      manualAllocations.reduce((sum, row) => sum + Number(row.amount), 0).toFixed(2),
+    );
+    if (allocationTotal > paymentAmount) {
+      throw new BadRequestException("Allocated amount cannot exceed the receipt amount.");
+    }
+
+    const receipt = await this.salesReceivablesService.createCustomerReceipt(
+      {
+        customerId: dto.customerId,
+        receiptDate: dto.receiptDate,
+        amount: paymentAmount,
+        bankCashAccountId: dto.bankCashAccountId,
+        description: dto.description,
+        sourceAction: "POST_AND_CREATE_RECEIPT",
+      },
+      { userId: user?.userId },
+    );
+
+    if (manualAllocations.length > 0) {
+      for (const allocation of manualAllocations) {
+        await this.salesReceivablesService.allocateReceipt(
+          {
+            salesInvoiceId: allocation.salesInvoiceId,
+            receiptTransactionId: receipt.id,
+            amount: allocation.amount,
+          },
+          { userId: user?.userId },
+        );
+      }
+    } else if (paymentAmount > 0) {
+      const openInvoices = await this.prisma.salesInvoice.findMany({
+        where: {
+          ...this.marketOpenInvoiceWhere(this.resolveMarketSalesRepScope(user)),
+          customerId: dto.customerId,
+        },
+        select: {
+          id: true,
+          outstandingAmount: true,
+        },
+        orderBy: [{ invoiceDate: "asc" }, { createdAt: "asc" }],
+      });
+
+      let remaining = paymentAmount;
+      for (const invoice of openInvoices) {
+        if (remaining <= 0) {
+          break;
+        }
+        const invoiceOutstanding = Number(invoice.outstandingAmount);
+        if (invoiceOutstanding <= 0) {
+          continue;
+        }
+        const allocationAmount = Number(Math.min(remaining, invoiceOutstanding).toFixed(2));
+        if (allocationAmount <= 0) {
+          continue;
+        }
+        await this.salesReceivablesService.allocateReceipt(
+          {
+            salesInvoiceId: invoice.id,
+            receiptTransactionId: receipt.id,
+            amount: allocationAmount,
+          },
+          { userId: user?.userId },
+        );
+        remaining = Number((remaining - allocationAmount).toFixed(2));
+      }
+    }
+
+    const balanceAfter = await this.sumMarketCustomerOutstanding(dto.customerId);
+    const bankCashAccount = await this.prisma.bankCashAccount.findUnique({
+      where: { id: dto.bankCashAccountId },
+      select: { name: true },
+    });
+
+    return {
+      id: receipt.id,
+      reference: receipt.reference,
+      receiptDate: receipt.receiptDate,
+      customerId: customer.id,
+      customerCode: customer.code,
+      customerName: customer.name,
+      amountPaid: paymentAmount.toFixed(2),
+      balanceBefore: balanceBefore.toFixed(2),
+      balanceAfter: balanceAfter.toFixed(2),
+      bankCashAccountName: bankCashAccount?.name ?? null,
+    };
+  }
+
+  async listDestinationMarkets(user?: AuthorizedUser, posProduct: PosProduct = PosProduct.MARKET) {
+    this.ensurePosPermissionCode("POS_VIEW_POS_SCREEN", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Destination markets are only available for market POS.");
+    }
+
+    const salesRepScope = this.isMarketRepScopedUser(user) ? user?.salesRepId ?? null : undefined;
+
+    return this.prisma.customer.findMany({
+      where: {
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        contactInfo: true,
+        salesRepId: true,
+      },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  private async resolvePosSaleCustomerId(
+    dto: { customerId?: string },
+    isMarketSession: boolean,
+  ): Promise<string> {
+    if (!isMarketSession) {
+      const walkInCustomer = await this.ensureWalkInCustomer();
+      if (!dto.customerId?.trim()) {
+        return walkInCustomer.id;
+      }
+      const cust = await this.prisma.customer.findUnique({
+        where: { id: dto.customerId.trim(), isActive: true },
+        select: { id: true },
+      });
+      if (!cust) {
+        throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
+      }
+      return cust.id;
+    }
+
+    if (!dto.customerId?.trim()) {
+      throw new BadRequestException(
+        "Market POS sales require a destination market. Select a market customer before completing the sale.",
+      );
+    }
+
+    const cust = await this.prisma.customer.findUnique({
+      where: { id: dto.customerId.trim(), isActive: true },
+      select: { id: true, code: true },
+    });
+    if (!cust) {
+      throw new BadRequestException(`Customer with ID ${dto.customerId} was not found or is inactive.`);
+    }
+    if (cust.code === POS_WALK_IN_CUSTOMER_CODE) {
+      throw new BadRequestException(
+        "Market POS sales cannot use the walk-in customer. Select a destination market.",
+      );
+    }
+    return cust.id;
+  }
+
   private async ensureWalkInCustomer() {
     const existing = await this.prisma.customer.findFirst({
       where: {
@@ -4863,7 +5698,7 @@ export class PosService {
     }
   }
 
-  private async ensureOpenSession(id: string) {
+  private async ensureOpenSession(id: string, expectedPosProduct?: PosProduct) {
     const session = await this.prisma.posSession.findUnique({
       where: { id },
       include: this.posSessionInclude(),
@@ -4874,7 +5709,67 @@ export class PosService {
     if (session.status !== PosSessionStatus.OPEN) {
       throw new BadRequestException("POS session must be open before creating or completing sales.");
     }
+    if (expectedPosProduct && session.posProduct !== expectedPosProduct) {
+      throw new BadRequestException(`POS session does not belong to the ${expectedPosProduct} terminal.`);
+    }
     return session;
+  }
+
+  private async ensureSessionProduct(id: string, expectedPosProduct: PosProduct) {
+    const session = await this.prisma.posSession.findUnique({
+      where: { id },
+      select: { id: true, posProduct: true },
+    });
+    if (!session) {
+      throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+    if (session.posProduct !== expectedPosProduct) {
+      throw new BadRequestException(`POS session does not belong to the ${expectedPosProduct} terminal.`);
+    }
+    return session;
+  }
+
+  private ensureSalePosProduct(
+    sale: {
+      posSession?: { posProduct?: PosProduct } | null;
+    },
+    expectedPosProduct: PosProduct,
+  ) {
+    const sessionProduct = sale.posSession?.posProduct;
+    if (sessionProduct && sessionProduct !== expectedPosProduct) {
+      throw new BadRequestException(`POS sale does not belong to the ${expectedPosProduct} terminal.`);
+    }
+  }
+
+  private ensureReturnPosProduct(
+    posReturn: {
+      posSession?: { posProduct?: PosProduct } | null;
+    },
+    expectedPosProduct: PosProduct,
+  ) {
+    const sessionProduct = posReturn.posSession?.posProduct;
+    if (sessionProduct && sessionProduct !== expectedPosProduct) {
+      throw new BadRequestException(`POS return does not belong to the ${expectedPosProduct} terminal.`);
+    }
+  }
+
+  private emptyRestaurantFields() {
+    return {
+      orderType: null,
+      tableId: null,
+      waiterId: null,
+      serviceChargeAmount: this.toAmount(0),
+      deliveryFeeAmount: this.toAmount(0),
+      driverId: null,
+      deliveryStatus: null,
+      deliveryAddress: null,
+      deliveryNotes: null,
+      deliveryCompanyId: null,
+      deliveryCollectionMethod: null,
+      deliverySettlementStatus: null,
+      deliverySettledAmount: this.toAmount(0),
+      originalOrderType: null,
+    };
   }
 
   private ensureDraftLikePosSale(
@@ -4945,13 +5840,20 @@ export class PosService {
     return session;
   }
 
-  private async ensureSessionAccess(id: string, user?: AuthorizedUser) {
+  private async ensureSessionAccess(
+    id: string,
+    user?: AuthorizedUser,
+    expectedPosProduct?: PosProduct,
+  ) {
     const session = await this.prisma.posSession.findUnique({
       where: { id },
-      select: { id: true, cashierUserId: true },
+      select: { id: true, cashierUserId: true, posProduct: true },
     });
     if (!session) {
       throw new BadRequestException(`POS session ${id} was not found.`);
+    }
+    if (expectedPosProduct && session.posProduct !== expectedPosProduct) {
+      throw new BadRequestException(`POS session does not belong to the ${expectedPosProduct} terminal.`);
     }
     const canSeeAll = this.canReviewAllSessions(user);
     if (!canSeeAll && session.cashierUserId && session.cashierUserId !== user?.userId) {
@@ -5345,6 +6247,7 @@ export class PosService {
           sessionNumber: true,
           terminalName: true,
           branchName: true,
+          posProduct: true,
           cashierUser: {
             select: { id: true, email: true, name: true },
           },
@@ -5416,6 +6319,7 @@ export class PosService {
           id: true,
           sessionNumber: true,
           branchName: true,
+          posProduct: true,
           warehouse: { select: { id: true, code: true, name: true } },
         },
       },
@@ -5527,6 +6431,7 @@ export class PosService {
     return {
       id: row.id,
       sessionNumber: row.sessionNumber,
+      posProduct: row.posProduct,
       terminalName: row.terminalName,
       branchName: row.branchName,
       status: row.status,
@@ -7069,7 +7974,12 @@ export class PosService {
     return { success: true };
   }
 
-  async correctPaymentMethod(id: string, dto: CorrectPaymentMethodDto, user?: AuthorizedUser) {
+  async correctPaymentMethod(
+    id: string,
+    dto: CorrectPaymentMethodDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
     if (
       !this.hasPosPermissionCode("POS_CORRECT_ORDER_TYPE", user) &&
       !this.hasPosPermissionCode("POS_APPROVE_ACCOUNTING", user)
@@ -7084,6 +7994,7 @@ export class PosService {
           select: {
             id: true,
             cashAccountId: true,
+            posProduct: true,
           },
         },
         deliveryCompany: {
@@ -7115,6 +8026,7 @@ export class PosService {
     if (!invoice) {
       throw new BadRequestException(`Invoice ${id} was not found.`);
     }
+    this.ensureSalePosProduct(invoice, posProduct);
     if (invoice.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
       throw new BadRequestException("Only completed POS invoices can be corrected.");
     }

@@ -236,11 +236,38 @@ Checks to run:
 - backend build
 - frontend typecheck
 
+## Add Or Change Market POS
+
+Where to edit:
+
+- frontend `features/pos-market`
+- backend `phase-3-sales-receivables/pos-market` (thin controller/service)
+- backend `phase-3-sales-receivables/pos-core/pos-terminal.service.ts` for shared retail session/sale/return/report logic
+- `frontend/lib/api/pos-market.ts` for market API fetchers (re-exported from `lib/api/index.ts`)
+- `frontend/app/(erp)/pos-market/` for thin route entrypoints only
+- `docs/pos-market/README.md` when structure, routes, or ownership changes
+- `backend/src/modules/platform/auth/access-control.constants.ts` when market cashier/accountant routes or permissions change
+
+What else to check:
+
+- do not add market POS features to `frontend/features/pos` or `backend/.../pos`
+- do not import across `features/pos` and `features/pos-market`
+- market cashiers use role `MARKET_CASHIER`, routes `/pos-market/*`, and API `/api/pos-market/*`
+- market field reps use role `MARKET_REP` with required `User.salesRepId`; routes include `/pos-market/receivables` and `/pos-market/receivables/:customerId`; receivables APIs live under `/api/pos-market/receivables*`
+- `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE` for partial/pay-later market sales; collection uses `POS_MARKET_COLLECT_RECEIVABLE` on `/api/pos-market/receivables/collect` (FIFO allocation to oldest open deliveries when allocations are omitted)
+- market POS sales require a destination market (`customerId` on complete/hold/draft); walk-in (`POS-WALKIN`) is rejected in `pos.service.ts` for `PosProduct.MARKET`
+- restaurant cashiers must remain limited to `/api/pos/*` and must not receive `/api/pos-market/*` through the JWT cashier guard
+
+Checks to run:
+
+- backend build
+- frontend typecheck
+
 ## Add Or Change POS Payment Account Mapping
 
 Where to edit:
 
-- frontend `features/pos`
+- frontend `features/pos` (restaurant POS only)
 - backend `phase-3-sales-receivables/pos`
 - `frontend/lib/api` and `frontend/types/api.ts` when the settings payload changes
 - `docs/data-model.md` and `docs/README.md` when posting or cashier behavior changes
@@ -834,6 +861,8 @@ Where to edit:
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
 - POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
 - POS add-on demo groups (extras, cooking level, drink size) linked to sandwich/chips/drinks: `backend/prisma/seed-pos-addons.ts` (runs with register seed); refresh only add-ons on an existing DB with `npm run seed:pos-addons`
+- Market POS demo catalog (`MKT-*` products, barcodes, stock, images) and destination markets (`MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03`): `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
+- Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`): `backend/prisma/setup-pos-market-cashier.ts`, invoked from full `npm run seed` or standalone `npm run seed:market-cashier`
 
 ### Volume seed (enterprise demo dataset)
 

@@ -9,7 +9,13 @@ export const ACCOUNT_TYPES = [
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
-export type PosAccessRole = "CASHIER" | "ACCOUNTANT" | "KITCHEN" | "WAITER";
+export type PosAccessRole =
+  | "CASHIER"
+  | "ACCOUNTANT"
+  | "KITCHEN"
+  | "WAITER"
+  | "MARKET_CASHIER"
+  | "MARKET_REP";
 export type PosPermissionCode =
   | "POS_OPEN_SESSION"
   | "POS_CLOSE_OWN_SESSION"
@@ -59,7 +65,9 @@ export type PosPermissionCode =
   | "RST_COMPLETE_RESTAURANT_PAYMENT"
   | "RST_PRINT_PRE_BILL"
   | "RST_VIEW_WAITER_ORDERS"
-  | "RST_UPDATE_WAITER_ORDER_STATUS";
+  | "RST_UPDATE_WAITER_ORDER_STATUS"
+  | "POS_MARKET_VIEW_RECEIVABLES"
+  | "POS_MARKET_COLLECT_RECEIVABLE";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -77,6 +85,7 @@ export type AuthUser = {
   permissions: PosPermissionCode[];
   allowedRoutes: string[];
   defaultRoute: string;
+  salesRepId?: string | null;
 };
 
 export type LoginPayload = {
@@ -90,6 +99,7 @@ export type RegisterPayload = {
   password: string;
   name?: string;
   posRoles?: PosAccessRole[];
+  salesRepId?: string;
 };
 
 export type LoginResponse = {
@@ -523,6 +533,8 @@ export type InventoryItemsQuery = {
   page?: number;
   limit?: number;
   warehouseId?: string;
+  /** Client-only cache discriminator (not sent to API). */
+  scope?: string;
 };
 
 export type InventoryMasterDataQuery = {
@@ -4004,6 +4016,10 @@ export type PosReceipt = {
   change: string;
   paymentSummary: string;
   warehouseName: string;
+  /** Remaining on this delivery when sold on credit. */
+  deliveryOutstanding?: string | null;
+  /** Customer account total outstanding after this sale. */
+  accountOutstanding?: string | null;
   lines: Array<{
     name: string;
     quantity: string;

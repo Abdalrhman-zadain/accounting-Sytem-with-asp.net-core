@@ -1,6 +1,7 @@
 import type { AuthUser, PosPermissionCode } from "@/types/api";
 
 const POS_ROUTE_PREFIX = "/pos";
+const POS_MARKET_ROUTE_PREFIX = "/pos-market";
 
 function normalizePath(pathname: string) {
   if (!pathname) {
@@ -14,6 +15,9 @@ function normalizePath(pathname: string) {
 function routeMatches(allowedRoute: string, normalizedPath: string) {
   if (allowedRoute === POS_ROUTE_PREFIX) {
     return normalizedPath === POS_ROUTE_PREFIX;
+  }
+  if (allowedRoute === POS_MARKET_ROUTE_PREFIX) {
+    return normalizedPath === POS_MARKET_ROUTE_PREFIX;
   }
   return normalizedPath === allowedRoute || normalizedPath.startsWith(`${allowedRoute}/`);
 }
@@ -48,6 +52,50 @@ export function isWaiterOnlyUser(user: AuthUser | null | undefined) {
 
 export function isCashierPosUser(user: AuthUser | null | undefined) {
   return Boolean(user?.posRoles?.includes("CASHIER"));
+}
+
+export function isMarketCashierUser(user: AuthUser | null | undefined) {
+  return Boolean(user?.posRoles?.includes("MARKET_CASHIER"));
+}
+
+export function isMarketRepUser(user: AuthUser | null | undefined) {
+  return Boolean(user?.posRoles?.includes("MARKET_REP"));
+}
+
+export type PosProduct = "restaurant" | "market";
+
+export function getUserPosProducts(user: AuthUser | null | undefined): PosProduct[] {
+  if (!user) {
+    return [];
+  }
+
+  const products = new Set<PosProduct>();
+
+  if (
+    user.posRoles.includes("CASHIER") ||
+    user.posRoles.includes("WAITER") ||
+    user.posRoles.includes("KITCHEN")
+  ) {
+    products.add("restaurant");
+  }
+
+  if (user.posRoles.includes("MARKET_CASHIER") || user.posRoles.includes("MARKET_REP")) {
+    products.add("market");
+  }
+
+  if (user.posRoles.includes("ACCOUNTANT")) {
+    products.add("restaurant");
+    products.add("market");
+  }
+
+  return Array.from(products);
+}
+
+export function userHasPosProduct(
+  user: AuthUser | null | undefined,
+  product: PosProduct,
+) {
+  return getUserPosProducts(user).includes(product);
 }
 
 export function canAccessRoute(user: AuthUser | null | undefined, pathname: string) {
@@ -157,6 +205,74 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   }
 
   if (normalizedPath === "/pos") {
+    return allowedRoutes.some((route) => routeMatches(route, normalizedPath));
+  }
+
+  if (
+    normalizedPath === "/pos-market/register" ||
+    normalizedPath.startsWith("/pos-market/register/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_SCREEN");
+  }
+
+  if (
+    normalizedPath === "/pos-market/held-sales" ||
+    normalizedPath.startsWith("/pos-market/held-sales/")
+  ) {
+    return hasPermission(user, "POS_RESUME_OWN_HELD_SALE");
+  }
+
+  if (
+    normalizedPath === "/pos-market/sessions" ||
+    normalizedPath.startsWith("/pos-market/sessions/")
+  ) {
+    return (
+      hasPermission(user, "POS_VIEW_OWN_SESSION_REPORT") ||
+      hasPermission(user, "POS_VIEW_SESSION_REPORT")
+    );
+  }
+
+  if (
+    normalizedPath === "/pos-market/printers" ||
+    normalizedPath.startsWith("/pos-market/printers/")
+  ) {
+    return (
+      hasPermission(user, "POS_VIEW_POS_SCREEN") ||
+      hasPermission(user, "POS_PRINT_RECEIPT")
+    );
+  }
+
+  if (
+    normalizedPath === "/pos-market/accounting-review" ||
+    normalizedPath.startsWith("/pos-market/accounting-review/") ||
+    normalizedPath === "/pos-market/completed-sales" ||
+    normalizedPath.startsWith("/pos-market/completed-sales/")
+  ) {
+    return hasPermission(user, "POS_VIEW_PENDING_ACCOUNTING");
+  }
+
+  if (
+    normalizedPath === "/pos-market/reports" ||
+    normalizedPath.startsWith("/pos-market/reports/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_REPORTS");
+  }
+
+  if (
+    normalizedPath === "/pos-market/settings" ||
+    normalizedPath.startsWith("/pos-market/settings/")
+  ) {
+    return hasPermission(user, "POS_VIEW_POS_REPORTS");
+  }
+
+  if (
+    normalizedPath === "/pos-market/receivables" ||
+    normalizedPath.startsWith("/pos-market/receivables/")
+  ) {
+    return hasPermission(user, "POS_MARKET_VIEW_RECEIVABLES");
+  }
+
+  if (normalizedPath === "/pos-market") {
     return allowedRoutes.some((route) => routeMatches(route, normalizedPath));
   }
 

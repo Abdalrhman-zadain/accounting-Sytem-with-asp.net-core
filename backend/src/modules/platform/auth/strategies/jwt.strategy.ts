@@ -27,6 +27,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             allowedRoutes: Array.isArray(payload.allowedRoutes) ? payload.allowedRoutes : [],
             defaultRoute: payload.defaultRoute ?? '/dashboard',
             isCashierOnly: Boolean(payload.isCashierOnly),
+            isMarketCashierOnly: Boolean(payload.isMarketCashierOnly),
+            isMarketRepOnly: Boolean(payload.isMarketRepOnly),
+            isMarketPosOperatorOnly: Boolean(payload.isMarketPosOperatorOnly),
+            salesRepId: typeof payload.salesRepId === 'string' ? payload.salesRepId : null,
             isKitchenOnly: Boolean(payload.isKitchenOnly),
             isWaiterOnly: Boolean(payload.isWaiterOnly),
         };

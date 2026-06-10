@@ -2410,6 +2410,8 @@ export async function getAgingReport(asOfDate?: string, token?: string | null) {
   });     
 }
 
+export * from "./pos-market";
+
 export async function getActivePosSession(token?: string | null) {
   return apiRequest<PosSession | null>("/pos/sessions/active", { token });
 }

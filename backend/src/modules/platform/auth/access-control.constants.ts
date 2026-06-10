@@ -1,5 +1,32 @@
 import type { PosAccessRoleCode, PosPermissionCode } from "./auth.types";
 
+export const MARKET_CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
+  "POS_OPEN_SESSION",
+  "POS_CLOSE_OWN_SESSION",
+  "POS_VIEW_POS_SCREEN",
+  "POS_SCAN_BARCODE",
+  "POS_SEARCH_ITEM",
+  "POS_ADD_ITEM_TO_CART",
+  "POS_UPDATE_ITEM_QUANTITY",
+  "POS_REMOVE_ITEM_FROM_CART",
+  "POS_HOLD_SALE",
+  "POS_RESUME_OWN_HELD_SALE",
+  "POS_VOID_DRAFT_SALE",
+  "POS_COMPLETE_SALE",
+  "POS_SELECT_PAYMENT_METHOD",
+  "POS_PRINT_RECEIPT",
+  "POS_VIEW_OWN_SESSION_REPORT",
+  "POS_VIEW_COMPLETED_SALES",
+  "POS_CHANGE_UNIT_PRICE",
+  "POS_CREDIT_SALE",
+];
+
+export const MARKET_REP_PERMISSION_CODES: PosPermissionCode[] = [
+  ...MARKET_CASHIER_PERMISSION_CODES,
+  "POS_MARKET_VIEW_RECEIVABLES",
+  "POS_MARKET_COLLECT_RECEIVABLE",
+];
+
 export const CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
   "POS_OPEN_SESSION",
   "POS_CLOSE_OWN_SESSION",
@@ -83,9 +110,22 @@ export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
   "POS_CORRECT_ORDER_TYPE",
   "POS_APPROVE_CORRECTION",
   "POS_REOPEN_SESSION",
+  "POS_MARKET_VIEW_RECEIVABLES",
+  "POS_MARKET_COLLECT_RECEIVABLE",
 ];
 
 export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
+  MARKET_CASHIER: [
+    "/pos-market/register",
+    "/pos-market/sessions",
+    "/pos-market/held-sales",
+    "/pos-market/printers",
+  ],
+  MARKET_REP: [
+    "/pos-market/register",
+    "/pos-market/receivables",
+    "/pos-market/printers",
+  ],
   CASHIER: [
     "/pos/register",
     "/pos/session",
@@ -106,6 +146,12 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/journal-entries",
     "/general-ledger",
     "/inventory",
+    "/pos-market/accounting-review",
+    "/pos-market/sessions",
+    "/pos-market/completed-sales",
+    "/pos-market/reports",
+    "/pos-market/settings",
+    "/pos-market/receivables",
     "/pos/accounting-review",
     "/pos/sessions",
     "/pos/completed-sales",
@@ -116,6 +162,8 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
 };
 
 export const POS_ROLE_PERMISSIONS: Record<PosAccessRoleCode, PosPermissionCode[]> = {
+  MARKET_CASHIER: MARKET_CASHIER_PERMISSION_CODES,
+  MARKET_REP: MARKET_REP_PERMISSION_CODES,
   CASHIER: CASHIER_PERMISSION_CODES,
   ACCOUNTANT: ACCOUNTANT_PERMISSION_CODES,
   KITCHEN: KITCHEN_PERMISSION_CODES,
@@ -128,6 +176,8 @@ export const ALL_POS_PERMISSION_CODES: PosPermissionCode[] = Array.from(
     ...ACCOUNTANT_PERMISSION_CODES,
     ...KITCHEN_PERMISSION_CODES,
     ...WAITER_PERMISSION_CODES,
+    ...MARKET_CASHIER_PERMISSION_CODES,
+    ...MARKET_REP_PERMISSION_CODES,
   ]),
 );
 
