@@ -3194,7 +3194,7 @@ Object.assign(arTranslations, {
   "pos.kitchen.column.ready": "جاهز",
   "pos.kitchen.column.done": "منتهي",
   "pos.waiterOrders.title": "متابعة الطلبات",
-  "pos.waiterOrders.subtitle": "طلبات المحلي — انتظار، استلام، مغادرة",
+  "pos.waiterOrders.subtitle": "طلبات الصالة — انتظار، استلام، مغادرة",
   "pos.waiterOrders.searchPlaceholder": "بحث طاولة، طلب، ويتر…",
   "pos.waiterOrders.emptyColumn": "لا توجد طلبات في هذه المرحلة",
   "pos.waiterOrders.column.waiting": "في انتظار",

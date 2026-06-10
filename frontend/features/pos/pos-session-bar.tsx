@@ -33,7 +33,9 @@ export function PosSessionBar({
             posTouchButtonClass,
           )}
         >
-          {isPending ? "Closing…" : getLocalizedText("Close Shift / إغلاق الوردية", language)}
+          {isPending
+            ? getLocalizedText("Closing… / جاري الإغلاق…", language)
+            : getLocalizedText("Close Shift / إغلاق الوردية", language)}
         </button>
         <button
           type="button"

@@ -1109,7 +1109,7 @@ export function PosPage() {
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
   const [selectedWaiterId, setSelectedWaiterId] = useState<string | null>(null);
-  const [deliveryMode, setDeliveryMode] = useState<"DIRECT" | "THIRD_PARTY">("DIRECT");
+  const [deliveryMode, setDeliveryMode] = useState<"DIRECT" | "THIRD_PARTY">("THIRD_PARTY");
   const [deliveryCompanyId, setDeliveryCompanyId] = useState<string | null>(null);
   const [deliveryCollectionMethod, setDeliveryCollectionMethod] =
     useState<DeliveryCollectionMethod>("RESTAURANT");
@@ -1258,8 +1258,8 @@ export function PosPage() {
   const catalogChips = useMemo(() => {
     return [
       ...itemGroups.map((g) => ({ id: g.id, name: g.name })),
-      { id: "favorites", name: language === "ar" ? "المفضلة" : "Favorites / المفضلة" },
-      { id: "all", name: language === "ar" ? "الكل" : "All / الكل" },
+      { id: "favorites", name: getLocalizedText("Favorites / المفضلة", language) },
+      { id: "all", name: getLocalizedText("All / الكل", language) },
     ];
   }, [itemGroups, language]);
 
@@ -2355,7 +2355,7 @@ export function PosPage() {
       setDeliveryDriverId(null);
       setSelectedDeliveryDriverName(null);
       setSelectedDeliveryDriverPhone(null);
-      setDeliveryMode("DIRECT");
+      setDeliveryMode("THIRD_PARTY");
       setDeliveryAddress("");
       setDeliveryNotes("");
       setDeliveryFee(0);
@@ -2858,7 +2858,7 @@ export function PosPage() {
     setSelectedTableId(null);
     setSelectedTableNumber(null);
     setSelectedWaiterId(null);
-    setDeliveryMode("DIRECT");
+    setDeliveryMode("THIRD_PARTY");
     setDeliveryCompanyId(null);
     setDeliveryCollectionMethod("RESTAURANT");
     setDeliveryDriverId(null);
@@ -3739,13 +3739,16 @@ export function PosPage() {
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="space-y-3 text-center">
                 <div className="inline-flex items-center rounded-full border border-[#d6e5da] bg-[#f2f8f3] px-4 py-2 text-xs font-black tracking-[0.18em] text-[#4f7059]">
-                  POS OPEN SHIFT
+                  {getLocalizedText("POS OPEN SHIFT / فتح الوردية نقاط البيع", language)}
                 </div>
                 <h1 className="text-3xl font-black tracking-tight text-[#1f3427] arabic-heading">
-                  فتح الوردية / Open Shift
+                  {getLocalizedText("Open Shift / فتح الوردية", language)}
                 </h1>
                 <p className="text-sm leading-7 text-[#65766b] arabic-auto">
-                  Start the cashier terminal by choosing the terminal, branch, warehouse, and cash register. Selling stays hidden until the shift is opened.
+                  {getLocalizedText(
+                    "Start the cashier terminal by choosing the terminal, branch, warehouse, and cash register. Selling stays hidden until the shift is opened. / ابدأ تشغيل جهاز الكاشير باختيار الجهاز، الفرع، المستودع، وصندوق الكاش. تظل شاشة البيع مخفية حتى يتم فتح الوردية.",
+                    language,
+                  )}
                 </p>
               </div>
 
@@ -3797,7 +3800,7 @@ export function PosPage() {
         <PosRegisterMainGrid
           catalog={
             <section className="flex flex-col gap-3 pb-3">
-              <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
+              <Card className="rounded-[12px] border-[#e4e9e6] bg-white px-3 py-2 shadow-none">
                 <div className="flex flex-col gap-3 lg:flex-row">
                   <div className="mb-0 min-w-0 flex-1">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -3830,7 +3833,7 @@ export function PosPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {catalogChips.map((chip) => (
                     <button
                       key={chip.id}
@@ -3891,7 +3894,7 @@ export function PosPage() {
                     }}
                     className="mt-3 rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-4 py-2 text-xs font-bold text-[#4f6556] hover:bg-white"
                   >
-                    Refresh products / تحديث المنتجات
+                    {getLocalizedText("Refresh products / تحديث المنتجات", language)}
                   </button>
                 </Card>
               ) : (
@@ -3918,10 +3921,12 @@ export function PosPage() {
                     onClick={() => setProductPage((p) => Math.max(1, p - 1))}
                     className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
                   >
-                    Previous / السابق
+                    {getLocalizedText("Previous / السابق", language)}
                   </button>
                   <span className="text-xs font-bold text-[#42564a]">
-                    Page {itemsQuery.data?.page ?? productPage} / {catalogTotalPages}
+                    {language === "ar"
+                      ? `الصفحة ${itemsQuery.data?.page ?? productPage} / ${catalogTotalPages}`
+                      : `Page ${itemsQuery.data?.page ?? productPage} / ${catalogTotalPages}`}
                   </span>
                   <button
                     type="button"
@@ -3929,7 +3934,7 @@ export function PosPage() {
                     onClick={() => setProductPage((p) => p + 1)}
                     className="rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-3 py-1.5 text-xs font-bold text-[#4f6556] disabled:opacity-40"
                   >
-                    Next / التالي
+                    {getLocalizedText("Next / التالي", language)}
                   </button>
                 </div>
               ) : null}
@@ -4809,13 +4814,13 @@ export function PosPage() {
         >
           <div className="max-h-[min(70vh,520px)] space-y-6 overflow-y-auto text-sm text-[#42564a]">
             {draftSales.length === 0 && heldSales.length === 0 ? (
-              <p className="py-6 text-center text-[#6b7c70]">No held or draft sales / لا يوجد</p>
+              <p className="py-6 text-center text-[#6b7c70]">{getLocalizedText("No held or draft sales / لا توجد مبيعات معلقة أو مسودة", language)}</p>
             ) : null}
 
             {draftSales.length > 0 ? (
               <div>
                 <div className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-[#5f6d66]">
-                  Drafts / مسودات
+                  {getLocalizedText("Drafts / مسودات", language)}
                 </div>
                 <ul className="space-y-3">
                   {draftSales.map((row) => (
@@ -4834,7 +4839,7 @@ export function PosPage() {
                           </div>
                         </div>
                         <span className="rounded-full bg-[#eef3ef] px-2 py-0.5 text-[11px] font-bold text-[#46644b]">
-                          {row.cartLines.length} lines
+                          {language === "ar" ? `${row.cartLines.length} أسطر` : `${row.cartLines.length} lines`}
                         </span>
                       </div>
                       <button
@@ -4846,7 +4851,7 @@ export function PosPage() {
                         }}
                         className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
                       >
-                        Resume / استئناف
+                        {getLocalizedText("Resume / استئناف", language)}
                       </button>
                     </li>
                   ))}
@@ -4857,7 +4862,7 @@ export function PosPage() {
             {heldSales.length > 0 ? (
               <div>
                 <div className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-[#5f6d66]">
-                  Held / معلقة
+                  {getLocalizedText("Held / معلقة", language)}
                 </div>
                 <ul className="space-y-3">
                   {heldSales.map((row) => (
@@ -4876,7 +4881,7 @@ export function PosPage() {
                           </div>
                         </div>
                         <span className="rounded-full bg-[#eef3ef] px-2 py-0.5 text-[11px] font-bold text-[#46644b]">
-                          {row.cartLines.length} lines
+                          {language === "ar" ? `${row.cartLines.length} أسطر` : `${row.cartLines.length} lines`}
                         </span>
                       </div>
                       <button
@@ -4888,7 +4893,7 @@ export function PosPage() {
                         }}
                         className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
                       >
-                        Resume / استئناف
+                        {getLocalizedText("Resume / استئناف", language)}
                       </button>
                     </li>
                   ))}
@@ -4911,18 +4916,16 @@ export function PosPage() {
         <Modal
           isOpen={isCancelSaleOpen}
           onClose={() => setIsCancelSaleOpen(false)}
-          title="Cancel sale? / إلغاء البيع؟"
+          title={getLocalizedText("Cancel sale? / إلغاء البيع؟", language)}
         >
           <div className="space-y-4 text-sm text-[#42564a]">
-            <p className="leading-7 text-[#596760]">
-              {editingInvoiceId
-                ? "This will void the held or draft invoice on the server and clear your cart."
-                : "This will clear the current cart."}{" "}
-              <span className="arabic-auto block text-[13px] text-[#6b7c70] mt-2">
-                {editingInvoiceId
-                  ? "سيُلغى المستند في الخادم ويُفرغ السلة."
-                  : "سيتم تفريغ السلة الحالية فقط."}
-              </span>
+            <p className="leading-7 text-[#596760] arabic-auto">
+              {getLocalizedText(
+                editingInvoiceId
+                  ? "This will void the held or draft invoice on the server and clear your cart. / سيُلغى المستند في الخادم ويُفرغ السلة."
+                  : "This will clear the current cart. / سيتم تفريغ السلة الحالية فقط.",
+                language,
+              )}
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               <button
@@ -4930,7 +4933,7 @@ export function PosPage() {
                 onClick={() => setIsCancelSaleOpen(false)}
                 className="flex-1 rounded-[18px] border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4f6556] hover:bg-white"
               >
-                Keep editing / متابعة
+                {getLocalizedText("Keep editing / متابعة", language)}
               </button>
               <button
                 type="button"
@@ -4940,7 +4943,7 @@ export function PosPage() {
                 }}
                 className="flex-1 rounded-[18px] border border-[#ead8d4] bg-[#fff5f5] px-4 py-3 text-sm font-black text-[#8a5952] hover:bg-white disabled:opacity-50"
               >
-                {voidSaleMutation.isPending ? "..." : "Confirm cancel / تأكيد"}
+                {voidSaleMutation.isPending ? "..." : getLocalizedText("Confirm cancel / تأكيد", language)}
               </button>
             </div>
           </div>
@@ -4958,33 +4961,36 @@ export function PosPage() {
         >
           <div className="space-y-5">
             <p className="text-sm text-[#6b7c70] arabic-auto">
-              Quick-create a customer to attach to this sale. You can fill in more details later from the Sales module.
+              {getLocalizedText(
+                "Quick-create a customer to attach to this sale. You can fill in more details later from the Sales module. / إنشاء سريع لعميل لربطه بهذا البيع. يمكنك ملء المزيد من التفاصيل لاحقًا من موديول المبيعات.",
+                language,
+              )}
             </p>
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[#42564a]">
-                Customer Name / اسم العميل <span className="text-red-500">*</span>
+                {getLocalizedText("Customer Name / اسم العميل", language)} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={newCustomerName}
                 onChange={(e) => setNewCustomerName(e.target.value)}
-                placeholder="e.g. Ahmed Ali"
+                placeholder={getLocalizedText("e.g. Ahmed Ali / مثال: أحمد علي", language)}
                 className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-medium text-[#233329] placeholder-[#a0b0a6] focus:border-[#5f8a67] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
               />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[#42564a]">
-                Tax Treatment / المعالجة الضريبية <span className="text-red-500">*</span>
+                {getLocalizedText("Tax Treatment / المعالجة الضريبية", language)} <span className="text-red-500">*</span>
               </label>
               <select
                 value={newCustomerTaxTreatmentId}
                 onChange={(e) => setNewCustomerTaxTreatmentId(e.target.value)}
                 className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
               >
-                <option value="">— Select / اختر —</option>
+                <option value="">{getLocalizedText("— Select — / — اختر —", language)}</option>
                 {taxTreatments.map((tt: TaxTreatment) => (
                   <option key={tt.id} value={tt.id}>
-                    {tt.englishName} / {tt.arabicName}
+                    {language === "ar" ? tt.arabicName : tt.englishName}
                   </option>
                 ))}
               </select>
@@ -5047,10 +5053,12 @@ export function PosPage() {
                 >
                   <div className="text-sm font-black text-[#233329]">{table.tableNumber}</div>
                   <div className="mt-1 text-xs text-[#68776f]">
-                    {table.status.replaceAll("_", " ")} • {table.capacity} seats
+                    {language === "ar"
+                      ? `${table.status.replaceAll("_", " ")} • ${table.capacity} مقاعد`
+                      : `${table.status.replaceAll("_", " ")} • ${table.capacity} seats`}
                   </div>
                   <div className="mt-2 text-[11px] text-[#5a6b61]">
-                    {table.assignedWaiter?.name ?? "No waiter assigned"}
+                    {table.assignedWaiter?.name ?? getLocalizedText("No waiter assigned / لا يوجد نادل معين", language)}
                   </div>
                 </button>
               );
@@ -5061,7 +5069,7 @@ export function PosPage() {
         <Modal
           isOpen={isTransferTableOpen}
           onClose={() => setIsTransferTableOpen(false)}
-          title="Transfer Table / نقل الطاولة"
+          title={getLocalizedText("Transfer Table / نقل الطاولة", language)}
         >
           <div className="space-y-4">
             <select
@@ -5069,7 +5077,7 @@ export function PosPage() {
               onChange={(event) => setTransferTargetTableId(event.target.value)}
               className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
             >
-              <option value="">Select target table / اختر الطاولة الهدف</option>
+              <option value="">{getLocalizedText("Select target table / اختر الطاولة الهدف", language)}</option>
               {restaurantTables
                 .filter((table) => table.id !== selectedTableId && !table.activeInvoice?.id)
                 .map((table) => (
@@ -5089,7 +5097,7 @@ export function PosPage() {
               }
               className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
-              Confirm transfer / تأكيد النقل
+              {getLocalizedText("Confirm transfer / تأكيد النقل", language)}
             </button>
           </div>
         </Modal>
@@ -5097,7 +5105,7 @@ export function PosPage() {
         <Modal
           isOpen={isMergeTablesOpen}
           onClose={() => setIsMergeTablesOpen(false)}
-          title="Merge Tables / دمج الطاولات"
+          title={getLocalizedText("Merge Tables / دمج الطاولات", language)}
         >
           <div className="space-y-4">
             <div className="space-y-2">
@@ -5131,7 +5139,7 @@ export function PosPage() {
               }
               className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
-              Merge into selected table / دمج في الطاولة المختارة
+              {getLocalizedText("Merge into selected table / دمج في الطاولة المختارة", language)}
             </button>
           </div>
         </Modal>
@@ -5139,14 +5147,16 @@ export function PosPage() {
         <Modal
           isOpen={isSplitBillOpen}
           onClose={() => setIsSplitBillOpen(false)}
-          title="Split Bill / تقسيم الفاتورة"
+          title={getLocalizedText("Split Bill / تقسيم الفاتورة", language)}
         >
           <div className="max-h-[70vh] space-y-4 overflow-y-auto">
             {cartLines.map((line) => (
               <div key={line.itemId} className="grid grid-cols-[minmax(0,1fr)_120px] gap-3 rounded-[14px] border border-[#dbe4de] bg-[#fafcf9] p-3">
                 <div>
                   <div className="text-sm font-bold text-[#233329]">{line.name}</div>
-                  <div className="text-xs text-[#68776f]">Current qty: {line.quantity}</div>
+                  <div className="text-xs text-[#68776f]">
+                    {language === "ar" ? `الكمية الحالية: ${line.quantity}` : `Current qty: ${line.quantity}`}
+                  </div>
                 </div>
                 <input
                   type="number"
@@ -5182,7 +5192,7 @@ export function PosPage() {
               }}
               className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
-              Create split invoice / إنشاء فاتورة منفصلة
+              {getLocalizedText("Create split invoice / إنشاء فاتورة منفصلة", language)}
             </button>
           </div>
         </Modal>
@@ -5197,19 +5207,25 @@ export function PosPage() {
           title={getLocalizedText("Close shift / إغلاق الوردية", language)}
         >
           <div className="space-y-4">
+            <div className="text-center py-2 px-3 text-sm font-bold text-[#4c6e52] bg-[#f0f5f1] rounded-[14px]">
+              {getLocalizedText(
+                "Well done team, thank you for your hard work! / يعطيكم العافية شباب ولله ما قصرتوا",
+                language,
+              )}
+            </div>
             <Input
               type="number"
               min="0"
               step="0.01"
               value={actualCashCount}
               onChange={(event) => setActualCashCount(event.target.value)}
-              placeholder="Actual counted cash / النقد الفعلي"
+              placeholder={getLocalizedText("Actual counted cash / النقد الفعلي", language)}
               className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
             />
             <Input
               value={closingNotes}
               onChange={(event) => setClosingNotes(event.target.value)}
-              placeholder="Closing notes / ملاحظات الإغلاق"
+              placeholder={getLocalizedText("Closing notes / ملاحظات الإغلاق", language)}
               className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
             />
             <button
@@ -5230,7 +5246,7 @@ export function PosPage() {
               }
               className="w-full rounded-[18px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
-              Confirm shift close / تأكيد الإغلاق
+              {getLocalizedText("Confirm shift close / تأكيد الإغلاق", language)}
             </button>
           </div>
         </Modal>
@@ -6818,6 +6834,7 @@ function PosCartRow({
 }
 
 function PosCalculatorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { language } = useTranslation();
   const [display, setDisplay] = useState("0");
   const [equation, setEquation] = useState("");
 
@@ -6837,12 +6854,12 @@ function PosCalculatorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
         setEquation(display + " =");
         setDisplay(String(result));
       } catch (e) {
-        setDisplay("Error");
+        setDisplay(language === "ar" ? "خطأ" : "Error");
       }
       return;
     }
     
-    if (display === "0" || display === "Error") {
+    if (display === "0" || display === "Error" || display === "خطأ") {
       setDisplay(val);
     } else {
       setDisplay(display + val);
@@ -6857,7 +6874,7 @@ function PosCalculatorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Calculator / حاسبة" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={getLocalizedText("Calculator / حاسبة", language)} size="sm">
       <div className="p-4 bg-[#f8faf9] rounded-2xl">
         <div className="mb-4 bg-white p-3 text-right rounded-xl border border-[#d7dfda] shadow-inner h-20 flex flex-col justify-end">
           <div className="text-[11px] text-gray-500 h-4">{equation}</div>
@@ -6868,7 +6885,7 @@ function PosCalculatorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             onClick={() => handlePress("C")}
             className="col-span-4 bg-[#ffe7e4] text-[#e06555] h-12 rounded-xl text-sm font-bold hover:brightness-95 transition"
           >
-            Clear / مسح
+            {getLocalizedText("Clear / مسح", language)}
           </button>
           {buttons.map((btn) => (
             <button

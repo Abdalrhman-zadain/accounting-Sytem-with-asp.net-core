@@ -80,7 +80,7 @@ function formatClockTime(iso: string, language: string) {
 
 function orderTypeLabel(orderType: PosOrderType, language: string) {
   if (language === "ar") {
-    if (orderType === "DINE_IN") return "محلي";
+    if (orderType === "DINE_IN") return "صالة";
     if (orderType === "TAKEAWAY") return "سفري";
     if (orderType === "DELIVERY") return "توصيل";
     return "استلام";

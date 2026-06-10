@@ -55,7 +55,7 @@ type PosRestaurantCartControlsProps = {
 };
 
 const ORDER_TYPE_OPTIONS: Array<{ value: PosOrderType; en: string; ar: string }> = [
-  { value: "DINE_IN", en: "Dine-In", ar: "محلي" },
+  { value: "DINE_IN", en: "Dine-In", ar: "صالة" },
   { value: "TAKEAWAY", en: "Takeaway", ar: "سفري" },
   { value: "DELIVERY", en: "Delivery", ar: "توصيل" },
 ];
@@ -251,7 +251,7 @@ export function PosRestaurantCartControls({
         <div className="space-y-2.5 rounded-[16px] border-2 border-[#dbe4de] bg-[#f8faf8] p-3">
           {/* Direct vs third-party toggle */}
           <div className="flex gap-2">
-            {(["DIRECT", "THIRD_PARTY"] as const).map((mode) => (
+            {(["THIRD_PARTY", "DIRECT"] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
