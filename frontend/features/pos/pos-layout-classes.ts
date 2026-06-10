@@ -24,7 +24,7 @@ export const posRegisterCatalogClass =
 
 /** Order panel on wide screens (side column). */
 export const posRegisterCartPanelClass =
-  "order-2 flex min-h-0 min-w-0 flex-col overflow-hidden min-[960px]:h-full xl:sticky xl:top-4 xl:max-h-[calc(100dvh-6rem)] xl:self-start";
+  "order-2 flex min-h-0 min-w-0 flex-col overflow-hidden min-[960px]:h-full";
 
 /** Touch-friendly minimum control height (Apple HIG ~44pt). */
 export const posTouchButtonClass = "min-h-[44px]";

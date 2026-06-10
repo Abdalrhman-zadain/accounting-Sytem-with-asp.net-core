@@ -3789,32 +3789,32 @@ export function PosPage() {
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
                 <div className="flex flex-col gap-3 lg:flex-row">
                   <div className="mb-0 min-w-0 flex-1">
-                    <div className="relative flex flex-col gap-2 sm:flex-row">
-                      <LuScanLine className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3.5" />
-                      <Input
-                        ref={searchInputRef}
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            handleBarcodeSubmit();
-                          }
-                        }}
-                        placeholder={t("pos.sales.barcodePlaceholder")}
-                        className="h-12 rounded-[10px] border-[#d7dfda] bg-white py-3 pl-10 pr-3 text-sm focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-10 shadow-sm transition-all"
-                      />
-                      <div className="flex shrink-0 sm:w-auto">
-                        <button
-                          type="button"
-                          onClick={() => setIsCalculatorOpen(true)}
-                          className="flex h-12 w-full sm:w-auto items-center justify-center rounded-[10px] border border-[#5f8a67] bg-white px-5 text-sm font-bold text-[#5f8a67] hover:bg-[#f3f7f4] active:bg-[#e4ede6] shadow-sm transition-all duration-200"
-                          title="Calculator"
-                        >
-                          <LuCalculator className="h-5 w-5 mr-2 rtl:mr-0 rtl:ml-2 text-[#5f8a67]" />
-                          <span className="truncate">{language === "ar" ? "الحاسبة" : "Calculator"}</span>
-                        </button>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="relative flex-1">
+                        <LuScanLine className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3.5" />
+                        <Input
+                          ref={searchInputRef}
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleBarcodeSubmit();
+                            }
+                          }}
+                          placeholder={t("pos.sales.barcodePlaceholder")}
+                          className="h-12 w-full rounded-[10px] border-[#d7dfda] bg-white py-3 pl-10 pr-3 text-sm focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-10 shadow-sm transition-all"
+                        />
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsCalculatorOpen(true)}
+                        className="flex h-12 shrink-0 items-center justify-center rounded-[10px] border border-[#5f8a67] bg-[#5f8a67] px-5 text-sm font-black text-white hover:bg-[#4d7354] active:bg-[#3d5c43] shadow-md transition-all duration-200"
+                        title="Calculator"
+                      >
+                        <LuCalculator className="h-5 w-5 mr-2 rtl:mr-0 rtl:ml-2" />
+                        <span className="truncate">{language === "ar" ? "الحاسبة" : "Calculator"}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3829,10 +3829,10 @@ export function PosPage() {
                         setProductPage(1);
                       }}
                       className={cn(
-                        "min-h-[28px] whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-bold transition",
+                        "min-h-[38px] whitespace-nowrap rounded-full border px-5 py-1.5 text-sm font-black transition-all duration-200 active:scale-95 shadow-sm",
                         activeCategory === chip.id
-                          ? "border-[#5f8a67] bg-[#5f8a67] text-white"
-                          : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
+                          ? "border-transparent bg-gradient-to-r from-[#5f8a67] to-[#6d9675] text-white shadow-md shadow-[#5f8a67]/20"
+                          : "border-[#e4ebe6] bg-[#f5f8f6] text-[#4e5e53] hover:bg-white hover:border-[#bdd0c0] hover:text-[#5f8a67]",
                       )}
                     >
                       {chip.name}
