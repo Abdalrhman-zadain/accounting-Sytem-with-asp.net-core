@@ -118,7 +118,7 @@ import {
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
-import { hasPermission, isCashierPosUser } from "@/lib/auth-access";
+import { hasPermission, isCashierPosUser, isWaiterOnlyUser } from "@/lib/auth-access";
 import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -375,6 +375,7 @@ const workspaceTabs: WorkspaceTab[] = [
 
 const pathnameWorkspaceMap: Record<string, PosWorkspace> = {
   "/pos/register": "sales",
+  "/pos/waiter/order": "sales",
   "/pos/session": "sessions",
   "/pos/sessions": "sessions",
   "/pos/held-sales": "held",
@@ -406,7 +407,10 @@ function resolvePosWorkspace(pathname: string, tab: string | null): PosWorkspace
   return null;
 }
 
-function workspaceHref(workspace: PosWorkspace) {
+function workspaceHref(workspace: PosWorkspace, waiterMode = false) {
+  if (waiterMode && workspace === "sales") {
+    return "/pos/waiter/order";
+  }
   const route = Object.entries(pathnameWorkspaceMap).find(([, id]) => id === workspace)?.[0];
   if (route) {
     return route;
@@ -1026,7 +1030,7 @@ function PlaceholderWorkspace({
   );
 }
 
-export function PosPage() {
+export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1089,7 +1093,8 @@ export function PosPage() {
   const messageTimeoutRef = useRef<number | null>(null);
   const resumedSaleRef = useRef<string | null>(null);
   const resumedTableIdRef = useRef<string | null>(null);
-  const prevOrderTypeRef = useRef<PosOrderType>("TAKEAWAY");
+  const defaultOrderType = isWaiterOnlyUser(user) ? "DINE_IN" : "TAKEAWAY";
+  const prevOrderTypeRef = useRef<PosOrderType>(defaultOrderType);
   const [activeReservationId, setActiveReservationId] = useState<string | null>(null);
   const [preOrderCompletedTableId, setPreOrderCompletedTableId] = useState<string | null>(null);
 
@@ -1105,7 +1110,7 @@ export function PosPage() {
   const [isCancelSaleOpen, setIsCancelSaleOpen] = useState(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   // Restaurant Cart details
-  const [orderType, setOrderType] = useState<PosOrderType>("TAKEAWAY");
+  const [orderType, setOrderType] = useState<PosOrderType>(defaultOrderType);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
   const [selectedWaiterId, setSelectedWaiterId] = useState<string | null>(null);
@@ -1140,7 +1145,7 @@ export function PosPage() {
   const [isCorrectPaymentMethodOpen, setIsCorrectPaymentMethodOpen] = useState(false);
   const [selectedCorrectionSale, setSelectedCorrectionSale] = useState<PosSale | null>(null);
   const [selectedPaymentCorrectionSale, setSelectedPaymentCorrectionSale] = useState<PosSale | null>(null);
-  const [correctionOrderType, setCorrectionOrderType] = useState<PosOrderType>("TAKEAWAY");
+  const [correctionOrderType, setCorrectionOrderType] = useState<PosOrderType>(defaultOrderType);
   const [correctionTableId, setCorrectionTableId] = useState<string>("");
   const [correctionDeliveryCompanyId, setCorrectionDeliveryCompanyId] = useState<string>("");
   const [correctionDriverId, setCorrectionDriverId] = useState<string>("");
@@ -1758,7 +1763,7 @@ export function PosPage() {
         ),
       );
       if (variables.reservationId) {
-        router.push("/pos/tables");
+        router.push(waiterMode ? "/pos/waiter/tables" : "/pos/tables");
       }
     },
     onError: (error) => {
@@ -2109,6 +2114,9 @@ export function PosPage() {
     reviewSessionGroups[0] ??
     null;
   const availableWorkspaceTabs = useMemo(() => {
+    if (waiterMode) {
+      return workspaceTabs.filter((tab) => tab.id === "sales");
+    }
     const visible = workspaceTabs.filter((tab) => {
       if (tab.id === "sales") return hasPermission(user, "POS_VIEW_POS_SCREEN");
       if (tab.id === "sessions") {
@@ -2200,7 +2208,7 @@ export function PosPage() {
     }
 
     startRoutingTransition(() => {
-      router.replace("/pos/register", { scroll: false });
+      router.replace(waiterMode ? "/pos/waiter/order" : "/pos/register", { scroll: false });
     });
   }, [
     workspace,
@@ -2217,13 +2225,13 @@ export function PosPage() {
   useEffect(() => {
     if (!requestedWorkspace) {
       startRoutingTransition(() => {
-        router.replace(workspaceHref(fallbackWorkspace));
+        router.replace(workspaceHref(fallbackWorkspace, waiterMode));
       });
       return;
     }
     if (!availableWorkspaceTabs.some((tab) => tab.id === requestedWorkspace)) {
       startRoutingTransition(() => {
-        router.replace(workspaceHref(fallbackWorkspace));
+        router.replace(workspaceHref(fallbackWorkspace, waiterMode));
       });
       return;
     }
@@ -2274,7 +2282,7 @@ export function PosPage() {
       resumedTableIdRef.current = target.id;
     }
     startRoutingTransition(() => {
-      router.replace("/pos/register", { scroll: false });
+      router.replace(waiterMode ? "/pos/waiter/order" : "/pos/register", { scroll: false });
     });
   }, [
     draftSalesQuery.data,
@@ -2847,14 +2855,14 @@ export function PosPage() {
     setEditingInvoiceId(null);
     hadKitchenTicketRef.current = false;
     lastKitchenSyncFingerprintRef.current = null;
-    prevOrderTypeRef.current = "TAKEAWAY";
+    prevOrderTypeRef.current = defaultOrderType;
     setCartLines([]);
     setInvoiceDiscountType("FIXED");
     setInvoiceDiscountValue(0);
     setSearch("");
     setOrderNotes("");
     setSelectedCustomerId(null);
-    setOrderType("TAKEAWAY");
+    setOrderType(defaultOrderType);
     setSelectedTableId(null);
     setSelectedTableNumber(null);
     setSelectedWaiterId(null);
@@ -3665,7 +3673,7 @@ export function PosPage() {
 
   const openCorrectionModal = (sale: PosSale) => {
     setSelectedCorrectionSale(sale);
-    setCorrectionOrderType(sale.orderType ?? "TAKEAWAY");
+    setCorrectionOrderType(sale.orderType ?? defaultOrderType);
     setCorrectionTableId(sale.tableId ?? "");
     setCorrectionDeliveryCompanyId(sale.deliveryCompanyId ?? "");
     setCorrectionDriverId(sale.driverId ?? "");
@@ -3755,6 +3763,26 @@ export function PosPage() {
     const singlePaymentEntry = paymentEntriesResolved[0] ?? null;
 
     if (!sessionState.isOpen || !activeSession) {
+      if (waiterMode) {
+        return (
+          <div className="mx-auto max-w-md space-y-6 py-12 text-center">
+            <Card className="rounded-[24px] border-[#dde5df] bg-white p-8 shadow-sm">
+              <p className="text-sm font-semibold text-[#506054]">
+                {isArabic
+                  ? "لا توجد وردية POS مفتوحة. اطلب من الكاشير فتح الوردية أولاً."
+                  : "No open POS session. Ask the cashier to open a shift first."}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push("/pos/waiter/tables")}
+                className="mt-6 rounded-xl bg-[#46644b] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#38513c]"
+              >
+                {isArabic ? "العودة للطاولات" : "Back to Tables"}
+              </button>
+            </Card>
+          </div>
+        );
+      }
       return (
         <div className="mx-auto max-w-4xl space-y-6">
           <Card className="rounded-[32px] border-[#d8e2db] bg-white p-6 shadow-[0_24px_70px_-46px_rgba(43,79,54,0.35)] sm:p-8">
@@ -4070,83 +4098,85 @@ export function PosPage() {
               {/* Scrollable middle container to allow cart items to be visible without squishing */}
               <div className="flex-1 min-h-0 overflow-y-auto">
                 {/* 2. Customer */}
-                <div className="border-b border-[#eef1ef] px-3 py-2.5">
-                  {selectedCustomer ? (
-                    <div className="flex h-9 items-center justify-between gap-2 rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
-                        <span className="truncate text-xs font-semibold text-[#111827]">
-                          {selectedCustomer.name}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={orderKitchenLocked}
-                        onClick={() => setSelectedCustomerId(null)}
-                        className="shrink-0 text-[11px] font-medium text-[#9ca3af] transition hover:text-[#dc2626] disabled:opacity-40"
-                        title="Remove customer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <LuUser className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9ca3af]" />
-                      <input
-                        type="text"
-                        placeholder={getLocalizedText(
-                          "Search customer / ابحث عن عميل...",
-                          language,
-                        )}
-                        value={searchCustomer}
-                        onChange={(e) => setSearchCustomer(e.target.value)}
-                        readOnly={orderKitchenLocked}
-                        className="h-9 w-full rounded-[10px] border border-[#e5e7eb] bg-white py-2 ps-8 pe-9 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
-                      />
-                      <button
-                        type="button"
-                        disabled={orderKitchenLocked}
-                        onClick={() => setIsAddCustomerOpen(true)}
-                        title={getLocalizedText("Add customer / إضافة عميل", language)}
-                        className="absolute end-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[#6b7280] transition hover:bg-[#f3f4f6] disabled:opacity-40"
-                      >
-                        <LuUserPlus className="h-3.5 w-3.5" />
-                      </button>
-                      {searchCustomer && customers.length > 0 && (
-                        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[10px] border border-[#e5e7eb] bg-white shadow-lg">
-                          <div className="max-h-48 divide-y divide-[#f3f4f6] overflow-y-auto">
-                            {customers
-                              .filter((c: Customer) =>
-                                c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                              )
-                              .slice(0, 8)
-                              .map((c: Customer) => (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedCustomerId(c.id);
-                                    setSearchCustomer("");
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#111827] hover:bg-[#f9fafb]"
-                                >
-                                  <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
-                                  <span className="truncate font-medium">{c.name}</span>
-                                </button>
-                              ))}
-                            {customers.filter((c: Customer) =>
-                              c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
-                            ).length === 0 && (
-                              <div className="px-3 py-2 text-[11px] text-[#9ca3af]">
-                                {getLocalizedText("No customer found / لا يوجد عميل", language)}
-                              </div>
-                            )}
-                          </div>
+                {!waiterMode && (
+                  <div className="border-b border-[#eef1ef] px-3 py-2.5">
+                    {selectedCustomer ? (
+                      <div className="flex h-9 items-center justify-between gap-2 rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] px-2.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
+                          <span className="truncate text-xs font-semibold text-[#111827]">
+                            {selectedCustomer.name}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        <button
+                          type="button"
+                          disabled={orderKitchenLocked}
+                          onClick={() => setSelectedCustomerId(null)}
+                          className="shrink-0 text-[11px] font-medium text-[#9ca3af] transition hover:text-[#dc2626] disabled:opacity-40"
+                          title="Remove customer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <LuUser className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9ca3af]" />
+                        <input
+                          type="text"
+                          placeholder={getLocalizedText(
+                            "Search customer / ابحث عن عميل...",
+                            language,
+                          )}
+                          value={searchCustomer}
+                          onChange={(e) => setSearchCustomer(e.target.value)}
+                          readOnly={orderKitchenLocked}
+                          className="h-9 w-full rounded-[10px] border border-[#e5e7eb] bg-white py-2 ps-8 pe-9 text-xs font-medium text-[#111827] placeholder-[#9ca3af] focus:border-[#d1d5db] focus:outline-none focus:ring-2 focus:ring-[#f3f4f6] read-only:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          disabled={orderKitchenLocked}
+                          onClick={() => setIsAddCustomerOpen(true)}
+                          title={getLocalizedText("Add customer / إضافة عميل", language)}
+                          className="absolute end-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[#6b7280] transition hover:bg-[#f3f4f6] disabled:opacity-40"
+                        >
+                          <LuUserPlus className="h-3.5 w-3.5" />
+                        </button>
+                        {searchCustomer && customers.length > 0 && (
+                          <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-[10px] border border-[#e5e7eb] bg-white shadow-lg">
+                            <div className="max-h-48 divide-y divide-[#f3f4f6] overflow-y-auto">
+                              {customers
+                                .filter((c: Customer) =>
+                                  c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                                )
+                                .slice(0, 8)
+                                .map((c: Customer) => (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCustomerId(c.id);
+                                      setSearchCustomer("");
+                                    }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#111827] hover:bg-[#f9fafb]"
+                                  >
+                                    <LuUser className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" />
+                                    <span className="truncate font-medium">{c.name}</span>
+                                  </button>
+                                ))}
+                              {customers.filter((c: Customer) =>
+                                c.name.toLowerCase().includes(searchCustomer.toLowerCase()),
+                              ).length === 0 && (
+                                <div className="px-3 py-2 text-[11px] text-[#9ca3af]">
+                                  {getLocalizedText("No customer found / لا يوجد عميل", language)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 3–4. Order type + restaurant details + notes */}
                 <div className="space-y-2.5 border-b border-[#eef1ef] px-3 py-2.5">
@@ -4204,7 +4234,7 @@ export function PosPage() {
                       setSelectedWaiterId(null);
                       setEditingInvoiceId(null);
                       resetSale();
-                      router.push("/pos/tables");
+                      router.push(waiterMode ? "/pos/waiter/tables" : "/pos/tables");
                     }}
                     onServiceChargeChange={(value) =>
                       setServiceChargeAmount(parseAmount(value))
@@ -4221,6 +4251,7 @@ export function PosPage() {
                     waiters={waiters}
                     language={language}
                     orderLocked={orderKitchenLocked}
+                    waiterMode={waiterMode}
                   />
 
                   {orderKitchenLocked ? (
@@ -4418,6 +4449,7 @@ export function PosPage() {
                     deliveryFee: getLocalizedText("Delivery fee / رسوم التوصيل", language),
                     grandTotal: t("pos.sales.totalGrand"),
                   }}
+                  waiterMode={waiterMode}
                 />
 
                 <div className="space-y-2 px-3 pb-3 pt-1">
@@ -4620,7 +4652,11 @@ export function PosPage() {
                     resetSale();
                     setIsPayModalOpen(false);
                     setPayFlowStep("tender");
-                    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+                    if (waiterMode) {
+                      router.push("/pos/waiter/tables");
+                    } else {
+                      window.requestAnimationFrame(() => searchInputRef.current?.focus());
+                    }
                   }}
                   className="inline-flex items-center justify-center gap-2 rounded-[20px] bg-[#5f8a67] px-4 py-3 text-sm font-black text-white"
                 >
@@ -5050,7 +5086,7 @@ export function PosPage() {
                   onClick={() => {
                     setIsTableSelectorOpen(false);
                     if (isBusy && table.activeInvoice?.id) {
-                      router.push(buildPosRegisterTablePath(table));
+                      router.push(buildPosRegisterTablePath(table, waiterMode ? "/pos/waiter/order" : "/pos/register"));
                       return;
                     }
                     const loaded = loadOpenTableOrder(table.id);
@@ -6474,6 +6510,7 @@ function PosPaymentSummaryCard({
   deliveryFee,
   grandTotal,
   labels,
+  waiterMode,
 }: {
   subtotal: string;
   discounts: string;
@@ -6489,6 +6526,7 @@ function PosPaymentSummaryCard({
     deliveryFee: string;
     grandTotal: string;
   };
+  waiterMode?: boolean;
 }) {
   const rows = [
     { label: labels.subtotal, value: subtotal },
@@ -6500,20 +6538,24 @@ function PosPaymentSummaryCard({
 
   return (
     <div className="mx-3 mt-2 rounded-[12px] border border-[#eef1ef] bg-[#fafafa] px-3 py-2.5">
-      <div className="space-y-1.5">
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center justify-between gap-3 text-[11px]"
-          >
-            <span className="font-medium text-[#6b7280] arabic-auto">{row.label}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-[#374151]" dir="ltr">
-              {row.value}
-            </span>
+      {!waiterMode && (
+        <>
+          <div className="space-y-1.5">
+            {rows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between gap-3 text-[11px]"
+              >
+                <span className="font-medium text-[#6b7280] arabic-auto">{row.label}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-[#374151]" dir="ltr">
+                  {row.value}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="my-2 border-t border-[#e5e7eb]" />
+          <div className="my-2 border-t border-[#e5e7eb]" />
+        </>
+      )}
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-bold text-[#111827] arabic-auto">{labels.grandTotal}</span>
         <span className="text-[17px] font-bold tabular-nums text-[#111827]" dir="ltr">

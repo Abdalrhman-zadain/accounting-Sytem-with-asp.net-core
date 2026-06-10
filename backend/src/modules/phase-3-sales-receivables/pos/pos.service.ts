@@ -1037,8 +1037,9 @@ export class PosService {
         await tx.posPayment.deleteMany({ where: { salesInvoiceId: existing.id } });
       }
 
+      const resolvedOrderType = dto.orderType || (dto.tableId ? OrderType.DINE_IN : null);
       const restaurantFields = {
-        orderType: dto.orderType || null,
+        orderType: resolvedOrderType,
         tableId: dto.tableId?.trim() || null,
         waiterId: dto.waiterId?.trim() || null,
         serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
@@ -1051,7 +1052,7 @@ export class PosService {
         deliveryCollectionMethod: dto.deliveryCompanyId?.trim() ? DeliveryCollectionMethod.COMPANY : null,
         deliverySettlementStatus: null,
         deliverySettledAmount: this.toAmount(0),
-        originalOrderType: dto.orderType || null,
+        originalOrderType: resolvedOrderType,
       };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
@@ -1134,7 +1135,7 @@ export class PosService {
       }
 
       if (dto.payments?.length) {
-        if (this.isWaiterOnlyUser(user)) {
+        if (this.isWaiterOnlyUser(user) && !this.hasPosPermissionCode("POS_COMPLETE_SALE", user)) {
           throw new ForbiddenException("Waiters cannot record payments on held sales.");
         }
         await tx.posPayment.createMany({
@@ -1186,7 +1187,7 @@ export class PosService {
 
   async completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("SELL", user);
-    if (this.isWaiterOnlyUser(user)) {
+    if (this.isWaiterOnlyUser(user) && !this.hasPosPermissionCode("POS_COMPLETE_SALE", user)) {
       throw new ForbiddenException("Waiters cannot complete sales or take payment.");
     }
     const session = await this.ensureOpenSession(dto.sessionId);
@@ -1342,8 +1343,9 @@ export class PosService {
         }
       }
 
+      const resolvedOrderType = dto.orderType || (dto.tableId ? OrderType.DINE_IN : null);
       const restaurantFields = {
-        orderType: dto.orderType || null,
+        orderType: resolvedOrderType,
         tableId: dto.tableId?.trim() || null,
         waiterId: dto.waiterId?.trim() || null,
         serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
@@ -1359,7 +1361,7 @@ export class PosService {
             ? DeliverySettlementStatus.PENDING
             : null,
         deliverySettledAmount: this.toAmount(0),
-        originalOrderType: dto.orderType || null,
+        originalOrderType: resolvedOrderType,
       };
 
       const reference = existing ? undefined : await this.generateInvoiceReference(tx);
@@ -3176,6 +3178,15 @@ export class PosService {
   }
 
   private hasPosPermissionCode(permissionCode: PosPermissionCode, user?: AuthorizedUser) {
+    if (permissionCode === "POS_VIEW_POS_SCREEN") {
+      const hasDirect = Boolean(user?.permissions?.includes(permissionCode));
+      if (hasDirect) return true;
+      return Boolean(
+        user?.permissions?.includes("RST_VIEW_TABLE_SCREEN") ||
+        user?.permissions?.includes("RST_OPEN_TABLE_ORDER") ||
+        user?.permissions?.includes("RST_VIEW_WAITER_ORDERS")
+      );
+    }
     return Boolean(user?.permissions?.includes(permissionCode));
   }
 

@@ -132,24 +132,26 @@ export function PosRestaurantCartControls({
       )}
 
       {/* ── ORDER TYPE SELECTOR (2×2 segmented) ── */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {ORDER_TYPE_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            disabled={controlsDisabled || (isTableLocked && opt.value !== orderType)}
-            onClick={() => onOrderTypeChange(opt.value)}
-            className={cn(
-              "flex h-9 items-center justify-center rounded-[10px] border text-xs font-bold transition-colors disabled:opacity-40",
-              orderType === opt.value
-                ? "border-[#ea580c] bg-[#fff7ed] text-[#c2410c]"
-                : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#d1d5db] hover:bg-[#fafafa]",
-            )}
-          >
-            {isAr ? opt.ar : opt.en}
-          </button>
-        ))}
-      </div>
+      {!waiterMode && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {ORDER_TYPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={controlsDisabled || (isTableLocked && opt.value !== orderType)}
+              onClick={() => onOrderTypeChange(opt.value)}
+              className={cn(
+                "flex h-9 items-center justify-center rounded-[10px] border text-xs font-bold transition-colors disabled:opacity-40",
+                orderType === opt.value
+                  ? "border-[#ea580c] bg-[#fff7ed] text-[#c2410c]"
+                  : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#d1d5db] hover:bg-[#fafafa]",
+              )}
+            >
+              {isAr ? opt.ar : opt.en}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── DINE-IN: table badge + ops + service charge ── */}
       {orderType === "DINE_IN" ? (
