@@ -6660,7 +6660,7 @@ function CompactCartLine({
                 type="button"
                 onClick={onDecrease}
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center text-[#475569] transition active:scale-95",
+                  "flex h-9 w-12 items-center justify-center text-[#475569] transition active:scale-95",
                   line.quantity <= 1
                     ? "hover:bg-red-50 hover:text-[#e11d48]"
                     : "hover:bg-gray-50 hover:text-gray-900"
@@ -6710,7 +6710,7 @@ function CompactCartLine({
                     }
                   }}
                   className={cn(
-                    "min-w-[2rem] px-2 text-center text-sm font-extrabold text-[#1e293b] transition-colors",
+                    "min-w-[3.5rem] px-2 text-center text-sm font-extrabold text-[#1e293b] transition-colors",
                     line.sellByWeight && onWeightChange ? "hover:text-[#059669] hover:bg-emerald-50 py-1.5 rounded-md mx-0.5" : "",
                   )}
                   dir="ltr"
@@ -6723,7 +6723,7 @@ function CompactCartLine({
               <button
                 type="button"
                 onClick={onIncrease}
-                className="flex h-9 w-9 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
+                className="flex h-9 w-12 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
                 title="Increase quantity"
               >
                 <LuPlus className="h-4 w-4 stroke-[2.5]" />
