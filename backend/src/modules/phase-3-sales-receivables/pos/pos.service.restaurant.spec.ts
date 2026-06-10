@@ -8,6 +8,8 @@ import {
   PosOperationalStatus,
   PosPaymentMethod,
   TableStatus,
+  SalesInvoiceStatus,
+  SalesInvoiceType,
 } from "../../../generated/prisma";
 import { PosService } from "./pos.service";
 
@@ -58,6 +60,10 @@ describe("PosService restaurant operations", () => {
     },
     posTable: {
       findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    posTableReservation: {
+      findMany: jest.fn(),
       update: jest.fn(),
     },
     posSession: {
@@ -648,6 +654,65 @@ describe("PosService restaurant operations", () => {
         status: TableStatus.OCCUPIED,
         activeInvoiceId: "inv1",
       },
+    });
+  });
+
+  it("voidSale resets table status to AVAILABLE when there are no active reservations", async () => {
+    prismaMock.salesInvoice.findUnique.mockResolvedValue({
+      id: "inv1",
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.HELD,
+      tableId: "t1",
+      reference: "POS-123",
+    });
+
+    prismaMock.salesInvoice.update.mockResolvedValue({
+      id: "inv1",
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.VOIDED,
+      tableId: "t1",
+      reference: "POS-123",
+      status: SalesInvoiceStatus.CANCELLED,
+      invoiceDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      totalAmount: { toString: () => "0" } as any,
+      discountAmount: { toString: () => "0" } as any,
+      taxAmount: { toString: () => "0" } as any,
+      subtotalAmount: { toString: () => "0" } as any,
+      allocatedAmount: { toString: () => "0" } as any,
+      outstandingAmount: { toString: () => "0" } as any,
+      posPayments: [],
+      lines: [],
+    });
+
+    prismaMock.posTable.findUnique.mockResolvedValue({
+      id: "t1",
+      status: TableStatus.OCCUPIED,
+      activeInvoiceId: null,
+    });
+
+    prismaMock.posTableReservation.findMany.mockResolvedValue([]);
+
+    const adminUser = {
+      userId: "u1",
+      permissions: ["POS_VOID_DRAFT_SALE"],
+    } as any;
+
+    await service.voidSale(
+      "inv1",
+      { reason: "Customer changed mind" },
+      adminUser,
+    );
+
+    expect(prismaMock.posTable.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { activeInvoiceId: null },
+    });
+
+    expect(prismaMock.posTable.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { status: TableStatus.AVAILABLE },
     });
   });
 

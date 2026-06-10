@@ -17,8 +17,6 @@ const waiterPermissionCodes: PosPermissionCode[] = [
   "POS_UPDATE_ITEM_QUANTITY",
   "POS_REMOVE_ITEM_FROM_CART",
   "POS_VIEW_POS_SCREEN",
-  "POS_COMPLETE_SALE",
-  "POS_SELECT_PAYMENT_METHOD",
 ];
 
 export async function setupPosWaiterUser(prisma: PrismaClient) {

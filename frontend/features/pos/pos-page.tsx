@@ -100,6 +100,7 @@ import {
   setPosFavoriteItemIds,
   voidPosSale,
   getPosTables,
+  updatePosTableStatus,
   transferPosTable,
   mergePosTables,
   splitPosTable,
@@ -2193,18 +2194,16 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       setOrderType("DINE_IN");
       resumeHeldSale(targetSale.id, openSales);
     } else {
-      setEditingInvoiceId(null);
       resetSale();
-      setTimeout(() => {
-        setOrderType("DINE_IN");
-        setSelectedTableId(urlTableId);
-        setSelectedTableNumber(table?.tableNumber ?? null);
-        if (table?.assignedWaiter) {
-          setSelectedWaiterId(table.assignedWaiter.id);
-        } else {
-          setSelectedWaiterId(null);
-        }
-      }, 0);
+      // MUST set table details AFTER resetSale because resetSale clears them
+      setOrderType("DINE_IN");
+      setSelectedTableId(urlTableId);
+      setSelectedTableNumber(table?.tableNumber ?? null);
+      if (table?.assignedWaiter) {
+        setSelectedWaiterId(table.assignedWaiter.id);
+      } else {
+        setSelectedWaiterId(null);
+      }
     }
 
     startRoutingTransition(() => {
@@ -4004,7 +4003,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                             ? "HELD"
                             : cartLines.length > 0
                               ? "ACTIVE"
-                              : null;
+                              : selectedTableId
+                                ? "SELECTED"
+                                : null;
                         const statusLabel =
                           statusKey === "DRAFT"
                             ? getLocalizedText("Draft / مسودة", language)
@@ -4012,7 +4013,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                               ? getLocalizedText("Held / معلقة", language)
                               : statusKey === "ACTIVE"
                                 ? getLocalizedText("Active / نشط", language)
-                                : null;
+                                : statusKey === "SELECTED"
+                                  ? getLocalizedText("Selected / تم الاختيار", language)
+                                  : null;
                         const statusClass =
                           statusKey === "DRAFT"
                             ? "bg-[#f3f4f6] text-[#6b7280] border-[#e5e7eb]"
@@ -4020,7 +4023,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                               ? "bg-[#fffbeb] text-[#b45309] border-[#fde68a]"
                               : statusKey === "ACTIVE"
                                 ? "bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]"
-                                : "";
+                                : statusKey === "SELECTED"
+                                  ? "bg-[#eef2ff] text-[#4338ca] border-[#c7c3ff]"
+                                  : "";
                         return statusLabel ? (
                           <span
                             className={cn(
@@ -4211,24 +4216,42 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                     onOrderTypeChange={setOrderType}
                     onSelectTable={async (tableId, waiterId) => {
                       if (selectedTableId && selectedTableId !== tableId) {
-                        await autoSaveCurrentTableOrderIfAny(tableId);
+                        // If switching tables, release the old one if it has no items
+                        if (cartLines.length === 0 && !editingInvoiceId) {
+                          try {
+                            await updatePosTableStatus(selectedTableId, "AVAILABLE", token);
+                          } catch (e) {
+                            console.error("Failed to release old table:", e);
+                          }
+                        } else {
+                          await autoSaveCurrentTableOrderIfAny(tableId);
+                        }
                       }
                       const loaded = loadOpenTableOrder(tableId);
                       if (!loaded) {
                         const table = restaurantTables.find((entry) => entry.id === tableId);
+                        
                         setEditingInvoiceId(null);
                         resetSale();
                         setOrderType("DINE_IN");
                         setSelectedTableId(tableId);
                         setSelectedTableNumber(table?.tableNumber ?? null);
-                        setSelectedWaiterId(waiterId);
+                        setSelectedWaiterId(waiterId || table?.assignedWaiterId || null);
                         resumedTableIdRef.current = `new:${tableId}`;
                       } else if (waiterId) {
                         setSelectedWaiterId(waiterId);
                       }
                     }}
                     onBackToTables={async () => {
-                      await autoSaveCurrentTableOrderIfAny();
+                      if (orderType === "DINE_IN" && selectedTableId && cartLines.length === 0 && !editingInvoiceId) {
+                        try {
+                          await updatePosTableStatus(selectedTableId, "AVAILABLE", token);
+                        } catch (e) {
+                          console.error("Failed to release table on exit:", e);
+                        }
+                      } else {
+                        await autoSaveCurrentTableOrderIfAny();
+                      }
                       setSelectedTableId(null);
                       setSelectedTableNumber(null);
                       setSelectedWaiterId(null);

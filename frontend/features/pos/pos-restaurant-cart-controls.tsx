@@ -163,8 +163,8 @@ export function PosRestaurantCartControls({
               {visibleTableLabel
                 ? visibleTableLabel
                 : isAr
-                  ? "لم تُختر طاولة"
-                  : "No table selected"}
+                  ? "تم الاختيار"
+                  : "Selected"}
             </span>
             <button
               type="button"

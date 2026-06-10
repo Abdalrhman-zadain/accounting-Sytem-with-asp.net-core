@@ -1135,7 +1135,7 @@ export class PosService {
       }
 
       if (dto.payments?.length) {
-        if (this.isWaiterOnlyUser(user) && !this.hasPosPermissionCode("POS_COMPLETE_SALE", user)) {
+        if (this.isWaiterOnlyUser(user)) {
           throw new ForbiddenException("Waiters cannot record payments on held sales.");
         }
         await tx.posPayment.createMany({
@@ -1187,7 +1187,7 @@ export class PosService {
 
   async completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
     this.ensurePosPermission("SELL", user);
-    if (this.isWaiterOnlyUser(user) && !this.hasPosPermissionCode("POS_COMPLETE_SALE", user)) {
+    if (this.isWaiterOnlyUser(user)) {
       throw new ForbiddenException("Waiters cannot complete sales or take payment.");
     }
     const session = await this.ensureOpenSession(dto.sessionId);
@@ -5856,7 +5856,7 @@ export class PosService {
       where: { id: tableId },
       data: { activeInvoiceId: null },
     });
-    await this.refreshTableOperationalStatus(tx, tableId);
+    await this.refreshTableOperationalStatus(tx, tableId, true);
   }
 
   private isWaiterOnlyUser(user?: AuthorizedUser) {
@@ -7852,6 +7852,7 @@ export class PosService {
   private async refreshTableOperationalStatus(
     tx: Prisma.TransactionClient,
     tableId: string,
+    forceReset?: boolean,
   ) {
     const table = await tx.posTable.findUnique({
       where: { id: tableId },
@@ -7863,8 +7864,9 @@ export class PosService {
 
     if (table.activeInvoiceId) {
       if (
-        table.status === TableStatus.CLEANING ||
-        table.status === TableStatus.WAITING_FOR_PAYMENT
+        !forceReset &&
+        (table.status === TableStatus.CLEANING ||
+          table.status === TableStatus.WAITING_FOR_PAYMENT)
       ) {
         return;
       }
@@ -7878,8 +7880,9 @@ export class PosService {
     }
 
     if (
-      table.status === TableStatus.WAITING_FOR_PAYMENT ||
-      table.status === TableStatus.CLEANING
+      !forceReset &&
+      (table.status === TableStatus.WAITING_FOR_PAYMENT ||
+        table.status === TableStatus.CLEANING)
     ) {
       return;
     }

@@ -249,6 +249,11 @@ export default function TablesPage() {
   const [markingAvailableTableId, setMarkingAvailableTableId] = React.useState<string | null>(null);
   const [tableViewFilter, setTableViewFilter] = React.useState<"all" | "cleaning">("all");
 
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const { data: tables, isLoading, refetch } = useQuery({
     queryKey: queryKeys.posTables(token),
     queryFn: () => getPosTables(token),
@@ -300,7 +305,7 @@ export default function TablesPage() {
     }
   };
 
-  const handleOpenTable = (table: PosTable) => {
+  const handleOpenTable = async (table: PosTable) => {
     const params = new URLSearchParams({ tableId: table.id });
     const invoice = table.activeInvoice;
     if (
@@ -309,6 +314,7 @@ export default function TablesPage() {
     ) {
       return;
     }
+
     if (
       invoice?.id &&
       (invoice.posOperationalStatus === "DRAFT" ||
@@ -370,12 +376,19 @@ export default function TablesPage() {
     setIsReserveOpen(true);
   };
 
-  const handleImmediateReservation = () => {
+  const handleImmediateReservation = async () => {
     if (!reserveTable) return;
     const tableId = reserveTable.id;
     setIsReserveOpen(false);
     setReserveTable(null);
     setReserveMode(null);
+
+    try {
+      await updatePosTableStatus(tableId, "OCCUPIED", token);
+    } catch (e) {
+      console.error("Failed to mark table as occupied", e);
+    }
+
     router.push(`${orderRoute}?tableId=${tableId}`);
   };
 
@@ -453,6 +466,15 @@ export default function TablesPage() {
     setIsOpeningPreOrder((prev) => ({ ...prev, [reservationId]: true }));
     try {
       const tableId = tableIdOverride ?? reserveTable?.id;
+
+      if (tableId) {
+        try {
+          await updatePosTableStatus(tableId, "OCCUPIED", token);
+        } catch (e) {
+          console.error("Failed to mark table as occupied", e);
+        }
+      }
+
       if (preOrderSaleId) {
         setIsReserveOpen(false);
         router.push(
@@ -472,19 +494,21 @@ export default function TablesPage() {
     }
   };
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return <PageSkeleton />;
   }
 
   const activeTablesList = tables || [];
   const totalCount = activeTablesList.length;
-  const occupiedCount = activeTablesList.filter((t) => Boolean(t.activeInvoice)).length;
+  const occupiedCount = activeTablesList.filter((t) => Boolean(t.activeInvoice) || t.status === "OCCUPIED" || t.status === "RESERVED").length;
   const cleaningCount = activeTablesList.filter((t) => t.status === "CLEANING").length;
   const vacantCount = activeTablesList.filter(
     (t) =>
       !t.activeInvoice &&
       t.status !== "CLEANING" &&
-      t.status !== "WAITING_FOR_PAYMENT",
+      t.status !== "WAITING_FOR_PAYMENT" &&
+      t.status !== "OCCUPIED" &&
+      t.status !== "RESERVED",
   ).length;
   const displayedTables =
     tableViewFilter === "cleaning"
@@ -666,7 +690,7 @@ export default function TablesPage() {
           <div className={posTableFloorGridClass}>
             {displayedTables.map((table) => {
               const activeInvoice = table.activeInvoice;
-              const isOccupied = Boolean(activeInvoice);
+              const isOccupied = Boolean(activeInvoice) || table.status === "OCCUPIED" || table.status === "RESERVED";
               const invoiceTotal = activeInvoice ? Number(activeInvoice.totalAmount) : 0;
               const tableStatus = table.status;
               const isWaiting = tableStatus === "WAITING_FOR_PAYMENT";

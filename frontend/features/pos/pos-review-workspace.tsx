@@ -738,7 +738,7 @@ export function PosReviewWorkspace({
         reference: r.reference,
         date: r.returnDate || r.createdAt,
         customer: getTranslation("pos.review.walkInCustomer", "عميل عام"),
-        orderType: r.tableId ? "DINE_IN" : "TAKEAWAY",
+        orderType: "TAKEAWAY",
         total: `-${r.totalAmount}`,
         status: r.accountingStatus || "PENDING_REVIEW",
         type: "return",

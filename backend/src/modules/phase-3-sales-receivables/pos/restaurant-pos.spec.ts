@@ -38,6 +38,7 @@ describe("Restaurant POS Controllers", () => {
     assertKitchenUpdatePermission: jest.fn(),
     listWaiterOrders: jest.fn(),
     updateWaiterOrderStatus: jest.fn(),
+    parseReservationNotes: jest.fn().mockReturnValue({ notes: "", orderNotes: "", attendanceStatus: "UNKNOWN" }),
   };
 
   let tableController: PosTableController;
@@ -68,6 +69,58 @@ describe("Restaurant POS Controllers", () => {
       const result = await tableController.listTables();
       expect(result).toEqual(mockTables);
       expect(prismaMock.posTable.findMany).toHaveBeenCalled();
+    });
+
+    it("heals stuck OCCUPIED table that has no active invoice and was updated more than 5 minutes ago", async () => {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const mockTables = [
+        {
+          id: "t1",
+          tableNumber: "T1",
+          capacity: 4,
+          status: TableStatus.OCCUPIED,
+          activeInvoice: null,
+          reservations: [],
+          updatedAt: tenMinutesAgo,
+        },
+      ];
+      prismaMock.posTable.findMany.mockResolvedValue(mockTables);
+      prismaMock.posTable.update.mockResolvedValue({
+        id: "t1",
+        tableNumber: "T1",
+        capacity: 4,
+        status: TableStatus.AVAILABLE,
+        activeInvoice: null,
+        reservations: [],
+        updatedAt: new Date(),
+      });
+
+      const result = await tableController.listTables();
+      expect(result[0].status).toEqual(TableStatus.AVAILABLE);
+      expect(prismaMock.posTable.update).toHaveBeenCalledWith({
+        where: { id: "t1" },
+        data: { status: TableStatus.AVAILABLE },
+      });
+    });
+
+    it("does NOT heal OCCUPIED table if it was updated less than 5 minutes ago", async () => {
+      const oneMinuteAgo = new Date(Date.now() - 1 * 60 * 1000);
+      const mockTables = [
+        {
+          id: "t1",
+          tableNumber: "T1",
+          capacity: 4,
+          status: TableStatus.OCCUPIED,
+          activeInvoice: null,
+          reservations: [],
+          updatedAt: oneMinuteAgo,
+        },
+      ];
+      prismaMock.posTable.findMany.mockResolvedValue(mockTables);
+
+      const result = await tableController.listTables();
+      expect(result[0].status).toEqual(TableStatus.OCCUPIED);
+      expect(prismaMock.posTable.update).not.toHaveBeenCalled();
     });
 
     it("gets table by id or throws NotFound", async () => {
