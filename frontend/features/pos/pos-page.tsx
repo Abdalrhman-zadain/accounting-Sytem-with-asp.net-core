@@ -6540,9 +6540,21 @@ function CompactCartLine({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-semibold text-[#111827] arabic-heading">
-            {getLocalizedText(line.name, language)}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-[12px] font-semibold text-[#111827] arabic-heading">
+              {getLocalizedText(line.name, language)}
+            </p>
+            {!locked ? (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-red-400 hover:bg-red-50 hover:text-red-600 transition active:scale-95"
+                title={getLocalizedText("Remove item / حذف الصنف", language)}
+              >
+                <LuTrash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
           {addonsLabel ? (
             <p className="mt-0.5 truncate text-[10px] text-[#6b7280]">{addonsLabel}</p>
           ) : null}
@@ -6725,16 +6737,6 @@ function CompactCartLine({
                 : formatCount(line.quantity)}
             </span>
           )}
-          {!locked ? (
-            <button
-              type="button"
-              onClick={onRemove}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[#94a3b8] hover:border-red-200 hover:bg-red-50 hover:text-[#e11d48] transition active:scale-95"
-              title={getLocalizedText("Remove item / حذف الصنف", language)}
-            >
-              <LuTrash2 className="h-4 w-4" />
-            </button>
-          ) : null}
         </div>
       </div>
     </div>
