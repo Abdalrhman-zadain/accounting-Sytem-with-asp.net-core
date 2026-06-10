@@ -1198,6 +1198,31 @@ export async function seedPosRegisterDemo(
   // Set the sales revenue account
   await upsertPosRuntimeSetting('POS_MAPPING_SALES_REVENUE_ACCOUNT_ID', salesRevenueAcc.id);
 
+  // Set default delivery companies mapping
+  await upsertPosRuntimeSetting(
+    'POS_MAPPING_DELIVERY_COMPANIES',
+    JSON.stringify([
+      {
+        id: 'dc_talabat',
+        receivableAccountId: talabatAcc.id,
+        commissionAccountId: commissionAcc.id,
+        serviceFeeAccountId: serviceFeeAcc.id,
+      },
+      {
+        id: 'dc_careem',
+        receivableAccountId: careemAcc.id,
+        commissionAccountId: commissionAcc.id,
+        serviceFeeAccountId: serviceFeeAcc.id,
+      },
+      {
+        id: 'dc_ashyaai',
+        receivableAccountId: jahezAcc.id,
+        commissionAccountId: commissionAcc.id,
+        serviceFeeAccountId: serviceFeeAcc.id,
+      },
+    ]),
+  );
+
   console.log('POS payment method mappings configured:');
   console.log(`  CASH → ${mainCashAcc.code} (${mainCashAcc.name})`);
   if (cardClearingAcc) console.log(`  CARD → ${cardClearingAcc.code} (${cardClearingAcc.name})`);
@@ -1205,6 +1230,7 @@ export async function seedPosRegisterDemo(
   if (walletAcc) console.log(`  WALLET → ${walletAcc.code} (${walletAcc.name})`);
   console.log(`  BANK_TRANSFER → ${bankAcc.code} (${bankAcc.name})`);
   console.log(`  SALES_REVENUE → ${salesRevenueAcc.code} (${salesRevenueAcc.name})`);
+  console.log('  DELIVERY_COMPANIES mapped by default');
 
   await seedPosAddons(prisma);
 
