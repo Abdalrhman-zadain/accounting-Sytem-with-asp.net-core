@@ -1137,6 +1137,75 @@ export async function seedPosRegisterDemo(
     }
   }
 
+  // --- SETUP POS PAYMENT METHOD ACCOUNT MAPPINGS ---
+
+  // Get or create bank/cash accounts for payment methods
+  const mainCashAcc = await prisma.account.findUniqueOrThrow({ where: { code: '1111001' } });
+  const cardClearingAcc = await prisma.account.findUnique({ where: { code: '1114001' } }); // Stripe
+  const cliqAcc = await prisma.account.findUnique({ where: { code: '1113001' } }); // CliQ Wallet
+  const walletAcc = await prisma.account.findUnique({ where: { code: '1113002' } }); // Zain Cash
+  const bankAcc = await prisma.account.findUniqueOrThrow({ where: { code: '1112001' } }); // Arab Bank
+  const salesRevenueAcc = await prisma.account.findUniqueOrThrow({ where: { code: '4110001' } });
+
+  // Ensure bank/cash accounts exist for each payment method
+  const ensureBankCashAccount = async (
+    accountId: string,
+    type: string,
+    name: string,
+    bankName: string,
+  ) => {
+    return prisma.bankCashAccount.upsert({
+      where: { accountId },
+      update: {},
+      create: {
+        type,
+        name,
+        bankName,
+        accountNumber: accountId,
+        accountId,
+      },
+    });
+  };
+
+  const cashBankCash = await ensureBankCashAccount(mainCashAcc.id, 'Cash', 'Main Cash Register', 'Head Office Cashier');
+  const cardBankCash = cardClearingAcc ? await ensureBankCashAccount(cardClearingAcc.id, 'Bank', 'Card Clearing Account', 'Payment Gateway') : null;
+  const cliqBankCash = cliqAcc ? await ensureBankCashAccount(cliqAcc.id, 'Bank', 'CliQ Wallet Account', 'Digital Wallet') : null;
+  const walletBankCash = walletAcc ? await ensureBankCashAccount(walletAcc.id, 'Bank', 'Wallet Account', 'Digital Wallet') : null;
+  const bankBankCash = await ensureBankCashAccount(bankAcc.id, 'Bank', 'Arab Bank Account', 'Arab Bank');
+
+  // Create POS runtime settings for payment method mappings
+  const upsertPosRuntimeSetting = async (key: string, value: string) => {
+    await prisma.posRuntimeSetting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+  };
+
+  // Map payment methods to their posting accounts
+  await upsertPosRuntimeSetting('POS_MAPPING_CASH_ACCOUNT_ID', mainCashAcc.id);
+  if (cardClearingAcc) {
+    await upsertPosRuntimeSetting('POS_MAPPING_CARD_ACCOUNT_ID', cardClearingAcc.id);
+  }
+  if (cliqAcc) {
+    await upsertPosRuntimeSetting('POS_MAPPING_CLIQ_ACCOUNT_ID', cliqAcc.id);
+  }
+  if (walletAcc) {
+    await upsertPosRuntimeSetting('POS_MAPPING_WALLET_ACCOUNT_ID', walletAcc.id);
+  }
+  await upsertPosRuntimeSetting('POS_MAPPING_BANK_TRANSFER_ACCOUNT_ID', bankAcc.id);
+
+  // Set the sales revenue account
+  await upsertPosRuntimeSetting('POS_MAPPING_SALES_REVENUE_ACCOUNT_ID', salesRevenueAcc.id);
+
+  console.log('POS payment method mappings configured:');
+  console.log(`  CASH → ${mainCashAcc.code} (${mainCashAcc.name})`);
+  if (cardClearingAcc) console.log(`  CARD → ${cardClearingAcc.code} (${cardClearingAcc.name})`);
+  if (cliqAcc) console.log(`  CLIQ → ${cliqAcc.code} (${cliqAcc.name})`);
+  if (walletAcc) console.log(`  WALLET → ${walletAcc.code} (${walletAcc.name})`);
+  console.log(`  BANK_TRANSFER → ${bankAcc.code} (${bankAcc.name})`);
+  console.log(`  SALES_REVENUE → ${salesRevenueAcc.code} (${salesRevenueAcc.name})`);
+
   await seedPosAddons(prisma);
 
   console.log(
