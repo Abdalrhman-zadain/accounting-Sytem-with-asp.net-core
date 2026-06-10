@@ -316,7 +316,7 @@ export function PosRestaurantCartControls({
                 onChange={(e) => onDeliveryCompanyChange(e.target.value || null)}
                 className="h-9 w-full rounded-xl border border-[#c2d6c9] bg-white px-3 text-xs font-bold text-[#233329] disabled:opacity-50"
               >
-                <option value="">{isAr ? "اختر الشركة" : "Select company"}</option>
+                <option value="">{isAr ? "اختر الشركة (اختياري)" : "Select company (optional)"}</option>
                 {deliveryCompanies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -337,7 +337,15 @@ export function PosRestaurantCartControls({
             value={deliveryAddress}
             disabled={controlsDisabled}
             onChange={(e) => onDeliveryAddressChange(e.target.value)}
-            placeholder={isAr ? "العنوان" : "Address"}
+            placeholder={
+              deliveryMode === "THIRD_PARTY"
+                ? isAr
+                  ? "العنوان (اختياري)"
+                  : "Address (optional)"
+                : isAr
+                  ? "العنوان"
+                  : "Address"
+            }
             className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
           />
           <input

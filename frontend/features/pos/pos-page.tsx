@@ -2785,7 +2785,7 @@ export function PosPage() {
           id: firstEntry?.id ?? createLocalId(),
           paymentMethod: method,
           bankCashAccountId: resolveMappedBankCashAccountId(method),
-          amount: currentAmount || cartMetrics.total.toFixed(2),
+          amount: currentAmount || "",
           reference: "",
         },
       ];
@@ -3157,7 +3157,7 @@ export function PosPage() {
         (current.quantity + qtyDelta).toFixed(current.quantityPrecision ?? 3),
       );
       if (nextQty <= 0) {
-        return current;
+        return null;
       }
       return { ...current, quantity: nextQty };
     });
@@ -3520,15 +3520,11 @@ export function PosPage() {
       pushError(getLocalizedText("Select a table before completing dine-in orders / اختر طاولة قبل إكمال الطلب الداخلي", language));
       return;
     }
-    if (orderType === "DELIVERY" && !deliveryAddress.trim()) {
+    if (orderType === "DELIVERY" && deliveryMode === "DIRECT" && !deliveryAddress.trim()) {
       pushError(getLocalizedText("Enter delivery address before completing delivery orders / أدخل عنوان التوصيل قبل إكمال الطلب", language));
       return;
     }
-    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") {
-      if (!deliveryCompanyId) {
-        pushError(getLocalizedText("Select a delivery company before completing the order / اختر شركة التوصيل قبل إكمال الطلب", language));
-        return;
-      }
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY" && deliveryCompanyId) {
       const mappedCompany = posSettings?.accounts.deliveryCompanies?.find(
         (c) => c.id === deliveryCompanyId
       );
@@ -3787,36 +3783,14 @@ export function PosPage() {
 
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#f6f7f8]">
-        <PosSessionBar
-          canCloseSession={hasPermission(user, "POS_CLOSE_OWN_SESSION")}
-          onCloseSession={() => {
-            const blockDrafts =
-              (draftSales.length > 0 || heldSales.length > 0) &&
-              !posSettings?.runtime.allowCloseWithDrafts;
-            if (blockDrafts) {
-              pushError(
-                getLocalizedText("Close blocked: drafts or held sales exist / الإغلاق ممنوع: توجد مسودات أو معلقة", language),
-              );
-              return;
-            }
-            setActualCashCount("");
-            setClosingNotes("");
-            setIsCashierCloseModalOpen(true);
-          }}
-          isPending={closeSessionMutation.isPending}
-        />
-
         <PosRegisterMainGrid
           catalog={
             <section className="flex flex-col gap-3 pb-3">
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                  <Field
-                    label={t("pos.sales.barcodeSearch")}
-                    className="mb-0 min-w-0 flex-1"
-                  >
+                <div className="flex flex-col gap-3 lg:flex-row">
+                  <div className="mb-0 min-w-0 flex-1">
                     <div className="relative flex flex-col gap-2 sm:flex-row">
-                      <LuScanLine className="pointer-events-none absolute left-3 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3" />
+                      <LuScanLine className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#7b8d82] rtl:left-auto rtl:right-3.5" />
                       <Input
                         ref={searchInputRef}
                         value={search}
@@ -3828,41 +3802,21 @@ export function PosPage() {
                           }
                         }}
                         placeholder={t("pos.sales.barcodePlaceholder")}
-                        className="h-9 rounded-[6px] border-[#d7dfda] bg-white py-2 pl-9 pr-3 text-xs focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-9"
+                        className="h-12 rounded-[10px] border-[#d7dfda] bg-white py-3 pl-10 pr-3 text-sm focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-10 shadow-sm transition-all"
                       />
-                      <div className="grid grid-cols-3 gap-2 sm:flex sm:w-auto sm:gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsCameraScannerOpen(true)}
-                          className="flex h-9 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                          title="Scan Barcode with Camera"
-                        >
-                          <LuCamera className="mr-1.5 h-3.5 w-3.5" />
-                          <span className="truncate">Scan / كاميرا</span>
-                        </button>
+                      <div className="flex shrink-0 sm:w-auto">
                         <button
                           type="button"
                           onClick={() => setIsCalculatorOpen(true)}
-                          className="flex h-9 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
+                          className="flex h-12 w-full sm:w-auto items-center justify-center rounded-[10px] border border-[#5f8a67] bg-white px-5 text-sm font-bold text-[#5f8a67] hover:bg-[#f3f7f4] active:bg-[#e4ede6] shadow-sm transition-all duration-200"
                           title="Calculator"
                         >
-                          <LuCalculator className="mr-1.5 h-3.5 w-3.5" />
-                          <span className="truncate">Calc / حاسبة</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void queryClient.invalidateQueries({
-                              queryKey: ["inventory-items", token],
-                            });
-                          }}
-                          className="h-9 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                        >
-                          Refresh / تحديث
+                          <LuCalculator className="h-5 w-5 mr-2 rtl:mr-0 rtl:ml-2 text-[#5f8a67]" />
+                          <span className="truncate">{language === "ar" ? "الحاسبة" : "Calculator"}</span>
                         </button>
                       </div>
                     </div>
-                  </Field>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -4028,20 +3982,50 @@ export function PosPage() {
                             : "—"}
                     </p>
                   </div>
-                  {hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsHeldOrdersOpen(true)}
-                      className="relative inline-flex h-7 shrink-0 items-center rounded-[10px] border border-[#e5e7eb] bg-white px-2 text-[10px] font-semibold text-[#6b7280] hover:border-[#d1d5db]"
-                    >
-                      {getLocalizedText("Held / معلقة", language)}
-                      {heldListCount > 0 ? (
-                        <span className="ms-1 rounded-full bg-[#374151] px-1.5 py-px text-[9px] font-bold text-white">
-                          {heldListCount}
-                        </span>
-                      ) : null}
-                    </button>
-                  ) : null}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {hasPermission(user, "POS_CLOSE_OWN_SESSION") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const blockDrafts =
+                            (draftSales.length > 0 || heldSales.length > 0) &&
+                            !posSettings?.runtime.allowCloseWithDrafts;
+                          if (blockDrafts) {
+                            pushError(
+                              getLocalizedText(
+                                "Close blocked: drafts or held sales exist / الإغلاق ممنوع: توجد مسودات أو معلقة",
+                                language,
+                              ),
+                            );
+                            return;
+                          }
+                          setActualCashCount("");
+                          setClosingNotes("");
+                          setIsCashierCloseModalOpen(true);
+                        }}
+                        disabled={closeSessionMutation.isPending}
+                        className="inline-flex h-7 items-center rounded-[10px] border border-[#f0d9d6] bg-[#fff5f4] px-2.5 text-[10px] font-extrabold text-[#b54b40] hover:bg-[#ffebeb] disabled:opacity-50 transition-colors shadow-sm"
+                      >
+                        {closeSessionMutation.isPending
+                          ? getLocalizedText("Closing... / إغلاق...", language)
+                          : getLocalizedText("Close Shift / إغلاق الوردية", language)}
+                      </button>
+                    )}
+                    {hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsHeldOrdersOpen(true)}
+                        className="relative inline-flex h-7 shrink-0 items-center rounded-[10px] border border-[#e5e7eb] bg-white px-2 text-[10px] font-semibold text-[#6b7280] hover:border-[#d1d5db]"
+                      >
+                        {getLocalizedText("Held / معلقة", language)}
+                        {heldListCount > 0 ? (
+                          <span className="ms-1 rounded-full bg-[#374151] px-1.5 py-px text-[9px] font-bold text-white">
+                            {heldListCount}
+                          </span>
+                        ) : null}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
@@ -4706,7 +4690,7 @@ export function PosPage() {
                               updatePaymentEntry(entry.id, { amount: event.target.value })
                             }
                             placeholder={getLocalizedText("Amount / المبلغ", language)}
-                            className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                            className="rounded-[16px] border-[#d6e1d9] bg-white py-3 no-spinner"
                           />
                         </div>
                         {!entry.bankCashAccountId ? (
@@ -4746,7 +4730,7 @@ export function PosPage() {
                           })
                           : undefined
                       }
-                      className="rounded-[16px] border-[#d6e1d9] bg-white py-3"
+                      className="rounded-[16px] border-[#d6e1d9] bg-white py-3 no-spinner"
                     />
                   </Field>
                 </div>
@@ -6648,13 +6632,23 @@ function CompactCartLine({
             {formatCurrency(lineTotal, currencyCode)}
           </span>
           {!locked ? (
-            <div className="flex items-center gap-0.5 rounded-[8px] border border-[#e5e7eb] bg-white">
+            <div className="flex items-center rounded-xl border border-[#cbd5e1] bg-white shadow-sm overflow-hidden select-none">
               <button
                 type="button"
                 onClick={onDecrease}
-                className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]"
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center text-[#475569] transition active:scale-95",
+                  line.quantity <= 1
+                    ? "hover:bg-red-50 hover:text-[#e11d48]"
+                    : "hover:bg-gray-50 hover:text-gray-900"
+                )}
+                title={line.quantity <= 1 ? "Remove item" : "Decrease quantity"}
               >
-                <LuMinus className="h-3 w-3" />
+                {line.quantity <= 1 ? (
+                  <LuTrash2 className="h-4 w-4" />
+                ) : (
+                  <LuMinus className="h-4 w-4 stroke-[2.5]" />
+                )}
               </button>
               {line.sellByWeight && onWeightChange && isEditingWeight ? (
                 <input
@@ -6680,7 +6674,7 @@ function CompactCartLine({
                     }
                   }}
                   onChange={(event) => setWeightDraft(event.target.value)}
-                  className="w-14 border-b border-[#d1d5db] bg-transparent text-center text-[11px] font-bold focus:outline-none"
+                  className="w-16 border-b border-[#cbd5e1] bg-transparent text-center text-sm font-extrabold text-[#1e293b] focus:outline-none"
                   dir="ltr"
                 />
               ) : (
@@ -6693,8 +6687,8 @@ function CompactCartLine({
                     }
                   }}
                   className={cn(
-                    "min-w-[1.25rem] text-center text-[11px] font-bold text-[#111827]",
-                    line.sellByWeight && onWeightChange ? "hover:text-[#059669]" : "",
+                    "min-w-[2rem] px-2 text-center text-sm font-extrabold text-[#1e293b] transition-colors",
+                    line.sellByWeight && onWeightChange ? "hover:text-[#059669] hover:bg-emerald-50 py-1.5 rounded-md mx-0.5" : "",
                   )}
                   dir="ltr"
                 >
@@ -6706,13 +6700,14 @@ function CompactCartLine({
               <button
                 type="button"
                 onClick={onIncrease}
-                className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]"
+                className="flex h-9 w-9 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
+                title="Increase quantity"
               >
-                <LuPlus className="h-3 w-3" />
+                <LuPlus className="h-4 w-4 stroke-[2.5]" />
               </button>
             </div>
           ) : (
-            <span className="text-[11px] font-semibold text-[#6b7280]" dir="ltr">
+            <span className="text-xs font-bold text-[#475569]" dir="ltr">
               ×
               {line.sellByWeight
                 ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
@@ -6723,10 +6718,10 @@ function CompactCartLine({
             <button
               type="button"
               onClick={onRemove}
-              className="text-[10px] text-[#d1d5db] transition hover:text-[#dc2626]"
-              title="Remove"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[#94a3b8] hover:border-red-200 hover:bg-red-50 hover:text-[#e11d48] transition active:scale-95"
+              title={getLocalizedText("Remove item / حذف الصنف", language)}
             >
-              <LuTrash2 className="h-3.5 w-3.5" />
+              <LuTrash2 className="h-4 w-4" />
             </button>
           ) : null}
         </div>
