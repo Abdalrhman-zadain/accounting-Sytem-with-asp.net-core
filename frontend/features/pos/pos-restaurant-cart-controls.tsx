@@ -174,7 +174,8 @@ export function PosRestaurantCartControls({
             </button>
           </div>
 
-          {/* Table operations (only visible when a table order is active) */}
+          {/* Table operations (only visible when a table order is active)
+              Note: Hidden per user request. To restore the buttons, uncomment this block.
           {selectedTableId && (
             <div className="grid grid-cols-3 gap-1.5">
               <button
@@ -206,43 +207,7 @@ export function PosRestaurantCartControls({
               </button>
             </div>
           )}
-
-          {/* Waiter picker */}
-          <div>
-            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
-              <LuUser className="h-3 w-3" />
-              <span>{isAr ? "الويتر" : "Waiter"}</span>
-            </div>
-            <select
-              value={selectedWaiterId ?? ""}
-              disabled={controlsDisabled}
-              onChange={(e) => onWaiterChange(e.target.value || null)}
-              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-semibold text-[#233329] disabled:opacity-50"
-            >
-              <option value="">{isAr ? "— اختر الويتر —" : "— No waiter —"}</option>
-              {waiters.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name || w.email}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Service charge */}
-          <div>
-            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#68776f]">
-              {isAr ? "رسوم الخدمة" : "Service charge"}
-            </div>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              disabled={controlsDisabled}
-              value={serviceChargeAmount}
-              onChange={(e) => onServiceChargeChange(e.target.value)}
-              className="h-9 w-full rounded-xl border border-[#cbd5cf] bg-white px-3 text-xs font-black text-[#233329] disabled:opacity-50"
-            />
-          </div>
+          */}
         </div>
       ) : null}
 

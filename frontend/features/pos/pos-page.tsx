@@ -3624,6 +3624,28 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.emptyCart"));
       return;
     }
+    if (orderType === "DINE_IN" && !selectedTableId) {
+      pushError(getLocalizedText("Select a table before completing dine-in orders / اختر طاولة قبل إكمال الطلب الداخلي", language));
+      return;
+    }
+    if (orderType === "DELIVERY" && deliveryMode === "DIRECT" && !deliveryAddress.trim()) {
+      pushError(getLocalizedText("Enter delivery address before completing delivery orders / أدخل عنوان التوصيل قبل إكمال الطلب", language));
+      return;
+    }
+    if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY" && deliveryCompanyId) {
+      const mappedCompany = posSettings?.accounts.deliveryCompanies?.find(
+        (c) => c.id === deliveryCompanyId
+      );
+      if (!mappedCompany?.receivableAccountId) {
+        pushError(
+          getLocalizedText(
+            "The order cannot be completed because no receivable account is configured for the selected delivery company / لا يمكن إكمال الطلب لعدم تهيئة حساب ذمم لشركة التوصيل المحددة",
+            language
+          )
+        );
+        return;
+      }
+    }
 
     if (orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") {
       completeSale();
