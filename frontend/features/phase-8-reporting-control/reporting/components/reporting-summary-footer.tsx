@@ -3,6 +3,7 @@
 import type { ReportingSummary } from "@/types/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useNavDesktopLayout } from "@/lib/hooks/use-viewport-breakpoints";
 import type { TranslationFn } from "../reporting-types";
 
 type ReportingSummaryFooterProps = {
@@ -16,6 +17,8 @@ function metricAmount(summary: ReportingSummary, key: string) {
 }
 
 export function ReportingSummaryFooter({ summary, t, sidebarCollapsed }: ReportingSummaryFooterProps) {
+  const isNavDesktop = useNavDesktopLayout();
+
   const items = [
     { label: t("reporting.footer.totalAssets"), value: formatCurrency(metricAmount(summary, "assets")) },
     { label: t("reporting.footer.balanceDifference"), value: formatCurrency(metricAmount(summary, "trialBalanceDifference")) },
@@ -28,7 +31,11 @@ export function ReportingSummaryFooter({ summary, t, sidebarCollapsed }: Reporti
     <footer
       className={cn(
         "fixed bottom-0 z-20 border-t border-gray-200 bg-white",
-        sidebarCollapsed ? "ltr:left-20 rtl:right-20" : "ltr:left-60 rtl:right-60",
+        isNavDesktop
+          ? sidebarCollapsed
+            ? "ltr:left-20 rtl:right-20"
+            : "ltr:left-60 rtl:right-60"
+          : "ltr:left-0 rtl:right-0",
         "ltr:right-0 rtl:left-0",
       )}
     >

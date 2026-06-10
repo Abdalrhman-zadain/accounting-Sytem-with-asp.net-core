@@ -27,6 +27,7 @@ import { PosMarketProductCard } from "@/features/pos-market/pos-market-product-c
 import { PosMarketRegisterLayout } from "@/features/pos-market/pos-market-register-layout";
 import { PosMarketSessionBar } from "@/features/pos-market/pos-market-session-bar";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
+import { posProductGridClass } from "@/features/pos-shared";
 import { usePosMarketCatalog } from "@/features/pos-market/use-pos-market-catalog";
 import { usePosMarketCart } from "@/features/pos-market/use-pos-market-cart";
 import { usePosMarketSession } from "@/features/pos-market/use-pos-market-session";
@@ -558,7 +559,7 @@ export function PosMarketRegisterWorkspace() {
                   {t("posMarket.catalogEmpty")}
                 </Card>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
+                <div className={posProductGridClass}>
                   {filteredItems.map((item) => (
                     <PosMarketProductCard
                       key={item.id}
@@ -605,6 +606,18 @@ export function PosMarketRegisterWorkspace() {
             isHoldDisabled={!hasDestinationMarket}
           />
         }
+        mobileCartBar={{
+          itemCount: cart.cartLines.length,
+          totalLabel: formatCurrency(cart.cartMetrics.total, currencyCode),
+          itemsLabel:
+            cart.cartLines.length === 0
+              ? getLocalizedText("No items / لا أصناف", language)
+              : cart.cartLines.length === 1
+                ? getLocalizedText("1 item / صنف واحد", language)
+                : getLocalizedText(`${cart.cartLines.length} items / ${cart.cartLines.length} أصناف`, language),
+          viewOrderLabel: getLocalizedText("View order / عرض الطلب", language),
+          orderTitle: t("pos.sales.orderSummary"),
+        }}
       />
 
       <PosMarketCheckoutModal

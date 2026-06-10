@@ -38,6 +38,7 @@ import {
   LuTruck as Truck,
   LuMaximize2 as Maximize2,
   LuMinimize2 as Minimize2,
+  LuX as X,
 } from "react-icons/lu";
 
 import { AppLogo } from "@/components/app-logo";
@@ -200,9 +201,15 @@ const navGroups: NavGroup[] = [
 export function SiteHeader({
   isCollapsed = false,
   onToggleCollapsed,
+  isMobileNav = false,
+  isDrawerOpen = false,
+  onCloseDrawer,
 }: {
   isCollapsed?: boolean;
   onToggleCollapsed?: () => void;
+  isMobileNav?: boolean;
+  isDrawerOpen?: boolean;
+  onCloseDrawer?: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -245,6 +252,13 @@ export function SiteHeader({
 
   const isLoginPage = pathname === "/login" || pathname === "/register";
   const currentLocation = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+  const effectiveCollapsed = isMobileNav ? false : isCollapsed;
+
+  const handleNavClick = () => {
+    if (isMobileNav) {
+      onCloseDrawer?.();
+    }
+  };
 
   if (!mounted) {
     if (isLoginPage) {
@@ -263,12 +277,12 @@ export function SiteHeader({
       <aside
         className={cn(
           "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white",
-          isCollapsed ? "w-20" : "w-60",
+          effectiveCollapsed ? "w-20" : isMobileNav ? "w-72 max-w-[85vw]" : "w-60",
         )}
       >
-        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-3")}>
-          <AppLogo height={isCollapsed ? 36 : 40} priority className="shrink-0" />
-          <div className={cn(isCollapsed && "sr-only")}>
+        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", effectiveCollapsed ? "justify-center" : "gap-3")}>
+          <AppLogo height={effectiveCollapsed ? 36 : 40} priority className="shrink-0" />
+          <div className={cn(effectiveCollapsed && "sr-only")}>
             <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">{t("app.subtitle")}</div>
           </div>
@@ -572,18 +586,42 @@ export function SiteHeader({
   };
 
   return (
-    <aside
-      className={cn(
-        "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white",
-        isCollapsed ? "w-20" : "w-60",
-      )}
-    >
-      <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", isCollapsed ? "justify-center" : "gap-3")}>
-        <AppLogo height={isCollapsed ? 36 : 40} priority className="shrink-0" />
-        <div className={cn(isCollapsed && "sr-only")}>
+    <>
+      {isMobileNav && isDrawerOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] nav-desktop:hidden"
+          onClick={() => onCloseDrawer?.()}
+          aria-label="Close navigation menu"
+        />
+      ) : null}
+
+      <aside
+        className={cn(
+          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white transition-transform duration-300 motion-reduce:transition-none",
+          effectiveCollapsed ? "w-20" : isMobileNav ? "w-72 max-w-[85vw]" : "w-60",
+          isMobileNav && !isDrawerOpen && "ltr:-translate-x-full rtl:translate-x-full",
+          isMobileNav && isDrawerOpen && "translate-x-0",
+        )}
+      >
+      <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", effectiveCollapsed ? "justify-center" : "justify-between gap-3")}>
+        <div className={cn("flex min-w-0 items-center", effectiveCollapsed ? "justify-center" : "gap-3")}>
+          <AppLogo height={effectiveCollapsed ? 36 : 40} priority className="shrink-0" />
+          <div className={cn(effectiveCollapsed && "sr-only")}>
           <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
           <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">{t("app.subtitle")}</div>
         </div>
+        </div>
+        {isMobileNav ? (
+          <button
+            type="button"
+            onClick={() => onCloseDrawer?.()}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50"
+            aria-label="Close navigation menu"
+          >
+            <X size={18} />
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-2 px-3 pt-3">
@@ -592,39 +630,41 @@ export function SiteHeader({
           onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
           className={cn(
             "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
-            isCollapsed ? "justify-center" : "justify-between",
+            effectiveCollapsed ? "justify-center" : "justify-between",
           )}
           aria-label={t("language.toggle.aria")}
           title={t("language.toggle.aria")}
         >
-          <span className={cn(isCollapsed && "sr-only")}>
+          <span className={cn(effectiveCollapsed && "sr-only")}>
             {language === "ar" ? t("language.arabicShort") : t("language.englishShort")}
           </span>
           <span
             className={cn(
               "inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-black tracking-widest text-gray-600",
-              isCollapsed && "sr-only",
+              effectiveCollapsed && "sr-only",
             )}
           >
             {language === "ar" ? "RTL" : "LTR"}
           </span>
-          <span className={cn("font-black tracking-widest text-gray-600", !isCollapsed && "sr-only")}>
+          <span className={cn("font-black tracking-widest text-gray-600", !effectiveCollapsed && "sr-only")}>
             {language === "ar" ? "AR" : "EN"}
           </span>
         </button>
 
+        {!isMobileNav ? (
         <button
           type="button"
           onClick={onToggleCollapsed}
           className={cn(
             "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
-            isCollapsed ? "justify-center" : "justify-between",
+            effectiveCollapsed ? "justify-center" : "justify-between",
           )}
-          aria-label={isCollapsed ? "Open sidebar" : "Close sidebar"}
+          aria-label={effectiveCollapsed ? "Open sidebar" : "Close sidebar"}
         >
-          {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          <span className={cn(isCollapsed && "sr-only")}>{isCollapsed ? "Open" : "Close"}</span>
+          {effectiveCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          <span className={cn(effectiveCollapsed && "sr-only")}>{effectiveCollapsed ? "Open" : "Close"}</span>
         </button>
+        ) : null}
 
         {isKitchenRoute && canAccessRoute(user, "/pos/kitchen") ? (
           <button
@@ -632,7 +672,7 @@ export function SiteHeader({
             onClick={toggleKitchenMode}
             className={cn(
               "flex w-full items-center rounded-lg border px-3 py-2.5 text-xs font-bold transition-all",
-              isCollapsed ? "justify-center" : "justify-between gap-2",
+              effectiveCollapsed ? "justify-center" : "justify-between gap-2",
               kitchenMode
                 ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                 : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50",
@@ -640,7 +680,7 @@ export function SiteHeader({
             title={kitchenMode ? t("pos.kitchen.exitKitchenMode") : t("pos.kitchen.kitchenMode")}
           >
             {kitchenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            <span className={cn(isCollapsed && "sr-only")}>
+            <span className={cn(effectiveCollapsed && "sr-only")}>
               {kitchenMode ? t("pos.kitchen.exitKitchenMode") : t("pos.kitchen.kitchenMode")}
             </span>
           </button>
@@ -650,7 +690,7 @@ export function SiteHeader({
       <nav className="flex-1 overflow-y-auto space-y-10 px-4 py-8">
         {visibleNavGroups.map((group) => (
           <div key={group.labelKey}>
-            <span className={cn("mb-4 block px-3 text-[10px] font-black uppercase tracking-[0.25em] text-gray-400", isCollapsed && "sr-only")}>
+            <span className={cn("mb-4 block px-3 text-[10px] font-black uppercase tracking-[0.25em] text-gray-400", effectiveCollapsed && "sr-only")}>
               {t(group.labelKey)}
             </span>
             <div className="space-y-1">
@@ -666,18 +706,18 @@ export function SiteHeader({
                     {item.children && item.children.length > 0 ? (
                       <button
                         onClick={(e) => toggleExpand(item.href, isActive, e)}
-                        title={!isCollapsed ? undefined : (t(item.labelKey) as string)}
+                        title={!effectiveCollapsed ? undefined : (t(item.labelKey) as string)}
                         className={cn(
                           "w-full group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
-                          isCollapsed && "justify-center",
+                          effectiveCollapsed && "justify-center",
                           isActive
                             ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
                             : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
                         )}
                       >
                         <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
-                        <span className={cn("flex-1 truncate text-left rtl:text-right", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
-                        {!isCollapsed && (
+                        <span className={cn("flex-1 truncate text-left rtl:text-right", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        {!effectiveCollapsed && (
                           <ChevronRight 
                             className={cn(
                               "h-4 w-4 text-gray-400 transition-transform", 
@@ -689,21 +729,22 @@ export function SiteHeader({
                     ) : (
                       <Link
                         href={item.href}
-                        title={!isCollapsed ? undefined : (t(item.labelKey) as string)}
+                        onClick={handleNavClick}
+                        title={!effectiveCollapsed ? undefined : (t(item.labelKey) as string)}
                         className={cn(
                           "group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
-                          isCollapsed && "justify-center",
+                          effectiveCollapsed && "justify-center",
                           isActive
                             ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
                             : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
                         )}
                       >
                         <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
-                        <span className={cn("flex-1 truncate text-left rtl:text-right", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        <span className={cn("flex-1 truncate text-left rtl:text-right", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
                       </Link>
                     )}
 
-                    {item.children && item.children.length > 0 && isItemExpanded(item.href, isActive) && !isCollapsed && (
+                    {item.children && item.children.length > 0 && isItemExpanded(item.href, isActive) && !effectiveCollapsed && (
                       <div className="mt-2 space-y-1 pe-3 ps-9">
                         {item.children.map((child) => {
                           const childPath = child.href.split("?")[0];
@@ -716,6 +757,8 @@ export function SiteHeader({
                             <Link
                               key={child.href}
                               href={child.href}
+                              onClick={handleNavClick}
+                              onMouseEnter={() => prefetchForHref(child.href)}
                               className={cn(
                                 "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all",
                                 isChildActive
@@ -740,11 +783,11 @@ export function SiteHeader({
 
       {isHydrated && isAuthenticated && (
         <div className="border-t border-gray-200 p-3">
-          <div className={cn("group flex items-center gap-3 rounded-xl p-3 transition-all hover:bg-gray-50", isCollapsed && "justify-center")}>
+          <div className={cn("group flex items-center gap-3 rounded-xl p-3 transition-all hover:bg-gray-50", effectiveCollapsed && "justify-center")}>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500">
               <User size={16} />
             </div>
-            <div className={cn("min-w-0 flex-1", isCollapsed && "sr-only")}>
+            <div className={cn("min-w-0 flex-1", effectiveCollapsed && "sr-only")}>
               <div className="truncate text-xs font-bold text-gray-900">{user?.name || user?.username || "User"}</div>
               <div className="truncate text-[10px] text-gray-500">{user?.email}</div>
             </div>
@@ -755,7 +798,7 @@ export function SiteHeader({
               }}
               className={cn(
                 "shrink-0 rounded-lg p-1.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600 ltr:rotate-0 rtl:rotate-180",
-                isCollapsed && "sr-only",
+                effectiveCollapsed && "sr-only",
               )}
               title="Logout"
             >
@@ -765,5 +808,6 @@ export function SiteHeader({
         </div>
       )}
     </aside>
+    </>
   );
 }

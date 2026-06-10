@@ -22,10 +22,17 @@ const inter = localFont({
 export const metadata: Metadata = {
   title: "Genius ERP — General Ledger",
   description: "Enterprise Resource Planning — Chart of Accounts, Journal Entries, and General Ledger.",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/brand/logo.png",
     apple: "/brand/logo.png",
   },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const,
 };
 
 export default async function RootLayout({

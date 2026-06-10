@@ -220,6 +220,17 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 | `/pos-market/my-stock` | Rep car on-hand dashboard (`MARKET_REP` only) |
 | `/pos-market/settings` | Payment method GL account mappings |
 
+### Mobile register UX
+
+On viewports below `960px` (`pos-wide`), the market register matches restaurant POS mobile behavior via `pos-shared`:
+
+- full-screen product catalog with auto-fill grid (`posProductGridClass`)
+- sticky bottom cart bar (item count + total)
+- slide-up order sheet containing the full cart panel
+- market blue accent theme (`POS_REGISTER_MARKET_THEME`)
+
+At `960px` and above, catalog and cart stay side by side. Navigation on phones/tablets uses the global mobile drawer (`frontend/components/mobile-nav-bar.tsx` floating menu on POS routes).
+
 Shared payment GL mappings (`PosRuntimeSetting`) are used by both restaurant and market POS in v1. Market and restaurant sessions are isolated via `PosSession.posProduct` (`RESTAURANT` | `MARKET`).
 
 ## Manual test checklist

@@ -5,7 +5,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+import { MobileNavBar } from "@/components/mobile-nav-bar";
 import { SiteHeader } from "@/components/site-header";
+import { useNavDesktopLayout } from "@/lib/hooks/use-viewport-breakpoints";
 import { useKdsMode } from "@/providers/kds-mode-provider";
 import { cn } from "@/lib/utils";
 
@@ -19,29 +21,34 @@ const DevRoutePerf =
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { kitchenMode } = useKdsMode();
+  const isNavDesktop = useNavDesktopLayout();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   const isAuthPage = pathname === "/login" || pathname === "/register";
-  const isPosPage = pathname?.startsWith("/pos");
+  const isPosPage = pathname?.startsWith("/pos") || pathname?.startsWith("/pos-market");
   const isKitchenRoute = pathname?.startsWith("/pos/kitchen");
   const hideSidebar = kitchenMode && isKitchenRoute;
+  const isMobileNav = !isNavDesktop;
 
   useEffect(() => {
-    // Defensive cleanup for stale scroll locks left behind during client navigation.
     document.body.style.overflow = "";
+    setIsDrawerOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (!isPosPage) return;
-    const media = window.matchMedia("(max-width: 1023px)");
-    const collapseForViewport = () => {
-      if (media.matches) {
-        setIsSidebarCollapsed(true);
-      }
+    if (!isMobileNav || !isDrawerOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
     };
-    collapseForViewport();
-    media.addEventListener("change", collapseForViewport);
-    return () => media.removeEventListener("change", collapseForViewport);
-  }, [isPosPage, pathname]);
+  }, [isMobileNav, isDrawerOpen]);
+
+  const showMobileNavBar = isMobileNav && !isAuthPage && !hideSidebar;
+  const mobileNavVariant = isPosPage ? "floating" : "bar";
 
   return (
     <>
@@ -50,6 +57,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SiteHeader
           isCollapsed={isSidebarCollapsed}
           onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
+          isMobileNav={isMobileNav}
+          isDrawerOpen={isDrawerOpen}
+          onCloseDrawer={() => setIsDrawerOpen(false)}
+        />
+      ) : null}
+      {showMobileNavBar ? (
+        <MobileNavBar
+          variant={mobileNavVariant}
+          onOpenDrawer={() => setIsDrawerOpen(true)}
         />
       ) : null}
       <main
@@ -57,10 +73,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           "min-h-screen",
           isAuthPage || hideSidebar
             ? "pl-0 pr-0"
-            : isSidebarCollapsed
-              ? "ltr:pl-20 rtl:pr-20"
-              : "ltr:pl-60 rtl:pr-60",
+            : isMobileNav
+              ? "pl-0 pr-0"
+              : isSidebarCollapsed
+                ? "ltr:pl-20 rtl:pr-20"
+                : "ltr:pl-60 rtl:pr-60",
           isPosPage && "pb-[env(safe-area-inset-bottom,0px)]",
+          showMobileNavBar && mobileNavVariant === "bar" && "pt-[calc(3.5rem+env(safe-area-inset-top,0px))]",
         )}
       >
         <div

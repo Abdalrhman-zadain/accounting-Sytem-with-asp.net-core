@@ -848,6 +848,28 @@ Checks to run:
 - backend build (`npm run build` in `backend/`)
 - frontend typecheck (`npx tsc --noEmit` in `frontend/`)
 
+## Mobile and tablet responsive layout
+
+Where to edit:
+
+- viewport breakpoints hook: `frontend/lib/hooks/use-viewport-breakpoints.ts` — `useNavDesktopLayout()` (≥1024px fixed sidebar), `usePosWideLayout()` (≥960px register side-by-side)
+- Tailwind named screens: `frontend/tailwind.config.ts` — `pos-wide` (960px), `nav-desktop` (1024px)
+- app shell + main content padding: `frontend/components/app-shell.tsx`
+- sidebar / mobile drawer: `frontend/components/site-header.tsx`
+- mobile top bar / floating menu on POS: `frontend/components/mobile-nav-bar.tsx`
+- PWA viewport + manifest: `frontend/app/layout.tsx`, `frontend/public/manifest.webmanifest`
+
+Behavior:
+
+- below `1024px`: sidebar is an overlay drawer (closed by default); ERP pages show a top nav bar; `/pos/*` and `/pos-market/*` show a floating menu button; main content uses full width (`pl-0`)
+- at `1024px` and above: fixed sidebar with collapse toggle (unchanged desktop behavior)
+- reporting summary footer spans full width on mobile (`frontend/features/phase-8-reporting-control/reporting/components/reporting-summary-footer.tsx`)
+
+Checks to run:
+
+- frontend typecheck
+- DevTools smoke at 390px (phone), 834px (tablet), 1024px (iPad Pro portrait)
+
 ## POS register layout, catalog, favorites, and payments
 
 Where to edit:
@@ -855,11 +877,12 @@ Where to edit:
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
 - payment receipt print (80mm thermal roll layout, auto-print on complete sale): `frontend/features/pos/pos-receipt-print.ts`
 - session closing roll print (80mm thermal roll, auto-print on cashier shift close; same layout as accountant review): `frontend/features/pos/pos-session-roll-print.ts`, triggered from `closeSessionMutation` in `frontend/features/pos/pos-page.tsx`
-- extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
-- shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos/pos-layout-classes.ts`; reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
-- narrow register UX (iPad portrait, phones): `frontend/features/pos/pos-register-mobile-cart.tsx` + `frontend/features/pos/pos-register-layout.tsx` — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full `salePanel`. From `960px` up, catalog and order panel stay side by side. Pass `mobileCartBar` from `pos-page.tsx` when extending the register shell
+- extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx` (re-exports from `pos-shared`)
+- shared register layout (both POS products): `frontend/features/pos-shared/pos-register-main-grid.tsx`, `pos-register-mobile-cart.tsx`, `pos-layout-classes.ts` — pass `mobileCartBar` and optional `theme` (`POS_REGISTER_DEFAULT_THEME` / `POS_REGISTER_MARKET_THEME`)
+- shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos-shared/pos-layout-classes.ts` (restaurant re-exports via `frontend/features/pos/pos-layout-classes.ts`); reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
+- narrow register UX (iPad portrait, phones): `pos-shared` register shell — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full cart panel. From `960px` (`pos-wide`) up, catalog and order panel stay side by side. Restaurant: pass `mobileCartBar` from `pos-page.tsx`. Market: `frontend/features/pos-market/pos-market-register-layout.tsx`
 - dine-in table floor plan UI: `frontend/app/(erp)/pos/tables/page.tsx` — uses the shared table grid classes and touch-friendly card actions
-- POS routes auto-collapse the ERP sidebar below `1024px` via `frontend/components/app-shell.tsx` so catalog/table views get more horizontal space on tablets and smaller laptops
+- mobile navigation drawer (replaces permanent sidebar offset on narrow viewports): `frontend/components/app-shell.tsx` + `frontend/components/mobile-nav-bar.tsx`
 
 - category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
