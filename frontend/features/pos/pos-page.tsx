@@ -1244,6 +1244,17 @@ export function PosPage() {
   });
 
   const itemGroups = itemGroupsQuery.data ?? [];
+  const hasInitializedCategoryRef = useRef(false);
+  useEffect(() => {
+    if (!hasInitializedCategoryRef.current && itemGroups.length > 0) {
+      const firstGroupId = itemGroups[0]?.id;
+      if (firstGroupId) {
+        setActiveCategory(firstGroupId);
+        hasInitializedCategoryRef.current = true;
+      }
+    }
+  }, [itemGroups]);
+
   const catalogChips = useMemo(() => {
     return [
       ...itemGroups.map((g) => ({ id: g.id, name: g.name })),
