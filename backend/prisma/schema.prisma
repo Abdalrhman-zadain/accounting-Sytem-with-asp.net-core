@@ -211,6 +211,8 @@ enum PosPermissionCode {
   // Market POS receivables
   POS_MARKET_VIEW_RECEIVABLES
   POS_MARKET_COLLECT_RECEIVABLE
+  POS_MARKET_MANAGE_REP_LOADS
+  POS_MARKET_REP_STOCKTAKE
 }
 
 enum OrderType {
@@ -389,6 +391,26 @@ enum InventoryStockMovementType {
   TRANSFER_IN
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
+  REP_CAR_LOAD
+}
+
+enum RepCarLoadStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum RepCarStocktakeStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum RepCarStockMovementType {
+  LOAD_IN
+  SALE_OUT
+  STOCKTAKE_IN
+  STOCKTAKE_OUT
 }
 
 enum EmployeeStatus {
@@ -982,11 +1004,140 @@ model SalesRepresentative {
   status                      SalesRepStatus @default(ACTIVE)
   customers                   Customer[]
   linkedUsers                 User[]         @relation("UserSalesRepresentative")
+  repCarStockBalances         RepCarStockBalance[]
+  repCarLoads                 RepCarLoad[]
+  repCarStocktakes            RepCarStocktake[]
+  repCarStockMovements        RepCarStockMovement[]
+  posSessions                 PosSession[]   @relation("PosSessionSalesRep")
   createdAt                   DateTime       @default(now())
   updatedAt                   DateTime       @updatedAt
 
   @@index([status, name])
   @@index([employeeReceivableAccountId])
+}
+
+model RepCarStockBalance {
+  id              String              @id @default(cuid())
+  salesRepId      String
+  salesRep        SalesRepresentative @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  itemId          String
+  item            InventoryItem       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  onHandQuantity  Decimal             @default(0) @db.Decimal(18, 4)
+  valuationAmount Decimal             @default(0) @db.Decimal(18, 2)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([salesRepId, itemId])
+  @@index([salesRepId])
+  @@index([itemId])
+}
+
+model RepCarLoad {
+  id              String           @id @default(cuid())
+  reference       String           @unique
+  status          RepCarLoadStatus @default(DRAFT)
+  loadDate        DateTime
+  warehouseId     String
+  warehouse       InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  salesRepId      String
+  salesRep        SalesRepresentative @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  description     String?
+  totalQuantity   Decimal          @default(0) @db.Decimal(18, 4)
+  totalAmount     Decimal          @default(0) @db.Decimal(18, 2)
+  postedAt        DateTime?
+  postedByUserId  String?
+  postedByUser    User?            @relation("RepCarLoadPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  lines           RepCarLoadLine[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, loadDate])
+  @@index([salesRepId, loadDate])
+  @@index([warehouseId])
+}
+
+model RepCarLoadLine {
+  id              String     @id @default(cuid())
+  repCarLoadId    String
+  repCarLoad      RepCarLoad @relation(fields: [repCarLoadId], references: [id], onDelete: Cascade)
+  lineNumber      Int
+  itemId          String
+  item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity        Decimal    @db.Decimal(18, 4)
+  unitCost        Decimal    @default(0) @db.Decimal(18, 2)
+  unitOfMeasure   String
+  description     String?
+  lineTotalAmount Decimal    @default(0) @db.Decimal(18, 2)
+
+  @@index([repCarLoadId, lineNumber])
+  @@index([itemId])
+}
+
+model RepCarStocktake {
+  id                  String                @id @default(cuid())
+  reference           String                @unique
+  status              RepCarStocktakeStatus @default(DRAFT)
+  stocktakeDate       DateTime
+  salesRepId          String
+  salesRep            SalesRepresentative   @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  reason              String
+  description         String?
+  totalVarianceQuantity Decimal             @default(0) @db.Decimal(18, 4)
+  totalAmount           Decimal             @default(0) @db.Decimal(18, 2)
+  postedAt            DateTime?
+  postedByUserId      String?
+  postedByUser        User?                 @relation("RepCarStocktakePostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  lines               RepCarStocktakeLine[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([status, stocktakeDate])
+  @@index([salesRepId, stocktakeDate])
+}
+
+model RepCarStocktakeLine {
+  id                String          @id @default(cuid())
+  repCarStocktakeId String
+  repCarStocktake   RepCarStocktake @relation(fields: [repCarStocktakeId], references: [id], onDelete: Cascade)
+  lineNumber        Int
+  itemId            String
+  item              InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  systemQuantity    Decimal         @db.Decimal(18, 4)
+  countedQuantity   Decimal         @db.Decimal(18, 4)
+  varianceQuantity  Decimal         @db.Decimal(18, 4)
+  unitCost          Decimal         @default(0) @db.Decimal(18, 2)
+  unitOfMeasure     String
+  description       String?
+  lineTotalAmount   Decimal         @default(0) @db.Decimal(18, 2)
+
+  @@index([repCarStocktakeId, lineNumber])
+  @@index([itemId])
+}
+
+model RepCarStockMovement {
+  id                   String                @id @default(cuid())
+  movementType         RepCarStockMovementType
+  transactionType      String
+  transactionId        String
+  transactionLineId    String?
+  transactionReference String
+  transactionDate      DateTime
+  salesRepId           String
+  salesRep             SalesRepresentative   @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  itemId               String
+  item                 InventoryItem         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantityIn           Decimal               @default(0) @db.Decimal(18, 4)
+  quantityOut          Decimal               @default(0) @db.Decimal(18, 4)
+  unitCost             Decimal               @default(0) @db.Decimal(18, 2)
+  valueIn              Decimal               @default(0) @db.Decimal(18, 2)
+  valueOut             Decimal               @default(0) @db.Decimal(18, 2)
+  runningQuantity      Decimal               @default(0) @db.Decimal(18, 4)
+  runningValuation     Decimal               @default(0) @db.Decimal(18, 2)
+  description          String?
+  createdAt            DateTime              @default(now())
+
+  @@index([salesRepId, itemId, transactionDate, createdAt])
+  @@index([transactionType, transactionId])
 }
 
 model PaymentTerm {
@@ -1097,6 +1248,10 @@ model InventoryItem {
   costLayers             InventoryCostLayer[]
   stockMovements         InventoryStockMovement[]
   posFavoriteMarkers     PosUserFavoriteItem[]
+  repCarStockBalances    RepCarStockBalance[]
+  repCarLoadLines        RepCarLoadLine[]
+  repCarStocktakeLines   RepCarStocktakeLine[]
+  repCarStockMovements   RepCarStockMovement[]
 
   // Restaurant Recipe relations
   recipe              RestaurantRecipe?
@@ -1226,6 +1381,7 @@ model InventoryWarehouse {
   debitNoteLines       DebitNoteLine[]
   posReturnLines       PosReturnLine[]
   posSessions          PosSession[]
+  repCarLoads          RepCarLoad[]
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
 
@@ -2446,6 +2602,8 @@ model PosSession {
   branchName    String?
   warehouseId   String
   warehouse     InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  salesRepId    String?
+  salesRep      SalesRepresentative? @relation("PosSessionSalesRep", fields: [salesRepId], references: [id], onDelete: SetNull)
   cashierUserId String?
   cashierUser   User?              @relation("PosSessionCashier", fields: [cashierUserId], references: [id], onDelete: SetNull)
   cashAccountId String
@@ -2480,6 +2638,7 @@ model PosSession {
 
   @@index([cashierUserId, status, openedAt])
   @@index([warehouseId, status])
+  @@index([salesRepId, status])
   @@index([posProduct, status, openedAt])
   @@index([cashierUserId, posProduct, status])
 }
@@ -2935,6 +3094,8 @@ model User {
   correctedInvoices                   SalesInvoice[]                 @relation("InvoiceCorrector")
   submittedSessions                   PosSession[]                   @relation("SessionSubmitter")
   acceptedSessions                    PosSession[]                   @relation("SessionAcceptor")
+  postedRepCarLoads                   RepCarLoad[]                   @relation("RepCarLoadPostedBy")
+  postedRepCarStocktakes              RepCarStocktake[]              @relation("RepCarStocktakePostedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

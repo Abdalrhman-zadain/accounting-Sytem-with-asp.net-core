@@ -73,8 +73,12 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}) {
 }
 import type {
   CompletePosSalePayload,
+  CreateRepCarLoadPayload,
+  CreateRepCarStocktakePayload,
   CreatePosReturnPayload,
   HoldPosSalePayload,
+  InventoryItem,
+  PaginatedMeta,
   PosCompleteSaleResponse,
   PosInventoryImpactRow,
   PosReportsOverview,
@@ -86,6 +90,10 @@ import type {
   PosSessionReport,
   PosSettings,
   PosTaxSummaryRow,
+  RepCarLoad,
+  RepCarStockBalance,
+  RepCarStockMovement,
+  RepCarStocktake,
   SavePosDraftPayload,
 } from "@/types/api";
 
@@ -170,6 +178,7 @@ export async function openPosMarketSession(
     branchName?: string;
     openingCash: number;
     notes?: string;
+    salesRepId?: string;
   },
   token?: string | null,
 ) {
@@ -609,6 +618,163 @@ export async function getPosMarketReceivableDetail(
 
 export async function getPosMarketReceivableSalesReps(token?: string | null) {
   return apiRequest<PosMarketReceivableSalesRep[]>("/pos-market/receivables/sales-reps", {
+    token,
+  });
+}
+
+export async function getPosMarketSalesReps(token?: string | null) {
+  return apiRequest<Array<{ id: string; code: string; name: string }>>(
+    "/pos-market/sales-reps",
+    { token },
+  );
+}
+
+export async function getPosMarketCatalog(salesRepId: string, token?: string | null) {
+  return apiRequest<InventoryItem[]>(
+    `/pos-market/catalog?salesRepId=${encodeURIComponent(salesRepId)}`,
+    { token },
+  );
+}
+
+export async function getRepCarLoads(
+  params: {
+    status?: string;
+    salesRepId?: string;
+    warehouseId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.salesRepId) searchParams.set("salesRepId", params.salesRepId);
+  if (params.warehouseId) searchParams.set("warehouseId", params.warehouseId);
+  if (params.search) searchParams.set("search", params.search);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<{ data: RepCarLoad[]; meta: PaginatedMeta }>(
+    `/pos-market/rep-car-loads${suffix}`,
+    { token },
+  );
+}
+
+export async function getRepCarLoad(id: string, token?: string | null) {
+  return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}`, { token });
+}
+
+export async function createRepCarLoad(
+  payload: CreateRepCarLoadPayload,
+  token?: string | null,
+) {
+  return apiRequest<RepCarLoad>("/pos-market/rep-car-loads", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateRepCarLoad(
+  id: string,
+  payload: Partial<CreateRepCarLoadPayload>,
+  token?: string | null,
+) {
+  return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function postRepCarLoad(id: string, token?: string | null) {
+  return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}/post`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function cancelRepCarLoad(id: string, token?: string | null) {
+  return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}/cancel`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getRepCarStock(salesRepId: string, token?: string | null) {
+  return apiRequest<RepCarStockBalance[]>(
+    `/pos-market/rep-car-stock?salesRepId=${encodeURIComponent(salesRepId)}`,
+    { token },
+  );
+}
+
+export async function getRepCarStockMovements(
+  params: {
+    salesRepId?: string;
+    itemId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.salesRepId) searchParams.set("salesRepId", params.salesRepId);
+  if (params.itemId) searchParams.set("itemId", params.itemId);
+  if (params.dateFrom) searchParams.set("dateFrom", params.dateFrom);
+  if (params.dateTo) searchParams.set("dateTo", params.dateTo);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<{ data: RepCarStockMovement[]; meta: PaginatedMeta }>(
+    `/pos-market/rep-car-stock/movements${suffix}`,
+    { token },
+  );
+}
+
+export async function getRepCarStocktakes(
+  params: {
+    status?: string;
+    salesRepId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.salesRepId) searchParams.set("salesRepId", params.salesRepId);
+  if (params.search) searchParams.set("search", params.search);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<{ data: RepCarStocktake[]; meta: PaginatedMeta }>(
+    `/pos-market/rep-car-stocktakes${suffix}`,
+    { token },
+  );
+}
+
+export async function getRepCarStocktake(id: string, token?: string | null) {
+  return apiRequest<RepCarStocktake>(`/pos-market/rep-car-stocktakes/${id}`, { token });
+}
+
+export async function createRepCarStocktake(
+  payload: CreateRepCarStocktakePayload,
+  token?: string | null,
+) {
+  return apiRequest<RepCarStocktake>("/pos-market/rep-car-stocktakes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function postRepCarStocktake(id: string, token?: string | null) {
+  return apiRequest<RepCarStocktake>(`/pos-market/rep-car-stocktakes/${id}/post`, {
+    method: "POST",
     token,
   });
 }

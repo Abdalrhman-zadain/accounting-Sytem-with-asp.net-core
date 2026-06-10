@@ -46,7 +46,9 @@ export function PosMarketSessionBar({
             </p>
             {session ? (
               <p className="truncate text-xs" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
-                {session.terminalName} · {session.warehouse?.name ?? "—"}
+                {session.terminalName}
+                {session.salesRep?.name ? ` · ${session.salesRep.name}` : ""}
+                {session.warehouse?.name ? ` · ${session.warehouse.name}` : ""}
               </p>
             ) : null}
           </div>

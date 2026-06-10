@@ -7,7 +7,7 @@ export type PosMarketReceiptData = {
   logoUrl?: string | null;
   branchName?: string | null;
   destinationMarketName?: string | null;
-  taxNumber?: string | null;
+  salesRepName?: string | null;
   cashierName: string;
   terminalName?: string | null;
   warehouseName: string;
@@ -18,10 +18,14 @@ export type PosMarketReceiptData = {
   change: number;
   subtotal: number;
   discount: number;
-  tax: number;
-  outstanding?: number;
-  /** Total customer account balance after this delivery (credit sales). */
+  /** Remaining on this invoice after today's payment. */
+  invoiceOutstanding?: number;
+  /** Total customer account balance after this sale. */
   accountOutstanding?: number;
+  /** Lifetime delivered total for the destination market. */
+  totalDelivered?: number;
+  /** Lifetime collections total for the destination market. */
+  totalPaid?: number;
   /** True when this is a credit delivery (no payment today). */
   isCreditDelivery?: boolean;
   lines: Array<{
@@ -29,7 +33,6 @@ export type PosMarketReceiptData = {
     quantity: number;
     unitPrice: number;
     discountAmount: number;
-    taxAmount: number;
     lineTotal: number;
     unitCode?: string;
   }>;
@@ -52,7 +55,7 @@ function fmtAmt(val: number): string {
 }
 
 function rowLine(label: string, value: string): string {
-  const maxLabel = 16;
+  const maxLabel = 18;
   const truncLabel = label.length > maxLabel ? label.slice(0, maxLabel) : label;
   const padLabel = truncLabel.padEnd(maxLabel, " ");
   return `<div class="row"><span class="lbl">${padLabel}</span><span class="val">${value}</span></div>`;
@@ -67,32 +70,41 @@ function formatReceiptQuantity(line: PosMarketReceiptData["lines"][number]): str
 
 function buildReceiptBodyHtml(receipt: PosMarketReceiptData): string {
   const rows: string[] = [];
+  const invoiceOutstanding = receipt.invoiceOutstanding ?? 0;
+  const showAccountSummary =
+    receipt.destinationMarketName != null ||
+    receipt.totalDelivered != null ||
+    receipt.totalPaid != null ||
+    receipt.accountOutstanding != null;
 
   rows.push(`<div class="center title">${receipt.companyName}</div>`);
-  rows.push(`<div class="center sub">Market POS / نقاط بيع السوق</div>`);
+  rows.push(`<div class="center sub">فاتورة مبيعات / Sales Invoice</div>`);
 
   if (receipt.branchName) {
     rows.push(`<div class="center sub">${receipt.branchName}</div>`);
-  }
-  if (receipt.taxNumber) {
-    rows.push(`<div class="center sub">الرقم الضريبي: ${receipt.taxNumber}</div>`);
   }
 
   rows.push(
     `<div class="sep">${SEP}</div>`,
     `<div class="center bold">${receipt.receiptNumber}</div>`,
-    receipt.isCreditDelivery
-      ? `<div class="center sub">Delivery Note / إيصال تسليم</div>`
-      : `<div class="center sub">Sales Receipt / إيصال بيع</div>`,
-    rowLine("التاريخ", fmtDate(receipt.soldAt)),
-    rowLine("الكاشير", receipt.cashierName),
-    rowLine("الجهاز", receipt.terminalName || "—"),
-    rowLine("المستودع", receipt.warehouseName),
-    ...(receipt.destinationMarketName
-      ? [rowLine("السوق", receipt.destinationMarketName)]
-      : []),
-    `<div class="sep">${SEP}</div>`,
   );
+
+  if (receipt.isCreditDelivery) {
+    rows.push(`<div class="center sub">تسليم على ذمة</div>`);
+  }
+
+  rows.push(rowLine("التاريخ", fmtDate(receipt.soldAt)));
+
+  if (receipt.destinationMarketName) {
+    rows.push(rowLine("السوق", receipt.destinationMarketName));
+  }
+  if (receipt.salesRepName) {
+    rows.push(rowLine("المندوب", receipt.salesRepName));
+  } else if (receipt.cashierName) {
+    rows.push(rowLine("البائع", receipt.cashierName));
+  }
+
+  rows.push(`<div class="sep">${SEP}</div>`);
 
   for (const line of receipt.lines) {
     const name = line.name.slice(0, 18);
@@ -104,53 +116,52 @@ function buildReceiptBodyHtml(receipt: PosMarketReceiptData): string {
     if (line.discountAmount > 0) {
       rows.push(rowLine("  خصم", `-${fmtAmt(line.discountAmount)}`));
     }
-    if (line.taxAmount > 0) {
-      rows.push(rowLine("  ضريبة", fmtAmt(line.taxAmount)));
-    }
   }
 
-  rows.push(
-    `<div class="sep">${SEP}</div>`,
-    rowLine("الإجمالي قبل الضريبة", fmtAmt(receipt.subtotal)),
-  );
+  rows.push(`<div class="sep">${SEP}</div>`);
 
   if (receipt.discount > 0) {
     rows.push(rowLine("الخصومات", fmtAmt(receipt.discount)));
   }
 
   rows.push(
-    rowLine("الضريبة", fmtAmt(receipt.tax)),
-    receipt.isCreditDelivery
-      ? rowLine("قيمة التسليمة", fmtAmt(receipt.total))
-      : rowLine("الإجمالي", fmtAmt(receipt.total)),
-    `<div class="sep">${"-".repeat(28)}</div>`,
+    rowLine("إجمالي الفاتورة", fmtAmt(receipt.total)),
+    rowLine("مدفوع اليوم", fmtAmt(receipt.paid)),
   );
 
-  if (receipt.isCreditDelivery) {
-    rows.push(rowLine("مدفوع اليوم", fmtAmt(receipt.paid)));
-    if ((receipt.accountOutstanding ?? 0) > 0) {
-      rows.push(rowLine("المتبقي على الحساب", fmtAmt(receipt.accountOutstanding ?? 0)));
-    } else if ((receipt.outstanding ?? 0) > 0) {
-      rows.push(rowLine("المتبقي على الحساب", fmtAmt(receipt.outstanding ?? 0)));
-    }
-  } else {
-    rows.push(
-      rowLine("المبلغ المقبوض", fmtAmt(receipt.tendered)),
-      rowLine("المدفوع", fmtAmt(receipt.paid)),
-    );
+  if (invoiceOutstanding > 0.009) {
+    rows.push(rowLine("متبقي الفاتورة", fmtAmt(invoiceOutstanding)));
+  }
+
+  if (!receipt.isCreditDelivery && receipt.paid > 0.009) {
     if (receipt.change > 0) {
       rows.push(rowLine("الباقي", fmtAmt(receipt.change)));
     }
-    if ((receipt.outstanding ?? 0) > 0) {
-      rows.push(rowLine("المتبقي على الذمم", fmtAmt(receipt.outstanding ?? 0)));
+    if (receipt.paymentSummary.trim()) {
+      rows.push(rowLine("طريقة الدفع", receipt.paymentSummary));
     }
-    rows.push(rowLine("الدفع", receipt.paymentSummary));
+  }
+
+  if (showAccountSummary) {
+    rows.push(
+      `<div class="sep">${"-".repeat(28)}</div>`,
+      `<div class="center sub">ملخص حساب العميل</div>`,
+    );
+    if (receipt.totalDelivered != null) {
+      rows.push(rowLine("إجمالي المسلّم", fmtAmt(receipt.totalDelivered)));
+    }
+    if (receipt.totalPaid != null) {
+      rows.push(rowLine("إجمالي المقبوض", fmtAmt(receipt.totalPaid)));
+    }
+    if (receipt.accountOutstanding != null) {
+      rows.push(rowLine("إجمالي الذمم", fmtAmt(receipt.accountOutstanding)));
+    }
   }
 
   rows.push(
     `<div class="sep">${SEP}</div>`,
-    `<div class="center muted">شكراً لزيارتكم</div>`,
-    `<div class="center sub">Thank you for your visit</div>`,
+    `<div class="center muted">شكراً لتعاملكم</div>`,
+    `<div class="center sub">Thank you</div>`,
   );
 
   return rows.join("\n");

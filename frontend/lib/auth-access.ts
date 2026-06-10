@@ -272,6 +272,27 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
     return hasPermission(user, "POS_MARKET_VIEW_RECEIVABLES");
   }
 
+  if (
+    normalizedPath === "/pos-market/rep-loads" ||
+    normalizedPath.startsWith("/pos-market/rep-loads/")
+  ) {
+    return hasPermission(user, "POS_MARKET_MANAGE_REP_LOADS");
+  }
+
+  if (
+    normalizedPath === "/pos-market/rep-stocktakes" ||
+    normalizedPath.startsWith("/pos-market/rep-stocktakes/")
+  ) {
+    return hasPermission(user, "POS_MARKET_REP_STOCKTAKE");
+  }
+
+  if (
+    normalizedPath === "/pos-market/my-stock" ||
+    normalizedPath.startsWith("/pos-market/my-stock/")
+  ) {
+    return isMarketRepUser(user);
+  }
+
   if (normalizedPath === "/pos-market") {
     return allowedRoutes.some((route) => routeMatches(route, normalizedPath));
   }

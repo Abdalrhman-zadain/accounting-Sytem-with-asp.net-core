@@ -198,6 +198,18 @@ What this means for future edits:
 - preserve Arabic/English translation coverage when adding fixed-asset statuses, depreciation methods, disposal terminology, document labels, and reporting filters.
 - treat future fixed-asset extensions as refinements to this implemented module rather than as unimplemented Phase 7 basics.
 
+## Market POS Rep Car Stock
+
+Current limitation:
+
+- market POS sales deduct `RepCarStockBalance` for the session's `salesRepId` instead of posting warehouse issues at checkout.
+- POS returns for market sales still follow the shared return/stock-in path and do **not** restore rep car balances yet. Returning goods to the rep's car requires a follow-up load or stocktake adjustment until return posting is extended for `PosProduct.MARKET`.
+
+What this means for future edits:
+
+- when implementing market returns, update `RepCarStockService` and return posting in `pos.service.ts` together and remove or narrow this note.
+- keep rep car UI and APIs in `frontend/features/pos-market` and `backend/.../pos-market/rep-car-stock/`; do not route market rep stock through restaurant POS modules.
+
 ## Phase 8 Reporting Status
 
 Current status:

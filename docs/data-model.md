@@ -147,7 +147,7 @@ Key fields:
 - quotation, sales-order, sales-invoice, and credit-note lines may optionally reference `Tax` through `taxId`; the stored `taxAmount` remains the historical calculated amount
 - customer receipt transactions `customerId`, settlement text, and links to posted receipt transactions
 - allocation `amount`, `allocatedAt`, and links to posted receipt transactions
-- POS session `sessionNumber`, `terminalName`, optional `branchName`, linked `warehouseId`, linked cash drawer `cashAccountId`, `openingCash`, `expectedCash`, optional `actualCash`, optional `difference`, `status`, `openedAt`, and optional `closedAt`
+- POS session `sessionNumber`, `terminalName`, optional `branchName`, linked `warehouseId`, linked cash drawer `cashAccountId`, optional `salesRepId` (required for market sessions — stock is scoped to that rep's car balance), `openingCash`, `expectedCash`, optional `actualCash`, optional `difference`, `status`, `openedAt`, and optional `closedAt`
 - POS payment `salesInvoiceId`, `bankCashAccountId`, `paymentMethod` (including grouped `DELIVERY` settlement rows for third-party companies), `amount`, optional `tenderedAmount`, optional `reference`, and optional `deliveryCompanyId`
 - delivery-company orders now also persist `deliveryCollectionMethod`, `deliverySettlementStatus`, and `deliverySettledAmount` on `SalesInvoice` so operational completion can remain separate from settlement follow-up
 - `DeliveryCompanySettlement` stores one confirmed settlement header per accountant action, including period, settlement date, statement reference, bank account, statement gross, commission, service fees, refunds, adjustments, difference classification, attachment URLs, linked journal entry, and audit users
@@ -157,6 +157,33 @@ Key fields:
 - POS return `reference`, linked original `salesInvoiceId`, optional `posSessionId`, linked `customerId`, `status`, `accountingStatus`, totals, refund amount, optional review/reversal metadata, and linked refund/accounting records
 - POS return line `salesInvoiceLineId`, optional `itemId`, optional `warehouseId`, quantity, price/discount/tax totals, posting-account references, and optional unit/total cost for stock returns
 - POS return payment `refundMethod`, optional `bankCashAccountId`, refund `amount`, and optional external `reference`
+
+### Market POS rep car stock
+
+Main models:
+
+- `RepCarStockBalance`
+- `RepCarLoad`
+- `RepCarLoadLine`
+- `RepCarStocktake`
+- `RepCarStocktakeLine`
+- `RepCarStockMovement`
+
+Key fields:
+
+- rep car balance `salesRepId`, `itemId`, `onHandQuantity`, `valuationAmount` (unique per rep + item)
+- rep car load `reference`, `status` (`DRAFT` / `POSTED` / `CANCELLED`), `loadDate`, `warehouseId`, `salesRepId`, optional `description`, totals, and posting metadata
+- rep car load line `lineNumber`, `itemId`, `quantity`, `unitCost`, `unitOfMeasure`, and `lineTotalAmount`
+- rep car stocktake `reference`, `status`, `stocktakeDate`, `salesRepId`, `reason`, variance totals, and posting metadata
+- rep car stocktake line `systemQuantity`, `countedQuantity`, `varianceQuantity`, `unitCost`, and `lineTotalAmount`
+- rep car stock movement `movementType` (`LOAD`, `SALE`, `STOCKTAKE`, etc.), transaction references, quantity/value in/out, and running rep-car balances per item
+
+Operational meaning:
+
+- posting a rep car load decreases main-warehouse stock through `InventoryPostingService` (`InventoryStockMovementType.REP_CAR_LOAD`) and increases the target rep's `RepCarStockBalance`
+- market POS sale completion deducts `RepCarStockBalance` for the session's `salesRepId` and writes `RepCarStockMovement` rows; it does not post a second warehouse issue for the same quantities
+- posting a rep car stocktake adjusts rep car balances to counted quantities and records variance movements; main-warehouse monthly جرد remains on ERP `InventoryAdjustment`
+- POS returns currently do not reverse rep car balances (documented limitation)
 
 Accounting meaning:
 

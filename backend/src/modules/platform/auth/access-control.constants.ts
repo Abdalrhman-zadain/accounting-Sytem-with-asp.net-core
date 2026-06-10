@@ -112,6 +112,8 @@ export const ACCOUNTANT_PERMISSION_CODES: PosPermissionCode[] = [
   "POS_REOPEN_SESSION",
   "POS_MARKET_VIEW_RECEIVABLES",
   "POS_MARKET_COLLECT_RECEIVABLE",
+  "POS_MARKET_MANAGE_REP_LOADS",
+  "POS_MARKET_REP_STOCKTAKE",
 ];
 
 export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
@@ -124,6 +126,7 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
   MARKET_REP: [
     "/pos-market/register",
     "/pos-market/receivables",
+    "/pos-market/my-stock",
     "/pos-market/printers",
   ],
   CASHIER: [
@@ -152,6 +155,8 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos-market/reports",
     "/pos-market/settings",
     "/pos-market/receivables",
+    "/pos-market/rep-loads",
+    "/pos-market/rep-stocktakes",
     "/pos/accounting-review",
     "/pos/sessions",
     "/pos/completed-sales",

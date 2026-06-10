@@ -132,8 +132,8 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - Markets load from `GET /api/pos-market/destination-markets` (market cashiers cannot use `/api/sales-receivables/customers`).
 - Walk-in customer (`POS-WALKIN`) is rejected for market sales.
 - Demo destination markets are seeded with codes `MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03` (`npm run seed:market`).
-- Session warehouse = stock source; customer = who received the goods.
-- Register catalog on-hand quantities are scoped to the **session warehouse** (same check used at sale completion). Demo `MKT-*` stock is seeded into every active non-transit warehouse (`npm run seed:market`).
+- Session warehouse = main stock location for **loads** (تحميل سيارة); customer = who received the goods on sale.
+- Register catalog on-hand quantities are scoped to the **active sales rep's car balance** (`RepCarStockBalance`), not main-warehouse on-hand. Demo `MKT-*` stock is seeded into every active non-transit warehouse (`npm run seed:market`); demo rep load `RCL-DEMO-01` moves 50× `MKT-001` from the main warehouse onto `REP-MARKET-01`.
 - Demo markets are linked to sales reps `REP-MARKET-01` / `REP-MARKET-02` for receivables filtering.
 
 ### Credit sales (ذمم)
@@ -141,7 +141,9 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE`.
 - Register checkout allows **partial payment** or **pay later** (zero tender) when `allowCreditSale` is true in POS settings (permission or `POS_ALLOW_CREDIT_SALE`).
 - Outstanding balance is stored on the POS `SalesInvoice` (`outstandingAmount`, `PARTIALLY_PAID`) and debited to the customer's receivable account on accounting posting.
-- Receipts print **المتبقي على الذمم** when applicable.
+- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip.
+- Each invoice shows **مدفوع اليوم**, **متبقي الفاتورة**, and a **ملخص حساب العميل** block (إجمالي المسلّم / المقبوض / الذمم) when selling to a destination market.
+- **المندوب** (customer-linked sales rep) prints on the invoice when configured on the market customer.
 
 ### Market receivables workspace
 
@@ -156,6 +158,39 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - `MARKET_REP` users are scoped to `User.salesRepId` → only their assigned destination markets (register picker + receivables list).
 - Accountants see all markets and can filter by sales rep.
 - Full ERP collections remain in `/sales-receivables`; this screen is the rep-focused follow-up UI.
+
+### Rep car stock (تحميل سيارة / جرد)
+
+Market POS sells from stock loaded onto a sales rep's car, not directly from main-warehouse balances at checkout.
+
+**Buying stock into the main warehouse** (purchase qty + unit cost) is **not** done in Market POS. Use ERP **Inventory → Goods Receipts** at `/inventory` (admin/accountant). After the warehouse has stock, post a **rep car load** to move quantities onto the rep's car.
+
+| Step | Where | Who |
+|------|-------|-----|
+| 1. Receive purchased goods into main warehouse | `/inventory` → Goods Receipts | Admin / accountant |
+| 2. Load rep car from warehouse | `/pos-market/rep-loads` | Admin |
+| 3. Sell to destination market | `/pos-market/register` | Market cashier / rep |
+| 4. Rep views remaining car stock | `/pos-market/my-stock` | `MARKET_REP` only |
+
+| Concept | Behavior |
+|---------|----------|
+| Main warehouse | Single shared pool; goods receipts increase it; rep loads decrease it |
+| Rep car balance | `RepCarStockBalance` per `(salesRepId, itemId)` — what the register shows as on-hand |
+| Session | Market sessions require `salesRepId` on open; cashiers pick a rep; `MARKET_REP` users are locked to `User.salesRepId` |
+| Sale | `completeSale` / `holdSale` deduct `RepCarStockBalance` only; warehouse is not decreased again |
+| Oversell | Blocked when cart quantity exceeds rep car on-hand (unless `POS_SELL_NEGATIVE_STOCK`) |
+| Returns | POS returns do **not** yet restore rep car stock (see `docs/known-issues.md`) |
+| Monthly جرد | Main warehouse via ERP inventory adjustments; rep car via `/pos-market/rep-stocktakes` |
+
+| Route | API | Permission | Purpose |
+|-------|-----|------------|---------|
+| `/pos-market/rep-loads` | `GET/POST/PATCH /api/pos-market/rep-car-loads` (+ post/cancel) | `POS_MARKET_MANAGE_REP_LOADS` | Admin load documents: warehouse → rep car |
+| `/pos-market/rep-stocktakes` | `GET/POST/PATCH /api/pos-market/rep-car-stocktakes` (+ post/cancel) | `POS_MARKET_REP_STOCKTAKE` | Monthly rep-car physical count (per-product variance in UI) |
+| `/pos-market/my-stock` | `GET /api/pos-market/rep-car-stock`, `.../movements` | `MARKET_REP` only | Rep dashboard: on-hand + recent movements |
+| (register) | `GET /api/pos-market/catalog?salesRepId=` | session POS permissions | Catalog grid scoped to rep car on-hand |
+| (register) | `GET /api/pos-market/sales-reps` | session POS permissions | Active reps for session open picker |
+
+Backend services live in `backend/src/modules/phase-3-sales-receivables/pos-market/rep-car-stock/`.
 
 ## Current status
 
@@ -180,6 +215,9 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 | `/pos-market/printers` | Receipt printer setup (local browser storage) |
 | `/pos-market/receivables` | Destination market balances; link to per-market account detail |
 | `/pos-market/receivables/:customerId` | Deliveries (what they got), collections (what they paid), amount due |
+| `/pos-market/rep-loads` | Rep car load documents (warehouse → rep) |
+| `/pos-market/rep-stocktakes` | Rep car monthly stocktake (جرد) with per-product variance |
+| `/pos-market/my-stock` | Rep car on-hand dashboard (`MARKET_REP` only) |
 | `/pos-market/settings` | Payment method GL account mappings |
 
 Shared payment GL mappings (`PosRuntimeSetting`) are used by both restaurant and market POS in v1. Market and restaurant sessions are isolated via `PosSession.posProduct` (`RESTAURANT` | `MARKET`).
@@ -187,10 +225,11 @@ Shared payment GL mappings (`PosRuntimeSetting`) are used by both restaurant and
 ## Manual test checklist
 
 1. Login `market / market123` → lands on `/pos-market/register`
-2. Open session (warehouse + cash account) → **select destination market** (ERP customer, e.g. `MKT-AMMAN-01`) → add `MKT-*` products → pay → complete sale
+2. Admin: post demo rep load (`RCL-DEMO-01` from `npm run seed:market`) or create/post a load at `/pos-market/rep-loads`
+3. Open session (warehouse + cash account + **sales rep**) → **select destination market** (ERP customer, e.g. `MKT-AMMAN-01`) → add `MKT-*` products (on-hand = rep car) → pay → complete sale
 3. Hold/resume sale; close session with report
 4. Receipt print (browser fallback when QZ Tray unavailable)
 5. Restaurant user `cashier` still works on `/pos/register`; cannot call `/api/pos-market`
 6. Accountant sees market review/reports routes under `/pos-market/*`
-7. Login `market_rep / market123` → `/pos-market/receivables` shows only `REP-MARKET-01` markets
+7. Login `market_rep / market123` → `/pos-market/receivables` shows only `REP-MARKET-01` markets; `/pos-market/my-stock` shows car balances after a rep load
 8. Partial or pay-later sale from register → balance appears in receivables; collect reduces `outstandingAmount`

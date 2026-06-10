@@ -99,6 +99,11 @@ export class OpenPosSessionDto {
   @IsString()
   @Length(0, 255)
   notes?: string;
+
+  /** Market POS: sales rep whose car stock this session sells from. */
+  @IsOptional()
+  @IsString()
+  salesRepId?: string;
 }
 
 export class ClosePosSessionDto {

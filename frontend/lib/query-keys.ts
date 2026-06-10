@@ -236,6 +236,36 @@ export const queryKeys = {
   posMarketReceivableSalesReps(token: string | null) {
     return ["pos-market-receivable-sales-reps", token] as const;
   },
+  posMarketSalesReps(token: string | null) {
+    return ["pos-market-sales-reps", token] as const;
+  },
+  posMarketCatalog(token: string | null, salesRepId: string | null) {
+    return ["pos-market-catalog", token, salesRepId] as const;
+  },
+  posMarketInventoryItems(token: string | null) {
+    return ["pos-market-inventory-items", token] as const;
+  },
+  posMarketWarehouseInventoryItems(token: string | null, warehouseId: string | null) {
+    return ["pos-market-warehouse-inventory-items", token, warehouseId] as const;
+  },
+  posMarketRepCarStock(token: string | null, salesRepId: string | null) {
+    return ["pos-market-rep-car-stock", token, salesRepId] as const;
+  },
+  posMarketRepCarStockMovements(token: string | null, salesRepId: string | null) {
+    return ["pos-market-rep-car-stock-movements", token, salesRepId] as const;
+  },
+  posMarketRepCarStocktake(token: string | null, id: string | null) {
+    return ["pos-market-rep-car-stocktake", token, id] as const;
+  },
+  posMarketRepCarLoads(token: string | null) {
+    return ["pos-market-rep-car-loads", token] as const;
+  },
+  posMarketRepCarLoad(token: string | null, id: string | null) {
+    return ["pos-market-rep-car-load", token, id] as const;
+  },
+  posMarketRepCarStocktakes(token: string | null) {
+    return ["pos-market-rep-car-stocktakes", token] as const;
+  },
   posMarketReportsOverview(token: string | null) {
     return ["pos-market-reports-overview", token] as const;
   },

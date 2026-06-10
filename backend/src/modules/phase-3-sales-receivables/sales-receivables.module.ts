@@ -18,11 +18,12 @@ import { PosWaiterOrdersController } from './pos/pos-waiter-orders.controller';
 import { PosAddonController } from './pos/pos-addon.controller';
 import { PosAddonService } from './pos/pos-addon.service';
 import { PosService } from './pos/pos.service';
+import { RepCarStockModule } from './pos-market/rep-car-stock/rep-car-stock.module';
 import { SalesReceivablesController } from './sales-receivables.controller';
 import { SalesReceivablesService } from './sales-receivables.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule],
+  imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule, RepCarStockModule],
   controllers: [
     SalesReceivablesController,
     PosController,

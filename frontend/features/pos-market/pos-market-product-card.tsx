@@ -154,7 +154,7 @@ export function PosMarketProductCard({
                   color: onHandQuantity > 0 ? POS_MARKET_THEME.colors.textMuted : "#b45309",
                 }}
               >
-                {isAr ? `متوفر ${onHandQuantity}` : `Stock ${onHandQuantity}`}
+                {isAr ? `على السيارة ${onHandQuantity}` : `On car ${onHandQuantity}`}
               </p>
             ) : null}
             <span className="text-sm font-bold" style={{ color: POS_MARKET_THEME.colors.text }}>
@@ -180,8 +180,8 @@ export function PosMarketProductCard({
                 : `Default price: ${formatCurrency(defaultPrice, currencyCode)}`}
               {onHandQuantity != null
                 ? isAr
-                  ? ` · متوفر في المخزن: ${onHandQuantity}`
-                  : ` · Warehouse stock: ${onHandQuantity}`
+                  ? ` · على السيارة: ${onHandQuantity}`
+                  : ` · On car: ${onHandQuantity}`
                 : null}
             </div>
           </div>

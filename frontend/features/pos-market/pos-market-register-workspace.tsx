@@ -38,12 +38,13 @@ import {
   getDraftPosMarketSales,
   getHeldPosMarketSales,
   getPosMarketDestinationMarkets,
+  getPosMarketSalesReps,
   getPosMarketSettings,
   getInventoryWarehouses,
   holdPosMarketSale,
   voidPosMarketSale,
 } from "@/lib/api";
-import { hasPermission } from "@/lib/auth-access";
+import { hasPermission, isMarketRepUser } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { getLocalizedText } from "@/lib/utils";
@@ -77,7 +78,7 @@ export function PosMarketRegisterWorkspace() {
 
   const session = usePosMarketSession(token);
   const activeSession = session.activeSession;
-  const catalog = usePosMarketCatalog(token, activeSession?.warehouse?.id);
+  const catalog = usePosMarketCatalog(token, activeSession?.salesRep?.id);
 
   const warehousesQuery = useQuery({
     queryKey: queryKeys.inventoryWarehouses(token ?? null, { isActive: "true" }),
@@ -101,6 +102,12 @@ export function PosMarketRegisterWorkspace() {
     queryKey: queryKeys.posMarketDestinationMarkets(token ?? null),
     queryFn: () => getPosMarketDestinationMarkets(token),
     enabled: Boolean(token),
+  });
+
+  const salesRepsQuery = useQuery({
+    queryKey: queryKeys.posMarketSalesReps(token ?? null),
+    queryFn: () => getPosMarketSalesReps(token),
+    enabled: Boolean(token) && !isMarketRepUser(user),
   });
 
   const paymentAccounts = paymentAccountsQuery.data ?? [];
@@ -218,6 +225,11 @@ export function PosMarketRegisterWorkspace() {
       void queryClient.invalidateQueries({
         queryKey: ["inventory-items", token],
       });
+      if (activeSession?.salesRep?.id) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.posMarketCatalog(token ?? null, activeSession.salesRep.id),
+        });
+      }
       pushMessage(t("posMarket.checkout.success"));
     },
     onError: (error) => {
@@ -369,6 +381,46 @@ export function PosMarketRegisterWorkspace() {
     );
   }
 
+  if (session.staleSession) {
+    const stale = session.staleSession;
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 p-4">
+        <Card className="rounded-[32px] border border-[#d5deea] p-6 sm:p-8">
+          <div className="mx-auto max-w-3xl space-y-6 text-center">
+            <h1 className="text-2xl font-black arabic-heading" style={{ color: POS_MARKET_THEME.colors.text }}>
+              {t("posMarket.session.staleTitle")}
+            </h1>
+            <p className="text-sm leading-7 arabic-auto" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+              {t("posMarket.session.staleDescription", { number: stale.sessionNumber })}
+            </p>
+            <button
+              type="button"
+              disabled={session.closeSessionMutation.isPending}
+              onClick={() =>
+                session.closeSessionMutation.mutate(
+                  {
+                    sessionId: stale.id,
+                    actualCash: parseAmount(stale.expectedCash || stale.openingCash),
+                    notes: "Closed legacy session before rep-car stock",
+                  },
+                  {
+                    onSuccess: () => pushMessage(t("posMarket.session.closeSuccess")),
+                    onError: (error) =>
+                      pushMessage(getErrorMessage(error, t("posMarket.session.closeError")), "error"),
+                  },
+                )
+              }
+              className="rounded-xl px-6 py-3 text-sm font-black text-white disabled:opacity-50"
+              style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
+            >
+              {t("posMarket.session.staleCloseAction")}
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   if (!session.isOpen || !activeSession) {
     return (
       <div className="mx-auto max-w-4xl space-y-6 p-4">
@@ -397,16 +449,26 @@ export function PosMarketRegisterWorkspace() {
               cashierLabel={cashierLabel}
               warehouses={warehousesQuery.data ?? []}
               paymentAccounts={paymentAccounts}
+              salesReps={salesRepsQuery.data ?? []}
+              showSalesRepPicker={!isMarketRepUser(user)}
+              lockedSalesRepId={user?.salesRepId ?? null}
               canOpenShift={hasPermission(user, "POS_OPEN_SESSION")}
               onSessionStateChange={(patch) => setSessionForm((current) => ({ ...current, ...patch }))}
-              onOpenSession={(openingCash, warehouseId, cashAccountId) => {
-                session.openSessionMutation.mutate({
-                  openingCash: parseAmount(openingCash),
-                  warehouseId,
-                  cashAccountId,
-                  terminalName: sessionForm.terminalName,
-                  branchName: sessionForm.branchName || undefined,
-                });
+              onOpenSession={(openingCash, warehouseId, cashAccountId, salesRepId) => {
+                session.openSessionMutation.mutate(
+                  {
+                    openingCash: parseAmount(openingCash),
+                    warehouseId,
+                    cashAccountId,
+                    salesRepId,
+                    terminalName: sessionForm.terminalName,
+                    branchName: sessionForm.branchName || undefined,
+                  },
+                  {
+                    onError: (error) =>
+                      pushMessage(getErrorMessage(error, t("posMarket.session.openError")), "error"),
+                  },
+                );
               }}
               isPending={session.openSessionMutation.isPending}
             />

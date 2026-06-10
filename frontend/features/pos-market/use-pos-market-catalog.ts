@@ -1,33 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { usePosCatalog } from "@/features/pos-shared";
-
-const MARKET_ITEM_CODE_PREFIX = "MKT-";
-const MARKET_GROUP_PREFIX = "MARKET-";
+import { getPosMarketCatalog } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import type { InventoryItem } from "@/types/api";
 
 export function usePosMarketCatalog(
   token: string | null | undefined,
-  sessionWarehouseId?: string | null,
+  salesRepId?: string | null,
 ) {
-  const catalog = usePosCatalog(token, {
-    warehouseId: sessionWarehouseId,
-    requireWarehouse: true,
+  const repId = salesRepId?.trim() || undefined;
+
+  const itemsQuery = useQuery({
+    queryKey: queryKeys.posMarketCatalog(token ?? null, repId ?? null),
+    queryFn: () => getPosMarketCatalog(repId!, token),
+    enabled: Boolean(token && repId),
   });
 
-  const items = useMemo(
-    () =>
-      catalog.items.filter(
-        (item) =>
-          item.code.startsWith(MARKET_ITEM_CODE_PREFIX) ||
-          item.itemGroup?.code?.startsWith(MARKET_GROUP_PREFIX),
-      ),
-    [catalog.items],
-  );
-
   return {
-    ...catalog,
-    items,
+    items: (itemsQuery.data ?? []) as InventoryItem[],
+    warehouses: [] as const,
+    isLoading: itemsQuery.isLoading,
+    isError: itemsQuery.isError,
+    refetch: async () => {
+      await itemsQuery.refetch();
+    },
   };
 }

@@ -102,6 +102,14 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
     name: 'Collect market receivables',
     description: 'Record customer receipts against market POS open invoices.',
   },
+  POS_MARKET_MANAGE_REP_LOADS: {
+    name: 'Manage rep car loads',
+    description: 'Create and post تحميل سيارة documents from main warehouse to rep car stock.',
+  },
+  POS_MARKET_REP_STOCKTAKE: {
+    name: 'Rep car stocktake',
+    description: 'Create and post monthly جرد for goods on rep cars.',
+  },
 };
 
 @Injectable()
@@ -395,6 +403,12 @@ export class AuthService {
     );
     await this.prisma.$executeRawUnsafe(
       `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_COLLECT_RECEIVABLE'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_MANAGE_REP_LOADS'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_REP_STOCKTAKE'`,
     );
   }
 

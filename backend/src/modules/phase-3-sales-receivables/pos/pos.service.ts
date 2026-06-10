@@ -39,6 +39,7 @@ import { JournalEntriesService } from "../../phase-1-accounting-foundation/accou
 import { PostingService } from "../../phase-1-accounting-foundation/accounting-core/posting-logic/posting.service";
 import { ReversalService } from "../../phase-1-accounting-foundation/accounting-core/reversal-control/reversal.service";
 import { InventoryPostingService } from "../../phase-5-inventory-management/inventory/shared/inventory-posting.service";
+import { RepCarStockService } from "../pos-market/rep-car-stock/rep-car-stock.service";
 import {
   ResolvedSalesLine,
   SalesReceivablesService,
@@ -99,6 +100,7 @@ export class PosService {
     private readonly reversalService: ReversalService,
     private readonly inventoryPostingService: InventoryPostingService,
     private readonly salesReceivablesService: SalesReceivablesService,
+    private readonly repCarStockService: RepCarStockService,
   ) {}
 
   async getActiveSession(
@@ -722,6 +724,10 @@ export class PosService {
     }
     await this.ensureWarehouse(dto.warehouseId);
     await this.ensureBankCashAccount(dto.cashAccountId);
+    const marketSalesRepId =
+      posProduct === PosProduct.MARKET
+        ? await this.resolveMarketSessionSalesRepId(dto.salesRepId, user)
+        : null;
 
     const activeSession = await this.prisma.posSession.findFirst({
       where: {
@@ -745,6 +751,7 @@ export class PosService {
         terminalName: dto.terminalName?.trim() || (posProduct === PosProduct.MARKET ? "Market POS 01" : "POS Terminal 01"),
         branchName: dto.branchName?.trim() || null,
         warehouseId: dto.warehouseId,
+        salesRepId: marketSalesRepId,
         cashierUserId: user?.userId ?? null,
         cashAccountId: dto.cashAccountId,
         openingCash: this.toAmount(dto.openingCash),
@@ -762,6 +769,7 @@ export class PosService {
       details: {
         sessionNumber: created.sessionNumber,
         warehouseId: created.warehouseId,
+        salesRepId: created.salesRepId,
         cashAccountId: created.cashAccountId,
         openingCash: dto.openingCash,
       },
@@ -1072,6 +1080,14 @@ export class PosService {
       }));
     }
     const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
+    if (isMarketSession) {
+      await this.assertMarketCustomerAccess(customerId, user);
+      if (!session.salesRepId) {
+        throw new BadRequestException(
+          "Market POS session must be linked to a sales representative before saving sales.",
+        );
+      }
+    }
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
     if (!isMarketSession) {
@@ -1286,6 +1302,14 @@ export class PosService {
       }));
     }
     const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
+    if (isMarketSession) {
+      await this.assertMarketCustomerAccess(customerId, user);
+      if (!session.salesRepId) {
+        throw new BadRequestException(
+          "Market POS session must be linked to a sales representative before completing sales.",
+        );
+      }
+    }
     let deliveryCompany = null;
     if (!isMarketSession && dto.deliveryCompanyId?.trim()) {
       deliveryCompany = await this.prisma.deliveryCompany.findUnique({
@@ -1627,25 +1651,44 @@ export class PosService {
         },
       });
 
-      const inventoryPosting = await this.salesReceivablesService.createSalesInvoiceInventoryEffects(
-        tx,
-        {
-          id: invoiceWithDetails.id,
-          reference: invoiceWithDetails.reference,
-          invoiceDate: invoiceWithDetails.invoiceDate,
-          description: invoiceWithDetails.description,
-          lines: invoiceWithDetails.lines.map((line) => ({
-            id: line.id,
-            lineNumber: line.lineNumber,
-            itemId: line.itemId,
-            warehouseId: line.warehouseId,
-            quantity: line.quantity,
-            description: line.description,
-            item: line.item,
-          })),
-        },
-        { allowNegativeStockIssue },
-      );
+      const inventoryPosting =
+        isMarketSession && session.salesRepId
+          ? await this.repCarStockService.applySaleDeduction(
+              tx,
+              session.salesRepId,
+              {
+                id: invoiceWithDetails.id,
+                reference: invoiceWithDetails.reference,
+                invoiceDate: invoiceWithDetails.invoiceDate,
+                lines: invoiceWithDetails.lines.map((line) => ({
+                  id: line.id,
+                  itemId: line.itemId,
+                  quantity: line.quantity,
+                  description: line.description,
+                  item: line.item,
+                })),
+              },
+              { allowNegative: allowNegativeStockIssue },
+            )
+          : await this.salesReceivablesService.createSalesInvoiceInventoryEffects(
+              tx,
+              {
+                id: invoiceWithDetails.id,
+                reference: invoiceWithDetails.reference,
+                invoiceDate: invoiceWithDetails.invoiceDate,
+                description: invoiceWithDetails.description,
+                lines: invoiceWithDetails.lines.map((line) => ({
+                  id: line.id,
+                  lineNumber: line.lineNumber,
+                  itemId: line.itemId,
+                  warehouseId: line.warehouseId,
+                  quantity: line.quantity,
+                  description: line.description,
+                  item: line.item,
+                })),
+              },
+              { allowNegativeStockIssue },
+            );
 
       if (posPostingMode === "BY_INVOICE") {
         const description = invoiceWithDetails.description
@@ -1775,9 +1818,9 @@ export class PosService {
       },
     });
 
-    const accountOutstanding =
-      result.customer?.id != null
-        ? await this.sumMarketCustomerOutstanding(result.customer.id)
+    const marketAccountSummary =
+      isMarketSession && result.customer?.id != null
+        ? await this.buildMarketReceiptAccountSummary(result.customer.id)
         : null;
 
     return {
@@ -1789,7 +1832,16 @@ export class PosService {
             ? Number(result.outstandingAmount).toFixed(2)
             : null,
         accountOutstanding:
-          accountOutstanding != null ? accountOutstanding.toFixed(2) : null,
+          marketAccountSummary != null
+            ? marketAccountSummary.accountOutstanding.toFixed(2)
+            : null,
+        salesRepName: marketAccountSummary?.salesRepName ?? null,
+        totalDelivered:
+          marketAccountSummary != null
+            ? marketAccountSummary.totalDelivered.toFixed(2)
+            : null,
+        totalPaid:
+          marketAccountSummary != null ? marketAccountSummary.totalPaid.toFixed(2) : null,
       },
     };
   }
@@ -5292,6 +5344,35 @@ export class PosService {
     return Number(Number(result._sum.outstandingAmount ?? 0).toFixed(2));
   }
 
+  private async buildMarketReceiptAccountSummary(customerId: string) {
+    const [customer, deliveredAgg, paymentsAgg, accountOutstanding] = await Promise.all([
+      this.prisma.customer.findUnique({
+        where: { id: customerId },
+        select: { salesRep: { select: { name: true } } },
+      }),
+      this.prisma.salesInvoice.aggregate({
+        where: this.marketCompletedPosInvoiceWhere(customerId),
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.bankCashTransaction.aggregate({
+        where: {
+          customerId,
+          kind: BankCashTransactionKind.RECEIPT,
+          status: BankCashTransactionStatus.POSTED,
+        },
+        _sum: { amount: true },
+      }),
+      this.sumMarketCustomerOutstanding(customerId),
+    ]);
+
+    return {
+      salesRepName: customer?.salesRep?.name ?? null,
+      totalDelivered: Number(Number(deliveredAgg._sum.totalAmount ?? 0).toFixed(2)),
+      totalPaid: Number(Number(paymentsAgg._sum.amount ?? 0).toFixed(2)),
+      accountOutstanding,
+    };
+  }
+
   async getMarketReceivableDetail(
     customerId: string,
     user?: AuthorizedUser,
@@ -6142,9 +6223,32 @@ export class PosService {
     return value?.trim().toUpperCase() === "AFTER_TAX" ? "AFTER_TAX" : "BEFORE_TAX";
   }
 
+  private async resolveMarketSessionSalesRepId(
+    salesRepId: string | undefined,
+    user?: AuthorizedUser,
+  ) {
+    if (this.isMarketRepScopedUser(user)) {
+      if (!user?.salesRepId) {
+        throw new ForbiddenException(
+          "Market sales rep account is not linked to a sales representative.",
+        );
+      }
+      return user.salesRepId;
+    }
+    const normalized = salesRepId?.trim();
+    if (!normalized) {
+      throw new BadRequestException(
+        "A sales representative must be selected before opening a market POS session.",
+      );
+    }
+    await this.repCarStockService.ensureActiveSalesRep(normalized);
+    return normalized;
+  }
+
   private posSessionInclude() {
     return {
       warehouse: { select: { id: true, code: true, name: true } },
+      salesRep: { select: { id: true, code: true, name: true } },
       cashAccount: {
         select: {
           id: true,
@@ -6444,6 +6548,8 @@ export class PosService {
       closedAt: row.closedAt?.toISOString() ?? null,
       notes: row.notes,
       warehouse: row.warehouse,
+      salesRepId: row.salesRepId ?? null,
+      salesRep: row.salesRep ?? null,
       cashAccount: row.cashAccount,
       cashierUser: row.cashierUser ?? null,
       invoiceCount,

@@ -8,6 +8,8 @@ import { useTranslation } from "@/lib/i18n";
 import { getLocalizedText } from "@/lib/utils";
 import type { BankCashAccount, InventoryWarehouse } from "@/types/api";
 
+type MarketSalesRepOption = { id: string; code: string; name: string };
+
 import { normalizePaymentAccountMethod } from "./pos-market-cart-utils";
 
 type SessionFormState = {
@@ -21,8 +23,16 @@ type PosMarketOpenShiftPanelProps = {
   cashierLabel: string;
   warehouses: InventoryWarehouse[];
   paymentAccounts: BankCashAccount[];
+  salesReps?: MarketSalesRepOption[];
+  showSalesRepPicker?: boolean;
+  lockedSalesRepId?: string | null;
   onSessionStateChange: (patch: Partial<SessionFormState>) => void;
-  onOpenSession: (openingCash: string, warehouseId: string, cashAccountId: string) => void;
+  onOpenSession: (
+    openingCash: string,
+    warehouseId: string,
+    cashAccountId: string,
+    salesRepId: string,
+  ) => void;
   isPending?: boolean;
   canOpenShift?: boolean;
 };
@@ -32,6 +42,9 @@ export function PosMarketOpenShiftPanel({
   cashierLabel,
   warehouses,
   paymentAccounts,
+  salesReps = [],
+  showSalesRepPicker = false,
+  lockedSalesRepId,
   onSessionStateChange,
   onOpenSession,
   isPending,
@@ -42,6 +55,7 @@ export function PosMarketOpenShiftPanel({
   const [openingCash, setOpeningCash] = useState(sessionState.openingCash);
   const [warehouseId, setWarehouseId] = useState("");
   const [cashAccountId, setCashAccountId] = useState("");
+  const [salesRepId, setSalesRepId] = useState(lockedSalesRepId ?? "");
 
   useEffect(() => {
     if (!warehouseId && warehouses.length > 0) {
@@ -60,6 +74,18 @@ export function PosMarketOpenShiftPanel({
       setCashAccountId(defaultCash.id);
     }
   }, [cashAccountId, paymentAccounts]);
+
+  useEffect(() => {
+    if (lockedSalesRepId) {
+      setSalesRepId(lockedSalesRepId);
+      return;
+    }
+    if (!salesRepId && salesReps.length === 1) {
+      setSalesRepId(salesReps[0].id);
+    }
+  }, [lockedSalesRepId, salesRepId, salesReps]);
+
+  const resolvedSalesRepId = lockedSalesRepId ?? salesRepId;
 
   const inputClass =
     "rounded-[18px] border py-3 text-sm font-semibold";
@@ -106,7 +132,10 @@ export function PosMarketOpenShiftPanel({
           style={inputStyle}
         />
       </Field>
-      <Field label={t("pos.sessions.warehouse")} className="mb-0">
+      <Field
+        label={getLocalizedText("المستودع الرئيسي / Main warehouse", language)}
+        className="mb-0"
+      >
         <select
           value={warehouseId}
           onChange={(event) => setWarehouseId(event.target.value)}
@@ -120,6 +149,27 @@ export function PosMarketOpenShiftPanel({
           ))}
         </select>
       </Field>
+      {showSalesRepPicker ? (
+        <Field
+          label={getLocalizedText("المندوب / Sales rep", language)}
+          className="mb-0"
+        >
+          <select
+            value={resolvedSalesRepId}
+            onChange={(event) => setSalesRepId(event.target.value)}
+            disabled={Boolean(lockedSalesRepId)}
+            className={`w-full px-4 ${inputClass}`}
+            style={inputStyle}
+          >
+            <option value="">{getLocalizedText("اختر المندوب / Select rep", language)}</option>
+            {salesReps.map((rep) => (
+              <option key={rep.id} value={rep.id}>
+                {rep.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <Field label={t("pos.sessions.cashRegisterLabel")} className="mb-0">
         <select
           value={cashAccountId}
@@ -138,8 +188,16 @@ export function PosMarketOpenShiftPanel({
       <div className="md:col-span-2">
         <button
           type="button"
-          onClick={() => onOpenSession(openingCash, warehouseId, cashAccountId)}
-          disabled={isPending || !canOpenShift || !warehouseId || !cashAccountId}
+          onClick={() =>
+            onOpenSession(openingCash, warehouseId, cashAccountId, resolvedSalesRepId)
+          }
+          disabled={
+            isPending ||
+            !canOpenShift ||
+            !warehouseId ||
+            !cashAccountId ||
+            !resolvedSalesRepId
+          }
           title={
             !canOpenShift
               ? getLocalizedText(

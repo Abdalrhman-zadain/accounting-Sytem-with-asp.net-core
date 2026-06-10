@@ -17,10 +17,24 @@ import {
   VoidPosSaleDto,
   CorrectPaymentMethodDto,
 } from "./dto/pos-market.dto";
+import {
+  CreateRepCarLoadDto,
+  CreateRepCarStocktakeDto,
+  UpdateRepCarLoadDto,
+  UpdateRepCarStocktakeDto,
+} from "./rep-car-stock/dto/rep-car-stock.dto";
+import { RepCarLoadService } from "./rep-car-stock/rep-car-load.service";
+import { RepCarStockService } from "./rep-car-stock/rep-car-stock.service";
+import { RepCarStocktakeService } from "./rep-car-stock/rep-car-stocktake.service";
 
 @Injectable()
 export class PosMarketService {
-  constructor(private readonly terminal: PosTerminalService) {}
+  constructor(
+    private readonly terminal: PosTerminalService,
+    private readonly repCarStockService: RepCarStockService,
+    private readonly repCarLoadService: RepCarLoadService,
+    private readonly repCarStocktakeService: RepCarStocktakeService,
+  ) {}
 
   getHealth(user: AuthorizedUser) {
     return {
@@ -212,5 +226,102 @@ export class PosMarketService {
 
   reverseReturnAccounting(id: string, dto: PosReverseAccountingDto, user?: AuthorizedUser) {
     return this.terminal.reverseReturnAccounting(id, dto, user);
+  }
+
+  listMarketSalesReps() {
+    return this.repCarStockService.listActiveSalesReps();
+  }
+
+  getMarketCatalog(salesRepId: string, user?: AuthorizedUser) {
+    return this.repCarStockService.getMarketCatalog(salesRepId, user);
+  }
+
+  listRepCarStock(salesRepId: string, user?: AuthorizedUser) {
+    return this.repCarStockService.listBalances(salesRepId, user);
+  }
+
+  listRepCarStockMovements(
+    query: {
+      salesRepId?: string;
+      itemId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: string;
+      limit?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.repCarStockService.listMovements(query, user);
+  }
+
+  listRepCarLoads(
+    query: {
+      status?: string;
+      salesRepId?: string;
+      warehouseId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.repCarLoadService.list(query, user);
+  }
+
+  getRepCarLoad(id: string, user?: AuthorizedUser) {
+    return this.repCarLoadService.getById(id, user);
+  }
+
+  createRepCarLoad(dto: CreateRepCarLoadDto, user?: AuthorizedUser) {
+    return this.repCarLoadService.create(dto, user);
+  }
+
+  updateRepCarLoad(id: string, dto: UpdateRepCarLoadDto, user?: AuthorizedUser) {
+    return this.repCarLoadService.update(id, dto, user);
+  }
+
+  postRepCarLoad(id: string, user?: AuthorizedUser) {
+    return this.repCarLoadService.post(id, user);
+  }
+
+  cancelRepCarLoad(id: string, user?: AuthorizedUser) {
+    return this.repCarLoadService.cancel(id, user);
+  }
+
+  listRepCarStocktakes(
+    query: {
+      status?: string;
+      salesRepId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.repCarStocktakeService.list(query, user);
+  }
+
+  getRepCarStocktake(id: string, user?: AuthorizedUser) {
+    return this.repCarStocktakeService.getById(id, user);
+  }
+
+  createRepCarStocktake(dto: CreateRepCarStocktakeDto, user?: AuthorizedUser) {
+    return this.repCarStocktakeService.create(dto, user);
+  }
+
+  updateRepCarStocktake(id: string, dto: UpdateRepCarStocktakeDto, user?: AuthorizedUser) {
+    return this.repCarStocktakeService.update(id, dto, user);
+  }
+
+  postRepCarStocktake(id: string, user?: AuthorizedUser) {
+    return this.repCarStocktakeService.post(id, user);
+  }
+
+  cancelRepCarStocktake(id: string, user?: AuthorizedUser) {
+    return this.repCarStocktakeService.cancel(id, user);
   }
 }

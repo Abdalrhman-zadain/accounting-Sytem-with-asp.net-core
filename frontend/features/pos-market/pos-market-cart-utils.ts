@@ -430,13 +430,22 @@ export function mapPosReceiptToPrintData(
   options?: { destinationMarketName?: string | null },
 ): PosMarketReceiptData {
   const paid = parseAmount(receipt.paid);
-  const deliveryOutstanding = receipt.deliveryOutstanding
+  const invoiceOutstanding = receipt.deliveryOutstanding
     ? parseAmount(receipt.deliveryOutstanding)
     : Math.max(parseAmount(receipt.total) - paid, 0);
-  const accountOutstanding = receipt.accountOutstanding
-    ? parseAmount(receipt.accountOutstanding)
-    : undefined;
-  const isCreditDelivery = paid <= 0.009 && deliveryOutstanding > 0.009;
+  const accountOutstanding =
+    receipt.accountOutstanding != null && receipt.accountOutstanding !== ""
+      ? parseAmount(receipt.accountOutstanding)
+      : undefined;
+  const totalDelivered =
+    receipt.totalDelivered != null && receipt.totalDelivered !== ""
+      ? parseAmount(receipt.totalDelivered)
+      : undefined;
+  const totalPaidLifetime =
+    receipt.totalPaid != null && receipt.totalPaid !== ""
+      ? parseAmount(receipt.totalPaid)
+      : undefined;
+  const isCreditDelivery = paid <= 0.009 && invoiceOutstanding > 0.009;
 
   return {
     receiptNumber: receipt.receiptNumber,
@@ -444,7 +453,7 @@ export function mapPosReceiptToPrintData(
     companyName: receipt.companyName,
     branchName: receipt.branchName,
     destinationMarketName: options?.destinationMarketName ?? null,
-    taxNumber: receipt.taxNumber,
+    salesRepName: receipt.salesRepName ?? null,
     cashierName: receipt.cashierName,
     terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,
@@ -453,18 +462,18 @@ export function mapPosReceiptToPrintData(
     paid,
     tendered: parseAmount(receipt.tendered),
     change: parseAmount(receipt.change),
-    outstanding: deliveryOutstanding,
+    invoiceOutstanding,
     accountOutstanding,
+    totalDelivered,
+    totalPaid: totalPaidLifetime,
     isCreditDelivery,
     subtotal: parseAmount(receipt.subtotal),
     discount: parseAmount(receipt.discount),
-    tax: parseAmount(receipt.tax),
     lines: receipt.lines.map((line) => ({
       name: line.name,
       quantity: parseAmount(line.quantity),
       unitPrice: parseAmount(line.unitPrice),
       discountAmount: parseAmount(line.discountAmount),
-      taxAmount: parseAmount(line.taxAmount),
       lineTotal: parseAmount(line.lineTotal),
     })),
   };

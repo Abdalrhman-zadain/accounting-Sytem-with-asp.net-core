@@ -1,9 +1,12 @@
 import {
   InventoryItemType,
+  InventoryStockMovementType,
   PosAccessRoleCode,
   PosPermissionCode,
   Prisma,
   PrismaClient,
+  RepCarLoadStatus,
+  RepCarStockMovementType,
 } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
@@ -517,9 +520,145 @@ export async function seedPosMarketDemo(
     created += 1;
   }
 
+  await seedRepCarStockDemo(prisma, marketRepNorth.id, mainWarehouse.id);
+
   console.log(
     `Market POS demo: ${created} products with online images (codes MKT-*) and ${MARKET_DESTINATION_CUSTOMERS.length} destination markets.`,
   );
+}
+
+async function seedRepCarStockDemo(
+  prisma: PrismaClient,
+  salesRepId: string,
+  warehouseId: string,
+) {
+  const item = await prisma.inventoryItem.findUnique({
+    where: { code: 'MKT-001' },
+    select: { id: true, unitOfMeasure: true, onHandQuantity: true, valuationAmount: true },
+  });
+  if (!item) {
+    return;
+  }
+
+  const existing = await prisma.repCarLoad.findUnique({
+    where: { reference: 'RCL-DEMO-01' },
+  });
+  if (existing?.status === RepCarLoadStatus.POSTED) {
+    return;
+  }
+
+  const quantity = new Prisma.Decimal(50);
+  const balance = await prisma.inventoryWarehouseBalance.findUnique({
+    where: { itemId_warehouseId: { itemId: item.id, warehouseId } },
+  });
+  const whQty = balance?.onHandQuantity ?? new Prisma.Decimal(0);
+  const whVal = balance?.valuationAmount ?? new Prisma.Decimal(0);
+  const unitCost = whQty.gt(0) ? whVal.div(whQty) : new Prisma.Decimal(0.85);
+  const lineTotal = unitCost.mul(quantity);
+
+  await prisma.$transaction(async (tx) => {
+    const load = await tx.repCarLoad.upsert({
+      where: { reference: 'RCL-DEMO-01' },
+      update: {},
+      create: {
+        reference: 'RCL-DEMO-01',
+        status: RepCarLoadStatus.POSTED,
+        loadDate: new Date(),
+        warehouseId,
+        salesRepId,
+        description: 'Demo rep car load for market_rep register',
+        totalQuantity: quantity,
+        totalAmount: lineTotal,
+        postedAt: new Date(),
+        lines: {
+          create: {
+            lineNumber: 1,
+            itemId: item.id,
+            quantity,
+            unitCost,
+            unitOfMeasure: item.unitOfMeasure,
+            lineTotalAmount: lineTotal,
+          },
+        },
+      },
+      include: { lines: true },
+    });
+
+    await tx.inventoryItem.update({
+      where: { id: item.id },
+      data: {
+        onHandQuantity: { decrement: quantity },
+        valuationAmount: { decrement: lineTotal },
+      },
+    });
+
+    const warehouseBalance = await tx.inventoryWarehouseBalance.upsert({
+      where: { itemId_warehouseId: { itemId: item.id, warehouseId } },
+      create: {
+        itemId: item.id,
+        warehouseId,
+        onHandQuantity: whQty.sub(quantity),
+        valuationAmount: whVal.sub(lineTotal),
+      },
+      update: {
+        onHandQuantity: { decrement: quantity },
+        valuationAmount: { decrement: lineTotal },
+      },
+    });
+
+    await tx.inventoryStockMovement.create({
+      data: {
+        movementType: InventoryStockMovementType.REP_CAR_LOAD,
+        transactionType: 'RepCarLoad',
+        transactionId: load.id,
+        transactionLineId: load.lines[0]?.id,
+        transactionReference: load.reference,
+        transactionDate: load.loadDate,
+        itemId: item.id,
+        warehouseId,
+        quantityOut: quantity,
+        unitCost,
+        valueOut: lineTotal,
+        balanceId: warehouseBalance.id,
+        runningQuantity: warehouseBalance.onHandQuantity,
+        runningValuation: warehouseBalance.valuationAmount,
+      },
+    });
+
+    await tx.repCarStockBalance.upsert({
+      where: { salesRepId_itemId: { salesRepId, itemId: item.id } },
+      create: {
+        salesRepId,
+        itemId: item.id,
+        onHandQuantity: quantity,
+        valuationAmount: lineTotal,
+      },
+      update: {
+        onHandQuantity: quantity,
+        valuationAmount: lineTotal,
+      },
+    });
+
+    await tx.repCarStockMovement.create({
+      data: {
+        movementType: RepCarStockMovementType.LOAD_IN,
+        transactionType: 'RepCarLoad',
+        transactionId: load.id,
+        transactionLineId: load.lines[0]?.id,
+        transactionReference: load.reference,
+        transactionDate: load.loadDate,
+        salesRepId,
+        itemId: item.id,
+        quantityIn: quantity,
+        unitCost,
+        valueIn: lineTotal,
+        runningQuantity: quantity,
+        runningValuation: lineTotal,
+      },
+    });
+  });
+
+  console.log('Demo rep car load RCL-DEMO-01: 50 x MKT-001 on REP-MARKET-01');
 }
 
 const marketRepPermissionCodes: PosPermissionCode[] = [

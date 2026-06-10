@@ -14,7 +14,22 @@ export function isReadyPosSession(
   session: PosSession | null | undefined,
 ): session is PosSession {
   return Boolean(
-    session?.id && session.warehouse?.id && session.cashAccount?.id,
+    session?.id &&
+      session.warehouse?.id &&
+      session.cashAccount?.id &&
+      session.salesRep?.id,
+  );
+}
+
+export function isStaleOpenPosSession(
+  session: PosSession | null | undefined,
+): session is PosSession {
+  return Boolean(
+    session?.id &&
+      session.status === "OPEN" &&
+      session.warehouse?.id &&
+      session.cashAccount?.id &&
+      !session.salesRep?.id,
   );
 }
 
@@ -29,11 +44,13 @@ export function usePosMarketSession(token: string | null | undefined) {
 
   const rawSession = activeSessionQuery.data ?? null;
   const activeSession = isReadyPosSession(rawSession) ? rawSession : null;
+  const staleSession = isStaleOpenPosSession(rawSession) ? rawSession : null;
 
   const openSessionMutation = useMutation({
     mutationFn: (payload: {
       warehouseId: string;
       cashAccountId: string;
+      salesRepId?: string;
       terminalName?: string;
       branchName?: string;
       openingCash: number;
@@ -68,6 +85,7 @@ export function usePosMarketSession(token: string | null | undefined) {
 
   return {
     activeSession,
+    staleSession,
     isLoading: activeSessionQuery.isLoading,
     isOpen: Boolean(activeSession),
     openSessionMutation,

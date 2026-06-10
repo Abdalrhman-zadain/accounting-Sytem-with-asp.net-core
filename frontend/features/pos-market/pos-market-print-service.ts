@@ -82,7 +82,7 @@ export async function testPosMarketReceiptPrinter(): Promise<PosMarketPrintResul
 <body>
   <div>Market POS Receipt Test</div>
   <div>${new Date().toLocaleString()}</div>
-  <div>Receipt / إيصال</div>
+  <div>فاتورة مبيعات / Sales Invoice</div>
 </body>
 </html>`;
 

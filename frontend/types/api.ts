@@ -67,7 +67,9 @@ export type PosPermissionCode =
   | "RST_VIEW_WAITER_ORDERS"
   | "RST_UPDATE_WAITER_ORDER_STATUS"
   | "POS_MARKET_VIEW_RECEIVABLES"
-  | "POS_MARKET_COLLECT_RECEIVABLE";
+  | "POS_MARKET_COLLECT_RECEIVABLE"
+  | "POS_MARKET_MANAGE_REP_LOADS"
+  | "POS_MARKET_REP_STOCKTAKE";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -338,7 +340,8 @@ export type InventoryStockMovementType =
   | "TRANSFER_OUT"
   | "TRANSFER_IN"
   | "ADJUSTMENT_IN"
-  | "ADJUSTMENT_OUT";
+  | "ADJUSTMENT_OUT"
+  | "REP_CAR_LOAD";
 
 export type InventoryCostingMethod = "WEIGHTED_AVERAGE" | "FIFO";
 
@@ -3645,6 +3648,8 @@ export type PosSession = {
   openedAt: string;
   closedAt?: string | null;
   warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
+  salesRepId?: string | null;
+  salesRep?: Pick<SalesRepresentative, "id" | "code" | "name"> | null;
   cashAccount: Pick<BankCashAccount, "id" | "name" | "type" | "currencyCode"> & {
     account: Pick<Account, "id" | "code" | "name">;
   };
@@ -4020,6 +4025,12 @@ export type PosReceipt = {
   deliveryOutstanding?: string | null;
   /** Customer account total outstanding after this sale. */
   accountOutstanding?: string | null;
+  /** Market POS: linked sales rep for the destination market customer. */
+  salesRepName?: string | null;
+  /** Market POS: lifetime delivered total for the destination market. */
+  totalDelivered?: string | null;
+  /** Market POS: lifetime collections total for the destination market. */
+  totalPaid?: string | null;
   lines: Array<{
     name: string;
     quantity: string;
@@ -4621,6 +4632,156 @@ export type AuditLogEntry = {
   action: AuditAction;
   details?: Record<string, unknown> | null;
   createdAt: string;
+};
+
+export type RepCarLoadStatus = "DRAFT" | "POSTED" | "CANCELLED";
+export type RepCarStocktakeStatus = "DRAFT" | "POSTED" | "CANCELLED";
+
+export type RepCarLoadLine = {
+  id: string;
+  lineNumber: number;
+  itemId: string;
+  item: Pick<InventoryItem, "id" | "code" | "name" | "unitOfMeasure" | "trackInventory">;
+  quantity: number;
+  unitCost: number;
+  unitOfMeasure: string;
+  description?: string | null;
+  lineTotalAmount: number;
+};
+
+export type RepCarLoad = {
+  id: string;
+  reference: string;
+  status: RepCarLoadStatus;
+  loadDate: string;
+  warehouseId: string;
+  warehouse: Pick<InventoryWarehouse, "id" | "code" | "name" | "isActive">;
+  salesRepId: string;
+  salesRep: Pick<SalesRepresentative, "id" | "code" | "name" | "status">;
+  description?: string | null;
+  totalQuantity: number;
+  totalAmount: number;
+  postedAt?: string | null;
+  postedByUser?: { id: string; username: string; name?: string | null } | null;
+  lines: RepCarLoadLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RepCarStocktakeLine = {
+  id: string;
+  lineNumber: number;
+  itemId: string;
+  item: Pick<InventoryItem, "id" | "code" | "name" | "unitOfMeasure">;
+  systemQuantity: number;
+  countedQuantity: number;
+  varianceQuantity: number;
+  unitCost: number;
+  unitOfMeasure: string;
+  description?: string | null;
+  lineTotalAmount: number;
+};
+
+export type RepCarStocktake = {
+  id: string;
+  reference: string;
+  status: RepCarStocktakeStatus;
+  stocktakeDate: string;
+  salesRepId: string;
+  salesRep: Pick<SalesRepresentative, "id" | "code" | "name" | "status">;
+  reason: string;
+  description?: string | null;
+  totalVarianceQuantity: number;
+  totalAmount: number;
+  postedAt?: string | null;
+  postedByUser?: { id: string; username: string; name?: string | null } | null;
+  lines: RepCarStocktakeLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RepCarStockMovementType =
+  | "LOAD_IN"
+  | "SALE_OUT"
+  | "STOCKTAKE_IN"
+  | "STOCKTAKE_OUT";
+
+export type RepCarStockBalance = {
+  salesRepId: string;
+  itemId: string;
+  onHandQuantity: number;
+  valuationAmount: number;
+  item: Pick<
+    InventoryItem,
+    | "id"
+    | "code"
+    | "name"
+    | "unitOfMeasure"
+    | "trackInventory"
+    | "allowFractionalQuantity"
+    | "defaultSalesPrice"
+    | "isActive"
+    | "attachmentsText"
+  > & {
+    itemGroup?: Pick<InventoryItemGroup, "code" | "name"> | null;
+  };
+};
+
+export type RepCarStockMovement = {
+  id: string;
+  movementType: RepCarStockMovementType;
+  transactionType: string;
+  transactionId: string;
+  transactionReference: string;
+  transactionDate: string;
+  salesRepId: string;
+  salesRep: Pick<SalesRepresentative, "id" | "code" | "name">;
+  itemId: string;
+  item: Pick<InventoryItem, "id" | "code" | "name">;
+  quantityIn: number;
+  quantityOut: number;
+  unitCost: number;
+  valueIn: number;
+  valueOut: number;
+  runningQuantity: number;
+  runningValuation: number;
+  description?: string | null;
+  createdAt: string;
+};
+
+export type CreateRepCarLoadPayload = {
+  reference?: string;
+  loadDate: string;
+  warehouseId: string;
+  salesRepId: string;
+  description?: string;
+  lines: Array<{
+    itemId: string;
+    quantity: string;
+    unitOfMeasure: string;
+    description?: string;
+  }>;
+};
+
+export type CreateRepCarStocktakePayload = {
+  reference?: string;
+  stocktakeDate: string;
+  salesRepId: string;
+  reason: string;
+  description?: string;
+  lines: Array<{
+    itemId: string;
+    countedQuantity: string;
+    unitOfMeasure: string;
+    description?: string;
+  }>;
+};
+
+export type PaginatedMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 };
 
 // ─── Misc ─────────────────────────────────────────────────────────────────────
