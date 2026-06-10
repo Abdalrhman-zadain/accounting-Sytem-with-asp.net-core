@@ -627,7 +627,7 @@ const POS_PRODUCTS: PosProductSeed[] = [
   {
     id: 'MENU-MEAL-001',
     code: 'MENU-MEAL-001',
-    name: 'وجبة كرشيب',
+    name: 'وجبة كرشنجي',
     description: 'نصف راس خروف + 1 مقادم + 1 كرش + 250 غرام فوارع + شوربة + خبز + مخلل + ليمونة',
     category: 'الوجبات',
     salesPrice: 8.5,
