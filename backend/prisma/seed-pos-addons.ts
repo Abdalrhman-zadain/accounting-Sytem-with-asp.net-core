@@ -36,10 +36,12 @@ type ResolvedItemAddonLink = {
 const ITEM_ADDON_LINKS: ItemAddonLinkSeed[] = [
   { id: 'cmq5gy4qq01mfetf5gm1f2bsy', itemCode: 'MENU-FOOD-003', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { itemCode: 'MENU-FOOD-003', groupCode: 'HALF_HEAD', sortOrder: 1 },
-  { id: 'cmq5gy4qq01mgetf5dc7r3ttp', itemCode: 'MENU-FOOD-003', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
+  { id: 'cmq5gy4qq01mgetf5dc7r3ttp', itemCode: 'MENU-FOOD-003', groupCode: 'YOGURT_ADDON', sortOrder: 2 },
+  { itemCode: 'MENU-FOOD-003', groupCode: 'COOKING_METHOD', sortOrder: 3 },
   { id: 'cmq5gyk2e01mietf5kmypn8iq', itemCode: 'MENU-FOOD-002', groupCode: 'YOGURT_ADDON', sortOrder: 0 },
   { id: 'cmq5gynpg01mjetf5s658eo2c', itemCode: 'MENU-FOOD-001', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5gynpg01mketf577saw6a8', itemCode: 'MENU-FOOD-001', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
+  { itemCode: 'MENU-FOOD-001', groupCode: 'COOKING_METHOD', sortOrder: 2 },
   { id: 'cmq5gywwc01mletf5mm0cwk5h', itemCode: 'MENU-FOOD-006', groupCode: 'COOKING_TYPE', sortOrder: 0 },
   { id: 'cmq5gywwc01mmetf5skjz1p0f', itemCode: 'MENU-FOOD-006', groupCode: 'YOGURT_ADDON', sortOrder: 1 },
   { id: 'cmq5gz1sf01mnetf5rxpyh7mr', itemCode: 'MENU-FOOD-005', groupCode: 'COOKING_TYPE', sortOrder: 0 },
@@ -145,6 +147,20 @@ const ADDON_GROUPS: AddonGroupSeed[] = [
     options: [
       { name: 'Grilled', nameAr: 'شوي', priceAdjustment: 0 },
       { name: 'Boiled', nameAr: 'سلق', priceAdjustment: 0 },
+    ],
+  },
+  {
+    code: 'COOKING_METHOD',
+    name: 'Cooking method',
+    nameAr: 'طريقة الطبخ',
+    selectionType: PosAddonSelectionType.SINGLE,
+    isRequired: true,
+    minSelections: 1,
+    sortOrder: 0,
+    options: [
+      { name: 'Grilled', nameAr: 'شوي', priceAdjustment: 0 },
+      { name: 'Boiled', nameAr: 'سلق', priceAdjustment: 0 },
+      { name: 'Fried', nameAr: 'قلي', priceAdjustment: 0 },
     ],
   },
   {
