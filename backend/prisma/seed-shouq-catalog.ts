@@ -97,28 +97,7 @@ export function readShouqCatalogRows(xlsxPath = DEFAULT_SHOUQ_XLSX_PATH): ShouqC
     .filter((row): row is ShouqCatalogRow => row !== null);
 }
 
-export async function deactivateLegacyMarketDemoProducts(prisma: PrismaClient) {
-  const legacyItems = await prisma.inventoryItem.findMany({
-    where: {
-      code: { startsWith: 'MKT-' },
-      NOT: { code: { startsWith: SHOUQ_CODE_PREFIX } },
-    },
-    select: { id: true, code: true },
-  });
-
-  if (legacyItems.length === 0) {
-    return;
-  }
-
-  await prisma.inventoryItem.updateMany({
-    where: { id: { in: legacyItems.map((item) => item.id) } },
-    data: { isActive: false },
-  });
-
-  console.log(
-    `Deactivated ${legacyItems.length} legacy market demo products: ${legacyItems.map((item) => item.code).join(', ')}`,
-  );
-}
+export { clearLegacyMarketDemoProducts as deactivateLegacyMarketDemoProducts } from './clear-legacy-market-demo';
 
 export async function deactivateRemovedShouqProducts(
   prisma: PrismaClient,
