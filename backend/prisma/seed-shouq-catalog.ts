@@ -97,7 +97,9 @@ export function readShouqCatalogRows(xlsxPath = DEFAULT_SHOUQ_XLSX_PATH): ShouqC
     .filter((row): row is ShouqCatalogRow => row !== null);
 }
 
-export { clearLegacyMarketDemoProducts as deactivateLegacyMarketDemoProducts } from './clear-legacy-market-demo';
+import { clearLegacyMarketDemoProducts } from './clear-legacy-market-demo';
+
+export { clearLegacyMarketDemoProducts as deactivateLegacyMarketDemoProducts };
 
 export async function deactivateRemovedShouqProducts(
   prisma: PrismaClient,
@@ -138,7 +140,7 @@ export async function seedShouqCatalog(
 
   const activeCodes = new Set(rows.map((row) => row.code));
 
-  await deactivateLegacyMarketDemoProducts(prisma);
+  await clearLegacyMarketDemoProducts(prisma);
   await deactivateRemovedShouqProducts(prisma, activeCodes);
 
   const [
