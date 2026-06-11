@@ -212,6 +212,13 @@ export function IssueEditorModal({
   const totalQuantity = editor.lines.reduce((sum, line) => sum + (parseFloat(line.quantity) || 0), 0);
   const isInline = presentation === "inline";
 
+  const controlClassName = cn(
+    "h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10",
+    isArabic ? "text-right" : "text-left",
+  );
+
+  const labelClassName = cn("text-sm font-bold tracking-normal text-slate-700", isArabic && "arabic-ui");
+
   return (
     <div className={cn(isInline ? "relative w-full" : "fixed inset-0 z-50 p-3 sm:p-6 flex items-center justify-center")}>
       {!isInline ? <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} /> : null}
@@ -275,8 +282,8 @@ export function IssueEditorModal({
                   <PackageIcon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
-                  <p className="truncate text-xs text-slate-500">
+                  <h1 className="text-2xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
+                  <p className="truncate text-sm text-slate-500">
                     {isArabic ? "إدارة وتوثيق مستندات صرف المخزون الصادرة" : "Manage and log outgoing stock issue documents"}
                   </p>
                 </div>
@@ -284,7 +291,7 @@ export function IssueEditorModal({
             ) : null}
 
             {validationError || localErrors.lines ? (
-              <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
+              <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-base font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
                 {validationError || localErrors.lines}
               </div>
             ) : null}
@@ -296,7 +303,7 @@ export function IssueEditorModal({
                   <FileText className="h-4.5 w-4.5" />
                 </div>
                 <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-base font-bold text-slate-950 arabic-ui-heading">
+                  <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
                     {isArabic ? "البيانات الأساسية" : "Basic Information"}
                   </div>
                 </div>
@@ -304,12 +311,12 @@ export function IssueEditorModal({
 
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 <div>
-                  <Field id="issue-reference" label={isArabic ? "الرقم المرجعي" : "Reference"} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="issue-reference" label={isArabic ? "الرقم المرجعي" : "Reference"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                     <Input
                       id="issue-reference"
                       value={editor.reference}
                       onChange={(e) => updateEditor((current) => ({ ...current, reference: e.target.value }))}
-                      className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                      className={controlClassName}
                       placeholder={isArabic ? "مثال: GI-0001" : "e.g. GI-0001"}
                     />
                   </Field>
@@ -322,6 +329,7 @@ export function IssueEditorModal({
                     required
                     error={localErrors.issueDate}
                     labelAlign={isArabic ? "end" : "start"}
+                    labelClassName={labelClassName}
                   >
                     <Input
                       id="issue-date"
@@ -333,8 +341,7 @@ export function IssueEditorModal({
                         clearFieldError("issueDate");
                       }}
                       className={cn(
-                        "bg-slate-50/50",
-                        isArabic ? "text-right" : "text-left",
+                        controlClassName,
                         localErrors.issueDate ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200"
                       )}
                     />
@@ -348,6 +355,7 @@ export function IssueEditorModal({
                     required
                     error={localErrors.warehouseId}
                     labelAlign={isArabic ? "end" : "start"}
+                    labelClassName={labelClassName}
                   >
                     <Select
                       id="issue-warehouseId"
@@ -357,8 +365,7 @@ export function IssueEditorModal({
                         clearFieldError("warehouseId");
                       }}
                       className={cn(
-                        "bg-slate-50/50",
-                        isArabic ? "text-right" : "text-left",
+                        controlClassName,
                         localErrors.warehouseId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200"
                       )}
                     >
@@ -377,48 +384,48 @@ export function IssueEditorModal({
                 </div>
 
                 <div>
-                  <Field id="issue-so-ref" label={isArabic ? "أمر بيع المصدر" : "Source Sales Order"} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="issue-so-ref" label={isArabic ? "أمر بيع المصدر" : "Source Sales Order"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                     <Input
                       id="issue-so-ref"
                       value={editor.sourceSalesOrderRef}
                       onChange={(e) => updateEditor((current) => ({ ...current, sourceSalesOrderRef: e.target.value }))}
-                      className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                      className={controlClassName}
                       placeholder={isArabic ? "اختياري" : "Optional"}
                     />
                   </Field>
                 </div>
 
                 <div>
-                  <Field id="issue-invoice-ref" label={isArabic ? "فاتورة بيع المصدر" : "Source Sales Invoice"} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="issue-invoice-ref" label={isArabic ? "فاتورة بيع المصدر" : "Source Sales Invoice"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                     <Input
                       id="issue-invoice-ref"
                       value={editor.sourceSalesInvoiceRef}
                       onChange={(e) => updateEditor((current) => ({ ...current, sourceSalesInvoiceRef: e.target.value }))}
-                      className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                      className={controlClassName}
                       placeholder={isArabic ? "اختياري" : "Optional"}
                     />
                   </Field>
                 </div>
 
                 <div>
-                  <Field id="issue-prod-ref" label={isArabic ? "طلب الإنتاج المصدر" : "Source Production Request"} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="issue-prod-ref" label={isArabic ? "طلب الإنتاج المصدر" : "Source Production Request"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                     <Input
                       id="issue-prod-ref"
                       value={editor.sourceProductionRequestRef}
                       onChange={(e) => updateEditor((current) => ({ ...current, sourceProductionRequestRef: e.target.value }))}
-                      className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                      className={controlClassName}
                       placeholder={isArabic ? "اختياري" : "Optional"}
                     />
                   </Field>
                 </div>
 
                 <div>
-                  <Field id="issue-internal-ref" label={isArabic ? "الطلب الداخلي المصدر" : "Source Internal Request"} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="issue-internal-ref" label={isArabic ? "الطلب الداخلي المصدر" : "Source Internal Request"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                     <Input
                       id="issue-internal-ref"
                       value={editor.sourceInternalRequestRef}
                       onChange={(e) => updateEditor((current) => ({ ...current, sourceInternalRequestRef: e.target.value }))}
-                      className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                      className={controlClassName}
                       placeholder={isArabic ? "اختياري" : "Optional"}
                     />
                   </Field>
@@ -426,13 +433,13 @@ export function IssueEditorModal({
               </div>
 
               <div className="mt-4">
-                <Field id="issue-description" label={isArabic ? "الوصف العام" : "General Description"} labelAlign={isArabic ? "end" : "start"}>
+                <Field id="issue-description" label={isArabic ? "الوصف العام" : "General Description"} labelAlign={isArabic ? "end" : "start"} labelClassName={labelClassName}>
                   <Textarea
                     id="issue-description"
                     value={editor.description}
                     rows={2}
                     onChange={(e) => updateEditor((current) => ({ ...current, description: e.target.value }))}
-                    className={cn("bg-slate-50/50 border-slate-200", isArabic ? "text-right" : "text-left")}
+                    className={cn(controlClassName, "h-auto")}
                     placeholder={isArabic ? "أدخل تفاصيل عامة حول هذا الصرف..." : "Enter general details about this issue..."}
                   />
                 </Field>
@@ -447,12 +454,12 @@ export function IssueEditorModal({
                     <WarehouseIcon className="h-4.5 w-4.5" />
                   </div>
                   <div className={isArabic ? "text-right" : "text-left"}>
-                    <div className="text-base font-bold text-slate-950 arabic-ui-heading">
+                    <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
                       {isArabic ? "المواد المصروفة" : "Issued Items"}
                     </div>
                   </div>
                 </div>
-                <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-xs flex items-center gap-1.5 py-2 px-3">
+                <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
                   <Plus className="h-4 w-4" />
                   <span>{isArabic ? "إضافة مادة" : "Add Item"}</span>
                 </Button>
@@ -469,12 +476,12 @@ export function IssueEditorModal({
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead className="bg-slate-50/75">
                       <tr>
-                        <th scope="col" className="w-[50px] px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase">#</th>
-                        <th scope="col" className={cn("px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider min-w-[280px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الصنف" : "Item"}</th>
-                        <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الوحدة" : "Unit"}</th>
-                        <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الكمية" : "Quantity"}</th>
-                        <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider min-w-[200px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "البيان / الوصف" : "Line Description"}</th>
-                        <th scope="col" className="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                        <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                        <th scope="col" className={cn("px-4 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider min-w-[280px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الصنف" : "Item"}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الوحدة" : "Unit"}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "الكمية" : "Quantity"}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider min-w-[200px]", isArabic ? "text-right" : "text-left")}>{isArabic ? "البيان / الوصف" : "Line Description"}</th>
+                        <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -485,16 +492,16 @@ export function IssueEditorModal({
 
                         return (
                           <tr key={`issue-row-${index}`} className="hover:bg-slate-50/50 transition">
-                            <td className="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-400">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">
                               {index + 1}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3.5">
                               <Select
                                 id={`line_${index}_itemId`}
                                 value={line.itemId}
                                 onChange={(e) => updateLine(index, { itemId: e.target.value })}
                                 className={cn(
-                                  "h-9 rounded-lg py-1 text-xs bg-white",
+                                  "h-10 rounded-lg text-sm bg-white",
                                   hasItemError ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200"
                                 )}
                               >
@@ -515,13 +522,13 @@ export function IssueEditorModal({
                                 </p>
                               )}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-3.5">
                               <Input
                                 id={`line_${index}_unitOfMeasure`}
                                 value={line.unitOfMeasure}
                                 onChange={(e) => updateLine(index, { unitOfMeasure: e.target.value })}
                                 className={cn(
-                                  "h-9 rounded-lg py-1 text-xs font-semibold bg-white",
+                                  "h-10 rounded-lg text-sm font-semibold bg-white",
                                   hasUnitError ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200",
                                   isArabic ? "text-right" : "text-left"
                                 )}
@@ -532,13 +539,13 @@ export function IssueEditorModal({
                                 </p>
                               )}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-3.5">
                               <Input
                                 id={`line_${index}_quantity`}
                                 value={line.quantity}
                                 onChange={(e) => updateLine(index, { quantity: e.target.value })}
                                 className={cn(
-                                  "h-9 rounded-lg py-1 text-xs font-mono bg-white",
+                                  "h-10 rounded-lg text-sm font-mono bg-white",
                                   hasQtyError ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200",
                                   isArabic ? "text-right" : "text-left"
                                 )}
@@ -550,23 +557,23 @@ export function IssueEditorModal({
                                 </p>
                               )}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-3.5">
                               <Input
                                 value={line.description}
                                 onChange={(e) => updateLine(index, { description: e.target.value })}
-                                className="h-9 rounded-lg border-slate-200 py-1 text-xs bg-white"
+                                className="h-10 rounded-lg border-slate-200 text-sm bg-white"
                                 placeholder={isArabic ? "بيان اختياري لهذا السطر" : "Optional line note"}
                               />
                             </td>
-                            <td className="whitespace-nowrap px-3 py-3 text-center">
+                            <td className="whitespace-nowrap px-3 py-3.5 text-center">
                               <Button
                                 type="button"
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => removeLine(index)}
-                                className="h-8 w-8 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                                className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-5 w-5" />
                               </Button>
                             </td>
                           </tr>
@@ -576,10 +583,10 @@ export function IssueEditorModal({
                     {/* Table Footer with Summary totals */}
                     <tfoot className="bg-slate-50/50 border-t border-slate-200 font-bold text-slate-800">
                       <tr>
-                        <td colSpan={3} className={cn("px-4 py-3 text-xs uppercase text-slate-500", isArabic ? "text-left" : "text-right")}>
+                        <td colSpan={3} className={cn("px-4 py-4 text-sm uppercase text-slate-500", isArabic ? "text-left" : "text-right")}>
                           {isArabic ? "المجموع الكلي للكميات:" : "Total Quantity:"}
                         </td>
-                        <td className="px-3 py-3 font-mono text-sm">
+                        <td className="px-3 py-4 font-mono text-base text-slate-900">
                           {totalQuantity.toFixed(2)}
                         </td>
                         <td colSpan={2}></td>
@@ -594,16 +601,16 @@ export function IssueEditorModal({
 
         {/* Footer Actions */}
         <div className={cn("flex items-center justify-between gap-4 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8", isInline && "rounded-b-lg shadow-md")}>
-          <Button variant="secondary" onClick={onClose} className="rounded-xl px-5 py-2.5 font-semibold text-sm">
+          <Button variant="secondary" onClick={onClose} className="rounded-xl px-6 py-3 font-bold text-base">
             {t("inventory.button.cancel")}
           </Button>
 
           <Button
             onClick={handleSaveClick}
             disabled={isSaving}
-            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center gap-1.5 px-6 py-2.5"
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base flex items-center gap-1.5 px-6 py-3"
           >
-            <Save className="h-4 w-4" />
+            <Save className="h-5 w-5" />
             <span>
               {editor.id ? t("inventory.button.save") : t("inventory.button.createIssue")}
             </span>
