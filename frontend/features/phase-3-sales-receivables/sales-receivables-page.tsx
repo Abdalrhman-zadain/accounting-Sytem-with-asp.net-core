@@ -77,7 +77,7 @@ import type {
   TaxTreatment,
   Currency,
 } from "@/types/api";
-import { Button, Card, Modal, PageShell, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, Modal, PageShell, SidePanel, StatusPill, ConfirmDialog } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { exportOrPrint, formatExportDate, formatExportMoney, type ExportMode } from "@/lib/export-print";
@@ -268,7 +268,8 @@ const EMPTY_RECEIPT_EDITOR = (): ReceiptEditorState => ({
 
 export function SalesReceivablesPage() {
   const { token, user } = useAuth();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isArabic = language === "ar";
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -291,6 +292,13 @@ export function SalesReceivablesPage() {
   const [salesRepEditorClientError, setSalesRepEditorClientError] = useState<string | null>(null);
   const [marketLoginSalesRep, setMarketLoginSalesRep] = useState<SalesRepresentative | null>(null);
   const [isMarketLoginPanelOpen, setIsMarketLoginPanelOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    tone?: "primary" | "danger" | "warning";
+  } | null>(null);
 
   const canManageMarketLogins = user?.role === "ADMIN" || user?.role === "MANAGER";
 
@@ -859,16 +867,23 @@ export function SalesReceivablesPage() {
       Boolean(invoiceEditor.customerId) && invoiceEditor.customerId !== value;
 
     if (changingCustomer && hasExistingLines) {
-      const confirmed = window.confirm(
-        t("salesReceivables.confirm.applyCustomerTaxTreatment", {
+      setConfirmConfig({
+        title: isArabic ? "تطبيق المعاملة الضريبية" : "Apply Tax Treatment",
+        message: t("salesReceivables.confirm.applyCustomerTaxTreatment", {
           name: nextCustomer?.name ?? "",
         }),
-      );
-
-      if (!confirmed) {
-        setInvoiceEditor((current) => ({ ...current, customerId: value }));
-        return;
-      }
+        onConfirm: () => {
+          setInvoiceEditor((current) => ({
+            ...current,
+            customerId: value,
+            lines: nextLines,
+          }));
+        },
+        onCancel: () => {
+          setInvoiceEditor((current) => ({ ...current, customerId: value }));
+        },
+      });
+      return;
     }
 
     setInvoiceEditor((current) => ({
@@ -892,16 +907,23 @@ export function SalesReceivablesPage() {
       Boolean(quotationEditor.customerId) && quotationEditor.customerId !== value;
 
     if (changingCustomer && hasExistingLines) {
-      const confirmed = window.confirm(
-        t("salesReceivables.confirm.applyCustomerTaxTreatment", {
+      setConfirmConfig({
+        title: isArabic ? "تطبيق المعاملة الضريبية" : "Apply Tax Treatment",
+        message: t("salesReceivables.confirm.applyCustomerTaxTreatment", {
           name: nextCustomer?.name ?? "",
         }),
-      );
-
-      if (!confirmed) {
-        setQuotationEditor((current) => ({ ...current, customerId: value }));
-        return;
-      }
+        onConfirm: () => {
+          setQuotationEditor((current) => ({
+            ...current,
+            customerId: value,
+            lines: nextLines,
+          }));
+        },
+        onCancel: () => {
+          setQuotationEditor((current) => ({ ...current, customerId: value }));
+        },
+      });
+      return;
     }
 
     setQuotationEditor((current) => ({
@@ -925,20 +947,28 @@ export function SalesReceivablesPage() {
       Boolean(orderEditor.customerId) && orderEditor.customerId !== value;
 
     if (changingCustomer && hasExistingLines) {
-      const confirmed = window.confirm(
-        t("salesReceivables.confirm.applyCustomerTaxTreatment", {
+      setConfirmConfig({
+        title: isArabic ? "تطبيق المعاملة الضريبية" : "Apply Tax Treatment",
+        message: t("salesReceivables.confirm.applyCustomerTaxTreatment", {
           name: nextCustomer?.name ?? "",
         }),
-      );
-
-      if (!confirmed) {
-        setOrderEditor((current) => ({
-          ...current,
-          customerId: value,
-          sourceQuotationId: "",
-        }));
-        return;
-      }
+        onConfirm: () => {
+          setOrderEditor((current) => ({
+            ...current,
+            customerId: value,
+            sourceQuotationId: "",
+            lines: nextLines,
+          }));
+        },
+        onCancel: () => {
+          setOrderEditor((current) => ({
+            ...current,
+            customerId: value,
+            sourceQuotationId: "",
+          }));
+        },
+      });
+      return;
     }
 
     setOrderEditor((current) => ({
@@ -1865,9 +1895,12 @@ export function SalesReceivablesPage() {
                                     type="button"
                                     className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
                                     onClick={() => {
-                                      if (window.confirm(t("salesReceivables.confirm.deactivateCustomer", { name: row.name }))) {
-                                        deactivateCustomerMutation.mutate(row.id);
-                                      }
+                                      setConfirmConfig({
+                                        title: isArabic ? "تعطيل العميل" : "Deactivate Customer",
+                                        message: t("salesReceivables.confirm.deactivateCustomer", { name: row.name }),
+                                        tone: "warning",
+                                        onConfirm: () => deactivateCustomerMutation.mutate(row.id),
+                                      });
                                     }}
                                   >
                                     {t("salesReceivables.action.deactivate")}
@@ -2052,18 +2085,19 @@ export function SalesReceivablesPage() {
                                   if (!marketLogin) {
                                     return;
                                   }
-                                  if (
-                                    window.confirm(
-                                      t("salesReceivables.salesReps.marketLogin.action.deactivateConfirm", {
-                                        username: marketLogin.username,
-                                      }),
-                                    )
-                                  ) {
-                                    deactivateSalesRepMarketLoginMutation.mutate({
-                                      salesRepId: row.id,
-                                      userId: marketLogin.id,
-                                    });
-                                  }
+                                  setConfirmConfig({
+                                    title: isArabic ? "تعطيل دخول السوق" : "Deactivate Market Login",
+                                    message: t("salesReceivables.salesReps.marketLogin.action.deactivateConfirm", {
+                                      username: marketLogin.username,
+                                    }),
+                                    tone: "warning",
+                                    onConfirm: () => {
+                                      deactivateSalesRepMarketLoginMutation.mutate({
+                                        salesRepId: row.id,
+                                        userId: marketLogin.id,
+                                      });
+                                    },
+                                  });
                                 }}
                               >
                                 {t("salesReceivables.salesReps.marketLogin.action.deactivate")}
@@ -2074,9 +2108,12 @@ export function SalesReceivablesPage() {
                                 type="button"
                                 className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
                                 onClick={() => {
-                                  if (window.confirm(t("salesReceivables.salesReps.action.deactivateConfirm", { name: row.name }))) {
-                                    deactivateSalesRepMutation.mutate(row.id);
-                                  }
+                                  setConfirmConfig({
+                                    title: isArabic ? "تعطيل المندوب" : "Deactivate Sales Rep",
+                                    message: t("salesReceivables.salesReps.action.deactivateConfirm", { name: row.name }),
+                                    tone: "warning",
+                                    onConfirm: () => deactivateSalesRepMutation.mutate(row.id),
+                                  });
                                 }}
                               >
                                 {t("salesReceivables.salesReps.action.deactivate")}

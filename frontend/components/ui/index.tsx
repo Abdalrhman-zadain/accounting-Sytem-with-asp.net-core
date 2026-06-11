@@ -326,3 +326,94 @@ export function PageSkeleton() {
     </div>
   );
 }
+
+export function ConfirmDialog({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmText = "OK",
+  cancelText = "Cancel",
+  tone = "primary",
+}: {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  tone?: "primary" | "danger" | "warning";
+}) {
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onCancel]);
+
+  if (!isOpen || typeof document === "undefined") return null;
+
+  const toneColors = {
+    primary: "bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-600/20",
+    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-600/20",
+    warning: "bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500/20",
+  };
+
+  const isArabic = /[\u0600-\u06FF]/.test(title + message);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm animate-in fade-in duration-300"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        dir={isArabic ? "rtl" : "ltr"}
+        className="relative z-10 w-full max-w-md scale-100 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl transition-all duration-300 animate-in zoom-in-95 duration-200"
+      >
+        <div className="flex flex-col gap-4 text-center">
+          <div className="text-xl font-extrabold text-slate-900">{title}</div>
+          <p className="text-base font-medium leading-relaxed text-slate-600">{message}</p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
+            >
+              {cancelText}
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className={cn(
+                "flex-1 rounded-xl px-5 py-3 text-sm font-bold shadow-sm transition focus:outline-none focus:ring-2",
+                toneColors[tone]
+              )}
+            >
+              {confirmText}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
