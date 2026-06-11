@@ -120,6 +120,32 @@ export async function deactivateLegacyMarketDemoProducts(prisma: PrismaClient) {
   );
 }
 
+export async function deactivateRemovedShouqProducts(
+  prisma: PrismaClient,
+  activeCodes: Set<string>,
+) {
+  const staleItems = await prisma.inventoryItem.findMany({
+    where: {
+      code: { startsWith: SHOUQ_CODE_PREFIX },
+      NOT: { code: { in: [...activeCodes] } },
+    },
+    select: { id: true, code: true },
+  });
+
+  if (staleItems.length === 0) {
+    return;
+  }
+
+  await prisma.inventoryItem.updateMany({
+    where: { id: { in: staleItems.map((item) => item.id) } },
+    data: { isActive: false },
+  });
+
+  console.log(
+    `Deactivated ${staleItems.length} Shouq products removed from catalog: ${staleItems.map((item) => item.code).join(', ')}`,
+  );
+}
+
 export async function seedShouqCatalog(
   prisma: PrismaClient,
   _options: { adminUserId: string; xlsxPath?: string },
@@ -131,7 +157,10 @@ export async function seedShouqCatalog(
 
   console.log(`Seeding Shouq market catalog (${rows.length} products from Excel)...`);
 
+  const activeCodes = new Set(rows.map((row) => row.code));
+
   await deactivateLegacyMarketDemoProducts(prisma);
+  await deactivateRemovedShouqProducts(prisma, activeCodes);
 
   const [
     inventoryAccount,
