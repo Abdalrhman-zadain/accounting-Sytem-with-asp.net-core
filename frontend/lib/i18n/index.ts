@@ -454,6 +454,7 @@ const enTranslations: Record<string, string> = {
   "journal.action.reverse": "Reverse",
   "journal.confirm.post": "Post this entry?",
   "journal.confirm.reverse": "Reverse this entry?",
+  "journal.confirm.editPosted": "This will reverse the posted entry and create a correction draft you can edit. Continue?",
 
   "master.title": "Master Data Setup",
   "master.description":

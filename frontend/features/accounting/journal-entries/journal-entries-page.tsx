@@ -311,6 +311,24 @@ export function JournalEntriesPage() {
         setNewTypeName("");
     };
 
+    const populateEditorForm = (entry: JournalEntry) => {
+        setEditingEntryId(entry.id);
+        setEntryDate(entry.entryDate.split("T")[0] ?? "");
+        setJournalEntryTypeId(entry.journalEntryTypeId ?? "");
+        setDescription(entry.description ?? "");
+        setLines(
+            entry.lines.length
+                ? entry.lines.map((line) => ({
+                    accountId: line.accountId,
+                    description: line.description ?? "",
+                    debitAmount: parseFloat(line.debitAmount) > 0 ? Number(line.debitAmount).toFixed(2) : "",
+                    creditAmount: parseFloat(line.creditAmount) > 0 ? Number(line.creditAmount).toFixed(2) : "",
+                }))
+                : [{ ...EMPTY_LINE }, { ...EMPTY_LINE }],
+        );
+        setShowCreate(true);
+    };
+
     const createMutation = useMutation({
         mutationFn: () => createJournalEntry({
             entryDate,
@@ -360,6 +378,37 @@ export function JournalEntriesPage() {
     const reverseMutation = useMutation({
         mutationFn: (id: string) => reverseJournalEntry(id, token),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["journal-entries"] }),
+    });
+
+    const reverseAndCreateCorrectionMutation = useMutation({
+        mutationFn: async (entry: JournalEntry) => {
+            const fullEntry = entry.lines.length
+                ? entry
+                : await queryClient.fetchQuery({
+                    queryKey: queryKeys.journalEntryById(token, entry.id),
+                    queryFn: () => getJournalEntryById(entry.id, token),
+                    staleTime: 0,
+                });
+
+            await reverseJournalEntry(entry.id, token);
+
+            return createJournalEntry({
+                entryDate: new Date().toISOString().split("T")[0],
+                description: fullEntry.description ?? undefined,
+                journalEntryTypeId: fullEntry.journalEntryTypeId ?? undefined,
+                lines: fullEntry.lines.map((line) => ({
+                    accountId: line.accountId,
+                    description: line.description ?? undefined,
+                    debitAmount: Number((parseFloat(line.debitAmount) || 0).toFixed(2)),
+                    creditAmount: Number((parseFloat(line.creditAmount) || 0).toFixed(2)),
+                })),
+            }, token);
+        },
+        onSuccess: (draft) => {
+            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            queryClient.setQueryData(queryKeys.journalEntryById(token, draft.id), draft);
+            populateEditorForm(draft);
+        },
     });
 
     const debitTotal = lines.reduce((s, l) => s + Number((parseFloat(l.debitAmount) || 0).toFixed(2)), 0);
@@ -427,21 +476,7 @@ export function JournalEntriesPage() {
             staleTime: 0,
         });
 
-        setEditingEntryId(entry.id);
-        setEntryDate(entry.entryDate.split("T")[0] ?? "");
-        setJournalEntryTypeId(entry.journalEntryTypeId ?? "");
-        setDescription(entry.description ?? "");
-        setLines(
-            entry.lines.length
-                ? entry.lines.map((line) => ({
-                    accountId: line.accountId,
-                    description: line.description ?? "",
-                    debitAmount: parseFloat(line.debitAmount) > 0 ? Number(line.debitAmount).toFixed(2) : "",
-                    creditAmount: parseFloat(line.creditAmount) > 0 ? Number(line.creditAmount).toFixed(2) : "",
-                }))
-                : [{ ...EMPTY_LINE }, { ...EMPTY_LINE }],
-        );
-        setShowCreate(true);
+        populateEditorForm(entry);
     };
 
     return (
@@ -673,6 +708,7 @@ export function JournalEntriesPage() {
                             <Button variant="secondary" onClick={resetEditorForm}>{t("journal.button.cancel")}</Button>
                             {createMutation.isError && <p className="text-sm text-red-500">{(createMutation.error as Error).message}</p>}
                             {updateMutation.isError && <p className="text-sm text-red-500">{(updateMutation.error as Error).message}</p>}
+                            {reverseAndCreateCorrectionMutation.isError && <p className="text-sm text-red-500">{(reverseAndCreateCorrectionMutation.error as Error).message}</p>}
                         </div>
                     </Card>
                 )}
@@ -741,10 +777,27 @@ export function JournalEntriesPage() {
                                                     </span>
                                                 </button>
                                             )}
-                                            {entry.status === "POSTED" && !entry.reversalOfId && (
-                                                <button
-                                                    onClick={e => { e.stopPropagation(); if (confirm(t("journal.confirm.reverse"))) reverseMutation.mutate(entry.id); }}
-                                                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
+                                        {entry.status === "POSTED" && !entry.reversalOfId && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm(t("journal.confirm.editPosted"))) {
+                                                        reverseAndCreateCorrectionMutation.mutate(entry);
+                                                    }
+                                                }}
+                                                className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                                                disabled={reverseAndCreateCorrectionMutation.isPending}
+                                            >
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <Pencil className="h-3 w-3" />
+                                                    {t("journal.button.editEntry")}
+                                                </span>
+                                            </button>
+                                        )}
+                                        {entry.status === "POSTED" && !entry.reversalOfId && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); if (confirm(t("journal.confirm.reverse"))) reverseMutation.mutate(entry.id); }}
+                                                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
                                                 >
                                                     <span className="inline-flex items-center gap-1.5">
                                                         <RotateCcw className="h-3 w-3" />

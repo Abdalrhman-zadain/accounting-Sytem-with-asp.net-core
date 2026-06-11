@@ -287,6 +287,7 @@ const arTranslations: Record<string, string> = {
   "journal.action.reverse": "عكس",
   "journal.confirm.post": "ترحيل هذا القيد؟",
   "journal.confirm.reverse": "عكس هذا القيد؟",
+  "journal.confirm.editPosted": "سيتم عكس القيد المُرحّل وإنشاء مسودة تصحيح قابلة للتعديل. هل تريد المتابعة؟",
 
   "master.title": "تهيئة البيانات الأساسية",
   "master.description":
