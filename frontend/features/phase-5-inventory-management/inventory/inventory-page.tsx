@@ -115,6 +115,7 @@ import {
   createEmptyItemEditor,
   createUnitConversionEditor,
 } from "./item-editor-modal";
+import { ReceiptEditorModal } from "./receipt-editor-modal";
 
 const ITEM_TYPE_OPTIONS: InventoryItemType[] = ["RAW_MATERIAL", "FINISHED_GOOD", "SERVICE", "MANUFACTURED_ITEM"];
 const RECEIPT_STATUS_OPTIONS: InventoryReceiptStatus[] = ["DRAFT", "POSTED", "CANCELLED", "REVERSED"];
@@ -3331,220 +3332,244 @@ export function InventoryPage() {
         </section>
 
         <section id="inventory-receipts-section" className={`space-y-5 ${workspace === "receipts" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.receipts.title")}
-            description={t("inventory.receipts.description")}
-            action={<Button onClick={() => openNewReceipt()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newReceipt")}</Button>}
-          />
+          {isReceiptEditorOpen ? (
+            <ReceiptEditorModal
+              presentation="inline"
+              isOpen={isReceiptEditorOpen}
+              title={receiptEditor.id ? t("inventory.receipts.editor.editTitle") : t("inventory.receipts.editor.createTitle")}
+              editor={receiptEditor}
+              onClose={closeReceiptEditor}
+              onChange={setReceiptEditor}
+              onSave={() => {
+                if (receiptEditor.id) {
+                  void updateReceiptMutation.mutate();
+                } else {
+                  void createReceiptMutation.mutate();
+                }
+              }}
+              isSaving={createReceiptMutation.isPending || updateReceiptMutation.isPending}
+              validationError={receiptMutationError}
+              items={items}
+              warehouses={warehouses}
+            />
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.receipts.title")}
+                description={t("inventory.receipts.description")}
+                action={<Button onClick={() => openNewReceipt()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newReceipt")}</Button>}
+              />
 
-          <div className={cn("grid gap-6", selectedReceipt ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
-            <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_220px]">
-                <div className="relative">
-                  <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
-                    <LuSearch size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    value={receiptSearch}
-                    onChange={(event) => setReceiptSearch(event.target.value)}
-                    placeholder={t("inventory.receipts.filters.search")}
-                    className={cn(
-                      "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
-                      isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
-                    )}
-                  />
-                </div>
+              <div className={cn("grid gap-6", selectedReceipt ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
+                <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_220px]">
+                    <div className="relative">
+                      <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
+                        <LuSearch size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        value={receiptSearch}
+                        onChange={(event) => setReceiptSearch(event.target.value)}
+                        placeholder={t("inventory.receipts.filters.search")}
+                        className={cn(
+                          "w-full rounded-[16px] border border-[#d6e1d9] bg-white py-2.5 text-sm font-semibold text-[#233329] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20",
+                          isArabic ? "pl-9 pr-3 text-right" : "pr-9 pl-3 text-left"
+                        )}
+                      />
+                    </div>
 
-                <select
-                  value={receiptStatusFilter}
-                  onChange={(event) => setReceiptStatusFilter(event.target.value as InventoryReceiptStatus | "")}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
-                >
-                  <option value="">{t("inventory.receipts.filters.allStatuses")}</option>
-                  {RECEIPT_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {t(`inventory.receipts.status.${status}`)}
-                    </option>
-                  ))}
-                </select>
+                    <select
+                      value={receiptStatusFilter}
+                      onChange={(event) => setReceiptStatusFilter(event.target.value as InventoryReceiptStatus | "")}
+                      className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                    >
+                      <option value="">{t("inventory.receipts.filters.allStatuses")}</option>
+                      {RECEIPT_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {t(`inventory.receipts.status.${status}`)}
+                        </option>
+                      ))}
+                    </select>
 
-                <select
-                  value={receiptWarehouseFilter}
-                  onChange={(event) => setReceiptWarehouseFilter(event.target.value)}
-                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
-                >
-                  <option value="">{t("inventory.receipts.filters.allWarehouses")}</option>
-                  {warehouses.map((warehouse) => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.code} · {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                    <select
+                      value={receiptWarehouseFilter}
+                      onChange={(event) => setReceiptWarehouseFilter(event.target.value)}
+                      className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                    >
+                      <option value="">{t("inventory.receipts.filters.allWarehouses")}</option>
+                      {warehouses.map((warehouse) => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.code} · {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="overflow-x-auto">
-                {goodsReceiptsQuery.isLoading ? (
-                  <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.receipts.loading")}</div>
-                ) : receipts.length === 0 ? (
-                  <EmptyState message={t("inventory.receipts.empty")} />
-                ) : (
-                  <table className="min-w-full text-xs text-start">
-                    <thead>
-                      <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
-                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
-                        <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
-                        <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
-                        <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية" : "Quantity"}</th>
-                        <th className="px-4 py-3 text-end font-black">{isArabic ? "القيمة" : "Amount"}</th>
-                        <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#f0f3f0]">
-                      {receipts.map((receipt) => {
-                        const isSelected = selectedReceipt?.id === receipt.id;
-                        return (
-                          <tr
-                            key={receipt.id}
-                            onClick={() => setSelectedReceiptId(receipt.id)}
-                            className={cn(
-                              "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
-                              isSelected ? "bg-sky-50/60 font-semibold" : "",
-                            )}
-                          >
-                            <td className="px-4 py-3 font-bold text-gray-900">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
-                                <span className="font-mono tracking-wider">{receipt.reference}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 font-bold text-gray-900">{receipt.warehouse.name}</td>
-                            <td className="px-4 py-3 text-gray-600">{receipt.receiptDate.slice(0, 10)}</td>
-                            <td className="px-4 py-3 text-end font-medium text-[#46644b]">{receipt.totalQuantity}</td>
-                            <td className="px-4 py-3 text-end font-bold text-gray-900">{receipt.totalAmount}</td>
-                            <td className="px-4 py-3 text-center">
-                              <StatusPill label={t(`inventory.receipts.status.${receipt.status}`)} tone={receiptTone(receipt.status)} />
-                            </td>
+                  <div className="overflow-x-auto">
+                    {goodsReceiptsQuery.isLoading ? (
+                      <div className="rounded-[24px] border border-[#e6ece7] bg-[#fafcfb] px-5 py-8 text-sm text-[#66756d]">{t("inventory.receipts.loading")}</div>
+                    ) : receipts.length === 0 ? (
+                      <EmptyState message={t("inventory.receipts.empty")} />
+                    ) : (
+                      <table className="min-w-full text-xs text-start">
+                        <thead>
+                          <tr className="border-b border-[#e1e7e2] text-[11px] uppercase tracking-wider text-[#6d7b73]">
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "المرجع" : "Reference"}</th>
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "المستودع" : "Warehouse"}</th>
+                            <th className="px-4 py-3 text-start font-black">{isArabic ? "التاريخ" : "Date"}</th>
+                            <th className="px-4 py-3 text-end font-black">{isArabic ? "الكمية" : "Quantity"}</th>
+                            <th className="px-4 py-3 text-end font-black">{isArabic ? "القيمة" : "Amount"}</th>
+                            <th className="px-4 py-3 text-center font-black">{isArabic ? "الحالة" : "Status"}</th>
                           </tr>
-                        );
+                        </thead>
+                        <tbody className="divide-y divide-[#f0f3f0]">
+                          {receipts.map((receipt) => {
+                            const isSelected = selectedReceipt?.id === receipt.id;
+                            return (
+                              <tr
+                                key={receipt.id}
+                                onClick={() => setSelectedReceiptId(receipt.id)}
+                                className={cn(
+                                  "cursor-pointer text-[12px] transition hover:bg-[#f7faf7]",
+                                  isSelected ? "bg-sky-50/60 font-semibold" : "",
+                                )}
+                              >
+                                <td className="px-4 py-3 font-bold text-gray-900">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+                                    <span className="font-mono tracking-wider">{receipt.reference}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 font-bold text-gray-900">{receipt.warehouse.name}</td>
+                                <td className="px-4 py-3 text-gray-600">{receipt.receiptDate.slice(0, 10)}</td>
+                                <td className="px-4 py-3 text-end font-medium text-[#46644b]">{receipt.totalQuantity}</td>
+                                <td className="px-4 py-3 text-end font-bold text-gray-900">{receipt.totalAmount}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <StatusPill label={t(`inventory.receipts.status.${receipt.status}`)} tone={receiptTone(receipt.status)} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
+                    <div>
+                      {t("inventory.pagination.summary", {
+                        from: receiptsRangeStart,
+                        to: receiptsRangeEnd,
+                        total: receiptsTotal,
                       })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1ee] pt-4 text-sm text-[#66756d]">
-                <div>
-                  {t("inventory.pagination.summary", {
-                    from: receiptsRangeStart,
-                    to: receiptsRangeEnd,
-                    total: receiptsTotal,
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                    {t("inventory.pagination.page", { page: receiptPage, totalPages: receiptsTotalPages })}
-                  </span>
-                  <Button variant="secondary" onClick={() => setReceiptPage((current) => current - 1)} disabled={receiptPage <= 1}>
-                    {t("inventory.pagination.previous")}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setReceiptPage((current) => current + 1)}
-                    disabled={receiptPage >= receiptsTotalPages}
-                  >
-                    {t("inventory.pagination.next")}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-            {selectedReceipt ? (
-              <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedReceipt.reference}</div>
-                      <h2 className="text-2xl font-black tracking-tight text-[#233329]">{selectedReceipt.warehouse.name}</h2>
                     </div>
-                    <StatusPill label={t(`inventory.receipts.status.${selectedReceipt.status}`)} tone={receiptTone(selectedReceipt.status)} />
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailCard label={t("inventory.receipts.detail.date")} value={selectedReceipt.receiptDate.slice(0, 10)} />
-                    <DetailCard label={t("inventory.receipts.detail.lines")} value={String(selectedReceipt.lines.length)} />
-                    <DetailCard label={t("inventory.receipts.detail.totalQuantity")} value={selectedReceipt.totalQuantity} />
-                    <DetailCard label={t("inventory.receipts.detail.totalAmount")} value={selectedReceipt.totalAmount} />
-                  </div>
-
-                  <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.receipts.field.warehouse")}:</span>{" "}
-                      {selectedReceipt.warehouse.code} · {selectedReceipt.warehouse.name}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.receipts.field.sourcePurchaseOrder")}:</span>{" "}
-                      {selectedReceipt.sourcePurchaseOrderRef || t("inventory.emptyValue")}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.receipts.field.sourcePurchaseInvoice")}:</span>{" "}
-                      {selectedReceipt.sourcePurchaseInvoiceRef || t("inventory.emptyValue")}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">{t("inventory.receipts.field.postedAt")}:</span>{" "}
-                      {selectedReceipt.postedAt ? selectedReceipt.postedAt.slice(0, 10) : t("inventory.receipts.notPosted")}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                        {t("inventory.pagination.page", { page: receiptPage, totalPages: receiptsTotalPages })}
+                      </span>
+                      <Button variant="secondary" onClick={() => setReceiptPage((current) => current - 1)} disabled={receiptPage <= 1}>
+                        {t("inventory.pagination.previous")}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setReceiptPage((current) => current + 1)}
+                        disabled={receiptPage >= receiptsTotalPages}
+                      >
+                        {t("inventory.pagination.next")}
+                      </Button>
                     </div>
                   </div>
+                </Card>
 
-                  {selectedReceipt.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedReceipt.description}</p> : null}
+                {selectedReceipt ? (
+                  <Card className="space-y-4 rounded-[28px] border-[#d7ddd8] bg-white p-6 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">{selectedReceipt.reference}</div>
+                          <h2 className="text-2xl font-black tracking-tight text-[#233329]">{selectedReceipt.warehouse.name}</h2>
+                        </div>
+                        <StatusPill label={t(`inventory.receipts.status.${selectedReceipt.status}`)} tone={receiptTone(selectedReceipt.status)} />
+                      </div>
 
-                  <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
-                      {t("inventory.receipts.lines.title")}
-                    </div>
-                    {selectedReceipt.lines.map((line) => (
-                      <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
-                        <div className="font-semibold text-[#233329]">
-                          {formatItemServiceLabel(line.item.code, line.item.name)}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <DetailCard label={t("inventory.receipts.detail.date")} value={selectedReceipt.receiptDate.slice(0, 10)} />
+                        <DetailCard label={t("inventory.receipts.detail.lines")} value={String(selectedReceipt.lines.length)} />
+                        <DetailCard label={t("inventory.receipts.detail.totalQuantity")} value={selectedReceipt.totalQuantity} />
+                        <DetailCard label={t("inventory.receipts.detail.totalAmount")} value={selectedReceipt.totalAmount} />
+                      </div>
+
+                      <div className="space-y-2 rounded-[24px] bg-[#fafcfb] p-4 text-sm leading-7 text-[#66756d]">
+                        <div>
+                          <span className="font-semibold text-gray-900">{t("inventory.receipts.field.warehouse")}:</span>{" "}
+                          {selectedReceipt.warehouse.code} · {selectedReceipt.warehouse.name}
                         </div>
                         <div>
-                          {line.quantity} {line.unitOfMeasure} · {line.unitCost} · {line.lineTotalAmount}
+                          <span className="font-semibold text-gray-900">{t("inventory.receipts.field.sourcePurchaseOrder")}:</span>{" "}
+                          {selectedReceipt.sourcePurchaseOrderRef || t("inventory.emptyValue")}
                         </div>
-                        {line.description ? <div>{line.description}</div> : null}
+                        <div>
+                          <span className="font-semibold text-gray-900">{t("inventory.receipts.field.sourcePurchaseInvoice")}:</span>{" "}
+                          {selectedReceipt.sourcePurchaseInvoiceRef || t("inventory.emptyValue")}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-gray-900">{t("inventory.receipts.field.postedAt")}:</span>{" "}
+                          {selectedReceipt.postedAt ? selectedReceipt.postedAt.slice(0, 10) : t("inventory.receipts.notPosted")}
+                        </div>
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <Button variant="secondary" onClick={() => openEditReceipt(selectedReceipt)} disabled={!selectedReceipt.canEdit} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
-                      {t("inventory.button.editReceipt")}
-                    </Button>
-                    <Button
-                      onClick={() => confirmPostReceipt(selectedReceipt.id)}
-                      disabled={!selectedReceipt.canPost || postReceiptMutation.isPending}
-                      className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
-                    >
-                      {t("inventory.button.postReceipt")}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => confirmCancelReceipt(selectedReceipt.id)}
-                      disabled={!selectedReceipt.canCancel || cancelReceiptMutation.isPending}
-                      className="rounded-full px-4 py-2 font-bold"
-                    >
-                      {t("inventory.button.cancelReceipt")}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => confirmReverseReceipt(selectedReceipt.id)}
-                      disabled={!selectedReceipt.canReverse || reverseReceiptMutation.isPending}
-                      className="rounded-full px-4 py-2 font-bold"
-                    >
-                      {t("inventory.button.reverseReceipt")}
-                    </Button>
-                  </div>
-              </Card>
-            ) : null}
-          </div>
+                      {selectedReceipt.description ? <p className="text-sm leading-7 text-[#66756d]">{selectedReceipt.description}</p> : null}
+
+                      <div className="space-y-2 rounded-[24px] border border-[#e1e7e2] bg-[#fafcfb] p-4">
+                        <div className="text-xs font-black uppercase tracking-[0.18em] text-[#7d8c83]">
+                          {t("inventory.receipts.lines.title")}
+                        </div>
+                        {selectedReceipt.lines.map((line) => (
+                          <div key={line.id} className="rounded-2xl border border-[#edf1ee] bg-white px-4 py-3 text-sm text-[#66756d] shadow-sm">
+                            <div className="font-semibold text-[#233329]">
+                              {formatItemServiceLabel(line.item.code, line.item.name)}
+                            </div>
+                            <div>
+                              {line.quantity} {line.unitOfMeasure} · {line.unitCost} · {line.lineTotalAmount}
+                            </div>
+                            {line.description ? <div>{line.description}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-3 pt-2">
+                        <Button variant="secondary" onClick={() => openEditReceipt(selectedReceipt)} disabled={!selectedReceipt.canEdit} className="rounded-full border-[#d6e0d8] px-4 py-2 font-bold text-[#46644b]">
+                          {t("inventory.button.editReceipt")}
+                        </Button>
+                        <Button
+                          onClick={() => confirmPostReceipt(selectedReceipt.id)}
+                          disabled={!selectedReceipt.canPost || postReceiptMutation.isPending}
+                          className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]"
+                        >
+                          {t("inventory.button.postReceipt")}
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => confirmCancelReceipt(selectedReceipt.id)}
+                          disabled={!selectedReceipt.canCancel || cancelReceiptMutation.isPending}
+                          className="rounded-full px-4 py-2 font-bold"
+                        >
+                          {t("inventory.button.cancelReceipt")}
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => confirmReverseReceipt(selectedReceipt.id)}
+                          disabled={!selectedReceipt.canReverse || reverseReceiptMutation.isPending}
+                          className="rounded-full px-4 py-2 font-bold"
+                        >
+                          {t("inventory.button.reverseReceipt")}
+                        </Button>
+                      </div>
+                  </Card>
+                ) : null}
+              </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-stock-ledger-section" className={`space-y-6 ${workspace === "stockLedger" ? "" : "hidden"}`}>
@@ -3904,123 +3929,6 @@ export function InventoryPage() {
                 disabled={Boolean(warehouseFormError) || createWarehouseMutation.isPending || updateWarehouseMutation.isPending}
               >
                 {warehouseEditor.id ? t("inventory.button.save") : t("inventory.button.createWarehouse")}
-              </Button>
-            </div>
-          </div>
-        </SidePanel>
-
-        <SidePanel
-          isOpen={isReceiptEditorOpen}
-          onClose={closeReceiptEditor}
-          title={receiptEditor.id ? t("inventory.receipts.editor.editTitle") : t("inventory.receipts.editor.createTitle")}
-        >
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("inventory.receipts.field.reference")} hint={t("inventory.receipts.field.referenceHint")}>
-                <Input value={receiptEditor.reference} onChange={(event) => setReceiptEditor((current) => ({ ...current, reference: event.target.value }))} />
-              </Field>
-              <Field label={t("inventory.receipts.field.date")}>
-                <Input
-                  type="date"
-                  min="1900-01-01"
-                  value={receiptEditor.receiptDate}
-                  onChange={(event) => setReceiptEditor((current) => ({ ...current, receiptDate: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.receipts.field.warehouse")}>
-                <WarehouseSelect
-                  value={receiptEditor.warehouseId}
-                  onChange={(value) => setReceiptEditor((current) => ({ ...current, warehouseId: value }))}
-                  options={warehouses.filter((row) => row.isActive)}
-                  placeholder={t("inventory.placeholder.selectWarehouse")}
-                />
-              </Field>
-              <Field label={t("inventory.receipts.field.sourcePurchaseOrder")}>
-                <Input
-                  value={receiptEditor.sourcePurchaseOrderRef}
-                  onChange={(event) => setReceiptEditor((current) => ({ ...current, sourcePurchaseOrderRef: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.receipts.field.sourcePurchaseInvoice")}>
-                <Input
-                  value={receiptEditor.sourcePurchaseInvoiceRef}
-                  onChange={(event) => setReceiptEditor((current) => ({ ...current, sourcePurchaseInvoiceRef: event.target.value }))}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("inventory.field.description")}>
-              <Textarea value={receiptEditor.description} rows={3} onChange={(event) => setReceiptEditor((current) => ({ ...current, description: event.target.value }))} />
-            </Field>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-gray-900">{t("inventory.receipts.lines.title")}</div>
-                <Button variant="secondary" onClick={() => addReceiptLine()}>
-                  {t("inventory.receipts.button.addLine")}
-                </Button>
-              </div>
-
-              {receiptEditor.lines.map((line, index) => (
-                <Card key={`receipt-line-${index}`} className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-gray-900">{t("inventory.receipts.line.label", { index: index + 1 })}</div>
-                    {receiptEditor.lines.length > 1 ? (
-                      <Button variant="danger" onClick={() => removeReceiptLine(index)}>
-                        {t("inventory.receipts.button.removeLine")}
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label={t("inventory.receipts.field.item")}>
-                      <ItemSelect
-                        value={line.itemId}
-                        onChange={(value) => updateReceiptLine(index, { itemId: value })}
-                        options={items.filter((row) => row.isActive)}
-                        placeholder={t("inventory.receipts.placeholder.selectItem")}
-                      />
-                    </Field>
-                    <Field label={t("inventory.receipts.field.unitOfMeasure")}>
-                      <Input
-                        value={line.unitOfMeasure}
-                        onChange={(event) => updateReceiptLine(index, { unitOfMeasure: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.receipts.field.quantity")}>
-                      <Input value={line.quantity} onChange={(event) => updateReceiptLine(index, { quantity: event.target.value })} />
-                    </Field>
-                    <Field label={t("inventory.receipts.field.unitCost")}>
-                      <Input value={line.unitCost} onChange={(event) => updateReceiptLine(index, { unitCost: event.target.value })} />
-                    </Field>
-                  </div>
-
-                  <Field label={t("inventory.receipts.field.lineDescription")}>
-                    <Input value={line.description} onChange={(event) => updateReceiptLine(index, { description: event.target.value })} />
-                  </Field>
-                </Card>
-              ))}
-            </div>
-
-            {receiptFormError ? <ErrorBox message={receiptFormError} /> : null}
-            {receiptMutationError ? <ErrorBox message={receiptMutationError} /> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={closeReceiptEditor}>
-                {t("inventory.button.cancel")}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (receiptFormError) return;
-                  if (receiptEditor.id) {
-                    void updateReceiptMutation.mutate();
-                    return;
-                  }
-                  void createReceiptMutation.mutate();
-                }}
-                disabled={Boolean(receiptFormError) || createReceiptMutation.isPending || updateReceiptMutation.isPending}
-              >
-                {receiptEditor.id ? t("inventory.button.save") : t("inventory.button.createReceipt")}
               </Button>
             </div>
           </div>
