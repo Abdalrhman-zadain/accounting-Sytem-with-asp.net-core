@@ -223,6 +223,19 @@ export function SiteHeader({
     setMounted(true);
   }, []);
 
+  //if the user is cashier or waiter set the language to arabic if the user is not cashier set the language to english and if the user is admin set the language to arabic
+  const isRestrictedUser =
+    user?.username === "cashier" ||
+    user?.username === "cashier123" ||
+    user?.username === "waiter" ||
+    user?.username === "waiter123";
+
+  useEffect(() => {
+    if (isRestrictedUser && language !== "ar") {
+      setLanguage("ar");
+    }
+  }, [isRestrictedUser, language, setLanguage]);
+
   const isLoginPage = pathname === "/login" || pathname === "/register";
   const currentLocation = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
 
@@ -488,22 +501,22 @@ export function SiteHeader({
 
   const visibleNavGroups = (waiterOnly
     ? [
-        {
-          labelKey: "nav.item.pos",
-          items: [
-            {
-              href: "/pos/waiter/tables",
-              labelKey: "pos.workspace.tables",
-              icon: Utensils,
-            },
-            {
-              href: "/pos/waiter/orders",
-              labelKey: "pos.workspace.waiterOrders",
-              icon: ChefHat,
-            },
-          ],
-        },
-      ]
+      {
+        labelKey: "nav.item.pos",
+        items: [
+          {
+            href: "/pos/waiter/tables",
+            labelKey: "pos.workspace.tables",
+            icon: Utensils,
+          },
+          {
+            href: "/pos/waiter/orders",
+            labelKey: "pos.workspace.waiterOrders",
+            icon: ChefHat,
+          },
+        ],
+      },
+    ]
     : kitchenOnly
       ? []
       : navGroups
@@ -571,31 +584,33 @@ export function SiteHeader({
       </div>
 
       <div className="space-y-2 px-3 pt-3">
-        <button
-          type="button"
-          onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-          className={cn(
-            "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
-            isCollapsed ? "justify-center" : "justify-between",
-          )}
-          aria-label={t("language.toggle.aria")}
-          title={t("language.toggle.aria")}
-        >
-          <span className={cn(isCollapsed && "sr-only")}>
-            {language === "ar" ? t("language.arabicShort") : t("language.englishShort")}
-          </span>
-          <span
+        {!isRestrictedUser && (
+          <button
+            type="button"
+            onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
             className={cn(
-              "inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-black tracking-widest text-gray-600",
-              isCollapsed && "sr-only",
+              "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
+              isCollapsed ? "justify-center" : "justify-between",
             )}
+            aria-label={t("language.toggle.aria")}
+            title={t("language.toggle.aria")}
           >
-            {language === "ar" ? "RTL" : "LTR"}
-          </span>
-          <span className={cn("font-black tracking-widest text-gray-600", !isCollapsed && "sr-only")}>
-            {language === "ar" ? "AR" : "EN"}
-          </span>
-        </button>
+            <span className={cn(isCollapsed && "sr-only")}>
+              {language === "ar" ? t("language.arabicShort") : t("language.englishShort")}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-black tracking-widest text-gray-600",
+                isCollapsed && "sr-only",
+              )}
+            >
+              {language === "ar" ? "RTL" : "LTR"}
+            </span>
+            <span className={cn("font-black tracking-widest text-gray-600", !isCollapsed && "sr-only")}>
+              {language === "ar" ? "AR" : "EN"}
+            </span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -662,11 +677,11 @@ export function SiteHeader({
                         <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
                         <span className={cn("flex-1 truncate text-left rtl:text-right", isCollapsed && "sr-only")}>{t(item.labelKey)}</span>
                         {!isCollapsed && (
-                          <ChevronRight 
+                          <ChevronRight
                             className={cn(
-                              "h-4 w-4 text-gray-400 transition-transform", 
+                              "h-4 w-4 text-gray-400 transition-transform",
                               isItemExpanded(item.href, isActive) ? "rotate-90" : "ltr:rotate-0 rtl:rotate-180"
-                            )} 
+                            )}
                           />
                         )}
                       </button>

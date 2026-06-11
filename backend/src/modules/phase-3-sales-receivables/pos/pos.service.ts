@@ -4965,7 +4965,8 @@ export class PosService {
       throw new BadRequestException(`POS session ${id} was not found.`);
     }
     const canSeeAll = this.canReviewAllSessions(user);
-    if (!canSeeAll && session.cashierUserId && session.cashierUserId !== user?.userId) {
+    const isWaiter = user?.posRoles?.includes("WAITER");
+    if (!canSeeAll && !isWaiter && session.cashierUserId && session.cashierUserId !== user?.userId) {
       throw new BadRequestException("You do not have permission to access this POS session.");
     }
     return session;

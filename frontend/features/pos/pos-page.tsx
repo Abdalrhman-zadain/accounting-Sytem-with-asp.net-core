@@ -488,20 +488,22 @@ function normalizePaymentAccountMethod(
 
 function getPaymentMethodLabel(
   method: "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" | "MIXED",
+  language: string = "ar",
 ) {
+  const isAr = language === "ar";
   switch (method) {
     case "CASH":
-      return "Cash / نقد";
+      return isAr ? "نقد" : "Cash";
     case "CARD":
-      return "Card / بطاقة";
+      return isAr ? "بطاقة" : "Card";
     case "CLIQ":
-      return "CliQ / كليك";
+      return isAr ? "كليك" : "CliQ";
     case "BANK_TRANSFER":
-      return "Bank / بنك";
+      return isAr ? "بنك" : "Bank";
     case "WALLET":
-      return "Wallet / محفظة";
+      return isAr ? "محفظة" : "Wallet";
     case "MIXED":
-      return "Mixed / مختلط";
+      return isAr ? "مختلط" : "Mixed";
     default:
       return method;
   }
@@ -2483,17 +2485,69 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const selectedWarehouse =
     warehouses.find((warehouse) => warehouse.id === selectedWarehouseId) ?? null;
 
+  const cartTotal = useMemo(() => {
+    const serviceCharge = orderType === "DINE_IN" ? serviceChargeAmount : 0;
+    const deliveryCharge = orderType === "DELIVERY" ? deliveryFee : 0;
+    const taxableBase = Number(
+      cartLines.reduce((sum, line) => sum + getLineNetBeforeInvoiceDiscount(line), 0).toFixed(2)
+    );
+    const isTaxFree = Boolean(posSettings?.runtime.taxFreeEnabled);
+    const invoiceDiscount = Number(
+      getInvoiceDiscountAmount(
+        invoiceDiscountType,
+        invoiceDiscountValue,
+        taxPolicy === "AFTER_TAX"
+          ? taxableBase +
+          cartLines.reduce(
+            (sum, line) => sum + getLineTaxAmount(line, 0, "AFTER_TAX", isTaxFree),
+            0,
+          )
+          : taxableBase,
+      ).toFixed(2)
+    );
+    const taxRaw = cartLines.reduce((sum, line) => {
+      const lineBase = getLineNetBeforeInvoiceDiscount(line);
+      if (taxPolicy === "AFTER_TAX") {
+        return sum + getLineTaxAmount(line, 0, taxPolicy, isTaxFree);
+      }
+      if (taxableBase <= 0) return sum;
+      const invoiceShare = invoiceDiscount * (lineBase / taxableBase);
+      return sum + getLineTaxAmount(line, invoiceShare, taxPolicy, isTaxFree);
+    }, 0);
+    const tax = Number(taxRaw.toFixed(2));
+    const totalRaw =
+      taxPolicy === "AFTER_TAX"
+        ? Math.max(taxableBase + tax - invoiceDiscount, 0)
+        : Math.max(taxableBase - invoiceDiscount, 0) + tax;
+    return Number((totalRaw + serviceCharge + deliveryCharge).toFixed(2));
+  }, [
+    orderType,
+    serviceChargeAmount,
+    deliveryFee,
+    cartLines,
+    posSettings?.runtime.taxFreeEnabled,
+    invoiceDiscountType,
+    invoiceDiscountValue,
+    taxPolicy,
+  ]);
+
   const paymentEntriesResolved = useMemo(
     () =>
-      paymentEntries.map((entry) => ({
-        ...entry,
-        account:
-          paymentAccounts.find(
-            (account) => account.id === entry.bankCashAccountId,
-          ) ?? null,
-        amountValue: parseAmount(entry.amount),
-      })),
-    [paymentAccounts, paymentEntries],
+      paymentEntries.map((entry) => {
+        const isSingle = paymentEntries.length === 1;
+        const amountValue = (isSingle && !entry.amount.trim())
+          ? cartTotal
+          : parseAmount(entry.amount);
+        return {
+          ...entry,
+          account:
+            paymentAccounts.find(
+              (account) => account.id === entry.bankCashAccountId,
+            ) ?? null,
+          amountValue,
+        };
+      }),
+    [paymentAccounts, paymentEntries, cartTotal],
   );
 
   const resolveMappedBankCashAccountId = (
@@ -2615,11 +2669,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       return sum + getLineTaxAmount(line, invoiceShare, taxPolicy, isTaxFree);
     }, 0);
     const tax = Number(taxRaw.toFixed(2));
-    const totalRaw =
-      taxPolicy === "AFTER_TAX"
-        ? Math.max(taxableBase + tax - invoiceDiscount, 0)
-        : Math.max(taxableBase - invoiceDiscount, 0) + tax;
-    const total = Number((totalRaw + serviceCharge + deliveryCharge).toFixed(2));
+    const total = cartTotal;
     const tendered = Number(
       paymentEntriesResolved.reduce(
         (sum, entry) => sum + entry.amountValue,
@@ -2655,6 +2705,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     serviceChargeAmount,
     taxPolicy,
     posSettings,
+    cartTotal,
   ]);
 
   const activeEditingSale = useMemo(() => {
@@ -4691,7 +4742,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
             <div className="space-y-5">
               <div className="rounded-[22px] bg-[#f3f8f4] p-4 text-center">
                 <div className="text-xs font-black uppercase tracking-[0.2em] text-[#66826e]">
-                  Total Amount
+                  {getLocalizedText("Total Amount / إجمالي المبلغ", language)}
                 </div>
                 <div className="mt-2 text-3xl font-black text-[#1f3427]">
                   {formatCurrency(cartMetrics.total, currencyCode)}
@@ -4699,9 +4750,6 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
               </div>
 
               <div>
-                <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#6b7c70]">
-                  Bank transfer highlighted / تحويل بنكي بارز
-                </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {(["CASH", "CARD", "BANK_TRANSFER", "CLIQ", "MIXED"] as const).map((method) => (
                     <button
@@ -4722,7 +4770,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                             : "border-[#d7e2d8] bg-white text-[#4f6556] hover:bg-[#f7faf8]",
                       )}
                     >
-                      {getPaymentMethodLabel(method)}
+                      {getPaymentMethodLabel(method, language)}
                     </button>
                   ))}
                 </div>
@@ -4730,8 +4778,10 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
 
               {posSettings?.runtime.allowCreditSale ? (
                 <div className="rounded-[18px] border border-[#d6e8db] bg-[#f8fcfa] px-4 py-3 text-xs font-semibold text-[#3d5c45]">
-                  Credit or partial payment allowed when a customer is selected / يُسمح بالبيع الآجل أو الجزئي
-                  بعد اختيار عميل حقيقي
+                  {getLocalizedText(
+                    "Credit or partial payment allowed when a customer is selected / يُسمح بالبيع الآجل أو الجزئي بعد اختيار عميل حقيقي",
+                    language,
+                  )}
                 </div>
               ) : null}
 
@@ -4739,14 +4789,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-bold text-[#233329]">
-                      Mixed payment / دفعات متعددة
+                      {getLocalizedText("Mixed payment / دفعات متعددة", language)}
                     </div>
                     <button
                       type="button"
                       onClick={addPaymentEntry}
                       className="rounded-full border border-[#d7e2d8] px-3 py-1.5 text-xs font-bold text-[#4f6556]"
                     >
-                      Add split / إضافة دفعة
+                      {getLocalizedText("Add split / إضافة دفعة", language)}
                     </button>
                   </div>
                   {paymentEntriesResolved.map((entry) => {
@@ -4772,11 +4822,11 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                             }
                             className="w-full rounded-[16px] border border-[#d6e1d9] bg-white px-4 py-3 text-sm font-semibold text-[#233329]"
                           >
-                            <option value="CASH">Cash / نقد</option>
-                            <option value="CARD">Card / بطاقة</option>
-                            <option value="CLIQ">CliQ / كليك</option>
-                            <option value="BANK_TRANSFER">Bank / بنك</option>
-                            <option value="WALLET">Wallet / محفظة</option>
+                            <option value="CASH">{getLocalizedText("Cash / نقد", language)}</option>
+                            <option value="CARD">{getLocalizedText("Card / بطاقة", language)}</option>
+                            <option value="CLIQ">{getLocalizedText("CliQ / كليك", language)}</option>
+                            <option value="BANK_TRANSFER">{getLocalizedText("Bank / بنك", language)}</option>
+                            <option value="WALLET">{getLocalizedText("Wallet / محفظة", language)}</option>
                           </select>
                           <Input
                             type="number"
@@ -4801,7 +4851,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                           disabled={paymentEntriesResolved.length === 1}
                           className="rounded-full border border-[#ead8d4] px-3 py-1.5 text-xs font-bold text-[#8a5952] disabled:opacity-40"
                         >
-                          Remove / حذف
+                          {getLocalizedText("Remove / حذف", language)}
                         </button>
                       </div>
                     );
@@ -4819,6 +4869,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                       type="number"
                       min="0"
                       step="0.01"
+                      placeholder={String(cartTotal)}
                       value={singlePaymentEntry?.amount ?? ""}
                       onChange={(event) =>
                         singlePaymentEntry
@@ -6488,7 +6539,7 @@ function OpenShiftPanel({
         >
           {warehouses.map((warehouse) => (
             <option key={warehouse.id} value={warehouse.id}>
-              {warehouse.name}
+              {getLocalizedText(warehouse.name, language)}
             </option>
           ))}
         </select>
@@ -6501,7 +6552,7 @@ function OpenShiftPanel({
         >
           {paymentAccounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {isArabic ? (account.account?.nameAr || account.name) : account.name}
+              {getLocalizedText(isArabic ? (account.account?.nameAr || account.name) : account.name, language)}
             </option>
           ))}
         </select>

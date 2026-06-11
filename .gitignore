@@ -22,3 +22,4 @@ frontend/.env
 *.tsbuildinfo
 .gemini/
 new.md
+next-env.d.ts
