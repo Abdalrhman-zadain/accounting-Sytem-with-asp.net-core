@@ -2615,7 +2615,7 @@ export function SalesReceivablesPage() {
                       </button>
                     </div>
                   ) : null}
-                  {selectedInvoice.journalReference === inlineJournalReference ? (
+                  {selectedInvoice.journalReference && selectedInvoice.journalReference === inlineJournalReference ? (
                     <InlineJournalEntryCard
                       journalEntry={inlineJournalQuery.data ?? null}
                       isLoading={inlineJournalQuery.isLoading}
@@ -2741,7 +2741,7 @@ export function SalesReceivablesPage() {
                       </button>
                     </div>
                   ) : null}
-                  {selectedReceipt.journalReference === inlineJournalReference ? (
+                  {selectedReceipt.journalReference && selectedReceipt.journalReference === inlineJournalReference ? (
                     <InlineJournalEntryCard
                       journalEntry={inlineJournalQuery.data ?? null}
                       isLoading={inlineJournalQuery.isLoading}
@@ -2931,7 +2931,7 @@ export function SalesReceivablesPage() {
                       </button>
                     </div>
                   ) : null}
-                  {selectedCreditNote.journalReference === inlineJournalReference ? (
+                  {selectedCreditNote.journalReference && selectedCreditNote.journalReference === inlineJournalReference ? (
                     <InlineJournalEntryCard
                       journalEntry={inlineJournalQuery.data ?? null}
                       isLoading={inlineJournalQuery.isLoading}

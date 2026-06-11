@@ -2370,7 +2370,7 @@ export function PurchasesPage() {
                           عرض القيد المحاسبي
                         </Button>
                       </div>
-                      {selectedPurchaseInvoice.journalReference === inlineJournalReference ? (
+                      {selectedPurchaseInvoice.journalReference && selectedPurchaseInvoice.journalReference === inlineJournalReference ? (
                         <InlineJournalEntryCard
                           journalEntry={inlineJournalQuery.data ?? null}
                           isLoading={inlineJournalQuery.isLoading}
@@ -2570,7 +2570,7 @@ export function PurchasesPage() {
                           عرض القيد المحاسبي
                         </Button>
                       </div>
-                      {selectedSupplierPayment.journalReference === inlineJournalReference ? (
+                      {selectedSupplierPayment.journalReference && selectedSupplierPayment.journalReference === inlineJournalReference ? (
                         <InlineJournalEntryCard
                           journalEntry={inlineJournalQuery.data ?? null}
                           isLoading={inlineJournalQuery.isLoading}
@@ -2765,7 +2765,7 @@ export function PurchasesPage() {
                           عرض القيد المحاسبي
                         </Button>
                       </div>
-                      {selectedDebitNote.journalReference === inlineJournalReference ? (
+                      {selectedDebitNote.journalReference && selectedDebitNote.journalReference === inlineJournalReference ? (
                         <InlineJournalEntryCard
                           journalEntry={inlineJournalQuery.data ?? null}
                           isLoading={inlineJournalQuery.isLoading}
