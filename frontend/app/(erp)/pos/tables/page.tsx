@@ -287,21 +287,27 @@ export default function TablesPage() {
       setNewTableCap(4);
       refetch();
     } catch (err: any) {
-      setTableError(err.message || "Failed to create table / فشل إنشاء الطاولة");
+      setTableError(err.message || (isAr ? "فشل إنشاء الطاولة" : "Failed to create table"));
     } finally {
       setIsSubmittingTable(false);
     }
   };
 
-  const handleDeleteTable = async (id: string) => {
-    if (!window.confirm(isAr ? "هل أنت متأكد من حذف هذه الطاولة؟" : "Are you sure you want to delete this table?")) {
-      return;
-    }
+  const [tableToDeleteId, setTableToDeleteId] = React.useState<string | null>(null);
+
+  const handleDeleteTable = (id: string) => {
+    setTableToDeleteId(id);
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!tableToDeleteId) return;
     try {
-      await deletePosTable(id, token);
+      await deletePosTable(tableToDeleteId, token);
       refetch();
     } catch (err: any) {
-      alert(err.message || "Failed to delete table / فشل حذف الطاولة");
+      alert(err.message || (isAr ? "فشل حذف الطاولة" : "Failed to delete table"));
+    } finally {
+      setTableToDeleteId(null);
     }
   };
 
@@ -534,7 +540,7 @@ export default function TablesPage() {
                 <span>{isAr ? "مخطط الصالة والخدمة داخل المطعم" : "Dine-In Floor Plan & Service"}</span>
               </div>
               <h1 className="mt-2 text-2xl font-black tracking-tight text-[#1e2c23] arabic-heading sm:text-3xl">
-                {isAr ? "صالة الطعام / Dine-In" : "Restaurant Tables / Dine-In"}
+                {isAr ? "صالة الطعام" : "Restaurant Tables"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-semibold text-[#506055]">
                 {waiterOnly
@@ -1189,28 +1195,28 @@ export default function TablesPage() {
         </div>
       </Modal>
 
-      {/* Table Management Modal */}
       <Modal
         isOpen={isManageOpen}
         onClose={() => setIsManageOpen(false)}
-        title={isAr ? "إدارة طاولات الصالة / Table Manager" : "Floor Plan & Table Manager"}
+        title={isAr ? "إدارة طاولات الصالة" : "Floor Plan & Table Manager"}
+        size="3xl"
       >
-        <div className="flex flex-col gap-6 p-1" dir={isAr ? "rtl" : "ltr"}>
+        <div className="flex flex-col gap-8 p-1" dir={isAr ? "rtl" : "ltr"}>
           {/* Create Table Form */}
-          <form onSubmit={handleCreateTable} className="flex flex-col gap-4 rounded-2xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
-            <h4 className="text-sm font-black text-[#233329]">
-              {isAr ? "إضافة طاولة جديدة / Add New Table" : "Add New Table"}
+          <form onSubmit={handleCreateTable} className="flex flex-col gap-6 rounded-2xl border border-[#e1e7e2] bg-[#fbfcfb] p-6 md:p-8">
+            <h4 className="text-base font-black text-[#233329]">
+              {isAr ? "إضافة طاولة جديدة" : "Add New Table"}
             </h4>
 
             {tableError && (
-              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs font-semibold text-red-600">
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm font-semibold text-red-600">
                 {tableError}
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-[#46644b]">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-[#46644b] uppercase tracking-wider">
                   {isAr ? "رقم الطاولة" : "Table Number"}
                 </label>
                 <input
@@ -1218,18 +1224,18 @@ export default function TablesPage() {
                   value={newTableNum}
                   onChange={(e) => setNewTableNum(e.target.value)}
                   placeholder="e.g. T13"
-                  className="w-full rounded-[12px] border border-[#d6e1d9] bg-white px-3 py-2 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
+                  className="w-full rounded-[14px] border border-[#d6e1d9] bg-white px-4 py-3 text-base font-semibold text-[#233329] outline-none focus:border-[#46644b] focus:ring-2 focus:ring-[#46644b]/10"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-[#46644b]">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-[#46644b] uppercase tracking-wider">
                   {isAr ? "عدد المقاعد" : "Capacity"}
                 </label>
                 <select
                   value={newTableCap}
                   onChange={(e) => setNewTableCap(Number(e.target.value))}
-                  className="w-full rounded-[12px] border border-[#d6e1d9] bg-white px-3 py-2 text-sm font-semibold text-[#233329]"
+                  className="w-full rounded-[14px] border border-[#d6e1d9] bg-white px-4 py-3 text-base font-semibold text-[#233329] outline-none focus:border-[#46644b]"
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16].map((num) => (
                     <option key={num} value={num}>
@@ -1243,40 +1249,40 @@ export default function TablesPage() {
             <button
               type="submit"
               disabled={isSubmittingTable}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#0f8f67] py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-xl bg-[#0f8f67] py-3.5 text-base font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:opacity-50"
             >
-              <LuPlus className="h-4 w-4" />
+              <LuPlus className="h-5 w-5" />
               <span>{isAr ? "إضافة الطاولة" : "Add Table"}</span>
             </button>
           </form>
 
           {/* Table List */}
-          <div className="flex flex-col gap-3">
-            <h4 className="text-sm font-black text-[#233329]">
+          <div className="flex flex-col gap-4">
+            <h4 className="text-base font-black text-[#233329]">
               {isAr ? "قائمة الطاولات الحالية" : "Current Tables"}
             </h4>
 
-            <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
               {activeTablesList.map((table) => {
                 const isOccupied = Boolean(table.activeInvoice);
                 return (
                   <div
                     key={table.id}
-                    className="flex items-center justify-between rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-3 shadow-sm"
+                    className="flex items-center justify-between rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-4 shadow-sm"
                   >
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-sm text-[#233329]">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-black text-base text-[#233329]">
                           {isAr ? `طاولة ${table.tableNumber}` : `Table ${table.tableNumber}`}
                         </span>
                         <span
                           className={cn(
-                            "h-2 w-2 rounded-full",
+                            "h-2.5 w-2.5 rounded-full",
                             isOccupied ? "bg-orange-500" : "bg-emerald-500"
                           )}
                         />
                       </div>
-                      <div className="text-[10px] text-[#68776f] mt-0.5">
+                      <div className="text-xs text-[#68776f] mt-1">
                         {table.capacity} {isAr ? "مقاعد" : "seats"} • {isOccupied ? (isAr ? "مشغولة" : "Busy") : (isAr ? "متاحة" : "Available")}
                       </div>
                     </div>
@@ -1286,14 +1292,14 @@ export default function TablesPage() {
                       disabled={isOccupied}
                       onClick={() => handleDeleteTable(table.id)}
                       className={cn(
-                        "rounded-lg p-1.5 transition-colors",
+                        "rounded-xl p-2.5 transition-colors",
                         isOccupied
                           ? "text-[#cbe5d5] cursor-not-allowed"
                           : "text-[#ef4444] hover:bg-red-50"
                       )}
                       title={isOccupied ? "Cannot delete table with active order" : "Delete Table"}
                     >
-                      <LuTrash2 className="h-4 w-4" />
+                      <LuTrash2 className="h-5 w-5" />
                     </button>
                   </div>
                 );
@@ -1412,6 +1418,36 @@ export default function TablesPage() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={tableToDeleteId !== null}
+        onClose={() => setTableToDeleteId(null)}
+        title={isAr ? "تأكيد الحذف" : "Confirm Delete"}
+        size="md"
+      >
+        <div className="space-y-6">
+          <p className="text-sm font-semibold text-gray-700 text-center">
+            {isAr ? "هل أنت متأكد من حذف هذه الطاولة؟" : "Are you sure you want to delete this table?"}
+          </p>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => setTableToDeleteId(null)}
+              className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50"
+            >
+              {isAr ? "إلغاء" : "Cancel"}
+            </button>
+            <button
+              type="button"
+              onClick={confirmDeleteTable}
+              className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700"
+            >
+              {isAr ? "موافق" : "OK"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </PageShell>
   );
