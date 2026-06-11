@@ -191,7 +191,7 @@ What else to check:
 - the quotation editor supports both `save draft` and immediate `approve quotation` from the same form; when approving a brand-new quotation, the UI should save first and then approve the created draft in the same flow
 - sales-order drafts must stay editable until confirmed, and confirmed orders must preserve quotation/invoice traceability
 - the sales-order editor now exposes an explicit confirm button (`تاكيد أمر البيع`) alongside draft save; confirming from the modal must save the draft first and then call the existing sales-order confirmation workflow
-- the sales-order create/edit form should open inline inside the `orders` tab workspace with the same placement style used by the inline sales-invoice editor, rather than as a separate full-screen-only workflow
+- all sales documents (quotations, orders, invoices, receipts, and credit notes) create/edit forms should open inline inside their respective tab workspaces using the unified inline workspace presentation pattern, rather than as separate modal overlay popups
 - new sales invoice references should default to a daily sequential format such as `INV-20260524-1`, `INV-20260524-2`, and `INV-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching invoice references
 - invoice and credit-note drafts must stay editable, but posted documents must be locked
 - credit-note type selection must come from active `CreditNoteType` master data (`GET /credit-note-types/active`) rather than a hardcoded frontend-only option list

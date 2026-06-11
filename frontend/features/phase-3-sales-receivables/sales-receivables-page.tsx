@@ -323,9 +323,7 @@ export function SalesReceivablesPage() {
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [invoiceEditorClientError, setInvoiceEditorClientError] = useState<string | null>(null);
   const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState>(EMPTY_INVOICE_EDITOR);
-  const isInlineOrderWorkspace = activeTab === "orders" && isOrderEditorOpen;
-  const isInlineInvoiceWorkspace = activeTab === "invoices" && isInvoiceEditorOpen;
-  const isInlineDocumentWorkspace = isInlineOrderWorkspace || isInlineInvoiceWorkspace;
+
 
   const [creditNoteSearch, setCreditNoteSearch] = useState("");
   const [creditNoteStatusFilter, setCreditNoteStatusFilter] = useState<"DRAFT" | "POSTED" | "">("");
@@ -341,6 +339,18 @@ export function SalesReceivablesPage() {
   const [isReceiptEditorOpen, setIsReceiptEditorOpen] = useState(false);
   const [receiptEditor, setReceiptEditor] = useState<ReceiptEditorState>(EMPTY_RECEIPT_EDITOR);
   const [receiptEditorLockedToInvoice, setReceiptEditorLockedToInvoice] = useState(false);
+
+  const isInlineQuotationWorkspace = activeTab === "quotations" && isQuotationEditorOpen;
+  const isInlineOrderWorkspace = activeTab === "orders" && isOrderEditorOpen;
+  const isInlineInvoiceWorkspace = activeTab === "invoices" && isInvoiceEditorOpen;
+  const isInlineReceiptWorkspace = activeTab === "receipts" && isReceiptEditorOpen;
+  const isInlineCreditNoteWorkspace = activeTab === "credit-notes" && isCreditNoteEditorOpen;
+  const isInlineDocumentWorkspace =
+    isInlineQuotationWorkspace ||
+    isInlineOrderWorkspace ||
+    isInlineInvoiceWorkspace ||
+    isInlineReceiptWorkspace ||
+    isInlineCreditNoteWorkspace;
 
   const [agingDate, setAgingDate] = useState(new Date().toISOString().slice(0, 10));
 
@@ -1727,9 +1737,23 @@ export function SalesReceivablesPage() {
         <div className="flex items-center px-1 text-sm font-semibold text-gray-500">
           <span className="text-gray-700">{t("salesReceivables.breadcrumb.sales")}</span>
           <span className="mx-2 text-gray-300">/</span>
-          <span className={cn((activeTab === "invoices" && !isInlineInvoiceWorkspace) || (activeTab === "orders" && !isInlineOrderWorkspace) ? "text-teal-700" : "text-gray-700")}>
+          <span className={cn(
+            (activeTab === "invoices" && !isInlineInvoiceWorkspace) ||
+            (activeTab === "orders" && !isInlineOrderWorkspace) ||
+            (activeTab === "quotations" && !isInlineQuotationWorkspace) ||
+            (activeTab === "receipts" && !isInlineReceiptWorkspace) ||
+            (activeTab === "credit-notes" && !isInlineCreditNoteWorkspace)
+              ? "text-teal-700"
+              : "text-gray-700"
+          )}>
             {activeTabBreadcrumbLabel}
           </span>
+          {isInlineQuotationWorkspace ? (
+            <>
+              <span className="mx-2 text-gray-300">/</span>
+              <span className="text-teal-700">{isArabic ? "عرض سعر جديد" : "New Quotation"}</span>
+            </>
+          ) : null}
           {isInlineOrderWorkspace ? (
             <>
               <span className="mx-2 text-gray-300">/</span>
@@ -1740,6 +1764,18 @@ export function SalesReceivablesPage() {
             <>
               <span className="mx-2 text-gray-300">/</span>
               <span className="text-teal-700">{t("salesReceivables.breadcrumb.newInvoice")}</span>
+            </>
+          ) : null}
+          {isInlineReceiptWorkspace ? (
+            <>
+              <span className="mx-2 text-gray-300">/</span>
+              <span className="text-teal-700">{isArabic ? "مقبوض عميل جديد" : "New Customer Receipt"}</span>
+            </>
+          ) : null}
+          {isInlineCreditNoteWorkspace ? (
+            <>
+              <span className="mx-2 text-gray-300">/</span>
+              <span className="text-teal-700">{isArabic ? "إشعار دائن جديد" : "New Credit Note"}</span>
             </>
           ) : null}
         </div>
@@ -2133,7 +2169,35 @@ export function SalesReceivablesPage() {
 
       {activeTab === "quotations" ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          {isQuotationEditorOpen ? (
+            <QuotationEditorModal
+              presentation="inline"
+              isOpen={isQuotationEditorOpen}
+              onClose={() => {
+                setQuotationEditorClientError(null);
+                setIsQuotationEditorOpen(false);
+              }}
+              title={quotationEditor.id ? t("salesReceivables.dialog.editQuotationDraft") : t("salesReceivables.dialog.newQuotation")}
+              editor={quotationEditor}
+              validationError={quotationEditorClientError}
+              customers={activeCustomers}
+              inventoryItems={inventoryItems}
+              isInventoryItemsLoading={inventoryItemsQuery.isLoading}
+              revenueAccounts={revenueAccountsQuery.data ?? []}
+              isSavingDraft={createQuotationMutation.isPending || updateQuotationMutation.isPending}
+              isApproving={approveQuotationMutation.isPending}
+              onChange={setQuotationEditor}
+              onCustomerChange={handleQuotationCustomerChange}
+              onSaveDraft={() => {
+                void saveQuotationDraft();
+              }}
+              onApprove={() => {
+                void approveQuotationFromEditor();
+              }}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
             <SummaryCard label={t("salesReceivables.summary.quotations")} value={quotations.length} hint={t("salesReceivables.hint.currentFilteredList")} />
             <SummaryCard label={t("salesReceivables.summary.approved")} value={quotations.filter((row) => row.status === "APPROVED").length} hint={t("salesReceivables.hint.readyForConversion")} />
             <SummaryCard label={t("salesReceivables.summary.quotedValue")} value={formatCurrency(quotations.reduce((sum, row) => sum + Number(row.totalAmount), 0))} hint={t("salesReceivables.hint.totalQuotedAmount")} />
@@ -2248,6 +2312,8 @@ export function SalesReceivablesPage() {
               </div>
             ) : null}
           </Modal>
+          </>
+          )}
         </div>
       ) : null}
 
@@ -2712,7 +2778,31 @@ export function SalesReceivablesPage() {
 
       {activeTab === "receipts" ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          {isReceiptEditorOpen ? (
+            <ReceiptEditorModal
+              presentation="inline"
+              isOpen={isReceiptEditorOpen}
+              onClose={() => {
+                setIsReceiptEditorOpen(false);
+                setReceiptEditorLockedToInvoice(false);
+              }}
+              title={t("salesReceivables.dialog.newReceipt")}
+              editor={receiptEditor}
+              customers={activeCustomers}
+              bankCashAccounts={bankCashAccountsQuery.data ?? []}
+              openInvoices={receiptAllocationInvoices}
+              selectedInvoice={selectedReceiptAllocationInvoice}
+              isSubmitting={createReceiptMutation.isPending || allocateReceiptMutation.isPending}
+              lockCustomerAndInvoice={receiptEditorLockedToInvoice}
+              onChange={setReceiptEditor}
+              onSubmit={() => {
+                void handleCreateReceiptSubmit();
+              }}
+              submitLabel={t("salesReceivables.action.post")}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
             <SummaryCard label={t("salesReceivables.summary.receipts")} value={customerReceipts.length} hint={t("salesReceivables.hint.postedCustomerReceipts")} />
             <SummaryCard label={t("salesReceivables.summary.unapplied")} value={formatCurrency(customerReceipts.reduce((sum, row) => sum + Number(row.unappliedAmount), 0))} hint={t("salesReceivables.hint.availableToAllocate")} />
             <SummaryCard label={t("salesReceivables.summary.allocated")} value={formatCurrency(customerReceipts.reduce((sum, row) => sum + Number(row.allocatedAmount), 0))} hint={t("salesReceivables.hint.matchedToInvoices")} />
@@ -2808,12 +2898,42 @@ export function SalesReceivablesPage() {
               </div>
             ) : null}
           </Modal>
+          </>
+          )}
         </div>
       ) : null}
 
       {activeTab === "credit-notes" ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          {isCreditNoteEditorOpen ? (
+            <CreditNoteEditorModal
+              presentation="inline"
+              isOpen={isCreditNoteEditorOpen}
+              onClose={() => {
+                setCreditNoteEditorClientError(null);
+                setIsCreditNoteEditorOpen(false);
+              }}
+              title={creditNoteEditor.id ? t("salesReceivables.dialog.editCreditNoteDraft") : t("salesReceivables.dialog.newCreditNote")}
+              editor={creditNoteEditor}
+              customers={activeCustomers}
+              invoices={matchingCustomerInvoices}
+              creditNoteTypes={activeCreditNoteTypes}
+              revenueAccounts={revenueAccountsQuery.data ?? []}
+              warehouses={inventoryWarehousesQuery.data ?? []}
+              validationError={creditNoteEditorClientError ?? errorMessage}
+              isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
+              onChange={(editor) =>
+                setCreditNoteEditor((current) => ({
+                  ...current,
+                  ...editor,
+                }))
+              }
+              onSubmit={saveCreditNoteFromEditor}
+              onSubmitAndPost={saveAndPostCreditNote}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
             <SummaryCard label={t("salesReceivables.summary.creditNotes")} value={creditNotes.length} hint={t("salesReceivables.hint.currentFilteredList")} />
             <SummaryCard label={t("salesReceivables.summary.drafts")} value={creditNotes.filter((row) => row.status === "DRAFT").length} hint={t("salesReceivables.hint.stillEditable")} />
             <SummaryCard
@@ -3023,6 +3143,8 @@ export function SalesReceivablesPage() {
               </div>
             ) : null}
           </Modal>
+          </>
+          )}
         </div>
       ) : null}
 
@@ -3422,77 +3544,6 @@ export function SalesReceivablesPage() {
           </div>
         </div>
       </SidePanel>
-
-      <QuotationEditorModal
-        isOpen={isQuotationEditorOpen}
-        onClose={() => {
-          setQuotationEditorClientError(null);
-          setIsQuotationEditorOpen(false);
-        }}
-        title={quotationEditor.id ? t("salesReceivables.dialog.editQuotationDraft") : t("salesReceivables.dialog.newQuotation")}
-        editor={quotationEditor}
-        validationError={quotationEditorClientError}
-        customers={activeCustomers}
-        inventoryItems={inventoryItems}
-        isInventoryItemsLoading={inventoryItemsQuery.isLoading}
-        revenueAccounts={revenueAccountsQuery.data ?? []}
-        isSavingDraft={createQuotationMutation.isPending || updateQuotationMutation.isPending}
-        isApproving={approveQuotationMutation.isPending}
-        onChange={setQuotationEditor}
-        onCustomerChange={handleQuotationCustomerChange}
-        onSaveDraft={() => {
-          void saveQuotationDraft();
-        }}
-        onApprove={() => {
-          void approveQuotationFromEditor();
-        }}
-      />
-
-      <CreditNoteEditorModal
-        isOpen={isCreditNoteEditorOpen}
-        onClose={() => {
-          setCreditNoteEditorClientError(null);
-          setIsCreditNoteEditorOpen(false);
-        }}
-        title={creditNoteEditor.id ? t("salesReceivables.dialog.editCreditNoteDraft") : t("salesReceivables.dialog.newCreditNote")}
-        editor={creditNoteEditor}
-        customers={activeCustomers}
-        invoices={matchingCustomerInvoices}
-        creditNoteTypes={activeCreditNoteTypes}
-        revenueAccounts={revenueAccountsQuery.data ?? []}
-        warehouses={inventoryWarehousesQuery.data ?? []}
-        validationError={creditNoteEditorClientError ?? errorMessage}
-        isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
-        onChange={(editor) =>
-          setCreditNoteEditor((current) => ({
-            ...current,
-            ...editor,
-          }))
-        }
-        onSubmit={saveCreditNoteFromEditor}
-        onSubmitAndPost={saveAndPostCreditNote}
-      />
-
-      <ReceiptEditorModal
-        isOpen={isReceiptEditorOpen}
-        onClose={() => {
-          setIsReceiptEditorOpen(false);
-          setReceiptEditorLockedToInvoice(false);
-        }}
-        title={t("salesReceivables.dialog.newReceipt")}
-        editor={receiptEditor}
-        customers={activeCustomers}
-        bankCashAccounts={bankCashAccountsQuery.data ?? []}
-        openInvoices={receiptAllocationInvoices}
-        selectedInvoice={selectedReceiptAllocationInvoice}
-        isSubmitting={createReceiptMutation.isPending || allocateReceiptMutation.isPending}
-        lockCustomerAndInvoice={receiptEditorLockedToInvoice}
-        onChange={setReceiptEditor}
-        onSubmit={() => {
-          void handleCreateReceiptSubmit();
-        }}
-        submitLabel={t("salesReceivables.action.post")}
-      />
 
       {false ? (
       <SidePanel

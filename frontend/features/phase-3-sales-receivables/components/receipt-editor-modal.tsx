@@ -31,6 +31,7 @@ type AllocationInvoiceOption = Pick<SalesInvoice, "id" | "reference" | "outstand
 
 type ReceiptEditorModalProps = {
   isOpen: boolean;
+  presentation?: "modal" | "inline";
   title: string;
   editor: ReceiptEditorValue;
   customers: Customer[];
@@ -47,6 +48,7 @@ type ReceiptEditorModalProps = {
 
 export function ReceiptEditorModal({
   isOpen,
+  presentation = "modal",
   title,
   editor,
   customers,
@@ -62,6 +64,7 @@ export function ReceiptEditorModal({
 }: ReceiptEditorModalProps) {
   const { t, language } = useTranslation();
   const isArabic = language === "ar";
+  const isInline = presentation === "inline";
   const amount = Number(editor.amount || 0);
   const selectedBankCashAccount = bankCashAccounts.find((row) => row.id === editor.bankCashAccountId) ?? null;
   const suggestedAllocationAmount = selectedInvoice
@@ -73,42 +76,75 @@ export function ReceiptEditorModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 p-3 sm:p-6">
-      <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} />
+    <div className={cn(isInline ? "relative w-full" : "fixed inset-0 z-50 p-3 sm:p-6 flex items-center justify-center")}>
+      {!isInline ? <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={onClose} /> : null}
       <div
         dir={isArabic ? "rtl" : "ltr"}
         className={cn(
-          "relative mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
+          "relative mx-auto flex flex-col overflow-hidden w-full",
+          isInline
+            ? "min-h-[calc(100vh-220px)] bg-transparent"
+            : "h-full max-h-full max-w-[1480px] rounded-[2rem] border border-slate-200 bg-[#fcfcfb] shadow-[0_30px_80px_rgba(15,23,42,0.18)]",
           isArabic && "arabic-ui",
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
+        {isInline && (
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            className="absolute end-3 top-3 z-30 rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           >
             <span className="sr-only">{t("salesReceivables.action.cancel")}</span>
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5" />
           </button>
-          <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
-            <div className="space-y-1">
-              <div className={cn("text-2xl text-slate-950 sm:text-3xl", isArabic ? "arabic-ui-heading" : "font-black tracking-tight")}>
-                {title}
+        )}
+
+        {!isInline ? (
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur sm:px-8">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <span className="sr-only">{t("salesReceivables.action.cancel")}</span>
+              <X className="h-6 w-6" />
+            </button>
+            <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
+              <div className="space-y-1">
+                <div className={cn("text-2xl text-slate-950 sm:text-3xl", isArabic ? "arabic-ui-heading" : "font-black tracking-tight")}>
+                  {title}
+                </div>
+                {editor.reference ? <div className="text-sm font-semibold text-slate-500">{editor.reference}</div> : null}
               </div>
-              {editor.reference ? <div className="text-sm font-semibold text-slate-500">{editor.reference}</div> : null}
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-              <FileCheck2 className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
+                <FileCheck2 className="h-6 w-6" />
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)] px-4 py-4 sm:px-8 sm:py-6">
+        <div className={cn(
+          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+          isInline ? "px-0 py-4" : "px-4 py-4 sm:px-8 sm:py-6"
+        )}>
           <div className="space-y-5">
+            {isInline ? (
+              <div className={cn("mb-5 flex items-center gap-3 border-b border-slate-200 pb-4", isArabic ? "justify-end text-right" : "justify-start text-left")}>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <FileCheck2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
+                  <p className="truncate text-sm text-slate-500">
+                    {editor.reference || (isArabic ? "إنشاء وتعديل مقبوضات العملاء" : "Create and manage customer receipt documents")}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
               <div className={cn("mb-4 text-lg text-slate-950", isArabic ? "arabic-ui-heading text-right" : "font-black")}>
-                {t("salesReceivables.dialog.newReceipt")}
+                {title}
               </div>
 
               <div className="grid gap-4 xl:grid-cols-[1fr_1.35fr_1fr]">
@@ -299,7 +335,7 @@ export function ReceiptEditorModal({
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-8">
+        <div className={cn("border-t border-slate-200 bg-white px-5 py-4 sm:px-8", isInline && "rounded-b-2xl shadow-md")}>
           <div className={cn("flex flex-col gap-3 sm:flex-row", isArabic ? "sm:flex-row-reverse" : "")}>
             <Button variant="secondary" onClick={onClose} className="rounded-2xl px-6">
               {t("salesReceivables.action.cancel")}
