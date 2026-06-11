@@ -18,30 +18,24 @@ import type {
 } from "@/types/api";
 
 const TEMPLATE_HEADERS = [
-  "name",
-  "groupCode",
-  "categoryCode",
-  "unitCode",
-  "code",
-  "barcode",
-  "defaultSalesPrice",
-  "defaultPurchasePrice",
-  "description",
-  "type",
+  "رمز المادة",
+  "وصف المادة",
+  "الوحدة",
+  "الكمية",
+  "الكلفة",
+  "سعر البيع",
 ] as const;
 
 const TEMPLATE_SAMPLE_ROW: Record<(typeof TEMPLATE_HEADERS)[number], string> = {
-  name: "حليب طازج ١ لتر / Fresh milk 1L",
-  groupCode: "MARKET-DAIRY",
-  categoryCode: "MARKET-DAIRY",
-  unitCode: "PCS",
-  code: "MKT-001",
-  barcode: "6291001001001",
-  defaultSalesPrice: "1.25",
-  defaultPurchasePrice: "0.85",
-  description: "Fresh milk 1L",
-  type: "FINISHED_GOOD",
+  "رمز المادة": "1",
+  "وصف المادة": "شوكلاته شير",
+  الوحدة: "كيلو",
+  الكمية: "0",
+  الكلفة: "0",
+  "سعر البيع": "3",
 };
+
+const DEFAULT_MARKET_GROUP = "MARKET-SNACKS";
 
 type ItemImportModalProps = {
   open: boolean;
@@ -115,7 +109,7 @@ export function ItemImportModal({ open, onClose, onImported }: ItemImportModalPr
     });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
-    XLSX.writeFile(workbook, "inventory-products-import-template.xlsx");
+    XLSX.writeFile(workbook, "market-products-import-template.xlsx");
   }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -306,18 +300,51 @@ function mapWorkbookRow(row: Record<string, unknown>): ImportInventoryItemRowInp
     Object.entries(row).map(([key, value]) => [normalizeHeader(key), stringifyCell(value)]),
   ) as Record<string, string>;
 
+  const arabicName = pickOptional(normalized["وصفالمادة"]);
+  const englishName = pickOptional(normalized.name);
+  const arabicSourceCode = pickOptional(normalized["رمزالمادة"]);
+  const englishCode = pickOptional(normalized.code);
+  const arabicUnit = pickOptional(normalized["الوحدة"]);
+  const englishUnit = pickOptional(normalized.unitcode);
+
+  const name = arabicName ?? englishName ?? "";
+  const unitCode = mapImportUnitCode(arabicUnit ?? englishUnit ?? "");
+  const groupCode =
+    pickOptional(normalized.groupcode) ??
+    pickOptional(normalized.categorycode) ??
+    DEFAULT_MARKET_GROUP;
+  const categoryCode = pickOptional(normalized.categorycode) ?? groupCode;
+
+  let code = englishCode;
+  if (!code && arabicSourceCode) {
+    code = `MKT-SHQ-${arabicSourceCode.padStart(3, "0")}`;
+  }
+
   return {
-    name: normalized.name ?? "",
-    groupCode: normalized.groupcode ?? "",
-    categoryCode: normalized.categorycode ?? "",
-    unitCode: normalized.unitcode ?? "",
-    code: pickOptional(normalized.code),
+    name,
+    groupCode,
+    categoryCode,
+    unitCode,
+    code: pickOptional(code),
     barcode: pickOptional(normalized.barcode),
-    defaultSalesPrice: pickOptional(normalized.defaultsalesprice),
-    defaultPurchasePrice: pickOptional(normalized.defaultpurchaseprice),
+    defaultSalesPrice:
+      pickOptional(normalized["سعرالبيع"]) ?? pickOptional(normalized.defaultsalesprice),
+    defaultPurchasePrice:
+      pickOptional(normalized["الكلفة"]) ?? pickOptional(normalized.defaultpurchaseprice),
     description: pickOptional(normalized.description),
     type: pickOptional(normalized.type) as ImportInventoryItemRowInput["type"],
   };
+}
+
+function mapImportUnitCode(unit: string) {
+  const normalized = unit.trim();
+  if (normalized === "كيلو") {
+    return "KG";
+  }
+  if (normalized === "حبة") {
+    return "PCS";
+  }
+  return normalized.toUpperCase();
 }
 
 function normalizeHeader(value: string) {

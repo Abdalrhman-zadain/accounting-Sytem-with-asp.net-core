@@ -266,6 +266,8 @@ export class ItemImportService {
     const unit = lookups.unitsByCode.get(this.normalizeCode(input.unitCode))!;
     const hasPrices = Boolean(input.defaultSalesPrice || input.defaultPurchasePrice);
 
+    const sellByWeight = unit.code === 'KG';
+
     return {
       code: input.code?.trim() || undefined,
       name: input.name.trim(),
@@ -286,7 +288,8 @@ export class ItemImportService {
       trackInventory: true,
       reorderLevel: '0',
       reorderQuantity: '0',
-      minSalesQuantity: '1',
+      allowFractionalQuantity: sellByWeight,
+      minSalesQuantity: sellByWeight ? '0.001' : '1',
       isActive: true,
     };
   }

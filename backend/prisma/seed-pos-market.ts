@@ -1,5 +1,4 @@
 import {
-  InventoryItemType,
   InventoryStockMovementType,
   PosAccessRoleCode,
   PosPermissionCode,
@@ -10,214 +9,7 @@ import {
 } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
-type MarketProductSeed = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  barcode: string;
-  category: string;
-  salesPrice: number;
-  purchasePrice: number;
-  stockMain: number;
-  groupCode: string;
-  categoryCode: string;
-  itemImageUrl: string;
-  unitOfMeasure?: string;
-  sellByWeight?: boolean;
-  minSalesQuantity?: number;
-  favorite?: boolean;
-};
-
-/** Demo retail products for market POS — images are public HTTPS URLs (Unsplash). */
-const MARKET_PRODUCTS: MarketProductSeed[] = [
-  {
-    id: 'MKT-ITEM-001',
-    code: 'MKT-001',
-    name: 'حليب طازج ١ لتر',
-    description: 'Fresh milk 1L',
-    barcode: '6291001001001',
-    category: 'ألبان',
-    salesPrice: 1.25,
-    purchasePrice: 0.85,
-    stockMain: 120,
-    groupCode: 'MARKET-DAIRY',
-    categoryCode: 'MARKET-DAIRY',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1563636619-e9143da7973b?auto=format&fit=crop&w=480&h=360&q=80',
-    favorite: true,
-  },
-  {
-    id: 'MKT-ITEM-002',
-    code: 'MKT-002',
-    name: 'خبز عربي',
-    description: 'Arabic bread pack',
-    barcode: '6291001001002',
-    category: 'مخبوزات',
-    salesPrice: 0.5,
-    purchasePrice: 0.25,
-    stockMain: 200,
-    groupCode: 'MARKET-BAKERY',
-    categoryCode: 'MARKET-BAKERY',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-003',
-    code: 'MKT-003',
-    name: 'بيض طازج (طبق)',
-    description: 'Fresh eggs tray',
-    barcode: '6291001001003',
-    category: 'ألبان',
-    salesPrice: 2.75,
-    purchasePrice: 2.1,
-    stockMain: 80,
-    groupCode: 'MARKET-DAIRY',
-    categoryCode: 'MARKET-DAIRY',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-004',
-    code: 'MKT-004',
-    name: 'أرز بسمتي ٥ كغ',
-    description: 'Basmati rice 5kg',
-    barcode: '6291001001004',
-    category: 'بقالة',
-    salesPrice: 6.5,
-    purchasePrice: 5.2,
-    stockMain: 60,
-    groupCode: 'MARKET-GROCERY',
-    categoryCode: 'MARKET-GROCERY',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=480&h=360&q=80',
-    favorite: true,
-  },
-  {
-    id: 'MKT-ITEM-005',
-    code: 'MKT-005',
-    name: 'زيت زيتون ٧٥٠ مل',
-    description: 'Olive oil 750ml',
-    barcode: '6291001001005',
-    category: 'بقالة',
-    salesPrice: 4.25,
-    purchasePrice: 3.1,
-    stockMain: 45,
-    groupCode: 'MARKET-GROCERY',
-    categoryCode: 'MARKET-GROCERY',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-006',
-    code: 'MKT-006',
-    name: 'طماطم طازجة',
-    description: 'Fresh tomatoes — per kg',
-    barcode: '6291001001006',
-    category: 'خضار',
-    salesPrice: 0.85,
-    purchasePrice: 0.55,
-    stockMain: 150,
-    groupCode: 'MARKET-PRODUCE',
-    categoryCode: 'MARKET-PRODUCE',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?auto=format&fit=crop&w=480&h=360&q=80',
-    unitOfMeasure: 'KG',
-    sellByWeight: true,
-    minSalesQuantity: 0.25,
-    favorite: true,
-  },
-  {
-    id: 'MKT-ITEM-007',
-    code: 'MKT-007',
-    name: 'صدر دجاج مجمد',
-    description: 'Frozen chicken breast 1kg',
-    barcode: '6291001001007',
-    category: 'لحوم',
-    salesPrice: 3.9,
-    purchasePrice: 3.0,
-    stockMain: 70,
-    groupCode: 'MARKET-MEAT',
-    categoryCode: 'MARKET-MEAT',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1604503468506-a8da358d2141?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-008',
-    code: 'MKT-008',
-    name: 'مياه معدنية ١.٥ لتر',
-    description: 'Mineral water 1.5L',
-    barcode: '6291001001008',
-    category: 'مشروبات',
-    salesPrice: 0.35,
-    purchasePrice: 0.18,
-    stockMain: 300,
-    groupCode: 'MARKET-BEVERAGES',
-    categoryCode: 'MARKET-BEVERAGES',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1548839140-29a7492991bd?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-009',
-    code: 'MKT-009',
-    name: 'قهوة تركية ٢٠٠ غ',
-    description: 'Turkish coffee 200g',
-    barcode: '6291001001009',
-    category: 'مشروبات',
-    salesPrice: 2.4,
-    purchasePrice: 1.7,
-    stockMain: 55,
-    groupCode: 'MARKET-BEVERAGES',
-    categoryCode: 'MARKET-BEVERAGES',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-010',
-    code: 'MKT-010',
-    name: 'شيبس بطاطا',
-    description: 'Potato chips family pack',
-    barcode: '6291001001010',
-    category: 'سناكات',
-    salesPrice: 1.1,
-    purchasePrice: 0.75,
-    stockMain: 90,
-    groupCode: 'MARKET-SNACKS',
-    categoryCode: 'MARKET-SNACKS',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1566478989037-eec170dfc792?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-011',
-    code: 'MKT-011',
-    name: 'صابون سائل لليدين',
-    description: 'Liquid hand soap',
-    barcode: '6291001001011',
-    category: 'منظفات',
-    salesPrice: 1.85,
-    purchasePrice: 1.2,
-    stockMain: 40,
-    groupCode: 'MARKET-HOUSEHOLD',
-    categoryCode: 'MARKET-HOUSEHOLD',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-  {
-    id: 'MKT-ITEM-012',
-    code: 'MKT-012',
-    name: 'مسحوق غسيل ٣ كغ',
-    description: 'Laundry detergent 3kg',
-    barcode: '6291001001012',
-    category: 'منظفات',
-    salesPrice: 5.75,
-    purchasePrice: 4.4,
-    stockMain: 35,
-    groupCode: 'MARKET-HOUSEHOLD',
-    categoryCode: 'MARKET-HOUSEHOLD',
-    itemImageUrl:
-      'https://images.unsplash.com/photo-1585421514738-01798e06a507?auto=format&fit=crop&w=480&h=360&q=80',
-  },
-];
+import { seedShouqCatalog, SHOUQ_CODE_PREFIX } from './seed-shouq-catalog';
 
 const MARKET_GROUPS = [
   { id: 'GRP-MARKET-GROCERY', code: 'MARKET-GROCERY', name: 'بقالة', description: 'Market grocery' },
@@ -234,7 +26,7 @@ export async function seedPosMarketDemo(
   prisma: PrismaClient,
   options: { adminUserId: string },
 ) {
-  console.log('Seeding market POS demo products...');
+  console.log('Seeding market POS (Shouq catalog, destination markets, reps)...');
 
   for (const group of MARKET_GROUPS) {
     await prisma.inventoryItemGroup.upsert({
@@ -284,23 +76,13 @@ export async function seedPosMarketDemo(
     });
   }
 
-  const [
-    inventoryAccount,
-    salesAccount,
-    operatingExpenses,
-    tradeReceivableAccount,
-    taxableTreatment,
-    vat16,
-    mainWarehouse,
-  ] = await Promise.all([
-    prisma.account.findUniqueOrThrow({ where: { code: '1131001' } }),
-    prisma.account.findUniqueOrThrow({ where: { code: '4110001' } }),
-    prisma.account.findUniqueOrThrow({ where: { code: '5100000' } }),
-    prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
-    prisma.taxTreatment.findFirstOrThrow({ where: { code: 'TAXABLE' } }),
-    prisma.tax.findUniqueOrThrow({ where: { taxCode: 'VAT16' } }),
-    prisma.inventoryWarehouse.findUniqueOrThrow({ where: { code: 'WH-MAIN' } }),
-  ]);
+  const [operatingExpenses, tradeReceivableAccount, taxableTreatment, mainWarehouse] =
+    await Promise.all([
+      prisma.account.findUniqueOrThrow({ where: { code: '5100000' } }),
+      prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
+      prisma.taxTreatment.findFirstOrThrow({ where: { code: 'TAXABLE' } }),
+      prisma.inventoryWarehouse.findUniqueOrThrow({ where: { code: 'WH-MAIN' } }),
+    ]);
 
   const marketRepNorth = await prisma.salesRepresentative.upsert({
     where: { code: 'REP-MARKET-01' },
@@ -401,129 +183,15 @@ export async function seedPosMarketDemo(
     });
   }
 
-  const units = await prisma.inventoryUnitOfMeasure.findMany();
-  const getUnit = (code: string) =>
-    units.find((unit) => unit.code === code) ?? units.find((unit) => unit.code === 'PCS')!;
+  const catalog = await seedShouqCatalog(prisma, { adminUserId: options.adminUserId });
 
-  const stockWarehouses = await prisma.inventoryWarehouse.findMany({
-    where: { isActive: true, isTransit: false },
-    orderBy: { code: 'asc' },
-  });
+  const repLoadItemCode =
+    catalog.rows.find((row) => row.quantity > 0)?.code ?? `${SHOUQ_CODE_PREFIX}001`;
 
-  let created = 0;
-
-  for (const product of MARKET_PRODUCTS) {
-    const unit = getUnit(product.unitOfMeasure ?? 'PCS');
-    const sellByWeight = product.sellByWeight ?? unit.code === 'KG';
-    const minSalesQty = product.minSalesQuantity ?? (sellByWeight ? 0.001 : 1);
-    const totalValue = product.stockMain * product.purchasePrice;
-    const totalOnHand = product.stockMain * stockWarehouses.length;
-    const totalValuation = totalValue * stockWarehouses.length;
-
-    const item = await prisma.inventoryItem.upsert({
-      where: { code: product.code },
-      update: {
-        name: product.name,
-        description: product.description,
-        barcode: product.barcode,
-        category: product.category,
-        unitOfMeasure: unit.code,
-        unitOfMeasureId: unit.id,
-        itemGroupId: groupIdByCode.get(product.groupCode) ?? null,
-        itemCategoryId: (
-          await prisma.inventoryItemCategory.findUnique({
-            where: { code: product.categoryCode },
-            select: { id: true },
-          })
-        )?.id,
-        type: InventoryItemType.FINISHED_GOOD,
-        inventoryAccountId: inventoryAccount.id,
-        cogsAccountId: cogsAccount.id,
-        salesAccountId: salesAccount.id,
-        itemImageUrl: product.itemImageUrl,
-        defaultSalesPrice: new Prisma.Decimal(product.salesPrice),
-        defaultPurchasePrice: new Prisma.Decimal(product.purchasePrice),
-        currencyCode: 'JOD',
-        taxable: true,
-        defaultTaxId: vat16.id,
-        trackInventory: true,
-        reorderLevel: new Prisma.Decimal(10),
-        reorderQuantity: new Prisma.Decimal(20),
-        preferredWarehouseId: mainWarehouse.id,
-        preferredWarehouseCode: mainWarehouse.code,
-        isActive: true,
-        onHandQuantity: new Prisma.Decimal(totalOnHand),
-        valuationAmount: new Prisma.Decimal(totalValuation),
-        allowFractionalQuantity: sellByWeight,
-        minSalesQuantity: new Prisma.Decimal(minSalesQty),
-      },
-      create: {
-        id: product.id,
-        code: product.code,
-        name: product.name,
-        description: product.description,
-        barcode: product.barcode,
-        category: product.category,
-        unitOfMeasure: unit.code,
-        unitOfMeasureId: unit.id,
-        itemGroupId: groupIdByCode.get(product.groupCode) ?? null,
-        itemCategoryId: (
-          await prisma.inventoryItemCategory.findUnique({
-            where: { code: product.categoryCode },
-            select: { id: true },
-          })
-        )?.id,
-        type: InventoryItemType.FINISHED_GOOD,
-        inventoryAccountId: inventoryAccount.id,
-        cogsAccountId: cogsAccount.id,
-        salesAccountId: salesAccount.id,
-        itemImageUrl: product.itemImageUrl,
-        defaultSalesPrice: new Prisma.Decimal(product.salesPrice),
-        defaultPurchasePrice: new Prisma.Decimal(product.purchasePrice),
-        currencyCode: 'JOD',
-        taxable: true,
-        defaultTaxId: vat16.id,
-        trackInventory: true,
-        reorderLevel: new Prisma.Decimal(10),
-        reorderQuantity: new Prisma.Decimal(20),
-        preferredWarehouseId: mainWarehouse.id,
-        preferredWarehouseCode: mainWarehouse.code,
-        isActive: true,
-        onHandQuantity: new Prisma.Decimal(totalOnHand),
-        valuationAmount: new Prisma.Decimal(totalValuation),
-        allowFractionalQuantity: sellByWeight,
-        minSalesQuantity: new Prisma.Decimal(minSalesQty),
-      },
-    });
-
-    for (const warehouse of stockWarehouses) {
-      await prisma.inventoryWarehouseBalance.upsert({
-        where: {
-          itemId_warehouseId: {
-            itemId: item.id,
-            warehouseId: warehouse.id,
-          },
-        },
-        update: {
-          onHandQuantity: new Prisma.Decimal(product.stockMain),
-          valuationAmount: new Prisma.Decimal(totalValue),
-        },
-        create: {
-          itemId: item.id,
-          warehouseId: warehouse.id,
-          onHandQuantity: new Prisma.Decimal(product.stockMain),
-          valuationAmount: new Prisma.Decimal(totalValue),
-        },
-      });
-    }
-
-    created += 1;
-  }
-
-  await seedRepCarStockDemo(prisma, marketRepNorth.id, mainWarehouse.id);
+  await seedRepCarStockDemo(prisma, marketRepNorth.id, mainWarehouse.id, repLoadItemCode);
 
   console.log(
-    `Market POS demo: ${created} products with online images (codes MKT-*) and ${MARKET_DESTINATION_CUSTOMERS.length} destination markets.`,
+    `Market POS: ${catalog.created + catalog.updated} Shouq products (codes ${SHOUQ_CODE_PREFIX}*) and ${MARKET_DESTINATION_CUSTOMERS.length} destination markets.`,
   );
 }
 
@@ -531,9 +199,10 @@ async function seedRepCarStockDemo(
   prisma: PrismaClient,
   salesRepId: string,
   warehouseId: string,
+  itemCode: string,
 ) {
   const item = await prisma.inventoryItem.findUnique({
-    where: { code: 'MKT-001' },
+    where: { code: itemCode },
     select: { id: true, unitOfMeasure: true, onHandQuantity: true, valuationAmount: true },
   });
   if (!item) {
@@ -658,7 +327,7 @@ async function seedRepCarStockDemo(
     });
   });
 
-  console.log('Demo rep car load RCL-DEMO-01: 50 x MKT-001 on REP-MARKET-01');
+  console.log(`Demo rep car load RCL-DEMO-01: 50 x ${itemCode} on REP-MARKET-01`);
 }
 
 const marketRepPermissionCodes: PosPermissionCode[] = [
