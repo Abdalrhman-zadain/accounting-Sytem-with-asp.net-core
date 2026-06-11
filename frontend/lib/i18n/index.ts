@@ -422,6 +422,7 @@ const enTranslations: Record<string, string> = {
   "journal.create.title": "New Journal Entry",
   "journal.field.date": "Date",
   "journal.field.description": "Description",
+  "journal.field.descriptionPlaceholder": "e.g. Electricity bill payment",
   "journal.field.type": "Type",
   "journal.none": "— None —",
   "journal.button.addType": "Add new type",
@@ -494,9 +495,11 @@ const enTranslations: Record<string, string> = {
   "journal.type.save": "Save type",
   "journal.type.saving": "Saving…",
   "journal.type.createError": "Failed to create type.",
+  "journal.type.placeholder": "e.g. Payment, Invoice, Adjustment",
 
   "common.status.active": "Active",
   "common.status.inactive": "Inactive",
+  "common.inactiveSuffix": "(inactive)",
   "common.table.code": "Code",
   "common.table.name": "Name",
   "common.table.status": "Status",
@@ -510,6 +513,7 @@ const enTranslations: Record<string, string> = {
   "common.action.viewDetails": "View Details",
   "common.action.close": "Close",
   "common.optional": "Optional",
+  "common.emptyDash": "—",
   "common.loading": "Loading...",
 
   "master.segmentValues.empty": "No values yet. Add one above.",

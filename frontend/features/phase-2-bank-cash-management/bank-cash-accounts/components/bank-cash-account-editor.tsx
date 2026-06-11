@@ -2,6 +2,7 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { type AccountOption, type BankCashAccountType, type PaymentMethodType } from "@/types/api";
 import { useTranslation } from "@/lib/i18n";
+import { getLocalizedPaymentMethodTypeName } from "@/lib/master-data-localization";
 import { cn } from "@/lib/utils";
 
 import type { EditorState } from "../bank-cash-accounts.types";
@@ -117,7 +118,7 @@ export function BankCashAccountEditor({
                 placeholder={t("bankCash.form.typePlaceholder")}
                 options={paymentMethodTypes
                   .filter((type) => type.isActive)
-                  .map((type) => ({ value: type.name, label: type.name }))}
+                  .map((type) => ({ value: type.name, label: getLocalizedPaymentMethodTypeName(type.name, language) }))}
                 onChange={(value) => handleTypeChange(value as BankCashAccountType)}
                 labelClassName={fieldLabelClassName}
                 selectClassName={fieldInputClassName}

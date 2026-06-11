@@ -51,6 +51,19 @@ If code and docs drift:
 - update docs immediately after confirming behavior
 - do not keep outdated architecture descriptions in `docs/`
 
+## Master Data Bilingual Gaps
+
+Current limitation:
+
+- `JournalEntryType` and `PaymentMethodType` currently persist a single `name` field only; they do not yet store a dedicated Arabic name in the schema.
+- the frontend now localizes seeded built-in values such as `General`, `Receipt`, `Payment`, `Transfer`, `Bank`, and `Cash` when the UI language is Arabic.
+- custom user-created journal entry types and payment method types still display exactly as entered because there is no separate persisted Arabic label yet.
+
+What this means for future edits:
+
+- do not assume these two master-data tables have full bilingual storage like accounts, currencies, or payment terms.
+- if full bilingual master-data editing is required later, implement it as a schema/API/UI change together rather than adding more one-off frontend translations.
+
 ## Backend Dev Watchers On Linux
 
 Current limitation:

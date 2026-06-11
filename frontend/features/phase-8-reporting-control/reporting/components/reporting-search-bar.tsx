@@ -6,6 +6,7 @@ import { LuChevronDown, LuFilter, LuStar, LuX } from "react-icons/lu";
 
 import { formatDate } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
+import { getLocalizedJournalEntryTypeName } from "@/lib/master-data-localization";
 import type { AccountOption, AccountType, JournalEntryType, ReportingDefinition } from "@/types/api";
 import type { TranslationFn } from "../reporting-types";
 import {
@@ -437,7 +438,10 @@ function FilterMenu({
           value={filters.journalEntryTypeId}
           expanded={expandedSubmenu === "journalEntryTypeId"}
           onToggle={() => onToggleSubmenu("journalEntryTypeId")}
-          options={journalEntryTypes.map((entryType) => ({ value: entryType.id, label: entryType.name }))}
+          options={journalEntryTypes.map((entryType) => ({
+            value: entryType.id,
+            label: getLocalizedJournalEntryTypeName(entryType.name, language),
+          }))}
           onSelect={(value) => onPatch({ journalEntryTypeId: value })}
         />
         {showAccountFilter ? (

@@ -21,6 +21,7 @@ import { JournalEntry, JournalEntryLine, AccountOption, JournalEntryType } from 
 import { SectionHeading, StatusPill, Card, Button, TableSkeleton, PageShell } from "@/components/ui";
 import { ExportActions } from "@/components/ui/export-actions";
 import { exportOrPrint, formatExportDate, type ExportMode } from "@/lib/export-print";
+import { getLocalizedJournalEntryTypeName } from "@/lib/master-data-localization";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
 
@@ -42,14 +43,24 @@ function normalizeSearchText(value: string) {
     return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function getLocalizedAccountName(account: Pick<AccountOption, "name" | "nameAr">, language: string) {
+    if (language === "ar") {
+        return account.nameAr?.trim() || account.name;
+    }
+
+    return account.name?.trim() || account.nameAr?.trim() || "";
+}
+
 function AccountAutocomplete({
     accounts,
     value,
     onChange,
+    language,
 }: {
     accounts: AccountOption[];
     value: string;
     onChange: (nextAccountId: string) => void;
+    language: string;
 }) {
     const { t } = useTranslation();
     const selected = accounts.find((a) => a.id === value) ?? null;
@@ -69,7 +80,7 @@ function AccountAutocomplete({
         const contains: AccountOption[] = [];
 
         for (const a of accounts) {
-            const hay = normalizeSearchText(`${a.code} ${a.name}`);
+            const hay = normalizeSearchText(`${a.code} ${a.name} ${a.nameAr ?? ""}`);
             if (hay.startsWith(q)) starts.push(a);
             else if (hay.includes(q)) contains.push(a);
             if (starts.length + contains.length >= 50) break;
@@ -77,7 +88,7 @@ function AccountAutocomplete({
         return [...starts, ...contains];
     }, [accounts, query]);
 
-    const displayValue = open ? query : selected ? `${selected.code} · ${selected.name}` : "";
+    const displayValue = open ? query : selected ? `${selected.code} · ${getLocalizedAccountName(selected, language)}` : "";
 
     useEffect(() => {
         if (!open) return;
@@ -179,7 +190,8 @@ function AccountAutocomplete({
                                     setOpen(false);
                                 }}
                                 className={cn(
-                                    "w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50",
+                                    "w-full px-3 py-2 text-xs text-gray-500 hover:bg-gray-50",
+                                    language === "ar" ? "text-right" : "text-left",
                                     activeIndex === 0 && "bg-teal-500/10",
                                 )}
                             >
@@ -199,12 +211,13 @@ function AccountAutocomplete({
                                             setOpen(false);
                                         }}
                                         className={cn(
-                                            "w-full text-left px-3 py-2 text-xs hover:bg-gray-50",
+                                            "w-full px-3 py-2 text-xs hover:bg-gray-50",
+                                            language === "ar" ? "text-right" : "text-left",
                                             isActive && "bg-teal-500/10",
                                         )}
                                     >
-                                        <span className="font-mono text-gray-500 mr-2">{a.code}</span>
-                                        <span className="text-gray-900">{a.name}</span>
+                                        <span className={cn("font-mono text-gray-500", language === "ar" ? "ml-2" : "mr-2")}>{a.code}</span>
+                                        <span className="text-gray-900">{getLocalizedAccountName(a, language)}</span>
                                     </button>
                                 );
                             })}
@@ -341,14 +354,24 @@ export function JournalEntriesPage() {
                 {
                     label: "نوع القيد",
                     value: filterTypeId
-                        ? (typesQuery.data ?? []).find((type: JournalEntryType) => type.id === filterTypeId)?.name
+                        ? getLocalizedJournalEntryTypeName(
+                            (typesQuery.data ?? []).find((type: JournalEntryType) => type.id === filterTypeId)?.name ?? "",
+                            language,
+                        )
                         : "كل الأنواع",
                 },
             ],
             columns: [
                 { key: "reference", label: "رقم القيد", value: (row) => row.reference },
                 { key: "date", label: "تاريخ القيد", value: (row) => formatExportDate(row.entryDate) },
-                { key: "type", label: "نوع القيد", value: (row) => row.journalEntryType?.name || "غير محدد" },
+                {
+                    key: "type",
+                    label: "نوع القيد",
+                    value: (row) =>
+                        row.journalEntryType?.name
+                            ? getLocalizedJournalEntryTypeName(row.journalEntryType.name, language)
+                            : "غير محدد",
+                },
                 { key: "description", label: "الوصف", value: (row) => row.description || "بدون وصف" },
                 { key: "status", label: "الحالة", value: (row) => t(`journal.status.${row.status}`) },
             ],
@@ -391,7 +414,7 @@ export function JournalEntriesPage() {
                             <option value="">{t("journal.list.allTypes")}</option>
                             {activeTypes.map((type: JournalEntryType) => (
                                 <option key={type.id} value={type.id}>
-                                    {type.name}
+                                    {getLocalizedJournalEntryTypeName(type.name, language)}
                                 </option>
                             ))}
                         </select>
@@ -435,7 +458,7 @@ export function JournalEntriesPage() {
                                 <input
                                     value={description}
                                     onChange={e => setDescription(e.target.value)}
-                                    placeholder="e.g. Electricity bill payment"
+                                    placeholder={t("journal.field.descriptionPlaceholder")}
                                     className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
                                 />
                             </div>
@@ -452,9 +475,9 @@ export function JournalEntriesPage() {
                                     <option value="">{t("journal.none")}</option>
                                     {(typesQuery.data ?? [])
                                         .filter((t: JournalEntryType) => t.isActive || t.id === journalEntryTypeId)
-                                        .map((t: JournalEntryType) => (
-                                            <option key={t.id} value={t.id}>
-                                                {t.name}{t.isActive ? "" : " (inactive)"}
+                                        .map((type: JournalEntryType) => (
+                                            <option key={type.id} value={type.id}>
+                                                {getLocalizedJournalEntryTypeName(type.name, language)}{type.isActive ? "" : ` ${t("common.inactiveSuffix")}`}
                                             </option>
                                         ))}
                                 </select>
@@ -472,7 +495,7 @@ export function JournalEntriesPage() {
                                     <input
                                         value={newTypeName}
                                         onChange={(e) => setNewTypeName(e.target.value)}
-                                        placeholder="e.g. Payment, Invoice, Adjustment"
+                                        placeholder={t("journal.type.placeholder")}
                                         className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
                                     />
                                     <div className="flex gap-2">
@@ -520,6 +543,7 @@ export function JournalEntriesPage() {
                                                     accounts={postingAccounts}
                                                     value={line.accountId}
                                                     onChange={(id) => updateLine(i, "accountId", id)}
+                                                    language={language}
                                                 />
                                             </td>
                                             <td className="px-4 py-3 align-top">
@@ -623,7 +647,7 @@ export function JournalEntriesPage() {
                                         <span className="text-xs text-gray-500">{formatDate(entry.entryDate)}</span>
                                         {entry.journalEntryType?.name && (
                                             <span className="inline-flex rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-900">
-                                                {entry.journalEntryType.name}
+                                                {getLocalizedJournalEntryTypeName(entry.journalEntryType.name, language)}
                                             </span>
                                         )}
                                         <JournalStatusPill status={entry.status} />
@@ -691,12 +715,12 @@ export function JournalEntriesPage() {
                                                                 </span>
                                                                 </div>
                                                             </td>
-                                                            <td className={cn("px-6 py-4 align-top text-gray-700", isArabic ? "text-right" : "text-left")}>{line.description || "—"}</td>
+                                                            <td className={cn("px-6 py-4 align-top text-gray-700", isArabic ? "text-right" : "text-left")}>{line.description || t("common.emptyDash")}</td>
                                                             <td className="px-6 py-4 text-end align-top font-mono font-bold tabular-nums text-teal-600">
-                                                                {parseFloat(line.debitAmount) > 0 ? formatCurrency(line.debitAmount) : "—"}
+                                                                {parseFloat(line.debitAmount) > 0 ? formatCurrency(line.debitAmount) : t("common.emptyDash")}
                                                             </td>
                                                             <td className="px-6 py-4 text-end align-top font-mono font-bold tabular-nums text-amber-600">
-                                                                {parseFloat(line.creditAmount) > 0 ? formatCurrency(line.creditAmount) : "—"}
+                                                                {parseFloat(line.creditAmount) > 0 ? formatCurrency(line.creditAmount) : t("common.emptyDash")}
                                                             </td>
                                                         </tr>
                                                     ))}

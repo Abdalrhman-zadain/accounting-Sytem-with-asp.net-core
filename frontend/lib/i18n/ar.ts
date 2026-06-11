@@ -256,6 +256,7 @@ const arTranslations: Record<string, string> = {
   "journal.create.title": "قيد يومية جديد",
   "journal.field.date": "التاريخ",
   "journal.field.description": "الوصف",
+  "journal.field.descriptionPlaceholder": "مثال: سداد فاتورة كهرباء",
   "journal.field.type": "النوع",
   "journal.none": "— بدون —",
   "journal.button.addType": "إضافة نوع جديد",
@@ -343,9 +344,11 @@ const arTranslations: Record<string, string> = {
   "journal.type.save": "حفظ النوع",
   "journal.type.saving": "جارٍ الحفظ…",
   "journal.type.createError": "فشل إنشاء النوع.",
+  "journal.type.placeholder": "مثال: دفعة، فاتورة، تسوية",
 
   "common.status.active": "نشط",
   "common.status.inactive": "غير نشط",
+  "common.inactiveSuffix": "(غير نشط)",
   "common.table.code": "الرمز",
   "common.table.name": "الاسم",
   "common.table.status": "الحالة",
@@ -359,6 +362,7 @@ const arTranslations: Record<string, string> = {
   "common.action.viewDetails": "عرض التفاصيل",
   "common.action.close": "إغلاق",
   "common.optional": "اختياري",
+  "common.emptyDash": "—",
   "common.loading": "جارٍ التحميل...",
 
   "master.segmentValues.empty": "لا توجد قيم بعد. أضف قيمة أعلاه.",

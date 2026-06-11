@@ -41,6 +41,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { AccountOption, AccountSubtype, CreditNoteLinkedInvoiceRequirement, CreditNoteType, CreditNoteTypeEffect, JournalEntryType, PaymentMethodType, Currency, SegmentDefinition, SegmentValue, SupplierDebitNoteType, Tax, TaxTreatment, TaxType } from "@/types/api";
 import { SectionHeading, StatusPill, Card, Button } from "@/components/ui";
+import { getLocalizedJournalEntryTypeName, getLocalizedPaymentMethodTypeName } from "@/lib/master-data-localization";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
 import { PaymentTermsTab } from "./payment-terms-tab";
@@ -185,7 +186,7 @@ function translateSegmentName(name: string, t: any): string {
 export function MasterDataPage() {
     const { token } = useAuth();
     const queryClient = useQueryClient();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const [activeTab, setActiveTab] = useState(0);
     const [segmentEditingId, setSegmentEditingId] = useState<string | null>(null);
     const [editCode, setEditCode] = useState("");
@@ -935,11 +936,11 @@ export function MasterDataPage() {
                     {showAddType && (
                         <div className="border-b border-gray-200 px-6 py-4 bg-indigo-500/5">
                             <div className="flex items-center gap-3">
-                                <input
-                                    value={newTypeName}
-                                    onChange={(e) => setNewTypeName(e.target.value)}
-                                    placeholder={t("master.journalEntryTypes.namePlaceholder")}
-                                    className="flex-1 rounded-lg border border-indigo-500/30 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                            <input
+                                                value={newTypeName}
+                                                onChange={(e) => setNewTypeName(e.target.value)}
+                                                placeholder={t("master.journalEntryTypes.namePlaceholder")}
+                                                className="flex-1 rounded-lg border border-indigo-500/30 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                 />
                                 <button
                                     onClick={() => createTypeMutation.mutate(newTypeName)}
@@ -981,7 +982,7 @@ export function MasterDataPage() {
                                                 className="rounded-lg border border-indigo-500/30 bg-gray-100 px-2 py-1 text-sm text-gray-900 focus:outline-none w-64"
                                             />
                                         ) : (
-                                            <span className="text-sm font-medium text-zinc-200">{row.name}</span>
+                                            <span className="text-sm font-medium text-zinc-200">{getLocalizedJournalEntryTypeName(row.name, language)}</span>
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-center">
@@ -1090,7 +1091,7 @@ export function MasterDataPage() {
                                                 className="rounded-lg border border-cyan-500/30 bg-gray-100 px-2 py-1 text-sm text-gray-900 focus:outline-none w-64"
                                             />
                                         ) : (
-                                            <span className="text-sm font-medium text-zinc-200">{row.name}</span>
+                                            <span className="text-sm font-medium text-zinc-200">{getLocalizedPaymentMethodTypeName(row.name, language)}</span>
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-center">

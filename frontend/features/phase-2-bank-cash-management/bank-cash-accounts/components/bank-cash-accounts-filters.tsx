@@ -1,6 +1,7 @@
 import type { BankCashAccountType, PaymentMethodType } from "@/types/api";
 import { Card } from "@/components/ui";
 import { useTranslation } from "@/lib/i18n";
+import { getLocalizedPaymentMethodTypeName } from "@/lib/master-data-localization";
 
 export function BankCashAccountsFilters({
   search,
@@ -19,7 +20,7 @@ export function BankCashAccountsFilters({
   onTypeFilterChange: (value: BankCashAccountType | "") => void;
   onStatusFilterChange: (value: "true" | "false" | "") => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   return (
     <Card className="border border-gray-200 bg-white p-5">
@@ -40,7 +41,7 @@ export function BankCashAccountsFilters({
             .filter((type) => type.isActive)
             .map((type) => (
               <option key={type.id} value={type.name}>
-                {type.name}
+                {getLocalizedPaymentMethodTypeName(type.name, language)}
               </option>
             ))}
         </select>
