@@ -22,7 +22,7 @@ npm install
 cp .env.example .env
 npm run db:up
 npm run prisma:generate
-npm run prisma:migrate -- --name init_accounting_core
+npm run prisma:deploy
 npm test
 npm run start:dev
 ```
@@ -34,7 +34,7 @@ npm run start:dev
 Create `backend/.env` by copying `backend/.env.example`, or use:
 
 ```bash
-DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public"
+DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
 PORT=3007
 JWT_SECRET="your_highly_secret_key_change_in_production"
 JWT_EXPIRATION="24h"
@@ -63,7 +63,7 @@ docker compose up -d postgres
 If backend startup fails with:
 
 ```text
-PrismaClientInitializationError: Database `simple_account` does not exist
+PrismaClientInitializationError: Database `simple-account-pos-m-ch` does not exist
 ```
 
 use this recovery flow from `backend/`:
@@ -71,20 +71,22 @@ use this recovery flow from `backend/`:
 ```bash
 npm run db:up
 npm run prisma:generate
-npm run prisma:migrate -- --name init_accounting_core
+npm run prisma:deploy
 npm run start:dev
 ```
+
+Use `npm run prisma:migrate -- --name <migration_name>` only when you are intentionally creating a new migration during development. For a fresh local database that should apply the repo's existing migration history as-is, prefer `npm run prisma:deploy`.
 
 If Docker starts but the database still does not exist, your local Postgres volume may have been created earlier with stale state. In that case, reset the local database volume and recreate it:
 
 ```bash
 npm run db:down
-docker volume rm simple-account_postgres_data
+docker volume rm simple-account_postgres_pos_market_data
 npm run db:up
-npm run prisma:migrate -- --name init_accounting_core
+npm run prisma:deploy
 ```
 
 Warning:
 
-- removing `simple-account_postgres_data` deletes all local PostgreSQL data in that Docker volume
+- removing `simple-account_postgres_pos_market_data` deletes all local PostgreSQL data in that Docker volume
 - only use the volume-reset flow when you are okay recreating the local database

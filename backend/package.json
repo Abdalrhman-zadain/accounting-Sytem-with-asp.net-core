@@ -11,6 +11,7 @@
     "db:up": "docker compose -f ../docker-compose.yml up -d postgres",
     "db:down": "docker compose -f ../docker-compose.yml down",
     "prisma:generate": "prisma generate --generator client",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:format": "prisma format",
     "prisma:migrate": "prisma migrate dev --skip-generate",
     "prisma:studio": "prisma studio",

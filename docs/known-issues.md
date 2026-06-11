@@ -95,11 +95,11 @@ Current limitation:
 
 - some Windows environments reserve dynamic TCP ranges that can block Docker from binding specific localhost ports even when the compose file is correct.
 - the previous local PostgreSQL host port `55432` can fall inside an excluded Windows TCP range, which causes Docker startup failures such as `bind: An attempt was made to access a socket in a way forbidden by its access permissions.`
-- the project now uses local host port `15432` for PostgreSQL to avoid the reserved range seen on affected machines.
+- the current `pos-market` branch setup uses local host port `15433` for PostgreSQL and a dedicated local database named `simple-account-pos-m-ch` so Prisma migrations and seeds stay isolated from the restaurant POS database.
 
 What this means for future edits:
 
-- keep `docker-compose.yml`, `backend/.env`, and `backend/.env.example` aligned if the local PostgreSQL host port changes again.
+- keep `docker-compose.yml`, `backend/.env`, and `backend/.env.example` aligned if the local PostgreSQL host port or branch-specific database name changes again.
 - if Docker reports a bind-permission error on startup, check `netsh int ipv4 show excludedportrange protocol=tcp` before assuming PostgreSQL or Prisma is misconfigured.
 
 ## Phase 2 Bank & Cash Scope
