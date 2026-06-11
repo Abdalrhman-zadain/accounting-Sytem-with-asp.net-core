@@ -4107,7 +4107,18 @@ function TableHead({
   children: ReactNode;
   className?: string;
 }) {
-  return <th className={cn("px-6 py-3 text-start text-[10px] font-bold uppercase tracking-widest text-gray-600", className)}>{children}</th>;
+  const hasAlignment = className && /\btext-(?:center|end|right|left|start)\b/.test(className);
+  return (
+    <th
+      className={cn(
+        "px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-gray-600",
+        !hasAlignment && "text-start",
+        className
+      )}
+    >
+      {children}
+    </th>
+  );
 }
 
 function mapSalesLines(lines: SalesLineEditorState[]): SalesLinePayload[] {
