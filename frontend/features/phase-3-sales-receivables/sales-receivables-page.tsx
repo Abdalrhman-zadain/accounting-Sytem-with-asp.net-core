@@ -2173,7 +2173,7 @@ export function SalesReceivablesPage() {
                       <TableHead>{t("salesReceivables.field.validUntil")}</TableHead>
                       <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
                       <TableHead className="text-center">{t("salesReceivables.field.status")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                      <TableHead className="text-end">{t("salesReceivables.field.actions")}</TableHead>
                     </tr>
                   </thead>
                   <tbody>
@@ -2181,7 +2181,7 @@ export function SalesReceivablesPage() {
                       <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">{t("salesReceivables.empty.quotations")}</td></tr>
                     ) : quotations.map((row) => (
                       <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedQuotation?.id === row.id && "bg-gray-50")}>
-                        <td className="px-6 py-4"><button type="button" className="text-left font-bold text-gray-900" onClick={() => setSelectedQuotationId(row.id)}>{row.reference}</button></td>
+                        <td className="px-6 py-4"><button type="button" className="text-start font-bold text-gray-900" onClick={() => setSelectedQuotationId(row.id)}>{row.reference}</button></td>
                         <td className="px-6 py-4"><div className="font-semibold text-gray-900">{row.customer.name}</div><div className="text-xs text-gray-500">{row.customer.code}</div></td>
                         <td className="px-6 py-4">{formatDate(row.quotationDate)}</td>
                         <td className="px-6 py-4">{formatDate(row.validityDate)}</td>
@@ -2316,7 +2316,7 @@ export function SalesReceivablesPage() {
                           <TableHead>{t("salesReceivables.field.quotation")}</TableHead>
                           <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
                           <TableHead className="text-center">{t("salesReceivables.field.status")}</TableHead>
-                          <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                          <TableHead className="text-end">{t("salesReceivables.field.actions")}</TableHead>
                         </tr>
                       </thead>
                       <tbody>
@@ -2324,7 +2324,7 @@ export function SalesReceivablesPage() {
                           <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">{t("salesReceivables.empty.orders")}</td></tr>
                         ) : salesOrders.map((row) => (
                           <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedOrder?.id === row.id && "bg-gray-50")}>
-                            <td className="px-6 py-4"><button type="button" className="text-left font-bold text-gray-900" onClick={() => setSelectedOrderId(row.id)}>{row.reference}</button></td>
+                            <td className="px-6 py-4"><button type="button" className="text-start font-bold text-gray-900" onClick={() => setSelectedOrderId(row.id)}>{row.reference}</button></td>
                             <td className="px-6 py-4"><div className="font-semibold text-gray-900">{row.customer.name}</div><div className="text-xs text-gray-500">{row.customer.code}</div></td>
                             <td className="px-6 py-4">{formatDate(row.orderDate)}</td>
                             <td className="px-6 py-4 text-gray-700">{row.sourceQuotation?.reference ?? t("salesReceivables.empty.manual")}</td>
@@ -2517,7 +2517,7 @@ export function SalesReceivablesPage() {
                           <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
                           <TableHead className="text-right">{t("salesReceivables.metric.outstanding")}</TableHead>
                           <TableHead className="text-center">{t("salesReceivables.metric.status")}</TableHead>
-                          <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                          <TableHead className="text-end">{t("salesReceivables.field.actions")}</TableHead>
                         </tr>
                       </thead>
                       <tbody>
@@ -2531,7 +2531,7 @@ export function SalesReceivablesPage() {
                           invoices.map((row) => (
                             <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedInvoice?.id === row.id && "bg-gray-50")}>
                               <td className="px-6 py-4">
-                                <button type="button" className="text-left" onClick={() => setSelectedInvoiceId(row.id)}>
+                                <button type="button" className="text-start" onClick={() => setSelectedInvoiceId(row.id)}>
                                   <div className="font-bold text-gray-900">{row.reference}</div>
                                   <div className="text-xs text-gray-500">{row.journalReference ?? t("salesReceivables.empty.noJournal")}</div>
                                 </button>
@@ -2741,7 +2741,7 @@ export function SalesReceivablesPage() {
                       <TableHead>{t("salesReceivables.field.date")}</TableHead>
                       <TableHead className="text-right">{t("salesReceivables.field.amount")}</TableHead>
                       <TableHead className="text-right">{t("salesReceivables.field.unapplied")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                      <TableHead className="text-end">{t("salesReceivables.field.actions")}</TableHead>
                     </tr>
                   </thead>
                   <tbody>
@@ -2749,12 +2749,12 @@ export function SalesReceivablesPage() {
                       <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">{t("salesReceivables.empty.receipts")}</td></tr>
                     ) : customerReceipts.map((row) => (
                       <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedReceipt?.id === row.id && "bg-gray-50")}>
-                        <td className="px-6 py-4"><button type="button" className="text-left font-bold text-gray-900" onClick={() => setSelectedReceiptId(row.id)}>{row.reference}</button></td>
+                        <td className="px-6 py-4"><button type="button" className="text-start font-bold text-gray-900" onClick={() => setSelectedReceiptId(row.id)}>{row.reference}</button></td>
                         <td className="px-6 py-4">{row.customer ? `${row.customer.code} · ${row.customer.name}` : t("salesReceivables.empty.unlinked")}</td>
                         <td className="px-6 py-4">{formatDate(row.receiptDate)}</td>
                         <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">{formatCurrency(row.amount)}</td>
                         <td className="px-6 py-4 text-right font-mono text-gray-700">{formatCurrency(row.unappliedAmount)}</td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-end">
                           <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" onClick={() => setSelectedReceiptId(row.id)}>{t("salesReceivables.action.view")}</button>
                         </td>
                       </tr>
@@ -2869,7 +2869,7 @@ export function SalesReceivablesPage() {
                       <TableHead>{t("salesReceivables.field.date")}</TableHead>
                       <TableHead className="text-right">{t("salesReceivables.field.total")}</TableHead>
                       <TableHead className="text-center">{t("salesReceivables.field.status")}</TableHead>
-                      <TableHead className="text-right">{t("salesReceivables.field.actions")}</TableHead>
+                      <TableHead className="text-end">{t("salesReceivables.field.actions")}</TableHead>
                     </tr>
                   </thead>
                   <tbody>
@@ -2883,7 +2883,7 @@ export function SalesReceivablesPage() {
                       creditNotes.map((row) => (
                         <tr key={row.id} className={cn("border-t border-gray-100 hover:bg-gray-50", selectedCreditNote?.id === row.id && "bg-gray-50")}>
                           <td className="px-6 py-4">
-                            <button type="button" className="text-left" onClick={() => setSelectedCreditNoteId(row.id)}>
+                            <button type="button" className="text-start" onClick={() => setSelectedCreditNoteId(row.id)}>
                               <div className="font-bold text-gray-900">{row.reference}</div>
                               <div className="text-xs text-gray-500">{row.journalReference ?? t("salesReceivables.empty.noJournal")}</div>
                             </button>
