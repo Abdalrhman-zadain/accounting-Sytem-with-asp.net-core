@@ -232,7 +232,7 @@ export function AdjustmentEditorModal({
   const isInline = presentation === "inline";
 
   const controlClassName = cn(
-    "h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10",
+    "h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-[#46644b] focus:bg-white focus:ring-2 focus:ring-[#46644b]/10",
     isArabic ? "text-right" : "text-left",
   );
 
@@ -282,7 +282,7 @@ export function AdjustmentEditorModal({
                   {isArabic ? "إدارة وتوثيق مستندات تسوية المخزون والفروقات" : "Manage and log stock adjustment and variance documents"}
                 </div>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#46644b]/10 text-[#46644b]">
                 <AdjustmentIcon className="h-6 w-6" />
               </div>
             </div>
@@ -291,13 +291,13 @@ export function AdjustmentEditorModal({
 
         {/* Content Container */}
         <div className={cn(
-          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(70,100,75,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
           isInline ? "px-0 py-4" : "px-4 py-4 sm:px-8 sm:py-6"
         )}>
           <div className="space-y-5">
             {isInline ? (
               <div className={cn("mb-5 flex items-center gap-3 border-b border-slate-200 pb-4", isArabic ? "justify-end text-right" : "justify-start text-left")}>
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#46644b]/10 text-[#46644b]">
                   <AdjustmentIcon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
@@ -569,7 +569,7 @@ export function AdjustmentEditorModal({
                             <td className={cn(
                               "px-3 py-3.5 font-mono text-sm font-bold text-center",
                               isVarianceNegative && "text-red-600",
-                              isVariancePositive && "text-emerald-600"
+                              isVariancePositive && "text-[#46644b]"
                             )}>
                               {varianceNum > 0 ? `+${variance}` : variance}
                             </td>
@@ -611,7 +611,7 @@ export function AdjustmentEditorModal({
                         <td className={cn(
                           "px-3 py-4 font-mono text-base text-center",
                           totalVarianceQuantity < 0 && "text-red-600",
-                          totalVarianceQuantity > 0 && "text-emerald-600"
+                          totalVarianceQuantity > 0 && "text-[#46644b]"
                         )}>
                           {totalVarianceQuantity > 0 ? `+${totalVarianceQuantity.toFixed(2)}` : totalVarianceQuantity.toFixed(2)}
                         </td>
@@ -634,7 +634,7 @@ export function AdjustmentEditorModal({
           <Button
             onClick={handleSaveClick}
             disabled={isSaving}
-            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base flex items-center gap-1.5 px-6 py-3"
+            className="rounded-xl bg-[#46644b] hover:bg-[#39523d] text-white font-bold text-base flex items-center gap-1.5 px-6 py-3"
           >
             <Save className="h-5 w-5" />
             <span>

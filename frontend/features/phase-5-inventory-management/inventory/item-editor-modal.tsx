@@ -796,7 +796,7 @@ export function ItemEditorModal({
                 </div>
                 <div className="truncate text-sm text-slate-500">{t("inventory.items.description")}</div>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#46644b]/10 text-[#46644b]">
                 <Package2 className="h-6 w-6" />
               </div>
             </div>
@@ -805,18 +805,18 @@ export function ItemEditorModal({
 
         {/* Content Container */}
         <div className={cn(
-          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
+          "flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(70,100,75,0.06),_transparent_30%),linear-gradient(180deg,_#fcfcfb_0%,_#f7f8f7_100%)]",
           isInline ? "px-0 py-4" : "px-4 py-4 sm:px-8 sm:py-6"
         )}>
           <div className="space-y-5">
             {isInline ? (
               <div className={cn("mb-5 flex items-center gap-3 border-b border-slate-200 pb-4", isArabic ? "justify-end text-right" : "justify-start text-left")}>
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#46644b]/10 text-[#46644b]">
                   <Package2 className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
-                  <p className="truncate text-xs text-slate-500">{t("inventory.items.description")}</p>
+                  <h1 className="text-2xl font-bold text-slate-900 arabic-ui-heading">{title}</h1>
+                  <p className="truncate text-sm text-slate-500">{t("inventory.items.description")}</p>
                 </div>
               </div>
             ) : null}
@@ -968,8 +968,8 @@ export function ItemEditorModal({
                         type="button"
                         onClick={() => updateEditor((current) => ({ ...current, isActive: !current.isActive }))}
                         className={cn(
-                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
-                          editor.isActive ? "bg-emerald-600" : "bg-slate-200"
+                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20",
+                          editor.isActive ? "bg-[#46644b]" : "bg-slate-200"
                         )}
                       >
                         <span
@@ -1001,11 +1001,11 @@ export function ItemEditorModal({
                     className={cn(
                       "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 outline-none",
                       isActive
-                        ? "bg-white text-emerald-600 shadow-sm border border-slate-200/50 font-bold"
+                        ? "bg-white text-[#46644b] shadow-sm border border-slate-200/50 font-bold"
                         : "text-slate-500 hover:bg-slate-200/50 hover:text-slate-800"
                     )}
                   >
-                    <IconComponent className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-slate-400")} />
+                    <IconComponent className={cn("h-4 w-4 shrink-0", isActive ? "text-[#46644b]" : "text-slate-400")} />
                     <span>{isArabic ? tab.labelAr : tab.labelEn}</span>
                   </button>
                 );
@@ -1021,7 +1021,7 @@ export function ItemEditorModal({
                     {/* Default Prices Card */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                       <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
-                        <Calculator className="h-5 w-5 text-emerald-600" />
+                        <Calculator className="h-5 w-5 text-[#46644b]" />
                         <h3 className="font-bold text-slate-900">{isArabic ? "الأسعار الافتراضية والوحدات" : "Default Prices & Units"}</h3>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -1080,8 +1080,8 @@ export function ItemEditorModal({
                               type="button"
                               onClick={() => updateEditor((current) => ({ ...current, allowFractionalQuantity: !current.allowFractionalQuantity }))}
                               className={cn(
-                                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                                editor.allowFractionalQuantity ? "bg-emerald-600" : "bg-slate-200"
+                                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20",
+                                editor.allowFractionalQuantity ? "bg-[#46644b]" : "bg-slate-200"
                               )}
                             >
                               <span
@@ -1192,7 +1192,7 @@ export function ItemEditorModal({
                     >
                       <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
                         <div className="flex items-center gap-2">
-                          <Calculator className="h-5 w-5 text-emerald-600" />
+                          <Calculator className="h-5 w-5 text-[#46644b]" />
                           <h3 className="font-bold text-slate-900">{isArabic ? "الوحدات والتحويلات الإضافية" : "Additional Units & Conversions"}</h3>
                         </div>
                         <Button type="button" variant="secondary" size="sm" onClick={addUnitConversionRow} className="rounded-xl text-xs">
@@ -1307,16 +1307,16 @@ export function ItemEditorModal({
                 <div className="space-y-5 animate-fadeIn">
                   {/* Visual Inventory Status Dashboard */}
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/20 p-4 flex items-center justify-between shadow-sm">
+                    <div className="rounded-2xl border border-[#46644b]/20 bg-[#46644b]/5 p-4 flex items-center justify-between shadow-sm">
                       <div className={cn("space-y-1", isArabic ? "text-right" : "text-left")}>
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                           {isArabic ? "الكمية المتوفرة حالياً" : "Current Quantity On-Hand"}
                         </span>
-                        <div className="text-3xl font-black text-emerald-800 font-mono">
+                        <div className="text-3xl font-black text-[#46644b] font-mono">
                           {parseFloat(editor.onHandQuantity || "0").toFixed(3)}
                         </div>
                       </div>
-                      <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <div className="h-12 w-12 rounded-xl bg-[#46644b]/10 text-[#46644b] flex items-center justify-center">
                         <Package2 className="h-6 w-6" />
                       </div>
                     </div>
@@ -1350,8 +1350,8 @@ export function ItemEditorModal({
                             type="button"
                             onClick={() => updateEditor((current) => ({ ...current, trackInventory: !current.trackInventory }))}
                             className={cn(
-                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              editor.trackInventory ? "bg-emerald-600" : "bg-slate-200"
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20",
+                              editor.trackInventory ? "bg-[#46644b]" : "bg-slate-200"
                             )}
                           >
                             <span
@@ -1434,8 +1434,8 @@ export function ItemEditorModal({
                             onClick={() => updateEditor((current) => ({ ...current, allowNegativeStock: !current.allowNegativeStock }))}
                             disabled={!editor.trackInventory}
                             className={cn(
-                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50",
-                              editor.allowNegativeStock ? "bg-emerald-600" : "bg-slate-200"
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20 disabled:opacity-50",
+                              editor.allowNegativeStock ? "bg-[#46644b]" : "bg-slate-200"
                             )}
                           >
                             <span
@@ -1601,8 +1601,8 @@ export function ItemEditorModal({
                             type="button"
                             onClick={() => updateEditor((current) => ({ ...current, taxable: !current.taxable }))}
                             className={cn(
-                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              editor.taxable ? "bg-emerald-600" : "bg-slate-200"
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20",
+                              editor.taxable ? "bg-[#46644b]" : "bg-slate-200"
                             )}
                           >
                             <span
@@ -1659,8 +1659,8 @@ export function ItemEditorModal({
                             type="button"
                             onClick={() => updateEditor((current) => ({ ...current, priceIncludesTax: !current.priceIncludesTax }))}
                             className={cn(
-                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              editor.priceIncludesTax ? "bg-emerald-600" : "bg-slate-200"
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#46644b]/20",
+                              editor.priceIncludesTax ? "bg-[#46644b]" : "bg-slate-200"
                             )}
                           >
                             <span
@@ -1693,7 +1693,7 @@ export function ItemEditorModal({
                 <div className="space-y-5 animate-fadeIn">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
-                      <LuTruck className="h-5 w-5 text-emerald-500" />
+                      <LuTruck className="h-5 w-5 text-[#46644b]" />
                       <h3 className="font-bold text-slate-900">{isArabic ? "معلومات الموردين والمشتريات" : "Supplier & Procurement Info"}</h3>
                     </div>
 
@@ -1841,7 +1841,7 @@ export function ItemEditorModal({
                 <div className="space-y-5 animate-fadeIn">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
-                      <LuNotebook className="h-5 w-5 text-emerald-500" />
+                      <LuNotebook className="h-5 w-5 text-[#46644b]" />
                       <h3 className="font-bold text-slate-900">{isArabic ? "الوصف والملحوظات الداخلية والخارجية" : "Descriptions, Public & Internal Notes"}</h3>
                     </div>
 
@@ -1892,7 +1892,7 @@ export function ItemEditorModal({
                 <div className="space-y-5 animate-fadeIn">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
-                      <LuPlus className="h-5 w-5 text-emerald-600" />
+                      <LuPlus className="h-5 w-5 text-[#46644b]" />
                       <h3 className="font-bold text-slate-900">
                         {isArabic ? "مجموعات إضافات نقاط البيع" : "POS Add-on Groups"}
                       </h3>
@@ -2029,7 +2029,7 @@ export function ItemEditorModal({
             <Button
               onClick={() => handleSaveClick("saveAndClose")}
               disabled={isSaving}
-              className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700 font-bold"
+              className="rounded-xl bg-[#46644b] px-6 hover:bg-[#39523d] font-bold"
             >
               <Save className="h-4 w-4" />
               {isArabic ? "حفظ وإغلاق" : "Save & Close"}
@@ -2038,7 +2038,7 @@ export function ItemEditorModal({
               variant="secondary"
               onClick={() => handleSaveClick("save")}
               disabled={isSaving}
-              className="rounded-xl border-slate-200 px-6 text-emerald-700 hover:bg-emerald-50 font-bold"
+              className="rounded-xl border-slate-200 px-6 text-[#46644b] hover:bg-[#46644b]/5 font-bold"
             >
               <Save className="h-4 w-4" />
               {isArabic ? "حفظ وتعديل" : "Save"}
