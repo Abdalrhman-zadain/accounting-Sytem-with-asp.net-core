@@ -127,11 +127,11 @@ export function SalesDocumentEditorModal({
   const [activeTab, setActiveTab] = useState<"lines" | "journal" | "other">("lines");
 
   const controlClassName = cn(
-    "h-10 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10",
+    "h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10",
     isArabic ? "text-right" : "text-left",
   );
 
-  const labelClassName = cn("text-[12px] font-bold tracking-normal text-slate-700", isArabic && "arabic-ui");
+  const labelClassName = cn("text-sm font-bold tracking-normal text-slate-700", isArabic && "arabic-ui");
 
   const tabs = [
     { key: "lines" as const, label: isArabic ? "بنود الفاتورة" : "Invoice Items" },
@@ -242,8 +242,8 @@ export function SalesDocumentEditorModal({
                   <ReceiptText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold text-slate-900 arabic-ui-heading">{introTitle}</h1>
-                  <p className="truncate text-xs text-slate-500">
+                  <h1 className="text-2xl font-bold text-slate-900 arabic-ui-heading">{introTitle}</h1>
+                  <p className="truncate text-sm text-slate-500">
                     {introDescription || (isArabic ? "إنشاء وتحرير مستندات المبيعات والفواتير الصادرة" : "Create and manage sales document entries and outgoing invoices")}
                   </p>
                 </div>
@@ -251,7 +251,7 @@ export function SalesDocumentEditorModal({
             ) : null}
 
             {validationError ? (
-              <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
+              <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-base font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
                 {validationError}
               </div>
             ) : null}
@@ -263,7 +263,7 @@ export function SalesDocumentEditorModal({
                   <FileText className="h-4.5 w-4.5" />
                 </div>
                 <div className={isArabic ? "text-right" : "text-left"}>
-                  <div className="text-base font-bold text-slate-950 arabic-ui-heading">
+                  <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
                     {isArabic ? "البيانات الأساسية" : "Basic Information"}
                   </div>
                 </div>
@@ -286,7 +286,7 @@ export function SalesDocumentEditorModal({
                           </option>
                         ))}
                       </Select>
-                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
+                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
                     </div>
                   </Field>
                 </div>
@@ -301,7 +301,7 @@ export function SalesDocumentEditorModal({
                         onChange={(event) => onDateChange(event.target.value)}
                         className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
                       />
-                      <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
+                      <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
                     </div>
                   </Field>
                 </div>
@@ -317,7 +317,7 @@ export function SalesDocumentEditorModal({
                           onChange={(event) => onSecondaryDateChange(event.target.value)}
                           className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
                         />
-                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", isArabic ? "left-3" : "right-3")} />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
                       </div>
                     </Field>
                   </div>
@@ -390,7 +390,7 @@ export function SalesDocumentEditorModal({
                       type="button"
                       onClick={() => setActiveTab(tab.key)}
                       className={cn(
-                        "rounded-xl px-4 py-2 text-xs font-bold transition-all duration-200 border",
+                        "rounded-xl px-4 py-2 text-sm font-bold transition-all duration-200 border",
                         isActive
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200/50 shadow-sm"
                           : "text-slate-600 hover:bg-slate-50 border-transparent",
@@ -407,10 +407,10 @@ export function SalesDocumentEditorModal({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2 text-slate-700">
-                      <Package2 className="h-4.5 w-4.5 text-slate-500" />
-                      <span className="text-sm font-bold">{isArabic ? "تفاصيل بنود الفاتورة" : "Invoice Line Items"}</span>
+                      <Package2 className="h-5 w-5 text-slate-500" />
+                      <span className="text-base font-bold">{isArabic ? "تفاصيل بنود الفاتورة" : "Invoice Line Items"}</span>
                     </div>
-                    <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-xs flex items-center gap-1.5 py-1.5 px-3">
+                    <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
                       <Plus className="h-4 w-4" />
                       <span>{isArabic ? "إضافة سطر" : "Add Line"}</span>
                     </Button>
@@ -420,16 +420,16 @@ export function SalesDocumentEditorModal({
                     <table className="min-w-[1360px] table-fixed border-collapse text-sm">
                       <thead className="bg-slate-50/75">
                         <tr>
-                          <th scope="col" className="w-[50px] px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase">#</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[240px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemOrService")} *</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("inventory.warehouse.title")} *</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")} *</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[100px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.quantity")} *</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.unitPrice")} *</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.discountAmount")}</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.tax")}</th>
-                          <th scope="col" className={cn("px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-[140px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.lineAmount")}</th>
-                          <th scope="col" className="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                          <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[240px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemOrService")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("inventory.warehouse.title")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[100px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.quantity")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.unitPrice")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.discountAmount")}</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.tax")}</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[140px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.lineAmount")}</th>
+                          <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
@@ -438,10 +438,10 @@ export function SalesDocumentEditorModal({
 
                           return (
                             <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
-                              <td className="whitespace-nowrap px-3 py-3.5 text-center font-bold text-slate-400">
+                              <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">
                                 {index + 1}
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <Select
                                   value={line.itemId}
                                   onChange={(event) => {
@@ -460,7 +460,7 @@ export function SalesDocumentEditorModal({
 
                                     updateLine(line.key, (current) => applyItemToSalesLine(current, item, customer, taxes, shouldUpdatePrice));
                                   }}
-                                  className="h-9 rounded-lg text-xs bg-white border-slate-200"
+                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
                                   <option value="">
                                     {isInventoryItemsLoading ? t("salesReceivables.state.loadingItems") : t("salesReceivables.empty.selectItemOrService")}
@@ -472,7 +472,7 @@ export function SalesDocumentEditorModal({
                                   ))}
                                 </Select>
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <Select
                                   value={line.warehouseId}
                                   disabled={!selectedItem || selectedItem.type === "SERVICE"}
@@ -482,7 +482,7 @@ export function SalesDocumentEditorModal({
                                       warehouseId: event.target.value,
                                     }))
                                   }
-                                  className="h-9 rounded-lg text-xs bg-white border-slate-200"
+                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
                                   <option value="">
                                     {selectedItem?.type === "SERVICE" ? t("inventory.common.notApplicable") : t("inventory.placeholder.selectWarehouse")}
@@ -496,7 +496,7 @@ export function SalesDocumentEditorModal({
                                     ))}
                                 </Select>
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <Select
                                   value={line.revenueAccountId}
                                   onChange={(event) =>
@@ -505,7 +505,7 @@ export function SalesDocumentEditorModal({
                                       revenueAccountId: event.target.value,
                                     }))
                                   }
-                                  className="h-9 rounded-lg text-xs bg-white border-slate-200"
+                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
                                   <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
                                   {revenueAccounts.map((account) => (
@@ -515,7 +515,7 @@ export function SalesDocumentEditorModal({
                                   ))}
                                 </Select>
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <Input
                                   type="number"
                                   min="0"
@@ -524,10 +524,10 @@ export function SalesDocumentEditorModal({
                                   onChange={(event) =>
                                     updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }))
                                   }
-                                  className="h-9 rounded-lg text-xs font-mono text-center bg-white border-slate-200"
+                                  className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200"
                                 />
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <CurrencyAmountInput
                                   currencyCode={currencyCode || "JOD"}
                                   isRtl={isArabic}
@@ -537,10 +537,10 @@ export function SalesDocumentEditorModal({
                                   onChange={(event) =>
                                     updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
                                   }
-                                  className="h-9 rounded-lg text-xs"
+                                  className="h-10 rounded-lg text-sm"
                                 />
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <CurrencyAmountInput
                                   currencyCode={currencyCode || "JOD"}
                                   isRtl={isArabic}
@@ -550,10 +550,10 @@ export function SalesDocumentEditorModal({
                                   onChange={(event) =>
                                     updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
                                   }
-                                  className="h-9 rounded-lg text-xs"
+                                  className="h-10 rounded-lg text-sm"
                                 />
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <Select
                                   value={line.taxId}
                                   onChange={(event) => {
@@ -565,7 +565,7 @@ export function SalesDocumentEditorModal({
                                       taxAmount: selectedTax ? current.taxAmount : "",
                                     }));
                                   }}
-                                  className="h-9 rounded-lg text-xs bg-white border-slate-200"
+                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
                                   <option value="">{t("salesReceivables.field.tax")}</option>
                                   {taxes.map((tax) => (
@@ -575,7 +575,7 @@ export function SalesDocumentEditorModal({
                                   ))}
                                 </Select>
                               </td>
-                              <td className="px-2.5 py-3">
+                              <td className="px-2.5 py-3.5">
                                 <CurrencyAmountInput
                                   currencyCode={currencyCode || "JOD"}
                                   isRtl={isArabic}
@@ -584,19 +584,19 @@ export function SalesDocumentEditorModal({
                                   value={line.lineAmount}
                                   readOnly
                                   disabled
-                                  className="h-9 rounded-lg text-xs bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                                  className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
                                 />
                               </td>
-                              <td className="px-2.5 py-3 text-center">
+                              <td className="px-2.5 py-3.5 text-center">
                                 <Button
                                   type="button"
                                   variant="secondary"
                                   size="sm"
                                   onClick={() => removeLine(line.key)}
                                   disabled={lines.length === 1}
-                                  className="h-8 w-8 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                                  className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-5 w-5" />
                                 </Button>
                               </td>
                             </tr>
@@ -607,7 +607,7 @@ export function SalesDocumentEditorModal({
                   </div>
                 </div>
               ) : (
-                <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 text-center text-sm text-slate-500 font-medium">
+                <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 text-center text-base text-slate-500 font-semibold">
                   {activeTab === "journal" 
                     ? (isArabic ? "سيظهر هنا عرض عناصر اليومية المرتبطة بالفاتورة." : "Associated journal items view will appear here.") 
                     : (isArabic ? "سيظهر هنا أي معلومات إضافية للفواتير في المستقبل." : "Additional invoice details will appear here in the future.")}
@@ -616,28 +616,28 @@ export function SalesDocumentEditorModal({
 
               {/* Totals Section */}
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+                <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
                   <div></div>
-                  <div className="rounded-2xl bg-slate-50/70 p-4 border border-slate-100 space-y-2">
-                    <div className={cn("text-xs font-bold tracking-wide text-slate-400 mb-1", isArabic ? "text-right" : "text-left")}>
+                  <div className="rounded-2xl bg-slate-50/70 p-5 border border-slate-100 space-y-3">
+                    <div className={cn("text-sm font-bold tracking-wide text-slate-500 mb-1", isArabic ? "text-right" : "text-left")}>
                       {t("salesReceivables.metric.invoiceTotal")}
                     </div>
-                    <div className="flex items-center justify-between gap-4 text-xs font-semibold text-slate-500">
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
                       <span>{isArabic ? "المبلغ قبل الضريبة" : "Amount before Tax"}</span>
-                      <span className="font-mono text-slate-900">
+                      <span className="font-mono text-slate-900 font-bold">
                         {currencyCode || "JOD"} {totals.subtotalAmount.toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 text-xs font-semibold text-slate-500">
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
                       <span>{t("salesReceivables.metric.tax")}</span>
-                      <span className="font-mono text-slate-900">
+                      <span className="font-mono text-slate-900 font-bold">
                         {currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
                       </span>
                     </div>
-                    <div className="border-t border-slate-200 pt-2.5">
+                    <div className="border-t border-slate-200 pt-3">
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-sm font-black text-slate-900">{t("salesReceivables.metric.total")}</span>
-                        <span className="font-mono text-lg font-black text-emerald-700">
+                        <span className="text-base font-black text-slate-950">{t("salesReceivables.metric.total")}</span>
+                        <span className="font-mono text-xl font-black text-emerald-700">
                           {currencyCode || "JOD"} {totals.totalAmount.toFixed(2)}
                         </span>
                       </div>
@@ -651,17 +651,17 @@ export function SalesDocumentEditorModal({
 
         {/* Footer Actions */}
         <div className={cn("flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8", isInline && "rounded-b-lg shadow-md")}>
-          <Button variant="secondary" onClick={onClose} className="rounded-xl px-5 py-2.5 font-semibold text-sm">
+          <Button variant="secondary" onClick={onClose} className="rounded-xl px-6 py-3 font-bold text-base">
             {t("salesReceivables.action.cancel")}
           </Button>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3.5">
             <Button
               onClick={onDraftSubmit}
               disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center gap-1.5 px-5 py-2.5"
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base flex items-center gap-1.5 px-6 py-3"
             >
-              <Save className="h-4 w-4" />
+              <Save className="h-5 w-5" />
               <span>{draftSubmitLabel}</span>
             </Button>
 
@@ -670,9 +670,9 @@ export function SalesDocumentEditorModal({
                 variant="secondary"
                 onClick={onPostSubmit}
                 disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-emerald-700 hover:bg-emerald-50 font-semibold text-sm flex items-center gap-1.5"
+                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-emerald-700 hover:bg-emerald-50 font-bold text-base flex items-center gap-1.5"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="h-5 w-5" />
                 <span>{postSubmitLabel}</span>
               </Button>
             ) : null}
@@ -683,9 +683,9 @@ export function SalesDocumentEditorModal({
                 onClick={onPostAndCreateReceiptSubmit}
                 disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
                 title={postAndCreateReceiptTooltip}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sky-700 hover:bg-sky-50 font-semibold text-sm flex items-center gap-1.5"
+                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sky-700 hover:bg-sky-50 font-bold text-base flex items-center gap-1.5"
               >
-                <ReceiptText className="h-4 w-4" />
+                <ReceiptText className="h-5 w-5" />
                 <span>{postAndCreateReceiptLabel}</span>
               </Button>
             ) : null}
