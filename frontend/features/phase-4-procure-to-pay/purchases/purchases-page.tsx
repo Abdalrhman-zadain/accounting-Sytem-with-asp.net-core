@@ -3811,6 +3811,11 @@ export function PurchasesPage() {
 
                     <div className="space-y-4">
                       {invoiceEditor.lines.map((line, index) => {
+                        const selectedInventoryItem = inventoryItems.find((item) => item.id === line.itemId) ?? null;
+                        const lineAccountOptions = getPurchaseInvoiceLineAccountOptions(
+                          selectedInventoryItem,
+                          purchaseInvoiceDebitAccounts,
+                        );
                         const lineTotal = calculateInvoiceLineTotal(line);
 
                         return (
@@ -3914,7 +3919,7 @@ export function PurchasesPage() {
                                     className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
                                   >
                                     <option value="">{t("purchases.invoices.empty.selectAccount")}</option>
-                                    {purchaseInvoiceDebitAccounts.map((account) => (
+                                    {lineAccountOptions.map((account) => (
                                       <option key={account.id} value={account.id}>
                                         {account.code} · {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)?.replace(/^أ:\s*/, "")} ({account.currencyCode})
                                       </option>
@@ -5357,6 +5362,12 @@ export function PurchasesPage() {
         const unitPrice = item?.defaultPurchasePrice ?? "0.00";
         const tax = item?.defaultTax;
         const tracksInventory = doesPurchaseInvoiceItemTrackInventory(item);
+        const preferredAccountId = tracksInventory
+          ? item?.inventoryAccount?.id ?? ""
+          : item?.expenseAccount?.id ?? "";
+        const eligibleAccountIds = new Set(
+          getPurchaseInvoiceLineAccountOptions(item, purchaseInvoiceDebitAccounts).map((account) => account.id),
+        );
 
         const baseAmount = Number(quantity) * Number(unitPrice);
         const discountedAmount = baseAmount - Number(line.discountAmount || 0);
@@ -5368,9 +5379,7 @@ export function PurchasesPage() {
           warehouseId: tracksInventory ? item?.preferredWarehouse?.id ?? item?.preferredWarehouseId ?? "" : "",
           itemName: item?.name ?? "",
           description: line.description.trim() || !item ? line.description : item.description ?? item.name,
-          accountId: tracksInventory
-            ? item?.inventoryAccount?.id ?? line.accountId
-            : item?.expenseAccount?.id ?? line.accountId,
+          accountId: preferredAccountId || (eligibleAccountIds.has(line.accountId) ? line.accountId : ""),
           quantity,
           unitPrice,
           taxId: tax?.id ?? "",
@@ -6137,9 +6146,22 @@ function getMutationErrorMessage(error: unknown) {
     return null;
   }
   if (error instanceof Error) {
-    return error.message;
+    return translatePurchasesErrorMessage(error.message);
   }
   return "Unable to complete the action. تعذر إكمال العملية.";
+}
+
+function translatePurchasesErrorMessage(message: string) {
+  switch (message) {
+    case "Inventory item lines must post to an active inventory asset account.":
+      return "Inventory item lines must post to an active inventory asset account. يجب ترحيل بنود الأصناف المخزنية إلى حساب أصل مخزون نشط.";
+    case "Service or non-stock item lines must post to an active expense account.":
+      return "Service or non-stock item lines must post to an active expense account. يجب ترحيل بنود الخدمات أو الأصناف غير المخزنية إلى حساب مصروف نشط.";
+    case "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account.":
+      return "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account. يجب أن يستخدم كل سطر في فاتورة الشراء حساب ترحيل نشط من نوع مخزون أو أصل ثابت أو مصروف.";
+    default:
+      return message;
+  }
 }
 
 function createEmptyRequestLine(): PurchaseRequestLineEditorState {
@@ -6321,6 +6343,19 @@ function mapInvoiceEditorLines(lines: PurchaseInvoiceLineEditorState[]) {
 
 function doesPurchaseInvoiceItemTrackInventory(item?: InventoryItem | null) {
   return Boolean(item && item.type !== "SERVICE" && item.trackInventory);
+}
+
+function getPurchaseInvoiceLineAccountOptions(
+  item: InventoryItem | null,
+  accounts: AccountOption[],
+) {
+  if (doesPurchaseInvoiceItemTrackInventory(item)) {
+    return accounts.filter((account) => account.type === "ASSET" && account.subtype === "Inventory");
+  }
+  if (item) {
+    return accounts.filter((account) => account.type === "EXPENSE");
+  }
+  return accounts;
 }
 
 function mapPaymentEditorAllocations(lines: SupplierPaymentAllocationEditorState[]) {
