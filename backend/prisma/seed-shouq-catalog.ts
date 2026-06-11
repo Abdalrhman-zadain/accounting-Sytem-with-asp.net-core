@@ -4,6 +4,10 @@ import * as path from 'path';
 import * as XLSX from 'xlsx';
 import { InventoryItemType, Prisma, PrismaClient } from '../src/generated/prisma';
 
+import { postJournalEntry } from './seed-posting';
+
+export const SHOUQ_OPENING_INVENTORY_JE_REF = 'JE-SHOUQ-OPENING-INV';
+
 export const SHOUQ_GROUP_CODE = 'MARKET-SNACKS';
 export const SHOUQ_CODE_PREFIX = 'MKT-SHQ-';
 export const DEFAULT_SHOUQ_XLSX_PATH = path.join(__dirname, '..', 'data', 'shouq.xlsx');
@@ -291,7 +295,102 @@ export async function seedShouqCatalog(
     `Shouq catalog ready: ${created} created, ${updated} updated, ${withStock} with opening stock (codes ${SHOUQ_CODE_PREFIX}*).`,
   );
 
+  await postOpeningInventoryToGl(prisma, _options.adminUserId, inventoryAccount.id, {
+    codePrefix: SHOUQ_CODE_PREFIX,
+    journalRef: SHOUQ_OPENING_INVENTORY_JE_REF,
+    label: 'Shouq catalog',
+  });
+
   return { created, updated, withStock, rows };
+}
+
+export async function postOpeningInventoryToGl(
+  prisma: PrismaClient,
+  adminUserId: string,
+  inventoryAccountId: string,
+  config: { codePrefix: string; journalRef: string; label: string },
+) {
+  const openingEquityAccount = await prisma.account.findUnique({
+    where: { code: '3410001' },
+    select: { id: true },
+  });
+  if (!openingEquityAccount) {
+    console.log(`Opening Balance Equity (3410001) not found — skipping ${config.label} GL posting.`);
+    return;
+  }
+
+  const aggregate = await prisma.inventoryWarehouseBalance.aggregate({
+    where: { item: { code: { startsWith: config.codePrefix } } },
+    _sum: { valuationAmount: true },
+  });
+  const targetAmount = Number(aggregate._sum.valuationAmount ?? 0);
+  if (targetAmount <= 0) {
+    console.log(`No ${config.label} opening inventory value to post to GL.`);
+    return;
+  }
+
+  const existing = await prisma.journalEntry.findUnique({
+    where: { reference: config.journalRef },
+    include: { lines: true },
+  });
+
+  const postedInventoryDebit = existing
+    ? existing.lines
+        .filter((line) => line.accountId === inventoryAccountId)
+        .reduce((sum, line) => sum + Number(line.debitAmount), 0)
+    : 0;
+
+  const delta = Number((targetAmount - postedInventoryDebit).toFixed(2));
+  if (Math.abs(delta) < 0.01) {
+    if (existing) {
+      console.log(
+        `${config.label} opening inventory already in GL (${postedInventoryDebit.toFixed(2)} JOD on 1131001).`,
+      );
+    }
+    return;
+  }
+
+  const period = await prisma.fiscalPeriod.findFirst({
+    where: { status: 'OPEN' },
+    orderBy: [{ fiscalYear: { startDate: 'desc' } }, { periodNumber: 'asc' }],
+  });
+  if (!period) {
+    console.log(`No open fiscal period — skipping ${config.label} GL posting.`);
+    return;
+  }
+
+  const amount = Math.abs(delta);
+  const isIncrease = delta > 0;
+  const reference = existing
+    ? `${config.journalRef}-ADJ-${Date.now()}`
+    : config.journalRef;
+
+  await postJournalEntry(prisma, adminUserId, {
+    reference,
+    description: existing
+      ? `${config.label} opening inventory adjustment (${amount.toFixed(2)} JOD)`
+      : `${config.label} opening inventory (${amount.toFixed(2)} JOD)`,
+    entryDate: new Date(),
+    fiscalPeriodId: period.id,
+    lines: [
+      {
+        accountId: inventoryAccountId,
+        description: `${config.label} opening merchandise inventory`,
+        debitAmount: isIncrease ? amount : 0,
+        creditAmount: isIncrease ? 0 : amount,
+      },
+      {
+        accountId: openingEquityAccount.id,
+        description: `${config.label} opening merchandise inventory offset`,
+        debitAmount: isIncrease ? 0 : amount,
+        creditAmount: isIncrease ? amount : 0,
+      },
+    ],
+  });
+
+  console.log(
+    `Posted ${config.label} opening inventory to GL: ${isIncrease ? '+' : '-'}${amount.toFixed(2)} JOD (1131001 / 3410001, ref ${reference}).`,
+  );
 }
 
 async function main() {

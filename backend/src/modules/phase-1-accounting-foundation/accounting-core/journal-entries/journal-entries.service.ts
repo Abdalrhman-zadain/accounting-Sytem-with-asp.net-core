@@ -324,7 +324,11 @@ export class JournalEntriesService {
     };
   }
 
-  private async ensureJournalEntryTypeIsActive(id: string) {
+  async assertFiscalPeriodAllowsPosting(date: Date, db: JournalDb = this.prisma) {
+    return this.resolveFiscalPeriod(date, db);
+  }
+
+  async ensureJournalEntryTypeIsActive(id: string) {
     const row = await this.prisma.journalEntryType.findFirst({
       where: { id, isActive: true },
       select: { id: true },

@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { LuPlus as Plus, LuRefreshCw as RefreshCw, LuSend as Send, LuRotateCcw as RotateCcw, LuChevronDown as ChevronDown, LuChevronRight as ChevronRight, LuCircleAlert as AlertCircle, LuPencil as Pencil } from "react-icons/lu";
+import { LuPlus as Plus, LuRefreshCw as RefreshCw, LuSend as Send, LuChevronDown as ChevronDown, LuChevronRight as ChevronRight, LuCircleAlert as AlertCircle, LuPencil as Pencil } from "react-icons/lu";
 import {
     getJournalEntries,
     createJournalEntry,
     updateJournalEntry,
+    unpostJournalEntry,
     postJournalEntry,
-    reverseJournalEntry,
     getAccountOptions,
     getJournalEntryById,
     getJournalEntryTypes,
@@ -300,6 +300,20 @@ export function JournalEntriesPage() {
         },
     });
 
+    const buildEditorPayload = () => ({
+        entryDate,
+        description,
+        journalEntryTypeId: journalEntryTypeId || null,
+        lines: lines
+            .filter((line) => line.accountId)
+            .map((line) => ({
+                accountId: line.accountId,
+                description: line.description || undefined,
+                debitAmount: Number((parseFloat(line.debitAmount) || 0).toFixed(2)),
+                creditAmount: Number((parseFloat(line.creditAmount) || 0).toFixed(2)),
+            })),
+    });
+
     const resetEditorForm = () => {
         setEditingEntryId(null);
         setShowCreate(false);
@@ -350,19 +364,7 @@ export function JournalEntriesPage() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: (id: string) => updateJournalEntry(id, {
-            entryDate,
-            description,
-            journalEntryTypeId: journalEntryTypeId || null,
-            lines: lines
-                .filter((l) => l.accountId)
-                .map((l) => ({
-                    accountId: l.accountId,
-                    description: l.description || undefined,
-                    debitAmount: Number((parseFloat(l.debitAmount) || 0).toFixed(2)),
-                    creditAmount: Number((parseFloat(l.creditAmount) || 0).toFixed(2)),
-                })),
-        }, token),
+        mutationFn: (id: string) => updateJournalEntry(id, buildEditorPayload(), token),
         onSuccess: (updated) => {
             queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
             queryClient.invalidateQueries({ queryKey: queryKeys.journalEntryById(token, updated.id) });
@@ -373,42 +375,6 @@ export function JournalEntriesPage() {
     const postMutation = useMutation({
         mutationFn: (id: string) => postJournalEntry(id, token),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["journal-entries"] }),
-    });
-
-    const reverseMutation = useMutation({
-        mutationFn: (id: string) => reverseJournalEntry(id, token),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["journal-entries"] }),
-    });
-
-    const reverseAndCreateCorrectionMutation = useMutation({
-        mutationFn: async (entry: JournalEntry) => {
-            const fullEntry = entry.lines.length
-                ? entry
-                : await queryClient.fetchQuery({
-                    queryKey: queryKeys.journalEntryById(token, entry.id),
-                    queryFn: () => getJournalEntryById(entry.id, token),
-                    staleTime: 0,
-                });
-
-            await reverseJournalEntry(entry.id, token);
-
-            return createJournalEntry({
-                entryDate: new Date().toISOString().split("T")[0],
-                description: fullEntry.description ?? undefined,
-                journalEntryTypeId: fullEntry.journalEntryTypeId ?? undefined,
-                lines: fullEntry.lines.map((line) => ({
-                    accountId: line.accountId,
-                    description: line.description ?? undefined,
-                    debitAmount: Number((parseFloat(line.debitAmount) || 0).toFixed(2)),
-                    creditAmount: Number((parseFloat(line.creditAmount) || 0).toFixed(2)),
-                })),
-            }, token);
-        },
-        onSuccess: (draft) => {
-            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
-            queryClient.setQueryData(queryKeys.journalEntryById(token, draft.id), draft);
-            populateEditorForm(draft);
-        },
     });
 
     const debitTotal = lines.reduce((s, l) => s + Number((parseFloat(l.debitAmount) || 0).toFixed(2)), 0);
@@ -470,11 +436,21 @@ export function JournalEntriesPage() {
     };
 
     const openEditForm = async (id: string) => {
-        const entry = await queryClient.fetchQuery({
+        let entry = await queryClient.fetchQuery({
             queryKey: queryKeys.journalEntryById(token, id),
             queryFn: () => getJournalEntryById(id, token),
             staleTime: 0,
         });
+
+        if (entry.status === "POSTED") {
+            if (!confirm(t("journal.confirm.unpostForEdit"))) {
+                return;
+            }
+
+            entry = await unpostJournalEntry(id, token);
+            await queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            queryClient.setQueryData(queryKeys.journalEntryById(token, entry.id), entry);
+        }
 
         populateEditorForm(entry);
     };
@@ -700,7 +676,7 @@ export function JournalEntriesPage() {
 
                         <div className="flex flex-wrap items-center gap-3">
                             <Button
-                                onClick={() => editingEntryId ? updateMutation.mutate(editingEntryId) : createMutation.mutate()}
+                                onClick={() => (editingEntryId ? updateMutation.mutate(editingEntryId) : createMutation.mutate())}
                                 disabled={!isBalanced || createMutation.isPending || updateMutation.isPending}
                             >
                                 {editingEntryId ? t("journal.button.updateDraft") : t("journal.button.saveDraft")}
@@ -708,7 +684,6 @@ export function JournalEntriesPage() {
                             <Button variant="secondary" onClick={resetEditorForm}>{t("journal.button.cancel")}</Button>
                             {createMutation.isError && <p className="text-sm text-red-500">{(createMutation.error as Error).message}</p>}
                             {updateMutation.isError && <p className="text-sm text-red-500">{(updateMutation.error as Error).message}</p>}
-                            {reverseAndCreateCorrectionMutation.isError && <p className="text-sm text-red-500">{(reverseAndCreateCorrectionMutation.error as Error).message}</p>}
                         </div>
                     </Card>
                 )}
@@ -781,12 +756,9 @@ export function JournalEntriesPage() {
                                             <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    if (confirm(t("journal.confirm.editPosted"))) {
-                                                        reverseAndCreateCorrectionMutation.mutate(entry);
-                                                    }
+                                                    await openEditForm(entry.id);
                                                 }}
                                                 className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
-                                                disabled={reverseAndCreateCorrectionMutation.isPending}
                                             >
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <Pencil className="h-3 w-3" />
@@ -794,17 +766,6 @@ export function JournalEntriesPage() {
                                                 </span>
                                             </button>
                                         )}
-                                        {entry.status === "POSTED" && !entry.reversalOfId && (
-                                            <button
-                                                onClick={e => { e.stopPropagation(); if (confirm(t("journal.confirm.reverse"))) reverseMutation.mutate(entry.id); }}
-                                                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
-                                                >
-                                                    <span className="inline-flex items-center gap-1.5">
-                                                        <RotateCcw className="h-3 w-3" />
-                                                        {t("journal.action.reverse")}
-                                                    </span>
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
                                 </div>

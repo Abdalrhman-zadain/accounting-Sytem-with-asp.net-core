@@ -454,7 +454,7 @@ const enTranslations: Record<string, string> = {
   "journal.action.reverse": "Reverse",
   "journal.confirm.post": "Post this entry?",
   "journal.confirm.reverse": "Reverse this entry?",
-  "journal.confirm.editPosted": "This will reverse the posted entry and create a correction draft you can edit. Continue?",
+  "journal.confirm.unpostForEdit": "This will return the posted entry to draft so you can edit it. No new journal entry will be created. Continue?",
 
   "master.title": "Master Data Setup",
   "master.description":
@@ -2649,6 +2649,8 @@ Object.assign(enTranslations, {
   "reporting.cashMovement.classified.financing": "Financing cash flow",
   "reporting.cashMovement.classified.unclassified": "Unclassified cash flow",
   "reporting.generalLedger.selectAccount": "Select a posting account to review the general ledger.",
+  "reporting.generalLedger.searchPlaceholder": "Search by account code or name…",
+  "reporting.generalLedger.searchEmpty": "No accounts match your search.",
   "reporting.audit.totalEvents": "Total events",
   "reporting.audit.actionCount": "Action groups",
   "reporting.audit.highRisk": "High-risk events",

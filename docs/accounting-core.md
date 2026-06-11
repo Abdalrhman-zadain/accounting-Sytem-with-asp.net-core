@@ -162,7 +162,8 @@ Service responsibility:
 Important business rules:
 
 - total debit must equal total credit
-- posted entries are controlled, not casually edited
+- posted manual journal entries are returned to `DRAFT` through `POST /journal-entries/:id/unpost`, which removes their ledger rows and reverses the posted balance impact on the same entry reference without creating a reversal journal entry
+- after unposting, the user edits the draft normally and posts again; posted entries created from another document (`sourceType` / `sourceId`) must still be corrected from that source; reversal entries cannot be unposted from the journal entries UI
 - reversing an entry creates a new reversing entry
 - journal references are unique
 - every journal entry line must reference a posting account

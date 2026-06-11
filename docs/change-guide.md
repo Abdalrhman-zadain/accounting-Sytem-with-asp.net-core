@@ -589,7 +589,7 @@ What else to check:
 - trial balance, balance sheet, profit and loss, and general-ledger inquiry should stay reconcilable to the same posted ledger source for the same filters/period
 - cash movement reporting should continue to derive from the linked bank/cash posting accounts rather than inventing a parallel balance store
 - Arabic and English terminology must stay aligned when adding report names, column labels, filters, export labels, and drill-down actions
-- the `/reporting` dashboard body uses a flat layout: tools row, primary filter bar (period/account/segment chips plus export), secondary filters row, KPI cards, content tabs (activity / trial balance / general ledger), and a sticky summary footer
+- the `/reporting` workspace uses a flat layout: tools row, primary filter bar (period/account/segment chips plus export), secondary filters row, and report-specific body content; general ledger is the default entry (`/reporting?tab=generalLedger`) and the first item in the sidebar `التقارير` dropdown, with a top account search (code or localized name) above the ledger table; the summary tab (`?tab=summary`) remains implemented for KPI cards and the sticky summary footer but is not linked from navigation
 - KPI sparklines on the reporting dashboard are derived client-side from comparison and current metric amounts; they are illustrative, not a historical time series from the API
 
 Must remain compatible:
@@ -692,6 +692,7 @@ Must remain compatible:
 - posted entries stay auditable
 - posting remains transactional
 - ledger history remains consistent with balances
+- manual posted journal entries are edited by unposting the same entry to `DRAFT` through `POST /journal-entries/:id/unpost`; do not reintroduce a reverse-plus-new-draft edit flow in the journal entries UI for those entries
 
 Checks to run:
 

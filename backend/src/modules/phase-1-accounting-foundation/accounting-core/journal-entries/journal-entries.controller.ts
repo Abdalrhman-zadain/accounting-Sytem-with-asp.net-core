@@ -46,6 +46,11 @@ export class JournalEntriesController {
     return this.journalEntriesService.update(id, dto);
   }
 
+  @Post(':id/unpost')
+  unpost(@Param('id') id: string) {
+    return this.postingService.unpost(id);
+  }
+
   @Post(':id/post')
   post(@Param('id') id: string) {
     return this.postingService.post(id);

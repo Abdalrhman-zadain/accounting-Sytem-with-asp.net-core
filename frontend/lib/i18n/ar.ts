@@ -287,7 +287,7 @@ const arTranslations: Record<string, string> = {
   "journal.action.reverse": "عكس",
   "journal.confirm.post": "ترحيل هذا القيد؟",
   "journal.confirm.reverse": "عكس هذا القيد؟",
-  "journal.confirm.editPosted": "سيتم عكس القيد المُرحّل وإنشاء مسودة تصحيح قابلة للتعديل. هل تريد المتابعة؟",
+  "journal.confirm.unpostForEdit": "سيتم إرجاع القيد المُرحّل إلى مسودة لتتمكن من تعديله دون إنشاء قيد جديد. هل تريد المتابعة؟",
 
   "master.title": "تهيئة البيانات الأساسية",
   "master.description":
@@ -2544,6 +2544,8 @@ Object.assign(arTranslations, {
   "reporting.cashMovement.classified.financing": "التدفق النقدي التمويلي",
   "reporting.cashMovement.classified.unclassified": "تدفق نقدي غير مصنف",
   "reporting.generalLedger.selectAccount": "اختر حساباً فرعياً لمراجعة دفتر الأستاذ العام.",
+  "reporting.generalLedger.searchPlaceholder": "ابحث برقم الحساب أو الاسم…",
+  "reporting.generalLedger.searchEmpty": "لا توجد حسابات مطابقة لبحثك.",
   "reporting.audit.totalEvents": "إجمالي الأحداث",
   "reporting.audit.actionCount": "مجموعات الإجراءات",
   "reporting.audit.highRisk": "الأحداث عالية المخاطر",

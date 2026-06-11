@@ -136,7 +136,7 @@ For a new site with many products, use **Inventory → Items → Import Products
 2. Download the Excel template from the import modal (Arabic columns: `رمز المادة`, `وصف المادة`, `الوحدة`, `الكمية`, `الكلفة`, `سعر البيع`).
 3. Fill rows — `كيلو` / `حبة` map to `KG` / `PCS`; numeric `رمز المادة` becomes `MKT-SHQ-001` style codes for Market POS. Legacy English headers (`name`, `groupCode`, …) still work.
 4. Upload, review the preview (valid / skipped / error per row), then import. Existing codes are skipped automatically. KG rows get sell-by-weight enabled.
-5. Opening stock (`الكمية`) is **not** imported via the UI — use goods receipts or the Shouq seed script below.
+5. Opening stock (`الكمية`) is **not** imported via the UI — use goods receipts or the Shouq seed script below. The Shouq seed posts warehouse opening stock and mirrors the total into GL (`1131001` Merchandise Inventory debited to `3410001` Opening Balance Equity, journal ref `JE-SHOUQ-OPENING-INV`).
 
 ## Shouq catalog seed
 
@@ -156,6 +156,23 @@ Market cashier login only (no catalog wipe):
 ```bash
 cd backend && npm run seed:market-cashier
 ```
+
+### Boss demo showcase (warehouse + register stock)
+
+Eight easy-to-demo products (`MKT-DEMO-01` … `MKT-DEMO-08`) with round warehouse quantities in **WH-MAIN**, rep car stock on **REP-MARKET-01**, and GL opening entry `JE-MKT-DEMO-OPENING-INV`. Safe to re-run (idempotent). Preserved when Shouq catalog seed runs.
+
+```bash
+cd backend && npm run seed:market-showcase
+```
+
+Requires foundation data (`admin` user). Runs `seed:market` automatically if `MARKET-SNACKS` is missing. Also ensures `market_cashier` / `market123`.
+
+| Screen | What to show |
+|--------|----------------|
+| `/inventory` | Search `MKT-DEMO` — warehouse on-hand in WH-MAIN |
+| `/accounts` | `1131001` Merchandise Inventory balance |
+| `/pos-market/register` | Login `market_cashier` / `market123`, open shift, pick rep + destination market, sell demo products |
+| `/pos-market/my-stock` | Login `market_rep` / `market123` — car quantities |
 
 ### Destination markets (customers)
 

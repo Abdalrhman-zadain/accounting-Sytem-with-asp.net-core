@@ -84,6 +84,55 @@ export class PostingService {
       : this.journalEntriesService.getById(postedEntryId);
   }
 
+  async unpost(entryId: string) {
+    const unpostedEntryId = await this.prisma.$transaction(async (tx) => {
+      const entry = await tx.journalEntry.findUnique({
+        where: { id: entryId },
+        include: { lines: { orderBy: { lineNumber: 'asc' } } },
+      });
+
+      if (!entry) {
+        throw new JournalEntryNotFoundException(entryId);
+      }
+
+      await this.journalEntriesService.ensurePosted(entry);
+
+      if (entry.reversalOfId) {
+        throw new InvalidJournalEntryException('Reversal journal entries cannot be returned to draft.');
+      }
+
+      if (entry.sourceType || entry.sourceId) {
+        throw new InvalidJournalEntryException(
+          'This journal entry was created from another document and must be corrected from that source.',
+        );
+      }
+
+      await this.updateAccountBalances(
+        tx,
+        entry.lines.map((line) => ({
+          accountId: line.accountId,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+        })),
+      );
+
+      await tx.ledgerTransaction.deleteMany({ where: { journalEntryId: entryId } });
+
+      await tx.journalEntry.update({
+        where: { id: entryId },
+        data: {
+          status: 'DRAFT',
+          postedAt: null,
+          postingBatchId: null,
+        },
+      });
+
+      return entryId;
+    });
+
+    return this.journalEntriesService.getById(unpostedEntryId);
+  }
+
   private async validatePostingAccounts(tx: TransactionClient, accountIds: string[]) {
     const uniqueAccountIds = [...new Set(accountIds)];
     const accounts = await tx.account.findMany({

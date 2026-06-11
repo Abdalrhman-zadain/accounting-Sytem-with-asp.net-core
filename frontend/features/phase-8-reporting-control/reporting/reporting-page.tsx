@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button, Card, PageShell, SectionHeading } from "@/components/ui";
-import { ReportingContentTabsBar, contentTabToExportReportType } from "./components/reporting-content-tabs";
+import { GeneralLedgerAccountSearch } from "./components/general-ledger-account-search";
 import { ReportingSearchBar } from "./components/reporting-search-bar";
 import type { ReportingFilterState } from "./components/reporting-search-utils";
 import { ReportingKpiCards } from "./components/reporting-kpi-cards";
@@ -15,7 +15,7 @@ import { ReportingSummaryFooter } from "./components/reporting-summary-footer";
 import { ReportingTable } from "./components/reporting-table";
 import { ReportingToolbar } from "./components/reporting-toolbar";
 import { ReportingActionBadge } from "./components/reporting-action-badge";
-import type { ContentTab, ReportTab, TranslationFn } from "./reporting-types";
+import type { ReportTab, TranslationFn } from "./reporting-types";
 import {
   createReportingSnapshotVersion,
   createReportingDefinition,
@@ -64,6 +64,7 @@ import type {
 
 const tabs: Array<{ id: ReportTab; labelKey: string }> = [
   { id: "summary", labelKey: "reporting.tab.summary" },
+  { id: "activity", labelKey: "reporting.tab.activity" },
   { id: "trialBalance", labelKey: "reporting.tab.trialBalance" },
   { id: "balanceSheet", labelKey: "reporting.tab.balanceSheet" },
   { id: "profitLoss", labelKey: "reporting.tab.profitLoss" },
@@ -74,22 +75,13 @@ const tabs: Array<{ id: ReportTab; labelKey: string }> = [
 
 const reportTypes = new Set<ReportTab>(tabs.map((tab) => tab.id));
 
-function resolveExportReportType(activeTab: ReportTab, contentTab: ContentTab): ReportTab {
-  if (activeTab !== "summary") {
-    return activeTab;
-  }
-
-  return contentTabToExportReportType(contentTab);
-}
-
 export function ReportingPage() {
   const { token, user } = useAuth();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<ReportTab>("summary");
-  const [contentTab, setContentTab] = useState<ContentTab>("activity");
+  const [activeTab, setActiveTab] = useState<ReportTab>("generalLedger");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [comparisonFrom, setComparisonFrom] = useState("");
@@ -245,24 +237,24 @@ export function ReportingPage() {
   });
 
   const canSeeActivity = user?.role !== "USER";
-  const isDashboardView = activeTab === "summary";
+  const isSummaryView = activeTab === "summary";
 
   const activityQuery = useQuery({
     queryKey: ["reporting-activity", token],
     queryFn: () => getReportingActivity(25, token),
-    enabled: Boolean(token) && canSeeActivity && isDashboardView,
+    enabled: Boolean(token) && canSeeActivity && activeTab === "activity",
   });
 
   const summaryQuery = useQuery({
     queryKey: ["reporting-summary", token, baseFilters],
     queryFn: () => getReportingSummary(baseFilters, token),
-    enabled: Boolean(token),
+    enabled: Boolean(token) && isSummaryView,
   });
 
   const trialBalanceQuery = useQuery({
     queryKey: ["reporting-trial-balance", token, baseFilters],
     queryFn: () => getReportingTrialBalance(baseFilters, token),
-    enabled: Boolean(token) && (activeTab === "trialBalance" || (isDashboardView && contentTab === "trialBalance")),
+    enabled: Boolean(token) && activeTab === "trialBalance",
   });
 
   const balanceSheetQuery = useQuery({
@@ -286,9 +278,7 @@ export function ReportingPage() {
   const generalLedgerQuery = useQuery({
     queryKey: ["reporting-general-ledger", token, generalLedgerFilters],
     queryFn: () => getReportingGeneralLedger(generalLedgerFilters, token),
-    enabled:
-      Boolean(token) &&
-      (activeTab === "generalLedger" || (isDashboardView && contentTab === "generalLedger")),
+    enabled: Boolean(token) && activeTab === "generalLedger",
   });
 
   const auditQuery = useQuery({
@@ -333,7 +323,7 @@ export function ReportingPage() {
 
   useEffect(() => {
     if (catalog.length > 0 && !catalog.some((item) => item.reportType === activeTab && item.canView)) {
-      const fallbackTab = visibleTabs[0]?.id ?? "summary";
+      const fallbackTab = visibleTabs[0]?.id ?? "generalLedger";
       setActiveTab(fallbackTab);
     }
   }, [activeTab, catalog, visibleTabs]);
@@ -485,15 +475,14 @@ export function ReportingPage() {
 
   const exportMutation = useMutation({
     mutationFn: async (overrideFormat?: ReportingExportFormat) => {
-      const reportType = resolveExportReportType(activeTab, contentTab);
       return exportReporting(
         {
-          reportType,
+          reportType: activeTab,
           format: overrideFormat || exportFormat,
           title: exportTitle.trim() || undefined,
           parameters: {
             ...reportParameters,
-            accountId: reportType === "generalLedger" ? accountId || undefined : undefined,
+            accountId: activeTab === "generalLedger" ? accountId || undefined : undefined,
           },
         },
         token,
@@ -600,10 +589,8 @@ export function ReportingPage() {
     setStatusMessage("");
   };
 
-  const showAccountFilter = isDashboardView && contentTab === "generalLedger";
-
   return (
-    <PageShell className={isDashboardView && summaryQuery.data ? "pb-24" : undefined}>
+    <PageShell className={isSummaryView && summaryQuery.data ? "pb-24" : undefined}>
       <SectionHeading title={t("reporting.title")} description={t("reporting.description")} />
 
       {statusMessage ? (
@@ -648,7 +635,7 @@ export function ReportingPage() {
           journalEntryTypes={journalEntryTypes}
           definitions={definitionsQuery.data ?? []}
           selectedDefinitionId={selectedDefinitionId}
-          showAccountFilter={showAccountFilter}
+          showAccountFilter={false}
           onFiltersChange={applyReportingFilters}
           onClearAll={clearAllFilters}
           onApplyDefinition={applyDefinition}
@@ -657,82 +644,65 @@ export function ReportingPage() {
 
       {reportingWarnings.length ? <WarningsCard warnings={reportingWarnings} activeTab={activeTab} t={t} /> : null}
 
-      {summaryQuery.isLoading ? <LoadingCard label={t("reporting.loading")} /> : null}
-      {summaryQuery.error ? <ErrorCard error={summaryQuery.error} t={t} /> : null}
-      {summaryQuery.data ? (
+      {isSummaryView && summaryQuery.isLoading ? <LoadingCard label={t("reporting.loading")} /> : null}
+      {isSummaryView && summaryQuery.error ? <ErrorCard error={summaryQuery.error} t={t} /> : null}
+      {isSummaryView && summaryQuery.data ? (
         <div className="mb-6">
           <ReportingKpiCards summary={summaryQuery.data} t={t} />
         </div>
       ) : null}
 
-      {isDashboardView ? (
-        <div className="border border-gray-200 bg-white">
-          <ReportingContentTabsBar activeTab={contentTab} onTabChange={setContentTab} t={t} />
-          <div className="min-h-[320px]">
-            {contentTab === "activity" ? (
-              canSeeActivity ? (
-                <div className="space-y-3 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-gray-500">{t("reporting.control.activityDescription")}</p>
-                    <Button variant="secondary" onClick={() => activityQuery.refetch()} disabled={!token || activityQuery.isFetching}>
-                      {t("reporting.action.refreshActivity")}
-                    </Button>
-                  </div>
-                  <ActivityList entries={activityQuery.data ?? []} loading={activityQuery.isLoading} t={t} />
-                </div>
-              ) : (
-                <EmptyCard label={t("reporting.control.emptyActivity")} />
-              )
-            ) : null}
-            {contentTab === "trialBalance" ? (
-              <TrialBalanceSection
-                data={trialBalanceQuery.data}
-                error={trialBalanceQuery.error}
-                loading={trialBalanceQuery.isLoading}
+      <div className="mt-6 space-y-6">
+        {activeTab === "activity" ? (
+          canSeeActivity ? (
+            <div className="space-y-3 border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-gray-500">{t("reporting.control.activityDescription")}</p>
+                <Button variant="secondary" onClick={() => activityQuery.refetch()} disabled={!token || activityQuery.isFetching}>
+                  {t("reporting.action.refreshActivity")}
+                </Button>
+              </div>
+              <ActivityList entries={activityQuery.data ?? []} loading={activityQuery.isLoading} t={t} />
+            </div>
+          ) : (
+            <EmptyCard label={t("reporting.control.emptyActivity")} />
+          )
+        ) : null}
+        {activeTab === "trialBalance" ? (
+          <TrialBalanceSection
+            data={trialBalanceQuery.data}
+            error={trialBalanceQuery.error}
+            loading={trialBalanceQuery.isLoading}
+            t={t}
+            onSelectAccount={(id) => {
+              setAccountId(id);
+              setActiveTab("generalLedger");
+            }}
+          />
+        ) : null}
+        {activeTab === "balanceSheet" ? (
+          <BalanceSheetSection data={balanceSheetQuery.data} error={balanceSheetQuery.error} loading={balanceSheetQuery.isLoading} t={t} />
+        ) : null}
+        {activeTab === "profitLoss" ? (
+          <ProfitLossSection data={profitLossQuery.data} error={profitLossQuery.error} loading={profitLossQuery.isLoading} t={t} />
+        ) : null}
+        {activeTab === "cashMovement" ? (
+          <CashMovementSection data={cashMovementQuery.data} error={cashMovementQuery.error} loading={cashMovementQuery.isLoading} t={t} />
+        ) : null}
+        {activeTab === "generalLedger" ? (
+          <>
+            <Card className="border border-gray-200 bg-white p-4">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+                {t("reporting.filter.generalLedgerAccount")}
+              </label>
+              <GeneralLedgerAccountSearch
+                accounts={accounts}
+                value={accountId}
+                language={language}
                 t={t}
-                compact
-                onSelectAccount={(id) => {
-                  setAccountId(id);
-                  setContentTab("generalLedger");
-                }}
+                onSelect={setAccountId}
               />
-            ) : null}
-            {contentTab === "generalLedger" ? (
-              <GeneralLedgerSection
-                data={generalLedgerQuery.data}
-                error={generalLedgerQuery.error}
-                loading={generalLedgerQuery.isLoading}
-                selectedAccount={selectedAccount}
-                t={t}
-                compact
-              />
-            ) : null}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-6 space-y-6">
-          {activeTab === "trialBalance" ? (
-            <TrialBalanceSection
-              data={trialBalanceQuery.data}
-              error={trialBalanceQuery.error}
-              loading={trialBalanceQuery.isLoading}
-              t={t}
-              onSelectAccount={(id) => {
-                setAccountId(id);
-                setActiveTab("generalLedger");
-              }}
-            />
-          ) : null}
-          {activeTab === "balanceSheet" ? (
-            <BalanceSheetSection data={balanceSheetQuery.data} error={balanceSheetQuery.error} loading={balanceSheetQuery.isLoading} t={t} />
-          ) : null}
-          {activeTab === "profitLoss" ? (
-            <ProfitLossSection data={profitLossQuery.data} error={profitLossQuery.error} loading={profitLossQuery.isLoading} t={t} />
-          ) : null}
-          {activeTab === "cashMovement" ? (
-            <CashMovementSection data={cashMovementQuery.data} error={cashMovementQuery.error} loading={cashMovementQuery.isLoading} t={t} />
-          ) : null}
-          {activeTab === "generalLedger" ? (
+            </Card>
             <GeneralLedgerSection
               data={generalLedgerQuery.data}
               error={generalLedgerQuery.error}
@@ -740,12 +710,12 @@ export function ReportingPage() {
               selectedAccount={selectedAccount}
               t={t}
             />
-          ) : null}
-          {activeTab === "audit" ? <AuditSection data={auditQuery.data} error={auditQuery.error} loading={auditQuery.isLoading} t={t} /> : null}
-        </div>
-      )}
+          </>
+        ) : null}
+        {activeTab === "audit" ? <AuditSection data={auditQuery.data} error={auditQuery.error} loading={auditQuery.isLoading} t={t} /> : null}
+      </div>
 
-      {isDashboardView && summaryQuery.data ? <ReportingSummaryFooter summary={summaryQuery.data} t={t} /> : null}
+      {isSummaryView && summaryQuery.data ? <ReportingSummaryFooter summary={summaryQuery.data} t={t} /> : null}
     </PageShell>
   );
 }

@@ -2,11 +2,10 @@ export type TranslationFn = (key: string, vars?: Record<string, string | number>
 
 export type ReportTab =
   | "summary"
+  | "activity"
   | "trialBalance"
   | "balanceSheet"
   | "profitLoss"
   | "cashMovement"
   | "generalLedger"
   | "audit";
-
-export type ContentTab = "activity" | "trialBalance" | "generalLedger";

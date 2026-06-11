@@ -4241,6 +4241,13 @@ export async function updateJournalEntry(
   });
 }
 
+export async function unpostJournalEntry(id: string, token?: string | null) {
+  return apiRequest<JournalEntry>(`/journal-entries/${id}/unpost`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function postJournalEntry(id: string, token?: string | null) {
   return apiRequest<JournalEntry>(`/journal-entries/${id}/post`, {
     method: "POST",

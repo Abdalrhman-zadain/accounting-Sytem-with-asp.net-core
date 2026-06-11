@@ -8,11 +8,16 @@ describe('PostingService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    journalEntryLine: {
+      deleteMany: jest.fn(),
+      findMany: jest.fn(),
+    },
     postingBatch: {
       create: jest.fn(),
     },
     ledgerTransaction: {
       createMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     account: {
       findMany: jest.fn(),
@@ -27,7 +32,11 @@ describe('PostingService', () => {
 
   const journalEntriesService = {
     ensureDraft: jest.fn(),
+    ensurePosted: jest.fn(),
     validateLines: jest.fn(),
+    ensureAccountsArePostable: jest.fn(),
+    assertFiscalPeriodAllowsPosting: jest.fn().mockResolvedValue(null),
+    ensureJournalEntryTypeIsActive: jest.fn(),
     getById: jest.fn().mockResolvedValue({
       id: 'entry-1',
       status: 'POSTED',
@@ -186,5 +195,53 @@ describe('PostingService', () => {
 
     expect(tx.postingBatch.create).not.toHaveBeenCalled();
     expect(tx.ledgerTransaction.createMany).not.toHaveBeenCalled();
+  });
+
+  it('returns a posted manual journal entry to draft without creating a reversal entry', async () => {
+    tx.journalEntry.findUnique.mockResolvedValue({
+      id: 'entry-4',
+      reference: 'JE-20260611-TEST',
+      status: JournalEntryStatus.POSTED,
+      entryDate: new Date('2026-06-11T00:00:00.000Z'),
+      description: 'Original entry',
+      reversalOfId: null,
+      sourceType: null,
+      sourceId: null,
+      lines: [
+        {
+          id: 'line-1',
+          accountId: 'cash',
+          lineNumber: 1,
+          debitAmount: 100,
+          creditAmount: 0,
+        },
+        {
+          id: 'line-2',
+          accountId: 'revenue',
+          lineNumber: 2,
+          debitAmount: 0,
+          creditAmount: 100,
+        },
+      ],
+    });
+    journalEntriesService.getById.mockResolvedValue({
+      id: 'entry-4',
+      status: 'DRAFT',
+      postingBatchId: null,
+    });
+
+    const result = await service.unpost('entry-4');
+
+    expect(tx.ledgerTransaction.deleteMany).toHaveBeenCalledWith({ where: { journalEntryId: 'entry-4' } });
+    expect(tx.journalEntry.update).toHaveBeenCalledWith({
+      where: { id: 'entry-4' },
+      data: {
+        status: 'DRAFT',
+        postedAt: null,
+        postingBatchId: null,
+      },
+    });
+    expect(tx.postingBatch.create).not.toHaveBeenCalled();
+    expect(result.status).toBe('DRAFT');
   });
 });

@@ -2,11 +2,18 @@ import { PrismaClient } from '../src/generated/prisma';
 
 import { SHOUQ_CODE_PREFIX } from './seed-shouq-catalog';
 
+const MARKET_DEMO_CODE_PREFIX = 'MKT-DEMO-';
+
 export async function clearLegacyMarketDemoProducts(prisma: PrismaClient) {
   const items = await prisma.inventoryItem.findMany({
     where: {
       code: { startsWith: 'MKT-' },
-      NOT: { code: { startsWith: SHOUQ_CODE_PREFIX } },
+      NOT: {
+        OR: [
+          { code: { startsWith: SHOUQ_CODE_PREFIX } },
+          { code: { startsWith: MARKET_DEMO_CODE_PREFIX } },
+        ],
+      },
     },
     select: { id: true, code: true },
   });
