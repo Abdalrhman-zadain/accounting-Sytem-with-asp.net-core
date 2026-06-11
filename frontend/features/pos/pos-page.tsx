@@ -233,6 +233,13 @@ function getOrderWaiterLockMessage(language: string) {
   );
 }
 
+function getWeightLineLockedMessage(language: string) {
+  return getLocalizedText(
+    "Weight-based items cannot be changed after adding them. Remove the item and add it again with the correct weight. / الأصناف المباعة بالوزن لا يمكن تعديل وزنها بعد إضافتها. احذف الصنف ثم أضفه من جديد بالوزن الصحيح.",
+    language,
+  );
+}
+
 function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
   if (item.code === "MENU-001") {
     return [
@@ -359,7 +366,7 @@ type CompletedReceipt = PosReceiptData;
 
 type FlashNotice = {
   message: string;
-  tone: "success" | "error";
+  tone: "success" | "warning" | "error";
 };
 
 const workspaceTabs: WorkspaceTab[] = [
@@ -3202,6 +3209,10 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
+    if (line.sellByWeight) {
+      pushMessage(getWeightLineLockedMessage(language));
+      return;
+    }
     if (isKitchenSentLineLocked(line)) {
       pushError(getOrderWaiterLockMessage(language));
       return;
@@ -3233,21 +3244,13 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   };
 
   const setLineWeight = (line: CartLine, nextWeight: number) => {
-    if (!line.sellByWeight || nextWeight <= 0) {
+    if (!line.sellByWeight) {
       return;
     }
-    const precision = line.quantityPrecision ?? 3;
-    const normalized = Number(nextWeight.toFixed(precision));
-    const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
-    if (line.trackInventory && !negOk && normalized > line.onHandQuantity) {
-      pushMessage(
-        t("pos.sales.alert.stockExceeded", {
-          item: line.name,
-        }),
-      );
+    pushMessage(getWeightLineLockedMessage(language));
+    if (nextWeight <= 0) {
       return;
     }
-    updateLine(line, (current) => ({ ...current, quantity: normalized }));
   };
 
   const updatePaymentEntry = (
@@ -3557,9 +3560,10 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       if (result.fallback) {
         pushMessage(
           getLocalizedText(
-            "Receipt printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
+            "Receipt printer unavailable; browser print opened / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
             language,
           ),
+          "warning",
         );
       }
     }).catch((err) => {
@@ -5389,7 +5393,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
           config={addonModalConfig}
           language={language}
           weightSelection={
-            addonModalItem && isWeightSaleItem(addonModalItem)
+            addonModalItem && isWeightSaleItem(addonModalItem) && !addonEditLine
               ? {
                   enabled: true,
                   unitCode: addonModalItem.unitOfMeasure,
@@ -5405,11 +5409,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                       : null,
                   pricePerUnit: parseAmount(addonModalItem.defaultSalesPrice),
                   presets: getCustomWeightPresets(addonModalItem),
-                  initialWeight:
-                    pendingEntryWeight ??
-                    (addonEditLine?.itemId === addonModalItem.id && addonEditLine.sellByWeight
-                      ? addonEditLine.quantity
-                      : null),
+                  initialWeight: pendingEntryWeight ?? null,
                 }
               : undefined
           }
@@ -6340,24 +6340,32 @@ function FlashNoticeBanner({
   onClose,
 }: {
   message: string;
-  tone: "success" | "error";
+  tone: "success" | "warning" | "error";
   onClose: () => void;
 }) {
   const isError = tone === "error";
+  const isWarning = tone === "warning";
   const accentClasses = isError
     ? {
-      panel: "bg-[#e53810] text-white shadow-[0_26px_70px_-24px_rgba(15,23,42,0.6)]",
-      badge: "bg-white/14",
-      eyebrow: "text-white/80",
-      button: "border-white/30 text-white hover:bg-white/12",
-    }
-    : {
-      panel:
-        "bg-[#0f8f67] text-white shadow-[0_26px_70px_-24px_rgba(6,95,70,0.55)]",
-      badge: "bg-white/14",
-      eyebrow: "text-white/80",
-      button: "border-white/30 text-white hover:bg-white/12",
-    };
+        panel: "bg-[#e53810] text-white shadow-[0_26px_70px_-24px_rgba(15,23,42,0.6)]",
+        badge: "bg-white/14",
+        eyebrow: "text-white/80",
+        button: "border-white/30 text-white hover:bg-white/12",
+      }
+    : isWarning
+      ? {
+          panel: "bg-[#d97706] text-white shadow-[0_26px_70px_-24px_rgba(146,64,14,0.5)]",
+          badge: "bg-white/14",
+          eyebrow: "text-white/85",
+          button: "border-white/30 text-white hover:bg-white/12",
+        }
+      : {
+          panel:
+            "bg-[#0f8f67] text-white shadow-[0_26px_70px_-24px_rgba(6,95,70,0.55)]",
+          badge: "bg-white/14",
+          eyebrow: "text-white/80",
+          button: "border-white/30 text-white hover:bg-white/12",
+        };
 
   if (typeof document === "undefined") {
     return null;
@@ -6390,7 +6398,7 @@ function FlashNoticeBanner({
                 accentClasses.eyebrow,
               )}
             >
-              {isError ? "Error" : "Success"}
+              {isError ? "Error" : isWarning ? "Warning" : "Success"}
             </div>
             <div className="mt-2 text-xl font-medium leading-10 arabic-auto sm:text-[2rem]">
               {message}
@@ -6809,80 +6817,49 @@ function CompactCartLine({
             {formatCurrency(lineTotal, currencyCode)}
           </span>
           {!locked ? (
-            <div className="flex items-center rounded-xl border border-[#cbd5e1] bg-white shadow-sm overflow-hidden select-none">
-              <button
-                type="button"
-                onClick={onDecrease}
-                className={cn(
-                  "flex h-9 w-12 items-center justify-center text-[#475569] transition active:scale-95",
-                  line.quantity <= 1
-                    ? "hover:bg-red-50 hover:text-[#e11d48]"
-                    : "hover:bg-gray-50 hover:text-gray-900"
-                )}
-                title={line.quantity <= 1 ? "Remove item" : "Decrease quantity"}
+            line.sellByWeight ? (
+              <span
+                className="inline-flex items-center justify-center rounded-xl border border-emerald-100 bg-[#e8f5e9] px-3.5 py-1.5 text-sm font-extrabold text-emerald-800 shadow-sm"
+                dir="ltr"
+                title={getLocalizedText("Weight is fixed after adding / الوزن ثابت بعد الإضافة", language)}
               >
-                {line.quantity <= 1 ? (
-                  <LuTrash2 className="h-4 w-4" />
-                ) : (
-                  <LuMinus className="h-4 w-4 stroke-[2.5]" />
-                )}
-              </button>
-              {line.sellByWeight && onWeightChange && isEditingWeight ? (
-                <input
-                  type="number"
-                  min={weightStep}
-                  step={weightStep}
-                  autoFocus
-                  value={weightDraft}
-                  onBlur={() => {
-                    const next = Number(weightDraft);
-                    if (Number.isFinite(next) && next > 0) {
-                      onWeightChange(next);
-                    }
-                    setIsEditingWeight(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      const next = Number(weightDraft);
-                      if (Number.isFinite(next) && next > 0) {
-                        onWeightChange(next);
-                      }
-                      setIsEditingWeight(false);
-                    }
-                  }}
-                  onChange={(event) => setWeightDraft(event.target.value)}
-                  className="w-16 border-b border-[#cbd5e1] bg-transparent text-center text-sm font-extrabold text-[#1e293b] focus:outline-none"
-                  dir="ltr"
-                />
-              ) : (
+                {formatWeightQuantity(line.quantity, line.unit, weightPrecision)}
+              </span>
+            ) : (
+              <div className="flex items-center rounded-xl border border-[#cbd5e1] bg-white shadow-sm overflow-hidden select-none">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (line.sellByWeight && onWeightChange) {
-                      setWeightDraft(String(line.quantity));
-                      setIsEditingWeight(true);
-                    }
-                  }}
+                  onClick={onDecrease}
                   className={cn(
-                    "min-w-[3.5rem] px-2 text-center text-sm font-extrabold text-[#1e293b] transition-colors",
-                    line.sellByWeight && onWeightChange ? "hover:text-[#059669] hover:bg-emerald-50 py-1.5 rounded-md mx-0.5" : "",
+                    "flex h-9 w-12 items-center justify-center text-[#475569] transition active:scale-95",
+                    line.quantity <= 1
+                      ? "hover:bg-red-50 hover:text-[#e11d48]"
+                      : "hover:bg-gray-50 hover:text-gray-900"
                   )}
+                  title={line.quantity <= 1 ? "Remove item" : "Decrease quantity"}
+                >
+                  {line.quantity <= 1 ? (
+                    <LuTrash2 className="h-4 w-4" />
+                  ) : (
+                    <LuMinus className="h-4 w-4 stroke-[2.5]" />
+                  )}
+                </button>
+                <span
+                  className="min-w-[3.5rem] px-2 text-center text-sm font-extrabold text-[#1e293b]"
                   dir="ltr"
                 >
-                  {line.sellByWeight
-                    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
-                    : formatCount(line.quantity)}
+                  {formatCount(line.quantity)}
+                </span>
+                <button
+                  type="button"
+                  onClick={onIncrease}
+                  className="flex h-9 w-12 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
+                  title="Increase quantity"
+                >
+                  <LuPlus className="h-4 w-4 stroke-[2.5]" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={onIncrease}
-                className="flex h-9 w-12 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
-                title="Increase quantity"
-              >
-                <LuPlus className="h-4 w-4 stroke-[2.5]" />
-              </button>
-            </div>
+              </div>
+            )
           ) : (
             <span className="text-xs font-bold text-[#475569]" dir="ltr">
               ×

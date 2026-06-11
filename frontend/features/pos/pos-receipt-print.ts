@@ -88,8 +88,6 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(`<div class="center"><img class="logo" src="${logoUrl}" alt="Logo"/></div>`);
   }
 
-  rows.push(`<div class="center title">${receipt.companyName}</div>`);
-
   if (receipt.branchName) {
     rows.push(`<div class="center sub">${receipt.branchName}</div>`);
   }
@@ -103,8 +101,6 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     `<div class="center sub">Sales Receipt / إيصال بيع</div>`,
     rowLine("التاريخ", fmtDate(receipt.soldAt)),
     rowLine("الكاشير", receipt.cashierName),
-    rowLine("الجهاز", receipt.terminalName || "—"),
-    rowLine("المستودع", receipt.warehouseName),
     `<div class="sep">${SEP}</div>`,
   );
 
@@ -175,7 +171,7 @@ export function buildPosReceiptHtml(receipt: PosReceiptData): string {
       color: #000;
       background: #fff;
       width: 76mm;
-      padding: 4mm 2mm;
+      padding: 1.5mm 1.75mm 1mm;
       direction: rtl;
       -webkit-font-smoothing: antialiased;
     }
@@ -183,33 +179,39 @@ export function buildPosReceiptHtml(receipt: PosReceiptData): string {
     .title {
       font-size: 20pt;
       font-weight: 900;
-      margin-bottom: 4pt;
+      margin-bottom: 1pt;
       letter-spacing: 0.02em;
+      line-height: 1.1;
     }
     .sub {
       font-size: 12pt;
       font-weight: 700;
       color: #000;
-      margin-bottom: 3pt;
+      margin-bottom: 0;
+      line-height: 1.02;
     }
     .sep {
       text-align: center;
       color: #000;
-      margin: 5pt 0;
+      margin: 1pt 0;
       font-size: 13pt;
       font-weight: 900;
       white-space: pre;
       letter-spacing: -0.05em;
+      line-height: 0.92;
     }
     .row {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin: 3pt 0;
-      line-height: 1.55;
+      margin: 0;
+      line-height: 1.02;
+    }
+    .row + .row {
+      margin-top: 0.5pt;
     }
     .sub-line .lbl {
-      font-size: 12pt;
+      font-size: 11pt;
       font-weight: 600;
       color: #000;
     }
@@ -231,13 +233,14 @@ export function buildPosReceiptHtml(receipt: PosReceiptData): string {
       color: #000;
       font-size: 14pt;
       font-weight: 700;
-      margin: 6pt 0;
+      margin: 1pt 0 0;
+      line-height: 1.02;
     }
     .logo {
       display: block;
       max-width: 52mm;
       max-height: 28mm;
-      margin: 0 auto 6pt;
+      margin: 0 auto 1.5pt;
       object-fit: contain;
     }
     @media print {
