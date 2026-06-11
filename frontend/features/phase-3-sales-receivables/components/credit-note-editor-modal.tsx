@@ -577,8 +577,8 @@ onChange({
                     (candidate) => candidate.id === line.salesInvoiceLineId,
                   );
                   return (
-                    <div key={line.key} className="rounded-xl border border-slate-100 bg-slate-50/45 p-4">
-                      <div className="mb-4 flex items-center justify-between">
+                    <div key={line.key} className="rounded-xl border border-slate-100 bg-slate-50/45 p-3">
+                      <div className="mb-2.5 flex items-center justify-between">
                         <div className="text-sm font-bold text-slate-900">#{index + 1}</div>
                         <button
                           type="button"
@@ -592,7 +592,7 @@ onChange({
                       </div>
 
                       {typeCode === "CN-SALES-RETURN" && (
-                        <div className="grid gap-4 lg:grid-cols-5">
+                        <div className="grid gap-4 lg:grid-cols-6">
                           <Field label={t("salesReceivables.creditNote.invoiceLine")}>
                             <Select
                               value={line.salesInvoiceLineId || ""}
@@ -638,8 +638,8 @@ onChange({
                               }
                               className="h-12 border-slate-200 bg-white"
                             >
-<option value="true">{t("inventory.boolean.yes")}</option>
-                               <option value="false">{t("inventory.boolean.no")}</option>
+                              <option value="true">{t("inventory.boolean.yes")}</option>
+                              <option value="false">{t("inventory.boolean.no")}</option>
                             </Select>
                           </Field>
                           <Field label={t("salesReceivables.creditNote.warehouse")}>
@@ -673,11 +673,14 @@ onChange({
                               className="h-12 border-slate-200 bg-white"
                             />
                           </Field>
+                          <Field label={t("salesReceivables.metric.total")}>
+                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
+                          </Field>
                         </div>
                       )}
 
                       {typeCode === "CN-PRICE-DIFF" && (
-                        <div className="grid gap-4 lg:grid-cols-4">
+                        <div className="grid gap-4 lg:grid-cols-5">
                           <Field label={t("salesReceivables.creditNote.invoiceLine")}>
                             <Select
                               value={line.salesInvoiceLineId || ""}
@@ -725,6 +728,9 @@ onChange({
                               }
                               isArabic={isArabic}
                             />
+                          </Field>
+                          <Field label={t("salesReceivables.metric.total")}>
+                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
                           </Field>
                         </div>
                       )}
@@ -853,26 +859,6 @@ onChange({
                           </Field>
                         </div>
                       )}
-
-                      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_180px]">
-                        <Field label={t("salesReceivables.field.description")}>
-                          <Textarea
-                            rows={2}
-                            value={line.description || ""}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({
-                                ...current,
-                                description: event.target.value,
-                              }))
-                            }
-                            className={cn("min-h-[72px] resize-none border-slate-200 bg-white", isArabic && "text-right")}
-                          />
-                        </Field>
-                        <Field label={t("salesReceivables.metric.total")}>
-                          <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} className="font-bold text-slate-950" />
-                        </Field>
-                      </div>
-
                       {sourceLine ? (
                         <div className="mt-3 text-xs font-medium text-slate-500">
                           {t("salesReceivables.creditNote.selectedLine")}: {sourceLine.lineNumber} - {sourceLine.itemName || sourceLine.description || "Line"}
@@ -883,51 +869,24 @@ onChange({
                 })}
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.35fr]">
-                <div className="rounded-xl border border-slate-200 bg-white p-5">
-                  <div className={cn("mb-4 text-sm font-bold text-slate-950", isArabic && "text-right")}>
-                    {t("salesReceivables.creditNote.summary")}
-                  </div>
-                  <SummaryRow label={t("salesReceivables.summary.subtotalBeforeTax")} value={`${currencyCode} ${totals.subtotalAmount.toFixed(3)}`} isArabic={isArabic} />
-                  <SummaryRow label={t("salesReceivables.field.taxAmount")} value={`${currencyCode} ${totals.taxAmount.toFixed(3)}`} isArabic={isArabic} />
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <SummaryRow
-                      label={t("salesReceivables.creditNote.totalDiscount")}
-                      value={`${currencyCode} ${totals.totalAmount.toFixed(3)}`}
-                      isArabic={isArabic}
-                      strong
-                      highlight={exceedsOutstanding}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-blue-200 bg-blue-50/45 p-5">
-                  <div className={cn("mb-4 flex items-center gap-2 text-sm font-bold text-slate-700", isArabic ? "justify-end text-right" : "text-left")}>
-                    <Info className="h-5 w-5 text-blue-500" />
-                    {t("salesReceivables.creditNote.postingHint")}
-                  </div>
-                  <div className={cn("space-y-2 text-sm text-slate-700", isArabic ? "text-right" : "text-left")}>
-                    <div className="font-bold text-slate-950">{t("salesReceivables.creditNote.journalAtApproval")}</div>
-                    <PostingRow
-                      label={t("salesReceivables.creditNote.journalDebit", {
-                        account: (() => {
-                          const acc = revenueAccounts.find((account) => account.id === editor.lines[0]?.revenueAccountId) || selectedType?.defaultAccount;
-                          if (!acc) return t("salesReceivables.field.revenueAccount");
-                          return isArabic ? acc.nameAr || acc.name : acc.name;
-                        })()
-                      })}
-                      value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
-                      isArabic={isArabic}
-                    />
-                    <PostingRow
-                      label={t("salesReceivables.creditNote.journalCredit", {
-                        account: selectedCustomer
-                          ? getReceivableAccountName(selectedInvoice, isArabic) ?? t("salesReceivables.field.receivableAccount")
-                          : t("salesReceivables.field.receivableAccount"),
-                      })}
-                      value={`${totals.totalAmount.toFixed(3)} ${currencyCode}`}
-                      isArabic={isArabic}
-                    />
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                  <div></div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <div className={cn("mb-4 text-sm font-bold text-slate-950", isArabic && "text-right")}>
+                      {t("salesReceivables.creditNote.summary")}
+                    </div>
+                    <SummaryRow label={t("salesReceivables.summary.subtotalBeforeTax")} value={`${currencyCode} ${totals.subtotalAmount.toFixed(3)}`} isArabic={isArabic} />
+                    <SummaryRow label={t("salesReceivables.field.taxAmount")} value={`${currencyCode} ${totals.taxAmount.toFixed(3)}`} isArabic={isArabic} />
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                      <SummaryRow
+                        label={t("salesReceivables.creditNote.totalDiscount")}
+                        value={`${currencyCode} ${totals.totalAmount.toFixed(3)}`}
+                        isArabic={isArabic}
+                        strong
+                        highlight={exceedsOutstanding}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
