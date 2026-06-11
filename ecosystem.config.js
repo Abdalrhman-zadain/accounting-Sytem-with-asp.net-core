@@ -17,7 +17,7 @@ module.exports = {
       args: 'run start',
       env: {
         PORT: 3007,
-        DATABASE_URL: 'postgresql://simple_account_user:simple_account_pass@localhost:55432/simple_account?schema=public',
+        DATABASE_URL: 'postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public',
         INVENTORY_ACCOUNTING_ENABLED: 'true'
       }
     }
