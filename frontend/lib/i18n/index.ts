@@ -419,7 +419,9 @@ const enTranslations: Record<string, string> = {
   "journal.description":
     "Create, review, and post balanced debit/credit journal entries. Only active posting accounts can be used.",
   "journal.button.newEntry": "New Entry",
+  "journal.button.editEntry": "Edit",
   "journal.create.title": "New Journal Entry",
+  "journal.edit.title": "Edit Draft Journal Entry",
   "journal.field.date": "Date",
   "journal.field.description": "Description",
   "journal.field.descriptionPlaceholder": "e.g. Electricity bill payment",
@@ -428,6 +430,7 @@ const enTranslations: Record<string, string> = {
   "journal.button.addType": "Add new type",
   "journal.button.cancel": "Cancel",
   "journal.button.saveDraft": "Save as Draft",
+  "journal.button.updateDraft": "Save Changes",
   "journal.lines.account": "Account",
   "journal.lines.description": "Description",
   "journal.lines.debit": "Debit",

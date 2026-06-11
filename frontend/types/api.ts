@@ -4348,6 +4348,13 @@ export type CreateJournalEntryPayload = {
   lines: JournalEntryLinePayload[];
 };
 
+export type UpdateJournalEntryPayload = {
+  entryDate?: string;
+  journalEntryTypeId?: string | null;
+  description?: string;
+  lines?: JournalEntryLinePayload[];
+};
+
 export type JournalEntriesQuery = {
   status?: JournalEntryStatus | "";
   dateFrom?: string;

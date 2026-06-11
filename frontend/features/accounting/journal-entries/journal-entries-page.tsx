@@ -4,10 +4,11 @@ import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { LuPlus as Plus, LuRefreshCw as RefreshCw, LuSend as Send, LuRotateCcw as RotateCcw, LuChevronDown as ChevronDown, LuChevronRight as ChevronRight, LuCircleAlert as AlertCircle } from "react-icons/lu";
+import { LuPlus as Plus, LuRefreshCw as RefreshCw, LuSend as Send, LuRotateCcw as RotateCcw, LuChevronDown as ChevronDown, LuChevronRight as ChevronRight, LuCircleAlert as AlertCircle, LuPencil as Pencil } from "react-icons/lu";
 import {
     getJournalEntries,
     createJournalEntry,
+    updateJournalEntry,
     postJournalEntry,
     reverseJournalEntry,
     getAccountOptions,
@@ -240,6 +241,7 @@ export function JournalEntriesPage() {
     const isArabic = language === "ar";
     const [showCreate, setShowCreate] = useState(false);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
     // Create form state
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
@@ -298,6 +300,17 @@ export function JournalEntriesPage() {
         },
     });
 
+    const resetEditorForm = () => {
+        setEditingEntryId(null);
+        setShowCreate(false);
+        setEntryDate(new Date().toISOString().split("T")[0]);
+        setJournalEntryTypeId("");
+        setDescription("");
+        setLines([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
+        setShowAddType(false);
+        setNewTypeName("");
+    };
+
     const createMutation = useMutation({
         mutationFn: () => createJournalEntry({
             entryDate,
@@ -314,10 +327,28 @@ export function JournalEntriesPage() {
         }, token),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
-            setShowCreate(false);
-            setLines([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
-            setDescription("");
-            setJournalEntryTypeId("");
+            resetEditorForm();
+        },
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: (id: string) => updateJournalEntry(id, {
+            entryDate,
+            description,
+            journalEntryTypeId: journalEntryTypeId || null,
+            lines: lines
+                .filter((l) => l.accountId)
+                .map((l) => ({
+                    accountId: l.accountId,
+                    description: l.description || undefined,
+                    debitAmount: Number((parseFloat(l.debitAmount) || 0).toFixed(2)),
+                    creditAmount: Number((parseFloat(l.creditAmount) || 0).toFixed(2)),
+                })),
+        }, token),
+        onSuccess: (updated) => {
+            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.journalEntryById(token, updated.id) });
+            resetEditorForm();
         },
     });
 
@@ -384,6 +415,35 @@ export function JournalEntriesPage() {
         setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
     };
 
+    const openCreateForm = () => {
+        resetEditorForm();
+        setShowCreate(true);
+    };
+
+    const openEditForm = async (id: string) => {
+        const entry = await queryClient.fetchQuery({
+            queryKey: queryKeys.journalEntryById(token, id),
+            queryFn: () => getJournalEntryById(id, token),
+            staleTime: 0,
+        });
+
+        setEditingEntryId(entry.id);
+        setEntryDate(entry.entryDate.split("T")[0] ?? "");
+        setJournalEntryTypeId(entry.journalEntryTypeId ?? "");
+        setDescription(entry.description ?? "");
+        setLines(
+            entry.lines.length
+                ? entry.lines.map((line) => ({
+                    accountId: line.accountId,
+                    description: line.description ?? "",
+                    debitAmount: parseFloat(line.debitAmount) > 0 ? Number(line.debitAmount).toFixed(2) : "",
+                    creditAmount: parseFloat(line.creditAmount) > 0 ? Number(line.creditAmount).toFixed(2) : "",
+                }))
+                : [{ ...EMPTY_LINE }, { ...EMPTY_LINE }],
+        );
+        setShowCreate(true);
+    };
+
     return (
         <PageShell>
             <div dir={isArabic ? "rtl" : "ltr"} className={cn("space-y-8 animate-in fade-in duration-200 motion-reduce:animate-none", isArabic && "arabic-ui")}>
@@ -418,7 +478,7 @@ export function JournalEntriesPage() {
                                 </option>
                             ))}
                         </select>
-                        <Button className="gap-2" onClick={() => setShowCreate(!showCreate)}>
+                        <Button className="gap-2" onClick={openCreateForm}>
                             <Plus className="h-4 w-4 shrink-0" />
                             {t("journal.button.newEntry")}
                         </Button>
@@ -440,7 +500,9 @@ export function JournalEntriesPage() {
                 {showCreate && (
                     <Card className="space-y-6 border border-teal-200 bg-teal-50/40 p-6">
                         <div>
-                            <div className="text-base font-bold text-gray-900">{t("journal.create.title")}</div>
+                            <div className="text-base font-bold text-gray-900">
+                                {editingEntryId ? t("journal.edit.title") : t("journal.create.title")}
+                            </div>
                             <div className="mt-1 text-xs text-gray-500">{t("journal.description")}</div>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
@@ -602,13 +664,15 @@ export function JournalEntriesPage() {
                         )}
 
                         <div className="flex flex-wrap items-center gap-3">
-                            <Button onClick={() => createMutation.mutate()} disabled={!isBalanced || createMutation.isPending}>
-                                {t("journal.button.saveDraft")}
+                            <Button
+                                onClick={() => editingEntryId ? updateMutation.mutate(editingEntryId) : createMutation.mutate()}
+                                disabled={!isBalanced || createMutation.isPending || updateMutation.isPending}
+                            >
+                                {editingEntryId ? t("journal.button.updateDraft") : t("journal.button.saveDraft")}
                             </Button>
-                            <Button variant="secondary" onClick={() => setShowCreate(false)}>{t("journal.button.cancel")}</Button>
-                            {createMutation.isError && (
-                                <p className="text-sm text-red-500">{(createMutation.error as Error).message}</p>
-                            )}
+                            <Button variant="secondary" onClick={resetEditorForm}>{t("journal.button.cancel")}</Button>
+                            {createMutation.isError && <p className="text-sm text-red-500">{(createMutation.error as Error).message}</p>}
+                            {updateMutation.isError && <p className="text-sm text-red-500">{(updateMutation.error as Error).message}</p>}
                         </div>
                     </Card>
                 )}
@@ -652,6 +716,20 @@ export function JournalEntriesPage() {
                                         )}
                                         <JournalStatusPill status={entry.status} />
                                         <div className="flex items-center gap-2">
+                                            {entry.status === "DRAFT" && (
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        await openEditForm(entry.id);
+                                                    }}
+                                                    className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                                                >
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <Pencil className="h-3 w-3" />
+                                                        {t("journal.button.editEntry")}
+                                                    </span>
+                                                </button>
+                                            )}
                                             {entry.status === "DRAFT" && (
                                                 <button
                                                     onClick={e => { e.stopPropagation(); if (confirm(t("journal.confirm.post"))) postMutation.mutate(entry.id); }}

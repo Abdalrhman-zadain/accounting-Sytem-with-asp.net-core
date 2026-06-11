@@ -253,7 +253,9 @@ const arTranslations: Record<string, string> = {
   "journal.description":
     "إنشاء ومراجعة وترحيل قيود يومية متوازنة (مدين/دائن). يمكن استخدام حسابات الترحيل النشطة فقط.",
   "journal.button.newEntry": "قيد جديد",
+  "journal.button.editEntry": "تعديل",
   "journal.create.title": "قيد يومية جديد",
+  "journal.edit.title": "تعديل قيد يومية مسودة",
   "journal.field.date": "التاريخ",
   "journal.field.description": "الوصف",
   "journal.field.descriptionPlaceholder": "مثال: سداد فاتورة كهرباء",
@@ -262,6 +264,7 @@ const arTranslations: Record<string, string> = {
   "journal.button.addType": "إضافة نوع جديد",
   "journal.button.cancel": "إلغاء",
   "journal.button.saveDraft": "حفظ كمسودة",
+  "journal.button.updateDraft": "حفظ التعديلات",
   "journal.lines.account": "الحساب",
   "journal.lines.description": "الوصف",
   "journal.lines.debit": "مدين",

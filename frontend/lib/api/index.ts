@@ -248,6 +248,7 @@ import {
   UpdateSupplierDebitNoteTypePayload,
   UpdateCustomerPayload,
   UpdateSalesRepresentativePayload,
+  UpdateJournalEntryPayload,
   UpdateJournalEntryTypePayload,
   UpdatePaymentMethodTypePayload,
   UpdatePayrollComponentPayload,
@@ -4223,6 +4224,18 @@ export async function createJournalEntry(
 ) {
   return apiRequest<JournalEntry>("/journal-entries", {
     method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateJournalEntry(
+  id: string,
+  payload: UpdateJournalEntryPayload,
+  token?: string | null,
+) {
+  return apiRequest<JournalEntry>(`/journal-entries/${id}`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
     token,
   });

@@ -282,14 +282,14 @@ export function CreateAccountForm({ accountId }: { accountId?: string }) {
               <div className="space-y-6">
                 {hasParent ? (
                   <Field label={t("accounts.type")}>
-                    <Input value={formatAccountType(watchedType)} disabled className="bg-gray-100/50 font-semibold" />
+                    <Input value={formatAccountType(watchedType, t)} disabled className="bg-gray-100/50 font-semibold" />
                   </Field>
                 ) : (
                   <Field label={t("accounts.type")} error={form.formState.errors.type?.message}>
                     <Select {...form.register("type")} className="font-semibold">
                       {ACCOUNT_TYPES.map((type) => (
                         <option key={type} value={type}>
-                          {formatAccountType(type)}
+                          {formatAccountType(type, t)}
                         </option>
                       ))}
                     </Select>
@@ -424,7 +424,7 @@ export function CreateAccountForm({ accountId }: { accountId?: string }) {
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t("accounts.form.preview")}</span>
                     <div className="flex flex-wrap gap-2">
                       <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wider", TYPE_COLORS[watchedType])}>
-                        {formatAccountType(watchedType)}
+                        {formatAccountType(watchedType, t)}
                       </span>
                       <span className={cn(
                         "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-bold",
@@ -531,6 +531,9 @@ function SectionLabel({ children, icon }: { children: React.ReactNode; icon?: st
   );
 }
 
-function formatAccountType(type: AccountType) {
-  return type.charAt(0) + type.slice(1).toLowerCase();
+function formatAccountType(
+  type: AccountType,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  return t(`accountType.${type}`);
 }
