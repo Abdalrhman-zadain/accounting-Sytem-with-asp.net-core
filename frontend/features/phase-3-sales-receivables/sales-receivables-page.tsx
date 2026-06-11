@@ -2579,17 +2579,22 @@ export function SalesReceivablesPage() {
                                         type="button"
                                         className="rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100"
                                         onClick={() => {
-                                          if (window.confirm(t("salesReceivables.confirm.postInvoiceAndCreateReceipt", { reference: row.reference }))) {
-                                            postInvoiceMutation
-                                              .mutateAsync({
-                                                id: row.id,
-                                                sourceAction: "POST_AND_CREATE_RECEIPT",
-                                              })
-                                              .then((postedInvoice) => {
-                                                openReceiptEditorForInvoice(postedInvoice, "POST_AND_CREATE_RECEIPT");
-                                              })
-                                              .catch(() => undefined);
-                                          }
+                                          setConfirmConfig({
+                                            title: isArabic ? "ترحيل الفاتورة" : "Post Invoice",
+                                            message: t("salesReceivables.confirm.postInvoiceAndCreateReceipt", { reference: row.reference }),
+                                            tone: "primary",
+                                            onConfirm: () => {
+                                              postInvoiceMutation
+                                                .mutateAsync({
+                                                  id: row.id,
+                                                  sourceAction: "POST_AND_CREATE_RECEIPT",
+                                                })
+                                                .then((postedInvoice) => {
+                                                  openReceiptEditorForInvoice(postedInvoice, "POST_AND_CREATE_RECEIPT");
+                                                })
+                                                .catch(() => undefined);
+                                            },
+                                          });
                                         }}
                                       >
                                         {t("salesReceivables.action.postAndCreateReceipt")}
@@ -2598,12 +2603,17 @@ export function SalesReceivablesPage() {
                                         type="button"
                                         className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
                                         onClick={() => {
-                                          if (window.confirm(t("salesReceivables.confirm.postInvoice", { reference: row.reference }))) {
-                                            postInvoiceMutation.mutate({
-                                              id: row.id,
-                                              sourceAction: "STANDARD_POST",
-                                            });
-                                          }
+                                          setConfirmConfig({
+                                            title: isArabic ? "ترحيل الفاتورة" : "Post Invoice",
+                                            message: t("salesReceivables.confirm.postInvoice", { reference: row.reference }),
+                                            tone: "primary",
+                                            onConfirm: () => {
+                                              postInvoiceMutation.mutate({
+                                                id: row.id,
+                                                sourceAction: "STANDARD_POST",
+                                              });
+                                            },
+                                          });
                                         }}
                                       >
                                         {t("salesReceivables.action.post")}
@@ -2917,9 +2927,12 @@ export function SalesReceivablesPage() {
                                     type="button"
                                     className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
                                     onClick={() => {
-                                      if (window.confirm(t("salesReceivables.confirm.postCreditNote", { reference: row.reference }))) {
-                                        postCreditNoteMutation.mutate(row.id);
-                                      }
+                                      setConfirmConfig({
+                                        title: isArabic ? "ترحيل إشعار الدائن" : "Post Credit Note",
+                                        message: t("salesReceivables.confirm.postCreditNote", { reference: row.reference }),
+                                        tone: "primary",
+                                        onConfirm: () => postCreditNoteMutation.mutate(row.id),
+                                      });
                                     }}
                                   >
                                     {t("salesReceivables.action.post")}
@@ -3704,6 +3717,23 @@ export function SalesReceivablesPage() {
           </div>
         </div>
       </SidePanel>
+
+      <ConfirmDialog
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title ?? ""}
+        message={confirmConfig?.message ?? ""}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => {
+          confirmConfig?.onCancel?.();
+          setConfirmConfig(null);
+        }}
+        tone={confirmConfig?.tone}
+        confirmText={isArabic ? "موافق" : "OK"}
+        cancelText={isArabic ? "إلغاء" : "Cancel"}
+      />
     </PageShell>
   );
 }
