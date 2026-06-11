@@ -176,6 +176,7 @@ What else to check:
 - customer sales-rep assignment should use optional `salesRepId` to an active Sales & Receivables `SalesRepresentative` for follow-up, reports, commissions, and collections; never substitute the representative's employee-payables account for the customer receivable account
 - new sales representatives should default their generated codes to sequential `REP-<number>` values such as `REP-1`, `REP-2`, and `REP-3`; when calculating the next number, ignore legacy non-sequential `REP-YYYYMMDD-...` codes
 - sales representative account linking may create a new posting liability account under `2130000 Employee Payables / ذمم الموظفين`, link an existing active posting account from that subtree, or leave the representative without an account; this link remains employee-side context only
+- market field-sales logins (`MARKET_REP`) are created from **Sales Receivables → Sales Reps** via `POST /sales-receivables/sales-reps/:id/market-login` (admin/manager only); the endpoint auto-links `User.salesRepId`, allows only one active market login per rep, and should not use the public unauthenticated `POST /auth/register` flow for production admin work
 - customer names should remain unique, and automatic customer-receivable account creation must not create a second detail account with the same customer name under `1121000`
 - customer creation and editing must require an active `TaxTreatment`; the old free-text tax-information field is no longer the authoritative sales tax selector
 - deactivated customers must not be selectable for new quotations, sales orders, invoices, receipts, or credit notes
@@ -414,7 +415,7 @@ What else to check:
 - item categories must belong to one active item group at creation time
 - material/item cards must select an active item group, an active category under that group, and an active base unit of measure
 - changing an item group in the UI should clear or revalidate the selected category
-- item/service codes must be generated only by the backend on create using the `ITM-000001` format, with prefix `ITM`, six zero-padded digits, no date/random suffixes, and one global sequence shared across all item and service types
+- item/service codes are backend-owned on create: omit `code` to allocate `ITM-000001` (prefix `ITM`, six zero-padded digits, one global sequence); optional explicit `code` is allowed when provided and must stay unique (used by Excel import and Market POS `MKT-*` products)
 - keep Arabic labels distinct: `مجموعة الأصناف`, `فئة الصنف / التصنيف`, `بطاقة المادة`, and `وحدة القياس`
 - item-card pricing fields are suggestion/default values only; they must not be treated as inventory valuation or actual stock cost
 - item-card unit conversion setup must always keep the base-unit row with factor `1`, block duplicate units, and keep conversion factors visible in the owning form/UI
@@ -427,6 +428,35 @@ Checks to run:
 - Prisma generate and migration review
 - backend build
 - frontend typecheck
+
+## Import Inventory Products From Excel
+
+Where to edit:
+
+- backend `phase-5-inventory-management/inventory/item-master/item-import.service.ts`
+- backend `phase-5-inventory-management/inventory/item-master/dto/import-inventory-items.dto.ts`
+- backend `phase-5-inventory-management/inventory/item-master/item-master.controller.ts` (`POST /inventory/items/import/preview`, `POST /inventory/items/import`)
+- frontend `features/phase-5-inventory-management/inventory/item-import-modal.tsx`
+- frontend `features/phase-5-inventory-management/inventory/inventory-page.tsx` (Items workspace **Import Products** action)
+- frontend `lib/api/index.ts` and `types/api.ts`
+
+What else to check:
+
+- v1 parses `.xlsx`/`.xls` on the client with the `xlsx` package and sends JSON rows to the backend (no multipart upload yet)
+- required template columns: `name`, `groupCode`, `categoryCode`, `unitCode`; optional `code`, `barcode`, prices, `description`, `type`
+- masters resolve by **code** (case-insensitive exact match); groups, categories, and units must already exist
+- category must belong to the resolved group
+- duplicate existing item `code` rows use `duplicatePolicy: "skip"` (default) and appear as **Skipped** in preview
+- import copies default posting accounts from the item group when the group stores them; item-level account fields otherwise remain null like manual create
+- Market POS catalog filters products by `MKT-*` item codes (or market group codes); use explicit `code` values such as `MKT-001` when onboarding retail products
+- opening stock is **not** part of v1 import; use goods receipts / rep loads after products exist
+
+Checks to run:
+
+- `item-import.service.spec.ts`
+- backend build
+- frontend typecheck
+- manual flow: download template → preview → import → confirm items list and Market POS catalog
 
 ## Start Or Extend Phase 5 Inventory
 

@@ -11,13 +11,18 @@ import {
 
 import { JwtAuthGuard } from "../../../platform/auth/guards/jwt-auth.guard";
 import { CreateInventoryItemDto } from "./dto/create-inventory-item.dto";
+import { ImportInventoryItemsDto } from "./dto/import-inventory-items.dto";
 import { UpdateInventoryItemDto } from "./dto/update-inventory-item.dto";
+import { ItemImportService } from "./item-import.service";
 import { ItemMasterService } from "./item-master.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("inventory/items")
 export class ItemMasterController {
-  constructor(private readonly service: ItemMasterService) {}
+  constructor(
+    private readonly service: ItemMasterService,
+    private readonly importService: ItemImportService,
+  ) {}
 
   @Get()
   list(
@@ -45,6 +50,16 @@ export class ItemMasterController {
   @Post("generate-barcode")
   generateBarcode() {
     return this.service.generateBarcode();
+  }
+
+  @Post("import/preview")
+  previewImport(@Body() dto: ImportInventoryItemsDto) {
+    return this.importService.preview(dto);
+  }
+
+  @Post("import")
+  importItems(@Body() dto: ImportInventoryItemsDto) {
+    return this.importService.import(dto);
   }
 
   @Get(":id")

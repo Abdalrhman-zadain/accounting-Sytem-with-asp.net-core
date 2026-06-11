@@ -120,11 +120,54 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    const requestedPosRoles = this.normalizePosRoles(dto.posRoles);
+    const salesRepId = await this.resolveRegisterSalesRepId(dto.salesRepId, requestedPosRoles);
+
+    return this.createUserWithPosAccess({
+      username: dto.username,
+      email: dto.email,
+      password: dto.password,
+      name: dto.name,
+      posRoles: requestedPosRoles,
+      salesRepId,
+    });
+  }
+
+  async createMarketRepUserForSalesRep(
+    salesRepId: string,
+    dto: { username: string; email: string; password: string; name?: string },
+  ) {
+    const rep = await this.prisma.salesRepresentative.findFirst({
+      where: { id: salesRepId.trim(), status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!rep) {
+      throw new BadRequestException('Sales representative was not found or is inactive.');
+    }
+
+    return this.createUserWithPosAccess({
+      username: dto.username,
+      email: dto.email,
+      password: dto.password,
+      name: dto.name,
+      posRoles: [PosAccessRoleCode.MARKET_REP],
+      salesRepId: rep.id,
+    });
+  }
+
+  private async createUserWithPosAccess(input: {
+    username: string;
+    email: string;
+    password: string;
+    name?: string;
+    posRoles: PosAccessRoleCode[];
+    salesRepId?: string | null;
+  }) {
     await this.ensurePosAccessBaseline();
 
-    const email = dto.email.trim().toLowerCase();
-    const username = dto.username.trim().toLowerCase();
-    const requestedPosRoles = this.normalizePosRoles(dto.posRoles);
+    const email = input.email.trim().toLowerCase();
+    const username = input.username.trim().toLowerCase();
+    const requestedPosRoles = input.posRoles;
 
     const [existingEmailUser, existingUsernameUser] = await Promise.all([
       this.prisma.user.findUnique({ where: { email } }),
@@ -138,23 +181,22 @@ export class AuthService {
       throw new ConflictException('A user with this username already exists.');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const hashedPassword = await bcrypt.hash(input.password, 10);
     const roleRecords = requestedPosRoles.length
       ? await this.prisma.posAccessRole.findMany({
           where: { code: { in: requestedPosRoles } },
           select: { id: true, code: true },
         })
       : [];
-    const salesRepId = await this.resolveRegisterSalesRepId(dto.salesRepId, requestedPosRoles);
 
     const user = await this.prisma.user.create({
       data: {
         username,
         email,
         password: hashedPassword,
-        name: dto.name?.trim() || null,
+        name: input.name?.trim() || null,
         role: UserRole.USER,
-        salesRepId,
+        salesRepId: input.salesRepId ?? null,
         posAccessRoles: roleRecords.length
           ? {
               create: roleRecords.map((roleRecord) => ({
@@ -166,6 +208,12 @@ export class AuthService {
       include: this.userAccessInclude(),
     });
 
+    return this.toRegisteredUserResponse(user);
+  }
+
+  private toRegisteredUserResponse(
+    user: Prisma.UserGetPayload<{ include: ReturnType<AuthService['userAccessInclude']> }>,
+  ) {
     const accessUser = this.buildAuthorizedUser(user);
     return {
       id: user.id,
@@ -178,6 +226,7 @@ export class AuthService {
       permissions: accessUser.permissions,
       allowedRoutes: accessUser.allowedRoutes,
       defaultRoute: accessUser.defaultRoute,
+      salesRepId: accessUser.salesRepId,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

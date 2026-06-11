@@ -32,9 +32,9 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 export function PosMarketMyStockWorkspace() {
-  const { token, user } = useAuth();
+  const { token, user, isHydrated } = useAuth();
   const { t } = useTranslation();
-  const salesRepId = user?.salesRepId ?? null;
+  const salesRepId = isHydrated ? (user?.salesRepId ?? null) : null;
 
   const stockQuery = useQuery({
     queryKey: queryKeys.posMarketRepCarStock(token ?? null, salesRepId),
@@ -56,6 +56,10 @@ export function PosMarketMyStockWorkspace() {
     const totalValue = balances.reduce((sum, row) => sum + row.valuationAmount, 0);
     return { skuCount, totalQty, totalValue };
   }, [balances]);
+
+  if (!isHydrated) {
+    return null;
+  }
 
   if (!isMarketRepUser(user)) {
     return (

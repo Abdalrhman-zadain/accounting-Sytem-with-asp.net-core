@@ -20,6 +20,7 @@ import {
   createCustomer,
   createCustomerReceipt,
   createSalesRepresentative,
+  deactivateSalesRepMarketLogin,
   createSalesInvoice,
   createSalesOrder,
   createSalesQuotation,
@@ -92,6 +93,10 @@ import { CreditNoteEditorModal } from "./components/credit-note-editor-modal";
 import { ReceiptEditorModal } from "./components/receipt-editor-modal";
 import { SalesDocumentEditorModal } from "./components/sales-document-editor-modal";
 import { SalesOrderEditorModal } from "./components/sales-order-editor-modal";
+import {
+  getActiveSalesRepMarketLogin,
+  SalesRepMarketLoginPanel,
+} from "./sales-rep-market-login-panel";
 
 type SalesTab = "customers" | "sales-reps" | "quotations" | "orders" | "invoices" | "receipts" | "credit-notes" | "aging";
 
@@ -284,6 +289,10 @@ export function SalesReceivablesPage() {
   const [isSalesRepEditorOpen, setIsSalesRepEditorOpen] = useState(false);
   const [salesRepEditor, setSalesRepEditor] = useState<SalesRepEditorState>(EMPTY_SALES_REP_EDITOR);
   const [salesRepEditorClientError, setSalesRepEditorClientError] = useState<string | null>(null);
+  const [marketLoginSalesRep, setMarketLoginSalesRep] = useState<SalesRepresentative | null>(null);
+  const [isMarketLoginPanelOpen, setIsMarketLoginPanelOpen] = useState(false);
+
+  const canManageMarketLogins = user?.role === "ADMIN" || user?.role === "MANAGER";
 
   const [quotationSearch, setQuotationSearch] = useState("");
   const [quotationStatusFilter, setQuotationStatusFilter] = useState("");
@@ -642,6 +651,15 @@ export function SalesReceivablesPage() {
 
   const deactivateSalesRepMutation = useMutation({
     mutationFn: (id: string) => deactivateSalesRepresentative(id, token),
+    onSuccess: async () => {
+      await invalidateSalesReceivables(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ["sales-representatives"] });
+    },
+  });
+
+  const deactivateSalesRepMarketLoginMutation = useMutation({
+    mutationFn: ({ salesRepId, userId }: { salesRepId: string; userId: string }) =>
+      deactivateSalesRepMarketLogin(salesRepId, userId, token),
     onSuccess: async () => {
       await invalidateSalesReceivables(queryClient);
       await queryClient.invalidateQueries({ queryKey: ["sales-representatives"] });
@@ -1905,15 +1923,16 @@ export function SalesReceivablesPage() {
               <div className="text-xs text-gray-500">{t("salesReceivables.salesReps.section.description")}</div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] table-fixed text-sm">
+              <table className="w-full min-w-[1240px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-[150px]" />
                   <col className="w-[210px]" />
                   <col className="w-[220px]" />
                   <col className="w-[140px]" />
                   <col className="w-[130px]" />
+                  <col className="w-[160px]" />
                   <col className="w-[120px]" />
-                  <col className="w-[170px]" />
+                  <col className="w-[210px]" />
                 </colgroup>
                 <thead className="bg-gray-50">
                   <tr>
@@ -1922,6 +1941,7 @@ export function SalesReceivablesPage() {
                     <TableHead>{t("salesReceivables.salesReps.field.contact")}</TableHead>
                     <TableHead className="text-end">{t("salesReceivables.salesReps.field.commissionRate")}</TableHead>
                     <TableHead className="text-center">{t("salesReceivables.salesReps.field.customersCount")}</TableHead>
+                    <TableHead className="text-center">{t("salesReceivables.salesReps.field.marketLogin")}</TableHead>
                     <TableHead className="text-center">{t("common.table.status")}</TableHead>
                     <TableHead className="text-center">{t("common.table.actions")}</TableHead>
                   </tr>
@@ -1929,7 +1949,7 @@ export function SalesReceivablesPage() {
                 <tbody>
                   {salesReps.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
                         {t("salesReceivables.salesReps.empty")}
                       </td>
                     </tr>
@@ -1955,6 +1975,31 @@ export function SalesReceivablesPage() {
                         </td>
                         <td className="px-6 py-4 text-end align-top font-mono font-bold tabular-nums text-gray-900">{Number(row.defaultCommissionRate).toFixed(2)}%</td>
                         <td className="px-6 py-4 text-center align-top font-mono font-bold tabular-nums text-gray-900">{row._count?.customers ?? 0}</td>
+                        <td className="px-4 py-4 text-center align-top">
+                          {(() => {
+                            const marketLogin = getActiveSalesRepMarketLogin(row);
+                            if (!marketLogin) {
+                              return (
+                                <span className="text-xs text-gray-500">
+                                  {t("salesReceivables.salesReps.marketLogin.none")}
+                                </span>
+                              );
+                            }
+                            return (
+                              <div className="space-y-1">
+                                <div className="font-mono text-xs font-bold text-gray-900">{marketLogin.username}</div>
+                                <StatusPill
+                                  label={
+                                    marketLogin.isActive
+                                      ? t("salesReceivables.salesReps.status.active")
+                                      : t("salesReceivables.salesReps.status.inactive")
+                                  }
+                                  tone={marketLogin.isActive ? "positive" : "neutral"}
+                                />
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td className="px-6 py-4 text-center align-top">
                           <StatusPill
                             label={row.status === "ACTIVE" ? t("salesReceivables.salesReps.status.active") : t("salesReceivables.salesReps.status.inactive")}
@@ -1986,6 +2031,44 @@ export function SalesReceivablesPage() {
                             >
                               {t("salesReceivables.salesReps.action.edit")}
                             </button>
+                            {canManageMarketLogins && row.status === "ACTIVE" && !getActiveSalesRepMarketLogin(row) ? (
+                              <button
+                                type="button"
+                                className="rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100"
+                                onClick={() => {
+                                  setMarketLoginSalesRep(row);
+                                  setIsMarketLoginPanelOpen(true);
+                                }}
+                              >
+                                {t("salesReceivables.salesReps.marketLogin.action.openCreate")}
+                              </button>
+                            ) : null}
+                            {canManageMarketLogins && getActiveSalesRepMarketLogin(row) ? (
+                              <button
+                                type="button"
+                                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
+                                onClick={() => {
+                                  const marketLogin = getActiveSalesRepMarketLogin(row);
+                                  if (!marketLogin) {
+                                    return;
+                                  }
+                                  if (
+                                    window.confirm(
+                                      t("salesReceivables.salesReps.marketLogin.action.deactivateConfirm", {
+                                        username: marketLogin.username,
+                                      }),
+                                    )
+                                  ) {
+                                    deactivateSalesRepMarketLoginMutation.mutate({
+                                      salesRepId: row.id,
+                                      userId: marketLogin.id,
+                                    });
+                                  }
+                                }}
+                              >
+                                {t("salesReceivables.salesReps.marketLogin.action.deactivate")}
+                              </button>
+                            ) : null}
                             {row.status === "ACTIVE" ? (
                               <button
                                 type="button"
@@ -3113,6 +3196,20 @@ export function SalesReceivablesPage() {
           </div>
         </div>
       </SidePanel>
+
+      <SalesRepMarketLoginPanel
+        isOpen={isMarketLoginPanelOpen}
+        salesRep={marketLoginSalesRep}
+        token={token}
+        onClose={() => {
+          setIsMarketLoginPanelOpen(false);
+          setMarketLoginSalesRep(null);
+        }}
+        onCreated={async () => {
+          await invalidateSalesReceivables(queryClient);
+          await queryClient.invalidateQueries({ queryKey: ["sales-representatives"] });
+        }}
+      />
 
       <SidePanel
         isOpen={isCustomerEditorOpen}

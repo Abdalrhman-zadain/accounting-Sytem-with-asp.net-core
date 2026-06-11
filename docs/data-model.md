@@ -172,7 +172,7 @@ Main models:
 Key fields:
 
 - rep car balance `salesRepId`, `itemId`, `onHandQuantity`, `valuationAmount` (unique per rep + item)
-- rep car load `reference`, `status` (`DRAFT` / `POSTED` / `CANCELLED`), `loadDate`, `warehouseId`, `salesRepId`, optional `description`, totals, and posting metadata
+- rep car load `reference`, `status` (`DRAFT` / `POSTED` / `CANCELLED` / `REVERSED`), `loadDate`, `warehouseId`, `salesRepId`, optional `description`, totals, posting metadata, and optional reversal metadata (`reversedAt`, `reversedByUserId`)
 - rep car load line `lineNumber`, `itemId`, `quantity`, `unitCost`, `unitOfMeasure`, and `lineTotalAmount`
 - rep car stocktake `reference`, `status`, `stocktakeDate`, `salesRepId`, `reason`, variance totals, and posting metadata
 - rep car stocktake line `systemQuantity`, `countedQuantity`, `varianceQuantity`, `unitCost`, and `lineTotalAmount`
@@ -181,6 +181,7 @@ Key fields:
 Operational meaning:
 
 - posting a rep car load decreases main-warehouse stock through `InventoryPostingService` (`InventoryStockMovementType.REP_CAR_LOAD`) and increases the target rep's `RepCarStockBalance`
+- reversing a posted rep car load (`POST /api/pos-market/rep-car-loads/:id/reverse`) is allowed only when every loaded quantity is still on the rep car and no `SALE_OUT` movement exists after the load was posted; reversal writes `RepCarStockMovementType.LOAD_OUT`, restores warehouse stock via `InventoryStockMovementType.REP_CAR_LOAD_REVERSAL`, and marks the load `REVERSED`
 - market POS sale completion deducts `RepCarStockBalance` for the session's `salesRepId` and writes `RepCarStockMovement` rows; it does not post a second warehouse issue for the same quantities
 - posting a rep car stocktake adjusts rep car balances to counted quantities and records variance movements; main-warehouse monthly جرد remains on ERP `InventoryAdjustment`
 - POS returns currently do not reverse rep car balances (documented limitation)
@@ -194,6 +195,7 @@ Accounting meaning:
 - customer `salesRepId` links to an active `SalesRepresentative` record managed inside Sales & Receivables for follow-up, reporting, commissions, collection ownership, and future sales-rep analysis; it never replaces the customer's receivable account and is not used as the invoice receivable posting account
 - newly generated sales representative codes follow the sequential `REP-<number>` pattern (for example `REP-1`, `REP-2`, `REP-3`); older random-style `REP-YYYYMMDD-...` values may still exist historically and should not affect the next sequential number
 - a sales representative may either have no employee-payables account, create one automatically under `2130000 Employee Payables / ذمم الموظفين`, or link an existing active posting account from that subtree; that account is used only for employee-side advances, custody, settlements, and commissions, not customer receivables
+- `SalesRepresentative.linkedUsers` (`User.salesRepId`) can hold one or more ERP users; market POS field logins use `MARKET_REP` on `UserPosAccessRole` with `User.salesRepId` set to the rep. The sales-reps list API returns linked `MARKET_REP` users for admin login management (create/deactivate) from Sales Receivables
 - customer names are treated as unique by the Sales & Receivables service, and automatic receivable account creation rejects duplicate detail-account names under `1121000`
 - quotations and sales orders preserve commercial traceability before accounting is created
 - newly generated sales quotation references follow a daily sequential pattern such as `QUO-20260524-1`, `QUO-20260524-2`, and `QUO-20260524-3`; older quotation references that do not match the current day's pattern may still exist historically and should not affect the next daily value
@@ -340,7 +342,8 @@ Key fields:
 Accounting meaning:
 
 - inventory item group, item category, unit-of-measure, item master, and warehouse master records now persist the foundational Phase 5 inventory setup slices
-- item master `code` is generated only by the backend during create using the shared `ITM-000001` pattern for both items and services, with one global six-digit sequence across all inventory item types
+- item master `code` is backend-owned on create: when omitted, the service allocates the shared `ITM-000001` pattern (one global six-digit sequence across all inventory item types); when an explicit `code` is supplied (manual create or Excel import), it must be unique and is stored as provided (for example Market POS `MKT-*` products)
+- Excel product import (v1) accepts JSON row batches at `POST /inventory/items/import/preview` and `POST /inventory/items/import`, resolves `groupCode`, `categoryCode`, and `unitCode` against existing masters, skips rows whose `code` already exists, and does not create opening stock
 - item cards enforce the hierarchy `InventoryItemGroup -> InventoryItemCategory -> InventoryItem`, and category selection must belong to the selected active group
 - units of measure are managed as master data and selected as the item card base unit; the legacy item `unitOfMeasure` text remains a compatibility display mirror of the selected unit code
 - item cards can now store a unique operational barcode plus QR payload text used for scan workflows, label preview/printing, stocktaking, sales, and purchase identification

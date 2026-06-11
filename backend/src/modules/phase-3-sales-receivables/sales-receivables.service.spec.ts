@@ -87,6 +87,7 @@ describe("SalesReceivablesService", () => {
       journalEntriesService as never,
       postingService as never,
       inventoryPostingService as never,
+      { createMarketRepUserForSalesRep: jest.fn() } as never,
     );
     recomputeInvoiceAmountsSpy = jest.spyOn(service as any, "recomputeInvoiceAmounts").mockResolvedValue({
       id: "inv-1",

@@ -120,6 +120,7 @@ describe("PosService restaurant operations", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -725,6 +726,7 @@ describe("PosService.parseReservationNotes", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -813,6 +815,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
     service = new PosService(
       prismaMock as never,
       { log: jest.fn() } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -1090,6 +1093,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         {} as never,
         {} as never,
         salesReceivablesMock as never,
+        {} as never,
       );
 
       prismaMock.posSession.findUnique.mockResolvedValue({
@@ -1156,6 +1160,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         {} as never,
         {} as never,
         salesReceivablesMock as never,
+        {} as never,
       );
 
       prismaMock.posSession.findUnique.mockResolvedValue({

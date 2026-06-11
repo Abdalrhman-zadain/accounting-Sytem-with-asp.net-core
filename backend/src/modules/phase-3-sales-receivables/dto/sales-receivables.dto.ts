@@ -60,6 +60,25 @@ export class CreateSalesRepresentativeDto {
   status!: "ACTIVE" | "INACTIVE";
 }
 
+export class CreateSalesRepMarketLoginDto {
+  @IsString()
+  @Length(3, 64)
+  username!: string;
+
+  @IsEmail()
+  @Length(1, 120)
+  email!: string;
+
+  @IsString()
+  @Length(6, 128)
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 120)
+  name?: string;
+}
+
 export class UpdateSalesRepresentativeDto {
   @IsOptional()
   @IsString()

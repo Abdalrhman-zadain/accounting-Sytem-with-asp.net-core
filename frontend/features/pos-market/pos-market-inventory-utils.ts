@@ -64,10 +64,15 @@ export function getWarehouseOnHandQuantity(
   return item ? Number(item.onHandQuantity) : 0;
 }
 
-export function findRepLoadStockIssue(
-  lines: Array<{ itemId: string; quantity: string }>,
-  warehouseItems: InventoryItem[],
-) {
+export type RepLoadStockIssue = {
+  itemId: string;
+  code: string;
+  onHand: number;
+  demand: number;
+  shortage: number;
+};
+
+function buildRepLoadDemandByItem(lines: Array<{ itemId: string; quantity: string }>) {
   const demandByItem = new Map<string, number>();
 
   for (const line of lines) {
@@ -77,18 +82,36 @@ export function findRepLoadStockIssue(
     demandByItem.set(line.itemId, (demandByItem.get(line.itemId) ?? 0) + quantity);
   }
 
+  return demandByItem;
+}
+
+export function findRepLoadStockIssues(
+  lines: Array<{ itemId: string; quantity: string }>,
+  warehouseItems: InventoryItem[],
+): RepLoadStockIssue[] {
+  const demandByItem = buildRepLoadDemandByItem(lines);
+  const issues: RepLoadStockIssue[] = [];
+
   for (const [itemId, demand] of demandByItem) {
     const item = warehouseItems.find((row) => row.id === itemId);
     const onHand = item ? Number(item.onHandQuantity) : 0;
     if (demand > onHand + 0.0001) {
-      return {
+      issues.push({
         itemId,
         code: item?.code ?? itemId,
         onHand,
         demand,
-      };
+        shortage: Number((demand - onHand).toFixed(4)),
+      });
     }
   }
 
-  return null;
+  return issues;
+}
+
+export function findRepLoadStockIssue(
+  lines: Array<{ itemId: string; quantity: string }>,
+  warehouseItems: InventoryItem[],
+) {
+  return findRepLoadStockIssues(lines, warehouseItems)[0] ?? null;
 }

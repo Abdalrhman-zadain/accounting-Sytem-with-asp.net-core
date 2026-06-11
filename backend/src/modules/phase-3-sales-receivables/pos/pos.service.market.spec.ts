@@ -67,6 +67,7 @@ describe("PosService market operations", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 

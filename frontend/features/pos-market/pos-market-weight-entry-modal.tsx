@@ -8,9 +8,11 @@ import {
   parseAmount,
 } from "@/features/pos-market/pos-market-cart-utils";
 import {
+  buildWeightPresets,
   formatWeightQuantity,
   getMinSalesQuantity,
   getQuantityPrecision,
+  getWeightPresetLabel,
   getWeightQuantityStep,
   parseWeightInput,
 } from "@/features/pos-market/pos-market-weight-utils";
@@ -41,18 +43,37 @@ export function PosMarketWeightEntryModal({
   const minWeight = item ? getMinSalesQuantity(item) : 0.0001;
   const unitCode = item?.unitOfMeasure ?? "KG";
   const unitPrice = parseAmount(item?.defaultSalesPrice);
+  const onHand = item?.trackInventory ? parseAmount(item.onHandQuantity) : null;
   const [weightInput, setWeightInput] = React.useState("");
+  const [selectedPreset, setSelectedPreset] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  const weightPresets = React.useMemo(
+    () =>
+      buildWeightPresets({
+        precision,
+        minWeight,
+        maxWeight: onHand,
+      }),
+    [minWeight, onHand, precision],
+  );
 
   React.useEffect(() => {
     if (!isOpen) return;
     setWeightInput("");
+    setSelectedPreset(null);
     setError(null);
   }, [isOpen, item?.id]);
 
   const parsedWeight = parseWeightInput(weightInput, precision);
   const lineTotal =
     parsedWeight != null ? Number((parsedWeight * unitPrice).toFixed(2)) : null;
+
+  const handlePresetSelect = (value: number) => {
+    setSelectedPreset(value);
+    setWeightInput(String(value));
+    setError(null);
+  };
 
   const handleConfirm = () => {
     const weight = parseWeightInput(weightInput, precision);
@@ -103,9 +124,58 @@ export function PosMarketWeightEntryModal({
             </div>
           </div>
 
+          {weightPresets.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-bold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+                {isAr ? "اختر الوزن" : "Choose weight"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {weightPresets.map((preset) => {
+                  const selected = selectedPreset === preset.value;
+                  const presetTotal = Number((preset.value * unitPrice).toFixed(2));
+                  const label = getWeightPresetLabel(
+                    preset.value,
+                    unitCode,
+                    precision,
+                    language,
+                    preset,
+                  );
+
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => handlePresetSelect(preset.value)}
+                      className="rounded-xl border px-3 py-2 text-start text-xs font-bold transition"
+                      style={{
+                        borderColor: selected
+                          ? POS_MARKET_THEME.colors.primary
+                          : POS_MARKET_THEME.colors.outline,
+                        backgroundColor: selected
+                          ? POS_MARKET_THEME.colors.primarySoft
+                          : "white",
+                        color: selected
+                          ? POS_MARKET_THEME.colors.primary
+                          : POS_MARKET_THEME.colors.text,
+                      }}
+                    >
+                      <span className="block">{label}</span>
+                      <span
+                        className="mt-0.5 block text-[10px] font-semibold"
+                        style={{ color: POS_MARKET_THEME.colors.textMuted }}
+                      >
+                        {formatCurrency(presetTotal, currencyCode)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <label className="mb-1 block text-xs font-bold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
-              {isAr ? `الوزن (${unitCode})` : `Weight (${unitCode})`}
+              {isAr ? `أو أدخل الوزن (${unitCode})` : `Or enter weight (${unitCode})`}
             </label>
             <input
               type="number"
@@ -115,6 +185,7 @@ export function PosMarketWeightEntryModal({
               value={weightInput}
               onChange={(event) => {
                 setWeightInput(event.target.value);
+                setSelectedPreset(null);
                 setError(null);
               }}
               onKeyDown={(event) => {

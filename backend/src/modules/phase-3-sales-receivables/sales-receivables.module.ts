@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { AuthModule } from '../platform/auth/auth.module';
 import { AuditModule } from '../phase-1-accounting-foundation/accounting-core/audit/audit.module';
 import { BankCashTransactionsModule } from '../phase-2-bank-cash-management/bank-cash-transactions/bank-cash-transactions.module';
 import { ChartOfAccountsModule } from '../phase-1-accounting-foundation/accounting-core/chart-of-accounts/chart-of-accounts.module';
@@ -23,7 +24,7 @@ import { SalesReceivablesController } from './sales-receivables.controller';
 import { SalesReceivablesService } from './sales-receivables.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule, RepCarStockModule],
+  imports: [PrismaModule, AuthModule, AuditModule, BankCashTransactionsModule, ChartOfAccountsModule, JournalEntriesModule, PostingLogicModule, ReversalControlModule, InventoryPostingModule, RepCarStockModule],
   controllers: [
     SalesReceivablesController,
     PosController,

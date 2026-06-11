@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
 } from "@nestjs/common";
 import {
@@ -11,12 +12,14 @@ import {
   CreditNoteStatus,
   CreditNoteTypeEffect,
   InventoryStockMovementType,
+  PosAccessRoleCode,
   Prisma,
   QuotationStatus,
   SalesInvoiceType,
   SalesInvoiceStatus,
   SalesOrderStatus,
   SalesRepStatus,
+  UserRole,
 } from "../../generated/prisma";
 
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -32,6 +35,7 @@ import {
   CreateCustomerDto,
   CreateCustomerReceiptDto,
   PostSalesInvoiceDto,
+  CreateSalesRepMarketLoginDto,
   CreateSalesRepresentativeDto,
   CreateSalesInvoiceDto,
   CreateSalesOrderDto,
@@ -44,6 +48,8 @@ import {
   UpdateSalesOrderDto,
   UpdateSalesQuotationDto,
 } from "./dto/sales-receivables.dto";
+import { AuthService } from "../platform/auth/auth.service";
+import type { AuthorizedUser } from "../platform/auth/auth.types";
 
 type DocumentQuery = {
   status?: string;
@@ -123,6 +129,7 @@ export class SalesReceivablesService {
     private readonly journalEntriesService: JournalEntriesService,
     private readonly postingService: PostingService,
     private readonly inventoryPostingService: InventoryPostingService,
+    private readonly authService: AuthService,
   ) {}
 
   async listCustomers(query: { isActive?: string; search?: string; salesRepId?: string } = {}) {
@@ -477,6 +484,78 @@ export class SalesReceivablesService {
       data: { status: SalesRepStatus.INACTIVE },
       include: this.salesRepInclude(),
     });
+  }
+
+  async createSalesRepMarketLogin(
+    salesRepId: string,
+    dto: CreateSalesRepMarketLoginDto,
+    actor?: AuthorizedUser,
+  ) {
+    this.assertCanManageSalesRepMarketLogins(actor);
+    const rep = await this.getSalesRepOrThrow(salesRepId);
+    if (rep.status !== SalesRepStatus.ACTIVE) {
+      throw new BadRequestException("Market logins can only be created for active sales representatives.");
+    }
+
+    const existingActiveLogin = await this.prisma.user.findFirst({
+      where: {
+        salesRepId,
+        isActive: true,
+        posAccessRoles: {
+          some: {
+            role: { code: PosAccessRoleCode.MARKET_REP },
+          },
+        },
+      },
+      select: { id: true, username: true },
+    });
+    if (existingActiveLogin) {
+      throw new ConflictException(
+        `This sales representative already has an active market login (${existingActiveLogin.username}).`,
+      );
+    }
+
+    return this.authService.createMarketRepUserForSalesRep(salesRepId, dto);
+  }
+
+  async deactivateSalesRepMarketLogin(
+    salesRepId: string,
+    userId: string,
+    actor?: AuthorizedUser,
+  ) {
+    this.assertCanManageSalesRepMarketLogins(actor);
+    await this.getSalesRepOrThrow(salesRepId);
+
+    const linkedUser = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        salesRepId,
+        posAccessRoles: {
+          some: {
+            role: { code: PosAccessRoleCode.MARKET_REP },
+          },
+        },
+      },
+      select: this.salesRepLinkedUserSelect(),
+    });
+    if (!linkedUser) {
+      throw new BadRequestException("Market login user was not found for this sales representative.");
+    }
+    if (!linkedUser.isActive) {
+      throw new BadRequestException("This market login is already inactive.");
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false },
+      select: this.salesRepLinkedUserSelect(),
+    });
+  }
+
+  private assertCanManageSalesRepMarketLogins(actor?: AuthorizedUser) {
+    if (actor?.role !== UserRole.ADMIN && actor?.role !== UserRole.MANAGER) {
+      throw new ForbiddenException("Only admin or manager users can manage sales rep market logins.");
+    }
   }
 
   async listQuotations(query: DocumentQuery = {}) {
@@ -4871,10 +4950,37 @@ export class SalesReceivablesService {
     };
   }
 
+  private salesRepLinkedUserSelect() {
+    return {
+      id: true,
+      username: true,
+      name: true,
+      email: true,
+      isActive: true,
+      posAccessRoles: {
+        select: {
+          role: {
+            select: { code: true },
+          },
+        },
+      },
+    } as const;
+  }
+
   private salesRepInclude() {
     return {
       employeeReceivableAccount: { select: this.accountSummarySelect() },
       _count: { select: { customers: true } },
+      linkedUsers: {
+        where: {
+          posAccessRoles: {
+            some: {
+              role: { code: PosAccessRoleCode.MARKET_REP },
+            },
+          },
+        },
+        select: this.salesRepLinkedUserSelect(),
+      },
     };
   }
 

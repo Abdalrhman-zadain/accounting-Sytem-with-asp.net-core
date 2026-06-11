@@ -48,7 +48,12 @@ import { useTranslation, TranslationKey } from "@/lib/i18n";
 import { useSettings } from "@/providers/settings-provider";
 import { useKdsMode } from "@/providers/kds-mode-provider";
 import { queryKeys } from "@/lib/query-keys";
-import { canAccessRoute, isKitchenOnlyUser, isWaiterOnlyUser } from "@/lib/auth-access";
+import {
+  canAccessRoute,
+  isKitchenOnlyUser,
+  isWaiterOnlyUser,
+  userHasPosProduct,
+} from "@/lib/auth-access";
 import {
   getAgingReport,
   getAccountOptions,
@@ -543,6 +548,10 @@ export function SiteHeader({
       items: group.items
         .map((item) => {
           if (HIDDEN_NAV_HREFS.has(item.href)) {
+            return null;
+          }
+
+          if (item.href === "/pos" && !userHasPosProduct(user, "restaurant")) {
             return null;
           }
 

@@ -63,7 +63,7 @@ Access is controlled by **POS access roles** on the user (`UserPosAccessRole`).
 |------|---------|---------------|-----------------|
 | `CASHIER` | Restaurant | `/pos/register` | Restaurant POS menu |
 | `MARKET_CASHIER` | Market | `/pos-market/register` | Market POS menu |
-| `MARKET_REP` | Market | `/pos-market/receivables` | Register, receivables, printers |
+| `MARKET_REP` | Market | `/pos-market/receivables` | Market POS only (register, receivables, my stock, printers). Restaurant POS (`/pos/*`) is hidden and blocked. |
 | `WAITER`, `KITCHEN` | Restaurant | waiter/kitchen routes | Restaurant only |
 | `ACCOUNTANT` | Both | `/dashboard` | Restaurant + market review routes + receivables |
 
@@ -71,9 +71,31 @@ Access is controlled by **POS access roles** on the user (`UserPosAccessRole`).
 
 **Seed (dev):** `market_cashier` / `market123` — created by `npm run seed:market-cashier` (`backend/prisma/setup-pos-market-cashier.ts`)
 
-**Market sales rep (dev):** `market_rep` / `market123` — created by `npm run seed:market` with `MARKET_REP` role and linked `User.salesRepId` → `REP-MARKET-01`. Sees only destination markets assigned to that rep.
+**Market sales rep (dev):** `market_rep` / `market123` — created by `npm run seed:market` with `MARKET_REP` role and linked `User.salesRepId` → `REP-MARKET-01`. Sees only destination markets assigned to that rep. The sidebar does not show **نقاط بيع المطعم** (restaurant POS); direct `/pos/*` URLs are denied by `canAccessRoute`.
 
-**Register API:**
+### Create a market sales rep login (admin UI)
+
+1. Open **Sales Receivables → Sales Reps** (`/sales-receivables?tab=sales-reps`).
+2. Create or select an **active** sales representative.
+3. Click **Create login** (admin/manager only).
+4. Enter username, email, password, and optional display name.
+5. The system creates a `MARKET_REP` user with `User.salesRepId` linked to that rep. Only one active market login is allowed per rep.
+6. Assign destination markets to the rep on the **Customers** tab (`salesRepId` on the customer).
+7. Post a rep car load at `/pos-market/rep-loads` before the rep can sell from the register.
+
+**API (admin/manager, authenticated):**
+
+```json
+POST /api/sales-receivables/sales-reps/:id/market-login
+{
+  "username": "ahmad_rep",
+  "email": "ahmad@example.com",
+  "password": "secret123",
+  "name": "Ahmad — Market Rep"
+}
+```
+
+**Register API (market cashier only):**
 
 ```json
 {
@@ -105,6 +127,16 @@ import { getUserPosProducts, userHasPosProduct } from "@/lib/auth-access";
 getUserPosProducts(user); // ["restaurant"] | ["market"] | ["restaurant", "market"]
 userHasPosProduct(user, "market");
 ```
+
+## Onboarding products (Excel import)
+
+For a new site with many products, use **Inventory → Items → Import Products** instead of entering cards one by one.
+
+1. Ensure item **groups**, **categories**, and **units of measure** exist first (demo: `npm run seed:market` creates `MARKET-*` groups/categories and standard units).
+2. Download the Excel template from the import modal.
+3. Fill rows with product `name`, `groupCode`, `categoryCode`, `unitCode`, and an explicit `code` such as `MKT-001` so products appear in the Market POS catalog (`MKT-*` filter).
+4. Upload, review the preview (valid / skipped / error per row), then import. Existing codes are skipped automatically.
+5. Add stock separately: main warehouse via ERP goods receipts; rep car via `/pos-market/rep-loads`.
 
 ## Demo product seed
 
@@ -176,6 +208,7 @@ Market POS sells from stock loaded onto a sales rep's car, not directly from mai
 |---------|----------|
 | Main warehouse | Single shared pool; goods receipts increase it; rep loads decrease it |
 | Rep car balance | `RepCarStockBalance` per `(salesRepId, itemId)` — what the register shows as on-hand |
+| Posted load undo | `POST /api/pos-market/rep-car-loads/:id/reverse` returns stock to the warehouse only when every line is still fully on the rep car and no `SALE_OUT` movement exists after the load was posted |
 | Session | Market sessions require `salesRepId` on open; cashiers pick a rep; `MARKET_REP` users are locked to `User.salesRepId` |
 | Sale | `completeSale` / `holdSale` deduct `RepCarStockBalance` only; warehouse is not decreased again |
 | Oversell | Blocked when cart quantity exceeds rep car on-hand (unless `POS_SELL_NEGATIVE_STOCK`) |
@@ -184,7 +217,7 @@ Market POS sells from stock loaded onto a sales rep's car, not directly from mai
 
 | Route | API | Permission | Purpose |
 |-------|-----|------------|---------|
-| `/pos-market/rep-loads` | `GET/POST/PATCH /api/pos-market/rep-car-loads` (+ post/cancel) | `POS_MARKET_MANAGE_REP_LOADS` | Admin load documents: warehouse → rep car |
+| `/pos-market/rep-loads` | `GET/POST/PATCH /api/pos-market/rep-car-loads` (+ post/cancel/reverse) | `POS_MARKET_MANAGE_REP_LOADS` | Admin load documents: warehouse → rep car; posted loads can be reversed only when the full quantity is still on the rep car and no sales happened after post |
 | `/pos-market/rep-stocktakes` | `GET/POST/PATCH /api/pos-market/rep-car-stocktakes` (+ post/cancel) | `POS_MARKET_REP_STOCKTAKE` | Monthly rep-car physical count (per-product variance in UI) |
 | `/pos-market/my-stock` | `GET /api/pos-market/rep-car-stock`, `.../movements` | `MARKET_REP` only | Rep dashboard: on-hand + recent movements |
 | (register) | `GET /api/pos-market/catalog?salesRepId=` | session POS permissions | Catalog grid scoped to rep car on-hand |
@@ -206,7 +239,7 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 
 | Route | Workspace |
 |-------|-----------|
-| `/pos-market/register` | Register — destination market (customer) required, catalog, cart, checkout, receipt print |
+| `/pos-market/register` | Register — destination market (customer) required, catalog, cart, checkout, receipt print; sell-by-weight items show quick-pick buttons (ربع كيلو / نص كيلو / 750 غم / كيلو) plus manual weight entry |
 | `/pos-market/sessions` | Shift list and session reports |
 | `/pos-market/held-sales` | Draft and held sales |
 | `/pos-market/accounting-review` | Pending sales approve/reject/reverse |

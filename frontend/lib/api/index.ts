@@ -56,10 +56,14 @@ import {
   CustomerTransaction,
   ConvertPurchaseRequestToOrderPayload,
   CustomersQuery,
+  SalesRepLinkedUser,
   SalesRepresentative,
   SalesRepresentativesQuery,
   CreateDebitNotePayload,
   CreateInventoryItemPayload,
+  ImportInventoryItemRowInput,
+  ImportInventoryItemsPreviewResult,
+  ImportInventoryItemsResult,
   CreateInventoryItemCategoryPayload,
   CreateInventoryGoodsIssuePayload,
   CreateInventoryGoodsReceiptPayload,
@@ -75,6 +79,7 @@ import {
   CreateCreditNotePayload,
   CreateCustomerPayload,
   CreateSupplierDebitNoteTypePayload,
+  CreateSalesRepMarketLoginPayload,
   CreateSalesRepresentativePayload,
   CreatePurchaseRequestPayload,
   CreatePurchaseOrderPayload,
@@ -1026,6 +1031,28 @@ export async function createInventoryItem(
   token?: string | null,
 ) {
   return apiRequest<InventoryItem>("/inventory/items", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function previewInventoryItemImport(
+  payload: { rows: ImportInventoryItemRowInput[]; duplicatePolicy?: "skip" },
+  token?: string | null,
+) {
+  return apiRequest<ImportInventoryItemsPreviewResult>("/inventory/items/import/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function importInventoryItems(
+  payload: { rows: ImportInventoryItemRowInput[]; duplicatePolicy?: "skip" },
+  token?: string | null,
+) {
+  return apiRequest<ImportInventoryItemsResult>("/inventory/items/import", {
     method: "POST",
     body: JSON.stringify(payload),
     token,
@@ -2080,6 +2107,32 @@ export async function deactivateSalesRepresentative(id: string, token?: string |
     method: "POST",
     token,
   });
+}
+
+export async function createSalesRepMarketLogin(
+  salesRepId: string,
+  payload: CreateSalesRepMarketLoginPayload,
+  token?: string | null,
+) {
+  return apiRequest<RegisterResponse>(`/sales-receivables/sales-reps/${salesRepId}/market-login`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function deactivateSalesRepMarketLogin(
+  salesRepId: string,
+  userId: string,
+  token?: string | null,
+) {
+  return apiRequest<SalesRepLinkedUser>(
+    `/sales-receivables/sales-reps/${salesRepId}/market-login/${userId}/deactivate`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function getCustomerBalance(

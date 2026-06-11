@@ -55,7 +55,7 @@ import type { InventoryItem } from "@/types/api";
 const POS_MARKET_LAST_CUSTOMER_KEY = "pos-market-last-customer-id";
 
 export function PosMarketRegisterWorkspace() {
-  const { token, user } = useAuth();
+  const { token, user, isHydrated } = useAuth();
   const { t, language } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -108,7 +108,7 @@ export function PosMarketRegisterWorkspace() {
   const salesRepsQuery = useQuery({
     queryKey: queryKeys.posMarketSalesReps(token ?? null),
     queryFn: () => getPosMarketSalesReps(token),
-    enabled: Boolean(token) && !isMarketRepUser(user),
+    enabled: Boolean(token) && isHydrated && !isMarketRepUser(user),
   });
 
   const paymentAccounts = paymentAccountsQuery.data ?? [];
@@ -451,9 +451,9 @@ export function PosMarketRegisterWorkspace() {
               warehouses={warehousesQuery.data ?? []}
               paymentAccounts={paymentAccounts}
               salesReps={salesRepsQuery.data ?? []}
-              showSalesRepPicker={!isMarketRepUser(user)}
-              lockedSalesRepId={user?.salesRepId ?? null}
-              canOpenShift={hasPermission(user, "POS_OPEN_SESSION")}
+              showSalesRepPicker={isHydrated && !isMarketRepUser(user)}
+              lockedSalesRepId={isHydrated ? (user?.salesRepId ?? null) : null}
+              canOpenShift={isHydrated && hasPermission(user, "POS_OPEN_SESSION")}
               onSessionStateChange={(patch) => setSessionForm((current) => ({ ...current, ...patch }))}
               onOpenSession={(openingCash, warehouseId, cashAccountId, salesRepId) => {
                 session.openSessionMutation.mutate(

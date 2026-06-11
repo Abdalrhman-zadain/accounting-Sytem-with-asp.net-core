@@ -45,7 +45,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 export function PosMarketReceivablesWorkspace() {
-  const { token, user } = useAuth();
+  const { token, user, isHydrated } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -57,8 +57,9 @@ export function PosMarketReceivablesWorkspace() {
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [flashTone, setFlashTone] = useState<"success" | "error">("success");
 
-  const canCollect = hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
-  const showRepFilter = !isMarketRepUser(user);
+  const canCollect =
+    isHydrated && hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
+  const showRepFilter = isHydrated && !isMarketRepUser(user);
 
   const receivablesQuery = useQuery({
     queryKey: queryKeys.posMarketReceivables(token ?? null, {

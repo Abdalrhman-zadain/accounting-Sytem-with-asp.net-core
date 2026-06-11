@@ -98,6 +98,10 @@ export function userHasPosProduct(
   return getUserPosProducts(user).includes(product);
 }
 
+function isRestaurantPosPath(normalizedPath: string) {
+  return normalizedPath === "/pos" || normalizedPath.startsWith("/pos/");
+}
+
 export function canAccessRoute(user: AuthUser | null | undefined, pathname: string) {
   if (!user) {
     return false;
@@ -105,6 +109,10 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
 
   const normalizedPath = normalizePath(pathname);
   const allowedRoutes = user.allowedRoutes ?? [];
+
+  if (isRestaurantPosPath(normalizedPath) && !userHasPosProduct(user, "restaurant")) {
+    return false;
+  }
 
   if (normalizedPath === "/pos/returns" || normalizedPath.startsWith("/pos/returns/")) {
     return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");

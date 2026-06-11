@@ -290,6 +290,10 @@ export class PosMarketService {
     return this.repCarLoadService.cancel(id, user);
   }
 
+  reverseRepCarLoad(id: string, user?: AuthorizedUser) {
+    return this.repCarLoadService.reverse(id, user);
+  }
+
   listRepCarStocktakes(
     query: {
       status?: string;

@@ -702,6 +702,13 @@ export async function cancelRepCarLoad(id: string, token?: string | null) {
   });
 }
 
+export async function reverseRepCarLoad(id: string, token?: string | null) {
+  return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}/reverse`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function getRepCarStock(salesRepId: string, token?: string | null) {
   return apiRequest<RepCarStockBalance[]>(
     `/pos-market/rep-car-stock?salesRepId=${encodeURIComponent(salesRepId)}`,

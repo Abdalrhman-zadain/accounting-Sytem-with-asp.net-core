@@ -392,12 +392,14 @@ enum InventoryStockMovementType {
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   REP_CAR_LOAD
+  REP_CAR_LOAD_REVERSAL
 }
 
 enum RepCarLoadStatus {
   DRAFT
   POSTED
   CANCELLED
+  REVERSED
 }
 
 enum RepCarStocktakeStatus {
@@ -408,6 +410,7 @@ enum RepCarStocktakeStatus {
 
 enum RepCarStockMovementType {
   LOAD_IN
+  LOAD_OUT
   SALE_OUT
   STOCKTAKE_IN
   STOCKTAKE_OUT
@@ -1044,12 +1047,15 @@ model RepCarLoad {
   description     String?
   totalQuantity   Decimal          @default(0) @db.Decimal(18, 4)
   totalAmount     Decimal          @default(0) @db.Decimal(18, 2)
-  postedAt        DateTime?
-  postedByUserId  String?
-  postedByUser    User?            @relation("RepCarLoadPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
-  lines           RepCarLoadLine[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  postedAt         DateTime?
+  postedByUserId   String?
+  postedByUser     User?            @relation("RepCarLoadPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reversedByUser   User?            @relation("RepCarLoadReversedBy", fields: [reversedByUserId], references: [id], onDelete: SetNull)
+  lines            RepCarLoadLine[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([status, loadDate])
   @@index([salesRepId, loadDate])
@@ -3095,6 +3101,7 @@ model User {
   submittedSessions                   PosSession[]                   @relation("SessionSubmitter")
   acceptedSessions                    PosSession[]                   @relation("SessionAcceptor")
   postedRepCarLoads                   RepCarLoad[]                   @relation("RepCarLoadPostedBy")
+  reversedRepCarLoads                 RepCarLoad[]                   @relation("RepCarLoadReversedBy")
   postedRepCarStocktakes              RepCarStocktake[]              @relation("RepCarStocktakePostedBy")
 
   createdAt DateTime @default(now())

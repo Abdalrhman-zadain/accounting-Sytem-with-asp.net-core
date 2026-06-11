@@ -21,6 +21,10 @@ import {
   UpdateRepCarLoadDto,
 } from "./dto/rep-car-stock.dto";
 import { RepCarStockService } from "./rep-car-stock.service";
+import {
+  evaluateRepLoadReverseEligibility,
+  type RepLoadReversePreview,
+} from "./rep-car-load-reverse.utils";
 import type { AuthorizedUser } from "../../../platform/auth/auth.types";
 
 type ResolvedLoadLine = {
@@ -52,6 +56,7 @@ export class RepCarLoadService {
         select: { id: true, code: true, name: true, status: true },
       },
       postedByUser: { select: { id: true, username: true, name: true } },
+      reversedByUser: { select: { id: true, username: true, name: true } },
       lines: {
         orderBy: { lineNumber: "asc" as const },
         include: {
@@ -74,7 +79,14 @@ export class RepCarLoadService {
     return `RCL-${stamp}`;
   }
 
-  private mapLoad(row: Awaited<ReturnType<typeof this.getByIdRaw>>) {
+  private mapLoad(
+    row: Awaited<ReturnType<typeof this.getByIdRaw>>,
+    reversePreview?: RepLoadReversePreview,
+  ) {
+    const linePreviewByItem = new Map(
+      (reversePreview?.lines ?? []).map((line) => [line.itemId, line]),
+    );
+
     return {
       id: row.id,
       reference: row.reference,
@@ -89,20 +101,77 @@ export class RepCarLoadService {
       totalAmount: Number(row.totalAmount.toFixed(2)),
       postedAt: row.postedAt?.toISOString() ?? null,
       postedByUser: row.postedByUser,
-      lines: row.lines.map((line) => ({
-        id: line.id,
-        lineNumber: line.lineNumber,
-        itemId: line.itemId,
-        item: line.item,
-        quantity: Number(line.quantity.toString()),
-        unitCost: Number(line.unitCost.toFixed(2)),
-        unitOfMeasure: line.unitOfMeasure,
-        description: line.description,
-        lineTotalAmount: Number(line.lineTotalAmount.toFixed(2)),
-      })),
+      reversedAt: row.reversedAt?.toISOString() ?? null,
+      reversedByUser: row.reversedByUser,
+      canReverse: reversePreview?.canReverse ?? false,
+      reverseBlockReasons: reversePreview?.reasons ?? [],
+      hasSalesAfterPost: reversePreview?.hasSalesAfterPost ?? false,
+      lines: row.lines.map((line) => {
+        const preview = linePreviewByItem.get(line.itemId);
+        return {
+          id: line.id,
+          lineNumber: line.lineNumber,
+          itemId: line.itemId,
+          item: line.item,
+          quantity: Number(line.quantity.toString()),
+          unitCost: Number(line.unitCost.toFixed(2)),
+          unitOfMeasure: line.unitOfMeasure,
+          description: line.description,
+          lineTotalAmount: Number(line.lineTotalAmount.toFixed(2)),
+          repOnHand: preview?.repOnHand ?? null,
+          reverseShortfall: preview?.shortfall ?? null,
+        };
+      }),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async buildReversePreview(row: {
+    status: RepCarLoadStatus;
+    postedAt: Date | null;
+    salesRepId: string;
+    lines: Array<{
+      itemId: string;
+      quantity: Prisma.Decimal;
+      item: { code: string };
+    }>;
+  }): Promise<RepLoadReversePreview | undefined> {
+    if (row.status !== RepCarLoadStatus.POSTED || !row.postedAt) {
+      return undefined;
+    }
+
+    const itemIds = [...new Set(row.lines.map((line) => line.itemId))];
+    const [balances, salesAfterPost] = await Promise.all([
+      this.prisma.repCarStockBalance.findMany({
+        where: {
+          salesRepId: row.salesRepId,
+          itemId: { in: itemIds },
+        },
+        select: { itemId: true, onHandQuantity: true },
+      }),
+      this.prisma.repCarStockMovement.findFirst({
+        where: {
+          salesRepId: row.salesRepId,
+          movementType: RepCarStockMovementType.SALE_OUT,
+          itemId: { in: itemIds },
+          transactionDate: { gte: row.postedAt },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    const repBalances = new Map(
+      balances.map((balance) => [balance.itemId, balance.onHandQuantity]),
+    );
+
+    return evaluateRepLoadReverseEligibility({
+      status: row.status,
+      postedAt: row.postedAt,
+      lines: row.lines,
+      repBalances,
+      hasSalesAfterPost: Boolean(salesAfterPost),
+    });
   }
 
   private async getByIdRaw(id: string) {
@@ -187,7 +256,8 @@ export class RepCarLoadService {
     if (repScope && row.salesRepId !== repScope) {
       throw new BadRequestException("Rep car load was not found.");
     }
-    return this.mapLoad(row);
+    const reversePreview = await this.buildReversePreview(row);
+    return this.mapLoad(row, reversePreview);
   }
 
   private async resolveLines(lines: CreateRepCarLoadDto["lines"]): Promise<ResolvedLoadLine[]> {
@@ -543,6 +613,142 @@ export class RepCarLoadService {
       entity: "RepCarLoad",
       entityId: updated.id,
       action: AuditAction.UPDATE,
+      details: { reference: updated.reference, status: updated.status },
+    });
+
+    return this.mapLoad(updated);
+  }
+
+  async reverse(id: string, user?: AuthorizedUser) {
+    this.repCarStockService.ensureManageRepLoads(user);
+    const load = await this.prisma.repCarLoad.findUnique({
+      where: { id },
+      include: { lines: { orderBy: { lineNumber: "asc" }, include: { item: { select: { id: true, code: true } } } } },
+    });
+    if (!load) {
+      throw new BadRequestException(`Rep car load ${id} was not found.`);
+    }
+    if (load.status !== RepCarLoadStatus.POSTED) {
+      throw new BadRequestException("Only posted rep car loads can be reversed.");
+    }
+
+    const reversePreview = await this.buildReversePreview(load);
+    if (!reversePreview?.canReverse) {
+      const reason = reversePreview?.reasons[0] ?? "This rep car load cannot be reversed.";
+      throw new BadRequestException(reason);
+    }
+
+    await this.warehousesService.getActiveWarehouseReference(load.warehouseId);
+    await this.repCarStockService.ensureActiveSalesRep(load.salesRepId);
+
+    const preventNegativeStock = this.inventoryPostingService.preventNegativeStock();
+    const reversalDate = new Date();
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      for (const line of load.lines) {
+        const balance = await tx.repCarStockBalance.findUnique({
+          where: {
+            salesRepId_itemId: {
+              salesRepId: load.salesRepId,
+              itemId: line.itemId,
+            },
+          },
+        });
+        const repOnHand = balance?.onHandQuantity ?? new Prisma.Decimal(0);
+        if (preventNegativeStock && repOnHand.lt(line.quantity)) {
+          throw new BadRequestException(
+            `Item ${line.item.code} does not have enough stock on the rep car to reverse this load.`,
+          );
+        }
+
+        const unitCost = line.unitCost;
+        const totalAmount = line.lineTotalAmount;
+
+        await this.repCarStockService.applyRepCarBalance(tx, {
+          salesRepId: load.salesRepId,
+          itemId: line.itemId,
+          quantityDelta: line.quantity.neg(),
+          valueDelta: totalAmount.neg(),
+        });
+
+        await this.repCarStockService.createRepCarMovement(tx, {
+          movementType: RepCarStockMovementType.LOAD_OUT,
+          transactionType: "RepCarLoadReversal",
+          transactionId: load.id,
+          transactionLineId: line.id,
+          transactionReference: load.reference,
+          transactionDate: reversalDate,
+          salesRepId: load.salesRepId,
+          itemId: line.itemId,
+          quantityOut: line.quantity,
+          unitCost,
+          valueOut: totalAmount,
+          description: line.description ?? load.description,
+        });
+
+        await tx.inventoryItem.update({
+          where: { id: line.itemId },
+          data: {
+            onHandQuantity: { increment: line.quantity },
+            valuationAmount: { increment: totalAmount },
+          },
+        });
+
+        const warehouseBalance = await this.inventoryPostingService.applyWarehouseBalance(tx, {
+          itemId: line.itemId,
+          warehouseId: load.warehouseId,
+          quantityDelta: line.quantity,
+          valueDelta: totalAmount,
+        });
+
+        await this.inventoryPostingService.createMovement(tx, {
+          movementType: InventoryStockMovementType.REP_CAR_LOAD_REVERSAL,
+          transactionType: "RepCarLoadReversal",
+          transactionId: load.id,
+          transactionLineId: line.id,
+          transactionReference: load.reference,
+          transactionDate: reversalDate,
+          itemId: line.itemId,
+          warehouseId: load.warehouseId,
+          quantityIn: line.quantity,
+          unitCost,
+          valueIn: totalAmount,
+          balanceId: warehouseBalance.id,
+          runningQuantity: warehouseBalance.onHandQuantity,
+          runningValuation: warehouseBalance.valuationAmount,
+          description: line.description ?? load.description,
+        });
+
+        await this.inventoryPostingService.addCostLayer(tx, {
+          itemId: line.itemId,
+          warehouseId: load.warehouseId,
+          quantity: line.quantity,
+          unitCost,
+          movementType: InventoryStockMovementType.REP_CAR_LOAD_REVERSAL,
+          sourceType: "RepCarLoadReversal",
+          sourceId: load.id,
+          sourceLineId: line.id,
+          sourceReference: load.reference,
+          sourceDate: reversalDate,
+        });
+      }
+
+      return tx.repCarLoad.update({
+        where: { id: load.id },
+        data: {
+          status: RepCarLoadStatus.REVERSED,
+          reversedAt: reversalDate,
+          reversedByUserId: user?.userId ?? null,
+        },
+        include: this.loadInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "RepCarLoad",
+      entityId: updated.id,
+      action: AuditAction.REVERSE,
       details: { reference: updated.reference, status: updated.status },
     });
 

@@ -616,6 +616,54 @@ export type InventoryStockLedgerQuery = {
   limit?: number;
 };
 
+export type ImportInventoryItemRowInput = {
+  name: string;
+  groupCode: string;
+  categoryCode: string;
+  unitCode: string;
+  code?: string;
+  barcode?: string;
+  defaultSalesPrice?: string;
+  defaultPurchasePrice?: string;
+  description?: string;
+  type?: InventoryItemType;
+};
+
+export type ImportInventoryItemRowPreview = {
+  rowNumber: number;
+  input: ImportInventoryItemRowInput;
+  status: "valid" | "error" | "skip";
+  errors: string[];
+  resolved?: {
+    code: string | null;
+    itemGroupId: string;
+    itemCategoryId: string;
+    unitOfMeasureId: string;
+  };
+};
+
+export type ImportInventoryItemsPreviewResult = {
+  rows: ImportInventoryItemRowPreview[];
+  summary: {
+    totalRows: number;
+    validCount: number;
+    skipCount: number;
+    errorCount: number;
+  };
+};
+
+export type ImportInventoryItemsResult = {
+  created: Array<{ rowNumber: number; id: string; code: string; name: string }>;
+  skipped: Array<{ rowNumber: number; code: string | null; reason: string }>;
+  failed: Array<{ rowNumber: number; errors: string[] }>;
+  summary: {
+    createdCount: number;
+    skippedCount: number;
+    failedCount: number;
+    totalRows: number;
+  };
+};
+
 export type CreateInventoryItemPayload = {
   code?: string;
   name: string;
@@ -2031,6 +2079,15 @@ export type PosRefundMethod =
   | "WALLET"
   | "STORE_CREDIT";
 
+export type SalesRepLinkedUser = {
+  id: string;
+  username: string;
+  name?: string | null;
+  email: string;
+  isActive: boolean;
+  posAccessRoles: Array<{ role: { code: PosAccessRole } }>;
+};
+
 export type SalesRepresentative = {
   id: string;
   code: string;
@@ -2041,9 +2098,17 @@ export type SalesRepresentative = {
   employeeReceivableAccountId?: string | null;
   employeeReceivableAccount?: AccountOption | null;
   status: SalesRepStatus;
+  linkedUsers?: SalesRepLinkedUser[];
   _count?: { customers: number };
   createdAt: string;
   updatedAt: string;
+};
+
+export type CreateSalesRepMarketLoginPayload = {
+  username: string;
+  email: string;
+  password: string;
+  name?: string;
 };
 
 export type Customer = {
@@ -4634,7 +4699,7 @@ export type AuditLogEntry = {
   createdAt: string;
 };
 
-export type RepCarLoadStatus = "DRAFT" | "POSTED" | "CANCELLED";
+export type RepCarLoadStatus = "DRAFT" | "POSTED" | "CANCELLED" | "REVERSED";
 export type RepCarStocktakeStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 export type RepCarLoadLine = {
@@ -4647,6 +4712,8 @@ export type RepCarLoadLine = {
   unitOfMeasure: string;
   description?: string | null;
   lineTotalAmount: number;
+  repOnHand?: number | null;
+  reverseShortfall?: number | null;
 };
 
 export type RepCarLoad = {
@@ -4663,6 +4730,11 @@ export type RepCarLoad = {
   totalAmount: number;
   postedAt?: string | null;
   postedByUser?: { id: string; username: string; name?: string | null } | null;
+  reversedAt?: string | null;
+  reversedByUser?: { id: string; username: string; name?: string | null } | null;
+  canReverse?: boolean;
+  reverseBlockReasons?: string[];
+  hasSalesAfterPost?: boolean;
   lines: RepCarLoadLine[];
   createdAt: string;
   updatedAt: string;

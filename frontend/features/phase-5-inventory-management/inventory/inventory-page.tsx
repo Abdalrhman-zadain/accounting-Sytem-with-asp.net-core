@@ -107,6 +107,7 @@ import type {
 } from "@/types/api";
 import { Button, Card, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
+import { ItemImportModal } from "./item-import-modal";
 import {
   ItemEditorModal,
   ItemEditorState,
@@ -424,6 +425,7 @@ export function InventoryPage() {
   const [itemPage, setItemPage] = useState(1);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isItemEditorOpen, setIsItemEditorOpen] = useState(false);
+  const [isItemImportOpen, setIsItemImportOpen] = useState(false);
   const [itemEditor, setItemEditor] = useState<ItemEditorState>(createEmptyItemEditor);
   const itemSaveModeRef = useRef<"save" | "saveAndClose">("saveAndClose");
   const [showItemCodePreview, setShowItemCodePreview] = useState(false);
@@ -2211,7 +2213,14 @@ export function InventoryPage() {
               <SectionHeading
                 title={t("inventory.items.title")}
                 description={t("inventory.items.description")}
-                action={<Button onClick={() => openNewItem()}>{t("inventory.button.newItem")}</Button>}
+                action={
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => setIsItemImportOpen(true)}>
+                      {t("inventory.button.importItems")}
+                    </Button>
+                    <Button onClick={() => openNewItem()}>{t("inventory.button.newItem")}</Button>
+                  </div>
+                }
               />
 
               <div className="w-full">
@@ -4387,6 +4396,13 @@ export function InventoryPage() {
           </div>
         </SidePanel>
       </div>
+      <ItemImportModal
+        open={isItemImportOpen}
+        onClose={() => setIsItemImportOpen(false)}
+        onImported={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
+        }}
+      />
     </PageShell>
   );
 

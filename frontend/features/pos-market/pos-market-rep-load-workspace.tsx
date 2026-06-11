@@ -9,12 +9,14 @@ import { getErrorMessage } from "@/features/pos-market/pos-market-cart-utils";
 import {
   fetchMarketInventoryItems,
   fetchMarketInventoryItemsForWarehouse,
-  findRepLoadStockIssue,
+  findRepLoadStockIssues,
   getWarehouseOnHandQuantity,
+  type RepLoadStockIssue,
 } from "@/features/pos-market/pos-market-inventory-utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
   cancelRepCarLoad,
+  reverseRepCarLoad,
   createRepCarLoad,
   getInventoryWarehouses,
   getPosMarketSalesReps,
@@ -33,15 +35,32 @@ type LineDraft = {
   unitOfMeasure: string;
 };
 
-function formatStockIssueMessage(
-  issue: { code: string; onHand: number; demand: number },
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
-) {
-  return t("posMarket.repLoads.exceedsWarehouseStock", {
-    code: issue.code,
-    onHand: issue.onHand,
-    demand: issue.demand,
-  });
+function StockIssueSummary({
+  issues,
+  t,
+}: {
+  issues: RepLoadStockIssue[];
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+}) {
+  if (issues.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+      <p className="font-semibold">
+        {t("posMarket.repLoads.stockSummaryTitle", { count: issues.length })}
+      </p>
+      <ul className="mt-1 space-y-0.5 text-xs">
+        {issues.map((issue) => (
+          <li key={issue.itemId}>
+            {t("posMarket.repLoads.stockSummaryLine", {
+              code: issue.code,
+              onHand: issue.onHand,
+            })}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function PosMarketRepLoadWorkspace() {
@@ -106,14 +125,19 @@ export function PosMarketRepLoadWorkspace() {
   const marketItems = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
   const warehouseItems = useMemo(() => warehouseItemsQuery.data ?? [], [warehouseItemsQuery.data]);
 
-  const draftStockIssue = useMemo(() => {
-    if (!warehouseId || warehouseItems.length === 0) return null;
-    return findRepLoadStockIssue(lines, warehouseItems);
+  const draftStockIssues = useMemo(() => {
+    if (!warehouseId || warehouseItems.length === 0) return [];
+    return findRepLoadStockIssues(lines, warehouseItems);
   }, [lines, warehouseId, warehouseItems]);
 
-  const selectedStockIssue = useMemo(() => {
-    if (!selected || selected.status !== "DRAFT" || warehouseItems.length === 0) return null;
-    return findRepLoadStockIssue(
+  const draftStockIssueByItemId = useMemo(
+    () => new Map(draftStockIssues.map((issue) => [issue.itemId, issue])),
+    [draftStockIssues],
+  );
+
+  const selectedStockIssues = useMemo(() => {
+    if (!selected || selected.status !== "DRAFT" || warehouseItems.length === 0) return [];
+    return findRepLoadStockIssues(
       selected.lines.map((line) => ({
         itemId: line.itemId,
         quantity: String(line.quantity),
@@ -121,6 +145,11 @@ export function PosMarketRepLoadWorkspace() {
       warehouseItems,
     );
   }, [selected, warehouseItems]);
+
+  const selectedStockIssueByItemId = useMemo(
+    () => new Map(selectedStockIssues.map((issue) => [issue.itemId, issue])),
+    [selectedStockIssues],
+  );
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateRepCarLoadPayload) => createRepCarLoad(payload, token),
@@ -161,10 +190,37 @@ export function PosMarketRepLoadWorkspace() {
       pushMessage(getErrorMessage(error, t("posMarket.repLoads.cancelError")), "error"),
   });
 
+  const reverseMutation = useMutation({
+    mutationFn: (id: string) => reverseRepCarLoad(id, token),
+    onSuccess: () => {
+      pushMessage(t("posMarket.repLoads.undone"));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketRepCarLoads(token ?? null) });
+      if (selectedId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.posMarketRepCarLoad(token ?? null, selectedId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.posMarketWarehouseInventoryItems(token ?? null, activeWarehouseId || null),
+        });
+      }
+    },
+    onError: (error: unknown) =>
+      pushMessage(getErrorMessage(error, t("posMarket.repLoads.undoError")), "error"),
+  });
+
+  const handleReverseSelected = () => {
+    if (!selected?.canReverse) return;
+    if (!window.confirm(t("posMarket.repLoads.undoConfirm"))) return;
+    reverseMutation.mutate(selected.id);
+  };
+
   const handlePostSelected = () => {
     if (!selected) return;
-    if (selectedStockIssue) {
-      pushMessage(formatStockIssueMessage(selectedStockIssue, t), "error");
+    if (selectedStockIssues.length > 0) {
+      pushMessage(
+        t("posMarket.repLoads.saveBlockedStock", { count: selectedStockIssues.length }),
+        "error",
+      );
       return;
     }
     postMutation.mutate(selected.id);
@@ -192,8 +248,11 @@ export function PosMarketRepLoadWorkspace() {
       pushMessage(t("posMarket.repLoads.addLine"), "error");
       return;
     }
-    if (draftStockIssue) {
-      pushMessage(formatStockIssueMessage(draftStockIssue, t), "error");
+    if (draftStockIssues.length > 0) {
+      pushMessage(
+        t("posMarket.repLoads.saveBlockedStock", { count: draftStockIssues.length }),
+        "error",
+      );
       return;
     }
     createMutation.mutate(payload);
@@ -252,41 +311,94 @@ export function PosMarketRepLoadWorkspace() {
             <p className="text-sm">
               {selected.salesRep.name} · {selected.warehouse.name} · {selected.loadDate.slice(0, 10)}
             </p>
+            <div className="hidden gap-2 text-xs font-semibold text-muted-foreground md:grid md:grid-cols-[2fr_1fr_1fr_1fr]">
+              <span>{t("posMarket.repLoads.colProduct")}</span>
+              <span>{t("posMarket.repLoads.colQuantity")}</span>
+              <span>{t("posMarket.repLoads.colUnit")}</span>
+              <span>
+                {selected.status === "DRAFT"
+                  ? t("posMarket.repLoads.colAvailable")
+                  : t("posMarket.repLoads.colOnCar")}
+              </span>
+            </div>
             <ul className="space-y-2 text-sm">
-              {selected.lines.map((line) => {
-                const onHand = getWarehouseOnHandQuantity(warehouseItems, line.itemId);
-                const over = Number(line.quantity) > onHand + 0.0001;
+              {selected.lines.map((line, lineIndex) => {
+                const warehouseOnHand = getWarehouseOnHandQuantity(warehouseItems, line.itemId);
+                const repOnHand = line.repOnHand;
+                const displayOnHand =
+                  selected.status === "DRAFT" ? warehouseOnHand : (repOnHand ?? "—");
+                const issue = selected.status === "DRAFT" ? selectedStockIssueByItemId.get(line.itemId) : undefined;
+                const hasReverseShortfall =
+                  selected.status === "POSTED" &&
+                  typeof line.reverseShortfall === "number" &&
+                  line.reverseShortfall > 0;
+                const showShortage =
+                  issue &&
+                  selected.lines.findIndex((row) => row.itemId === line.itemId) === lineIndex;
                 return (
-                  <li
-                    key={line.id}
-                    className={over ? "rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-800" : ""}
-                  >
-                    <div>
-                      {line.item.code} — {line.quantity} {line.unitOfMeasure}
+                  <li key={line.id} className="space-y-1">
+                    <div className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr] md:items-center">
+                      <span>
+                        {line.item.code} — {line.item.name}
+                      </span>
+                      <span>{line.quantity}</span>
+                      <span>{line.unitOfMeasure}</span>
+                      <span
+                        className={
+                          issue || hasReverseShortfall
+                            ? "rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-semibold text-amber-900"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {displayOnHand}
+                      </span>
                     </div>
-                    <div className="text-xs">
-                      {t("posMarket.repLoads.warehouseOnHand", { qty: onHand })}
-                      {over
-                        ? ` · ${t("posMarket.repLoads.lineOverStock", {
-                            demand: line.quantity,
-                            onHand,
-                          })}`
-                        : ""}
-                    </div>
+                    {showShortage && issue ? (
+                      <p className="text-xs font-semibold text-amber-800">
+                        {t("posMarket.repLoads.lineShortage", { shortage: issue.shortage })}
+                      </p>
+                    ) : null}
+                    {hasReverseShortfall ? (
+                      <p className="text-xs font-semibold text-amber-800">
+                        {t("posMarket.repLoads.reverseBlockedShortfall", {
+                          code: line.item.code,
+                          loaded: line.quantity,
+                          onCar: repOnHand ?? 0,
+                        })}
+                      </p>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
-            {selected.status === "DRAFT" && selectedStockIssue ? (
-              <p className="text-sm font-semibold text-red-700">
-                {formatStockIssueMessage(selectedStockIssue, t)}
+            {selected.status === "DRAFT" ? (
+              <StockIssueSummary issues={selectedStockIssues} t={t} />
+            ) : null}
+            {selected.status === "POSTED" && !selected.canReverse ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                <p className="font-semibold">{t("posMarket.repLoads.reverseBlockedTitle")}</p>
+                {selected.hasSalesAfterPost ? (
+                  <p className="mt-1 text-xs">{t("posMarket.repLoads.reverseBlockedSales")}</p>
+                ) : null}
+                <ul className="mt-1 space-y-0.5 text-xs">
+                  {(selected.reverseBlockReasons ?? []).map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {selected.status === "REVERSED" && selected.reversedAt ? (
+              <p className="text-sm text-muted-foreground">
+                {t("posMarket.repLoads.reversedAt", {
+                  date: selected.reversedAt.slice(0, 10),
+                })}
               </p>
             ) : null}
             {selected.status === "DRAFT" ? (
               <div className="flex gap-2">
                 <Button
                   onClick={handlePostSelected}
-                  disabled={postMutation.isPending || Boolean(selectedStockIssue)}
+                  disabled={postMutation.isPending || selectedStockIssues.length > 0}
                 >
                   {t("posMarket.repLoads.post")}
                 </Button>
@@ -296,6 +408,17 @@ export function PosMarketRepLoadWorkspace() {
                   disabled={cancelMutation.isPending}
                 >
                   {t("posMarket.repLoads.cancel")}
+                </Button>
+              </div>
+            ) : null}
+            {selected.status === "POSTED" && selected.canReverse ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleReverseSelected}
+                  disabled={reverseMutation.isPending}
+                >
+                  {t("posMarket.repLoads.undo")}
                 </Button>
               </div>
             ) : null}
@@ -353,27 +476,25 @@ export function PosMarketRepLoadWorkspace() {
             <p className="text-sm text-muted-foreground">{t("posMarket.repLoads.warehouseStockLoading")}</p>
           ) : null}
 
-          {draftStockIssue ? (
-            <p className="text-sm font-semibold text-red-700">
-              {formatStockIssueMessage(draftStockIssue, t)}
-            </p>
-          ) : null}
-
           <div className="space-y-3">
+            <div className="hidden gap-2 text-xs font-semibold text-muted-foreground md:grid md:grid-cols-[2fr_1fr_1fr_1fr]">
+              <span>{t("posMarket.repLoads.colProduct")}</span>
+              <span>{t("posMarket.repLoads.colQuantity")}</span>
+              <span>{t("posMarket.repLoads.colUnit")}</span>
+              <span>{t("posMarket.repLoads.colAvailable")}</span>
+            </div>
             {lines.map((line, index) => {
               const onHand = warehouseId
                 ? getWarehouseOnHandQuantity(warehouseItems, line.itemId)
                 : null;
-              const quantity = Number(line.quantity);
-              const lineOver =
-                onHand !== null &&
-                line.itemId &&
-                Number.isFinite(quantity) &&
-                quantity > onHand + 0.0001;
+              const issue = line.itemId ? draftStockIssueByItemId.get(line.itemId) : undefined;
+              const showShortage =
+                issue &&
+                lines.findIndex((row) => row.itemId === line.itemId) === index;
 
               return (
                 <div key={index} className="space-y-1">
-                  <div className="grid gap-2 md:grid-cols-3">
+                  <div className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr] md:items-start">
                     <select
                       className="rounded-md border px-3 py-2"
                       value={line.itemId}
@@ -399,20 +520,43 @@ export function PosMarketRepLoadWorkspace() {
                         </option>
                       ))}
                     </select>
-                    <Input
-                      type="number"
-                      min="0.0001"
-                      step="any"
-                      value={line.quantity}
-                      className={lineOver ? "border-red-500 text-red-700" : undefined}
-                      onChange={(e) =>
-                        setLines((current) =>
-                          current.map((row, i) =>
-                            i === index ? { ...row, quantity: e.target.value } : row,
-                          ),
-                        )
-                      }
-                    />
+                    <div className="space-y-1">
+                      <Input
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        value={line.quantity}
+                        onChange={(e) =>
+                          setLines((current) =>
+                            current.map((row, i) =>
+                              i === index ? { ...row, quantity: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                      {showShortage && issue ? (
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-amber-800">
+                            {t("posMarket.repLoads.lineShortage", { shortage: issue.shortage })}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-primary underline-offset-2 hover:underline"
+                            onClick={() =>
+                              setLines((current) =>
+                                current.map((row, i) =>
+                                  i === index
+                                    ? { ...row, quantity: String(issue.onHand) }
+                                    : row,
+                                ),
+                              )
+                            }
+                          >
+                            {t("posMarket.repLoads.setToAvailable")}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                     <Input
                       value={line.unitOfMeasure}
                       onChange={(e) =>
@@ -423,18 +567,18 @@ export function PosMarketRepLoadWorkspace() {
                         )
                       }
                     />
+                    <div
+                      className={`flex min-h-[42px] items-center rounded-md border px-3 py-2 text-sm ${
+                        issue
+                          ? "border-amber-300 bg-amber-50 font-semibold text-amber-900"
+                          : line.itemId && warehouseId
+                            ? "border-border bg-muted/40 text-muted-foreground"
+                            : "border-dashed border-border bg-muted/20 text-muted-foreground"
+                      }`}
+                    >
+                      {line.itemId && warehouseId && onHand !== null ? onHand : "—"}
+                    </div>
                   </div>
-                  {line.itemId && warehouseId && onHand !== null ? (
-                    <p className={`text-xs ${lineOver ? "font-semibold text-red-700" : "text-muted-foreground"}`}>
-                      {t("posMarket.repLoads.warehouseOnHand", { qty: onHand })}
-                      {lineOver
-                        ? ` · ${t("posMarket.repLoads.lineOverStock", {
-                            demand: quantity,
-                            onHand,
-                          })}`
-                        : ""}
-                    </p>
-                  ) : null}
                 </div>
               );
             })}
@@ -449,9 +593,11 @@ export function PosMarketRepLoadWorkspace() {
             </Button>
           </div>
 
+          <StockIssueSummary issues={draftStockIssues} t={t} />
+
           <Button
             onClick={handleSaveDraft}
-            disabled={createMutation.isPending || Boolean(draftStockIssue)}
+            disabled={createMutation.isPending || draftStockIssues.length > 0}
           >
             {t("posMarket.repLoads.saveDraft")}
           </Button>

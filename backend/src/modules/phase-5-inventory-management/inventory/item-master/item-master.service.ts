@@ -248,7 +248,7 @@ export class ItemMasterService {
     for (let attempt = 0; attempt < ITEM_CREATE_MAX_ATTEMPTS; attempt += 1) {
       try {
         const created = await this.prisma.$transaction(async (tx) => {
-          const code = await this.allocateNextItemCode(tx);
+          const code = await this.resolveItemCode(tx, dto.code);
           const barcode = this.normalizeOptionalText(dto.barcode);
           const qrCodeValue = this.normalizeOptionalText(dto.qrCodeValue);
           const trackInventory = this.resolveTrackInventory(dto.type, dto.trackInventory);
@@ -966,6 +966,22 @@ export class ItemMasterService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async resolveItemCode(tx: InventoryItemCodeDb, requestedCode?: string) {
+    const normalized = this.normalizeOptionalText(requestedCode);
+    if (normalized) {
+      const existing = await tx.inventoryItem.findUnique({
+        where: { code: normalized },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new ConflictException(`Item code "${normalized}" already exists.`);
+      }
+      return normalized;
+    }
+
+    return this.allocateNextItemCode(tx);
   }
 
   private async allocateNextItemCode(tx: InventoryItemCodeDb) {

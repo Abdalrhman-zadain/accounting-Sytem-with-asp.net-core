@@ -408,6 +408,11 @@ export class PosMarketController {
     return this.service.cancelRepCarLoad(id, req.user);
   }
 
+  @Post("rep-car-loads/:id/reverse")
+  reverseRepCarLoad(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.reverseRepCarLoad(id, req.user);
+  }
+
   @Get("rep-car-stocktakes")
   listRepCarStocktakes(
     @Req() req: Request & { user?: AuthorizedUser },

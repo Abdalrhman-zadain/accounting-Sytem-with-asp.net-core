@@ -8,6 +8,7 @@ import {
   CreateCustomerDto,
   CreateCustomerReceiptDto,
   PostSalesInvoiceDto,
+  CreateSalesRepMarketLoginDto,
   CreateSalesRepresentativeDto,
   CreateSalesInvoiceDto,
   CreateSalesOrderDto,
@@ -69,6 +70,24 @@ export class SalesReceivablesController {
   @Post('sales-reps/:id/deactivate')
   deactivateSalesRepresentative(@Param('id') id: string) {
     return this.service.deactivateSalesRepresentative(id);
+  }
+
+  @Post('sales-reps/:id/market-login')
+  createSalesRepMarketLogin(
+    @Req() req: Request & { user?: { role?: string } },
+    @Param('id') id: string,
+    @Body() dto: CreateSalesRepMarketLoginDto,
+  ) {
+    return this.service.createSalesRepMarketLogin(id, dto, req.user as any);
+  }
+
+  @Post('sales-reps/:id/market-login/:userId/deactivate')
+  deactivateSalesRepMarketLogin(
+    @Req() req: Request & { user?: { role?: string } },
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.service.deactivateSalesRepMarketLogin(id, userId, req.user as any);
   }
 
   @Get('customers/:id/balance')
