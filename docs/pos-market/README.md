@@ -133,28 +133,29 @@ userHasPosProduct(user, "market");
 For a new site with many products, use **Inventory → Items → Import Products** instead of entering cards one by one.
 
 1. Ensure item **groups**, **categories**, and **units of measure** exist first (demo: `npm run seed:market` creates `MARKET-*` groups/categories and standard units).
-2. Download the Excel template from the import modal.
-3. Fill rows with product `name`, `groupCode`, `categoryCode`, `unitCode`, and an explicit `code` such as `MKT-001` so products appear in the Market POS catalog (`MKT-*` filter).
-4. Upload, review the preview (valid / skipped / error per row), then import. Existing codes are skipped automatically.
-5. Add stock separately: main warehouse via ERP goods receipts; rep car via `/pos-market/rep-loads`.
+2. Download the Excel template from the import modal (Arabic columns: `رمز المادة`, `وصف المادة`, `الوحدة`, `الكمية`, `الكلفة`, `سعر البيع`).
+3. Fill rows — `كيلو` / `حبة` map to `KG` / `PCS`; numeric `رمز المادة` becomes `MKT-SHQ-001` style codes for Market POS. Legacy English headers (`name`, `groupCode`, …) still work.
+4. Upload, review the preview (valid / skipped / error per row), then import. Existing codes are skipped automatically. KG rows get sell-by-weight enabled.
+5. Opening stock (`الكمية`) is **not** imported via the UI — use goods receipts or the Shouq seed script below.
 
-## Demo product seed
+## Shouq catalog seed
 
-Market test products (codes `MKT-*`) with online product images (Unsplash HTTPS URLs):
+Market products are loaded from `backend/data/shouq.xlsx` (sweets/snacks catalog). Codes are `MKT-SHQ-*` under `MARKET-SNACKS`. Legacy demo products (`MKT-001` … `MKT-012`) are deactivated when this seed runs.
 
 ```bash
-cd backend && npm run seed:market
+cd backend && npm run seed:market    # groups, destination markets, reps + Shouq catalog
+cd backend && npm run seed:shouq     # reload Shouq catalog only (requires foundation + MARKET-* groups)
 ```
+
+Replace `backend/data/shouq.xlsx` with an updated spreadsheet (same column layout), then re-run `npm run seed:shouq`.
+
+Included in the main `npm run seed` flow after restaurant POS demo seed. Requires foundation data (`admin` user) when run standalone.
 
 Market cashier login only (no catalog wipe):
 
 ```bash
 cd backend && npm run seed:market-cashier
 ```
-
-Included in the main `npm run seed` flow after restaurant POS demo seed. Requires foundation data (`admin` user) when run standalone.
-
-Products cover dairy, bakery, grocery, produce (weight sale), meat, beverages, snacks, and household items. Images load directly from the internet in the market register grid.
 
 ### Destination markets (customers)
 

@@ -2835,9 +2835,9 @@ Object.assign(enTranslations, {
   "inventory.button.importItems": "Import Products",
   "inventory.import.title": "Import Products from Excel",
   "inventory.import.description":
-    "Upload a spreadsheet using the template. Item groups, categories, and units must already exist in the system.",
+    "Upload a spreadsheet using the Arabic template (or legacy English columns). Item groups, categories, and units must already exist in the system.",
   "inventory.import.hint":
-    "Use MKT-* codes for Market POS products. Existing product codes are skipped automatically.",
+    "Arabic template: رمز المادة becomes MKT-SHQ-### for Market POS. كيلو/حبة map to KG/PCS. Opening quantity (الكمية) is not imported here — use goods receipts or seed:shouq.",
   "inventory.import.downloadTemplate": "Download template",
   "inventory.import.chooseFile": "Choose Excel file",
   "inventory.import.rowCount": "{count} rows loaded",

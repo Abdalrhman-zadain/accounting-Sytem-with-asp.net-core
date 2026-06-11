@@ -21,6 +21,7 @@
     "seed:pos-demo": "ts-node prisma/seed-pos-demo.ts",
     "seed:pos-addons": "ts-node prisma/seed-pos-addons-only.ts",
     "seed:market": "ts-node prisma/seed-pos-market.ts",
+    "seed:shouq": "ts-node prisma/seed-shouq-catalog.ts",
     "seed:market-cashier": "ts-node prisma/setup-pos-market-cashier.ts",
     "prisma:migrate:account-codes:6-to-7": "ts-node prisma/migrate-6-to-7-digit-account-codes.ts",
     "seed": "ts-node prisma/seed.ts",
@@ -58,7 +59,8 @@
     "ts-jest": "^29.2.6",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "xlsx": "^0.18.5"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

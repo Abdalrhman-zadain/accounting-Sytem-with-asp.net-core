@@ -1919,9 +1919,9 @@ Object.assign(arTranslations, {
   "inventory.button.importItems": "استيراد المنتجات",
   "inventory.import.title": "استيراد المنتجات من Excel",
   "inventory.import.description":
-    "ارفع ملفًا باستخدام القالب. يجب أن تكون مجموعات الأصناف والفئات والوحدات موجودة مسبقًا في النظام.",
+    "ارفع ملفًا باستخدام القالب العربي (أو الأعمدة الإنجليزية القديمة). يجب أن تكون مجموعات الأصناف والفئات والوحدات موجودة مسبقًا في النظام.",
   "inventory.import.hint":
-    "استخدم رموز MKT-* لمنتجات نقطة بيع السوق. يتم تخطي رموز المنتجات الموجودة تلقائيًا.",
+    "القالب العربي: رمز المادة يصبح MKT-SHQ-### لنقطة بيع السوق. كيلو/حبة → KG/PCS. الكمية لا تُستورد هنا — استخدم إدخالات البضاعة أو seed:shouq.",
   "inventory.import.downloadTemplate": "تنزيل القالب",
   "inventory.import.chooseFile": "اختيار ملف Excel",
   "inventory.import.rowCount": "تم تحميل {count} صفًا",
