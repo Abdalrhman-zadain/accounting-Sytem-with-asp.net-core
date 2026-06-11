@@ -116,6 +116,9 @@ import {
   createUnitConversionEditor,
 } from "./item-editor-modal";
 import { ReceiptEditorModal } from "./receipt-editor-modal";
+import { IssueEditorModal } from "./issue-editor-modal";
+import { TransferEditorModal } from "./transfer-editor-modal";
+import { AdjustmentEditorModal } from "./adjustment-editor-modal";
 
 const ITEM_TYPE_OPTIONS: InventoryItemType[] = ["RAW_MATERIAL", "FINISHED_GOOD", "SERVICE", "MANUFACTURED_ITEM"];
 const RECEIPT_STATUS_OPTIONS: InventoryReceiptStatus[] = ["DRAFT", "POSTED", "CANCELLED", "REVERSED"];
@@ -2422,11 +2425,33 @@ export function InventoryPage() {
         </section>
 
         <section id="inventory-issues-section" className={`space-y-5 ${workspace === "issues" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.issues.title")}
-            description={t("inventory.issues.description")}
-            action={<Button onClick={() => openNewIssue()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newIssue")}</Button>}
-          />
+          {isIssueEditorOpen ? (
+            <IssueEditorModal
+              presentation="inline"
+              isOpen={isIssueEditorOpen}
+              title={issueEditor.id ? t("inventory.issues.editor.editTitle") : t("inventory.issues.editor.createTitle")}
+              editor={issueEditor}
+              onClose={closeIssueEditor}
+              onChange={setIssueEditor}
+              onSave={() => {
+                if (issueEditor.id) {
+                  void updateIssueMutation.mutate();
+                } else {
+                  void createIssueMutation.mutate();
+                }
+              }}
+              isSaving={createIssueMutation.isPending || updateIssueMutation.isPending}
+              validationError={issueMutationError}
+              items={items}
+              warehouses={warehouses}
+            />
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.issues.title")}
+                description={t("inventory.issues.description")}
+                action={<Button onClick={() => openNewIssue()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newIssue")}</Button>}
+              />
 
           <div className={cn("grid gap-6", selectedIssue ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
             <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
@@ -2647,14 +2672,38 @@ export function InventoryPage() {
               </Card>
             ) : null}
           </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-transfers-section" className={`space-y-5 ${workspace === "transfers" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.transfers.title")}
-            description={t("inventory.transfers.description")}
-            action={<Button onClick={() => openNewTransfer()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newTransfer")}</Button>}
-          />
+          {isTransferEditorOpen ? (
+            <TransferEditorModal
+              presentation="inline"
+              isOpen={isTransferEditorOpen}
+              title={transferEditor.id ? t("inventory.transfers.editor.editTitle") : t("inventory.transfers.editor.createTitle")}
+              editor={transferEditor}
+              onClose={closeTransferEditor}
+              onChange={setTransferEditor}
+              onSave={() => {
+                if (transferEditor.id) {
+                  void updateTransferMutation.mutate();
+                } else {
+                  void createTransferMutation.mutate();
+                }
+              }}
+              isSaving={createTransferMutation.isPending || updateTransferMutation.isPending}
+              validationError={transferMutationError}
+              items={items}
+              warehouses={warehouses}
+            />
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.transfers.title")}
+                description={t("inventory.transfers.description")}
+                action={<Button onClick={() => openNewTransfer()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newTransfer")}</Button>}
+              />
 
           <div className={cn("grid gap-6", selectedTransfer ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
             <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
@@ -2886,14 +2935,38 @@ export function InventoryPage() {
               </Card>
             ) : null}
           </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-adjustments-section" className={`space-y-5 ${workspace === "adjustments" ? "" : "hidden"}`}>
-          <SectionHeading
-            title={t("inventory.adjustments.title")}
-            description={t("inventory.adjustments.description")}
-            action={<Button onClick={() => openNewAdjustment()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newAdjustment")}</Button>}
-          />
+          {isAdjustmentEditorOpen ? (
+            <AdjustmentEditorModal
+              presentation="inline"
+              isOpen={isAdjustmentEditorOpen}
+              title={adjustmentEditor.id ? t("inventory.adjustments.editor.editTitle") : t("inventory.adjustments.editor.createTitle")}
+              editor={adjustmentEditor}
+              onClose={closeAdjustmentEditor}
+              onChange={setAdjustmentEditor}
+              onSave={() => {
+                if (adjustmentEditor.id) {
+                  void updateAdjustmentMutation.mutate();
+                } else {
+                  void createAdjustmentMutation.mutate();
+                }
+              }}
+              isSaving={createAdjustmentMutation.isPending || updateAdjustmentMutation.isPending}
+              validationError={adjustmentMutationError}
+              items={items}
+              warehouses={warehouses}
+            />
+          ) : (
+            <>
+              <SectionHeading
+                title={t("inventory.adjustments.title")}
+                description={t("inventory.adjustments.description")}
+                action={<Button onClick={() => openNewAdjustment()} className="rounded-full bg-[#46644b] px-4 py-2 font-bold text-white hover:bg-[#39523d]">{t("inventory.button.newAdjustment")}</Button>}
+              />
 
           <div className={cn("grid gap-6", selectedAdjustment ? "lg:grid-cols-[1.3fr_1fr]" : "")}>
             <Card className="space-y-5 rounded-[28px] border-[#d7ddd8] bg-white p-5 shadow-sm">
@@ -3128,6 +3201,8 @@ export function InventoryPage() {
               </Card>
             ) : null}
           </div>
+            </>
+          )}
         </section>
 
         <section id="inventory-warehouses-section" className={`space-y-5 ${workspace === "warehouses" ? "" : "hidden"}`}>
@@ -3934,375 +4009,6 @@ export function InventoryPage() {
           </div>
         </SidePanel>
 
-        <SidePanel
-          isOpen={isIssueEditorOpen}
-          onClose={closeIssueEditor}
-          title={issueEditor.id ? t("inventory.issues.editor.editTitle") : t("inventory.issues.editor.createTitle")}
-        >
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("inventory.issues.field.reference")} hint={t("inventory.issues.field.referenceHint")}>
-                <Input value={issueEditor.reference} onChange={(event) => setIssueEditor((current) => ({ ...current, reference: event.target.value }))} />
-              </Field>
-              <Field label={t("inventory.issues.field.date")}>
-                <Input
-                  type="date"
-                  min="1900-01-01"
-                  value={issueEditor.issueDate}
-                  onChange={(event) => setIssueEditor((current) => ({ ...current, issueDate: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.issues.field.warehouse")}>
-                <WarehouseSelect
-                  value={issueEditor.warehouseId}
-                  onChange={(value) => setIssueEditor((current) => ({ ...current, warehouseId: value }))}
-                  options={warehouses.filter((row) => row.isActive)}
-                  placeholder={t("inventory.placeholder.selectWarehouse")}
-                />
-              </Field>
-              <Field label={t("inventory.issues.field.sourceSalesOrder")}>
-                <Input
-                  value={issueEditor.sourceSalesOrderRef}
-                  onChange={(event) => setIssueEditor((current) => ({ ...current, sourceSalesOrderRef: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.issues.field.sourceSalesInvoice")}>
-                <Input
-                  value={issueEditor.sourceSalesInvoiceRef}
-                  onChange={(event) => setIssueEditor((current) => ({ ...current, sourceSalesInvoiceRef: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.issues.field.sourceProductionRequest")}>
-                <Input
-                  value={issueEditor.sourceProductionRequestRef}
-                  onChange={(event) => setIssueEditor((current) => ({ ...current, sourceProductionRequestRef: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.issues.field.sourceInternalRequest")}>
-                <Input
-                  value={issueEditor.sourceInternalRequestRef}
-                  onChange={(event) => setIssueEditor((current) => ({ ...current, sourceInternalRequestRef: event.target.value }))}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("inventory.field.description")}>
-              <Textarea value={issueEditor.description} rows={3} onChange={(event) => setIssueEditor((current) => ({ ...current, description: event.target.value }))} />
-            </Field>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-gray-900">{t("inventory.issues.lines.title")}</div>
-                <Button variant="secondary" onClick={() => addIssueLine()}>
-                  {t("inventory.issues.button.addLine")}
-                </Button>
-              </div>
-
-              {issueEditor.lines.map((line, index) => (
-                <Card key={`issue-line-${index}`} className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-gray-900">{t("inventory.issues.line.label", { index: index + 1 })}</div>
-                    {issueEditor.lines.length > 1 ? (
-                      <Button variant="danger" onClick={() => removeIssueLine(index)}>
-                        {t("inventory.issues.button.removeLine")}
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label={t("inventory.issues.field.item")}>
-                      <ItemSelect
-                        value={line.itemId}
-                        onChange={(value) => updateIssueLine(index, { itemId: value })}
-                        options={items.filter((row) => row.isActive)}
-                        placeholder={t("inventory.issues.placeholder.selectItem")}
-                      />
-                    </Field>
-                    <Field label={t("inventory.issues.field.unitOfMeasure")}>
-                      <Input
-                        value={line.unitOfMeasure}
-                        onChange={(event) => updateIssueLine(index, { unitOfMeasure: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.issues.field.quantity")}>
-                      <Input value={line.quantity} onChange={(event) => updateIssueLine(index, { quantity: event.target.value })} />
-                    </Field>
-                  </div>
-
-                  <Field label={t("inventory.issues.field.lineDescription")}>
-                    <Input value={line.description} onChange={(event) => updateIssueLine(index, { description: event.target.value })} />
-                  </Field>
-                </Card>
-              ))}
-            </div>
-
-            {issueFormError ? <ErrorBox message={issueFormError} /> : null}
-            {issueMutationError ? <ErrorBox message={issueMutationError} /> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={closeIssueEditor}>
-                {t("inventory.button.cancel")}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (issueFormError) return;
-                  if (issueEditor.id) {
-                    void updateIssueMutation.mutate();
-                    return;
-                  }
-                  void createIssueMutation.mutate();
-                }}
-                disabled={Boolean(issueFormError) || createIssueMutation.isPending || updateIssueMutation.isPending}
-              >
-                {issueEditor.id ? t("inventory.button.save") : t("inventory.button.createIssue")}
-              </Button>
-            </div>
-          </div>
-        </SidePanel>
-
-        <SidePanel
-          isOpen={isTransferEditorOpen}
-          onClose={closeTransferEditor}
-          title={transferEditor.id ? t("inventory.transfers.editor.editTitle") : t("inventory.transfers.editor.createTitle")}
-        >
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("inventory.transfers.field.reference")} hint={t("inventory.transfers.field.referenceHint")}>
-                <Input
-                  value={transferEditor.reference}
-                  onChange={(event) => setTransferEditor((current) => ({ ...current, reference: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.transfers.field.date")}>
-                <Input
-                  type="date"
-                  min="1900-01-01"
-                  value={transferEditor.transferDate}
-                  onChange={(event) => setTransferEditor((current) => ({ ...current, transferDate: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.transfers.field.sourceWarehouse")}>
-                <WarehouseSelect
-                  value={transferEditor.sourceWarehouseId}
-                  onChange={(value) => setTransferEditor((current) => ({ ...current, sourceWarehouseId: value }))}
-                  options={warehouses.filter((row) => row.isActive)}
-                  placeholder={t("inventory.placeholder.selectWarehouse")}
-                />
-              </Field>
-              <Field label={t("inventory.transfers.field.destinationWarehouse")}>
-                <WarehouseSelect
-                  value={transferEditor.destinationWarehouseId}
-                  onChange={(value) => setTransferEditor((current) => ({ ...current, destinationWarehouseId: value }))}
-                  options={warehouses.filter((row) => row.isActive)}
-                  placeholder={t("inventory.placeholder.selectWarehouse")}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("inventory.field.description")}>
-              <Textarea
-                value={transferEditor.description}
-                rows={3}
-                onChange={(event) => setTransferEditor((current) => ({ ...current, description: event.target.value }))}
-              />
-            </Field>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-gray-900">{t("inventory.transfers.lines.title")}</div>
-                <Button variant="secondary" onClick={() => addTransferLine()}>
-                  {t("inventory.transfers.button.addLine")}
-                </Button>
-              </div>
-
-              {transferEditor.lines.map((line, index) => (
-                <Card key={`transfer-line-${index}`} className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-gray-900">{t("inventory.transfers.line.label", { index: index + 1 })}</div>
-                    {transferEditor.lines.length > 1 ? (
-                      <Button variant="danger" onClick={() => removeTransferLine(index)}>
-                        {t("inventory.transfers.button.removeLine")}
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label={t("inventory.transfers.field.item")}>
-                      <ItemSelect
-                        value={line.itemId}
-                        onChange={(value) => updateTransferLine(index, { itemId: value })}
-                        options={items.filter((row) => row.isActive)}
-                        placeholder={t("inventory.transfers.placeholder.selectItem")}
-                      />
-                    </Field>
-                    <Field label={t("inventory.transfers.field.unitOfMeasure")}>
-                      <Input
-                        value={line.unitOfMeasure}
-                        onChange={(event) => updateTransferLine(index, { unitOfMeasure: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.transfers.field.quantity")}>
-                      <Input value={line.quantity} onChange={(event) => updateTransferLine(index, { quantity: event.target.value })} />
-                    </Field>
-                  </div>
-
-                  <Field label={t("inventory.transfers.field.lineDescription")}>
-                    <Input value={line.description} onChange={(event) => updateTransferLine(index, { description: event.target.value })} />
-                  </Field>
-                </Card>
-              ))}
-            </div>
-
-            {transferFormError ? <ErrorBox message={transferFormError} /> : null}
-            {transferMutationError ? <ErrorBox message={transferMutationError} /> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={closeTransferEditor}>
-                {t("inventory.button.cancel")}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (transferFormError) return;
-                  if (transferEditor.id) {
-                    void updateTransferMutation.mutate();
-                    return;
-                  }
-                  void createTransferMutation.mutate();
-                }}
-                disabled={Boolean(transferFormError) || createTransferMutation.isPending || updateTransferMutation.isPending}
-              >
-                {transferEditor.id ? t("inventory.button.save") : t("inventory.button.createTransfer")}
-              </Button>
-            </div>
-          </div>
-        </SidePanel>
-
-        <SidePanel
-          isOpen={isAdjustmentEditorOpen}
-          onClose={closeAdjustmentEditor}
-          title={adjustmentEditor.id ? t("inventory.adjustments.editor.editTitle") : t("inventory.adjustments.editor.createTitle")}
-        >
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("inventory.adjustments.field.reference")} hint={t("inventory.adjustments.field.referenceHint")}>
-                <Input
-                  value={adjustmentEditor.reference}
-                  onChange={(event) => setAdjustmentEditor((current) => ({ ...current, reference: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.adjustments.field.date")}>
-                <Input
-                  type="date"
-                  min="1900-01-01"
-                  value={adjustmentEditor.adjustmentDate}
-                  onChange={(event) => setAdjustmentEditor((current) => ({ ...current, adjustmentDate: event.target.value }))}
-                />
-              </Field>
-              <Field label={t("inventory.adjustments.field.warehouse")}>
-                <WarehouseSelect
-                  value={adjustmentEditor.warehouseId}
-                  onChange={(value) => setAdjustmentEditor((current) => ({ ...current, warehouseId: value }))}
-                  options={warehouses.filter((row) => row.isActive)}
-                  placeholder={t("inventory.placeholder.selectWarehouse")}
-                />
-              </Field>
-              <Field label={t("inventory.adjustments.field.reason")}>
-                <Input
-                  value={adjustmentEditor.reason}
-                  onChange={(event) => setAdjustmentEditor((current) => ({ ...current, reason: event.target.value }))}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("inventory.field.description")}>
-              <Textarea
-                value={adjustmentEditor.description}
-                rows={3}
-                onChange={(event) => setAdjustmentEditor((current) => ({ ...current, description: event.target.value }))}
-              />
-            </Field>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-gray-900">{t("inventory.adjustments.lines.title")}</div>
-                <Button variant="secondary" onClick={() => addAdjustmentLine()}>
-                  {t("inventory.adjustments.button.addLine")}
-                </Button>
-              </div>
-
-              {adjustmentEditor.lines.map((line, index) => (
-                <Card key={`adjustment-line-${index}`} className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-gray-900">{t("inventory.adjustments.line.label", { index: index + 1 })}</div>
-                    {adjustmentEditor.lines.length > 1 ? (
-                      <Button variant="danger" onClick={() => removeAdjustmentLine(index)}>
-                        {t("inventory.adjustments.button.removeLine")}
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label={t("inventory.adjustments.field.item")}>
-                      <ItemSelect
-                        value={line.itemId}
-                        onChange={(value) => updateAdjustmentLine(index, { itemId: value })}
-                        options={items.filter((row) => row.isActive)}
-                        placeholder={t("inventory.adjustments.placeholder.selectItem")}
-                      />
-                    </Field>
-                    <Field label={t("inventory.adjustments.field.unitOfMeasure")}>
-                      <Input
-                        value={line.unitOfMeasure}
-                        onChange={(event) => updateAdjustmentLine(index, { unitOfMeasure: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.adjustments.field.systemQuantity")}>
-                      <Input
-                        value={line.systemQuantity}
-                        onChange={(event) => updateAdjustmentLine(index, { systemQuantity: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.adjustments.field.countedQuantity")}>
-                      <Input
-                        value={line.countedQuantity}
-                        onChange={(event) => updateAdjustmentLine(index, { countedQuantity: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("inventory.adjustments.field.varianceQuantity")}>
-                      <Input value={formatVariance(line.systemQuantity, line.countedQuantity)} disabled />
-                    </Field>
-                  </div>
-
-                  <Field label={t("inventory.adjustments.field.lineDescription")}>
-                    <Input value={line.description} onChange={(event) => updateAdjustmentLine(index, { description: event.target.value })} />
-                  </Field>
-                </Card>
-              ))}
-            </div>
-
-            {adjustmentFormError ? <ErrorBox message={adjustmentFormError} /> : null}
-            {adjustmentMutationError ? <ErrorBox message={adjustmentMutationError} /> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={closeAdjustmentEditor}>
-                {t("inventory.button.cancel")}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (adjustmentFormError) return;
-                  if (adjustmentEditor.id) {
-                    void updateAdjustmentMutation.mutate();
-                    return;
-                  }
-                  void createAdjustmentMutation.mutate();
-                }}
-                disabled={Boolean(adjustmentFormError) || createAdjustmentMutation.isPending || updateAdjustmentMutation.isPending}
-              >
-                {adjustmentEditor.id ? t("inventory.button.save") : t("inventory.button.createAdjustment")}
-              </Button>
-            </div>
-          </div>
-        </SidePanel>
       </div>
       <ItemImportModal
         open={isItemImportOpen}
