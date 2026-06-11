@@ -337,11 +337,13 @@ export type InventoryStockMovementType =
   | "PURCHASE_RECEIPT"
   | "GOODS_ISSUE"
   | "SALES_ISSUE"
+  | "SALES_RETURN"
   | "TRANSFER_OUT"
   | "TRANSFER_IN"
   | "ADJUSTMENT_IN"
   | "ADJUSTMENT_OUT"
-  | "REP_CAR_LOAD";
+  | "REP_CAR_LOAD"
+  | "REP_CAR_LOAD_REVERSAL";
 
 export type InventoryCostingMethod = "WEIGHTED_AVERAGE" | "FIFO";
 

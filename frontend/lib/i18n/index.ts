@@ -3154,10 +3154,14 @@ Object.assign(enTranslations, {
   "inventory.stockLedger.movementType.GOODS_RECEIPT": "Goods Receipt",
   "inventory.stockLedger.movementType.PURCHASE_RECEIPT": "Purchase Receipt",
   "inventory.stockLedger.movementType.GOODS_ISSUE": "Goods Issue",
+  "inventory.stockLedger.movementType.SALES_ISSUE": "Sales Issue",
+  "inventory.stockLedger.movementType.SALES_RETURN": "Sales Return",
   "inventory.stockLedger.movementType.TRANSFER_OUT": "Transfer Out",
   "inventory.stockLedger.movementType.TRANSFER_IN": "Transfer In",
   "inventory.stockLedger.movementType.ADJUSTMENT_IN": "Adjustment In",
   "inventory.stockLedger.movementType.ADJUSTMENT_OUT": "Adjustment Out",
+  "inventory.stockLedger.movementType.REP_CAR_LOAD": "Rep Car Load",
+  "inventory.stockLedger.movementType.REP_CAR_LOAD_REVERSAL": "Rep Car Load Reversal",
 });
 
 Object.assign(enTranslations, {

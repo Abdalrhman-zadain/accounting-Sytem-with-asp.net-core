@@ -129,10 +129,14 @@ const STOCK_MOVEMENT_TYPE_OPTIONS: InventoryStockMovementType[] = [
   "GOODS_RECEIPT",
   "PURCHASE_RECEIPT",
   "GOODS_ISSUE",
+  "SALES_ISSUE",
+  "SALES_RETURN",
   "TRANSFER_OUT",
   "TRANSFER_IN",
   "ADJUSTMENT_IN",
   "ADJUSTMENT_OUT",
+  "REP_CAR_LOAD",
+  "REP_CAR_LOAD_REVERSAL",
 ];
 const INVENTORY_ITEMS_PAGE_SIZE = 9;
 const INVENTORY_RECEIPTS_PAGE_SIZE = 20;
@@ -4417,21 +4421,25 @@ export function InventoryPage() {
 
   function openStockMovementSource(movement: InventoryStockMovement) {
     if (movement.transactionType === "InventoryGoodsReceipt") {
+      setWorkspace("receipts");
       setSelectedReceiptId(movement.transactionId);
       setTimeout(() => document.getElementById("inventory-receipts-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
       return;
     }
     if (movement.transactionType === "InventoryGoodsIssue") {
+      setWorkspace("issues");
       setSelectedIssueId(movement.transactionId);
       setTimeout(() => document.getElementById("inventory-issues-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
       return;
     }
     if (movement.transactionType === "InventoryTransfer") {
+      setWorkspace("transfers");
       setSelectedTransferId(movement.transactionId);
       setTimeout(() => document.getElementById("inventory-transfers-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
       return;
     }
     if (movement.transactionType === "InventoryAdjustment") {
+      setWorkspace("adjustments");
       setSelectedAdjustmentId(movement.transactionId);
       setTimeout(() => document.getElementById("inventory-adjustments-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     }
@@ -5484,7 +5492,20 @@ function getAdjustmentFormError(editor: AdjustmentEditorState) {
 
 function getMutationError(...errors: unknown[]) {
   const error = errors.find((value) => value instanceof Error);
-  return error instanceof Error ? error.message : null;
+  return error instanceof Error ? translateInventoryMutationError(error.message) : null;
+}
+
+function translateInventoryMutationError(message: string) {
+  switch (message) {
+    case "Inventory item lines must post to an active inventory asset account.":
+      return "Inventory item lines must post to an active inventory asset account. يجب ترحيل بنود الأصناف المخزنية إلى حساب أصل مخزون نشط.";
+    case "Service or non-stock item lines must post to an active expense account.":
+      return "Service or non-stock item lines must post to an active expense account. يجب ترحيل بنود الخدمات أو الأصناف غير المخزنية إلى حساب مصروف نشط.";
+    case "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account.":
+      return "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account. يجب أن يستخدم كل سطر حساب ترحيل نشط من نوع مخزون أو أصل ثابت أو مصروف.";
+    default:
+      return message;
+  }
 }
 
 function receiptTone(status: InventoryReceiptStatus): "positive" | "warning" | "neutral" {
