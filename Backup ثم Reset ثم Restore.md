@@ -168,5 +168,5 @@ pm2 restart ecosystem.config.js
   2. frontend: npm run build
   3. backend: npm run build
   4. pm2 restart account-frontend account-backend
-  5. Verify http://sabina.trusttechlimited.com
+  5. Verify http://market.trusttechlimited.com
 

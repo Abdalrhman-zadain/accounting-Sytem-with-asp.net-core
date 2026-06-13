@@ -4,10 +4,10 @@ This document explains the production URL architecture for the Simple Account sy
 
 ## Primary Production URLs
 
-The system is accessible via two primary subdomains, both pointing to the same production environment:
+The system is accessible via its primary production domain:
 
-1.  **ERP & Restaurant POS:** [https://sabina.trusttechlimited.com](https://sabina.trusttechlimited.com)
-2.  **Market POS & Operations:** [https://market.trusttechlimited.com](https://market.trusttechlimited.com)
+1.  **Primary Access:** [https://market.trusttechlimited.com](https://market.trusttechlimited.com)
+2.  **Legacy/Secondary Access:** [https://sabina.trusttechlimited.com](https://sabina.trusttechlimited.com)
 
 ## Technical Architecture (Reverse Proxy)
 
@@ -15,7 +15,7 @@ Although there are multiple subdomains, they both serve the same application ins
 
 ### How it Works
 
-*   **Nginx Configuration:** The server is configured to listen for both `sabina.trusttechlimited.com` and `market.trusttechlimited.com`. Regardless of which subdomain is requested, Nginx proxies the traffic to the same internal ports:
+*   **Nginx Configuration:** The server is configured to listen for both `market.trusttechlimited.com` and `sabina.trusttechlimited.com`. Regardless of which subdomain is requested, Nginx proxies the traffic to the same internal ports:
     *   **Frontend:** Port `3000` (Next.js)
     *   **Backend:** Port `3007` (NestJS API)
 *   **Unified Application:** Since both URLs point to the same running code, the user experience, database, and features are identical. A user navigating to `/journal-entries` on either subdomain is accessing the same accounting module.

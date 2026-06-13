@@ -7,7 +7,7 @@ module.exports = {
       args: 'run start',
       env: {
         PORT: 3000,
-        NEXT_PUBLIC_API_BASE_URL: 'https://sabina.trusttechlimited.com/api'
+        NEXT_PUBLIC_API_BASE_URL: 'https://market.trusttechlimited.com/api'
       }
     },
     {

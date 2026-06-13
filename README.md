@@ -244,7 +244,7 @@ The project is deployed using **PM2** and **Nginx**.
 
 - **Backend:** Runs on port `3007` (to avoid conflicts with other local projects).
 - **Frontend:** Runs on port `3000`.
-- **Domain:** `https://sabina.trusttechlimited.com`
+- **Domain:** `https://market.trusttechlimited.com`
 
 #### Managing with PM2
 
@@ -271,8 +271,8 @@ pm2 save
 
 The Nginx configuration (typically in `/etc/nginx/sites-available/trusttech-apps`) routes domain traffic as follows:
 
-- `https://sabina.trusttechlimited.com/` -> Frontend (Port 3000)
-- `https://sabina.trusttechlimited.com/api/` -> Backend (Port 3007)
+- `https://market.trusttechlimited.com/` -> Frontend (Port 3000)
+- `https://market.trusttechlimited.com/api/` -> Backend (Port 3007)
 
 ---
 
