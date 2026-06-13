@@ -14,13 +14,16 @@ import {
   parseAmount,
 } from "@/features/pos-market/pos-market-cart-utils";
 import {
+  exportMarketAccountStatementPdf,
   printMarketAccountStatement,
+  printMarketAccountStatementA4,
   printMarketCollectionReceipt,
 } from "@/features/pos-market/pos-market-print-service";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import {
   collectPosMarketReceivables,
   getBankCashAccounts,
+  getPosMarketAccountStatement,
   getPosMarketReceivableDetail,
 } from "@/lib/api";
 import { hasPermission, isMarketRepUser } from "@/lib/auth-access";
@@ -57,10 +60,23 @@ function formatDetailDate(value: string) {
 
 type PosMarketReceivableDetailWorkspaceProps = {
   customerId: string;
+  embedded?: boolean;
+  backHref?: string;
 };
+
+function defaultStatementFromDate() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+}
+
+function defaultStatementToDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function PosMarketReceivableDetailWorkspace({
   customerId,
+  embedded = false,
+  backHref = "/pos-market/receivables",
 }: PosMarketReceivableDetailWorkspaceProps) {
   const { token, user } = useAuth();
   const { t } = useTranslation();
@@ -72,6 +88,9 @@ export function PosMarketReceivableDetailWorkspace({
   const [collectBankAccountId, setCollectBankAccountId] = useState("");
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [flashTone, setFlashTone] = useState<"success" | "error">("success");
+  const [statementFromDate, setStatementFromDate] = useState(defaultStatementFromDate);
+  const [statementToDate, setStatementToDate] = useState(defaultStatementToDate);
+  const [isStatementLoading, setIsStatementLoading] = useState(false);
 
   const canCollect = hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
   const isRep = isMarketRepUser(user);
@@ -144,6 +163,39 @@ export function PosMarketReceivableDetailWorkspace({
       setFlashTone("error");
     },
   });
+
+  const handleStatementExport = async (mode: "print" | "pdf") => {
+    if (!statementFromDate || !statementToDate) {
+      setFlashMessage(t("posMarket.statement.dateRangeRequired"));
+      setFlashTone("error");
+      return;
+    }
+    if (statementFromDate > statementToDate) {
+      setFlashMessage(t("posMarket.statement.invalidDateRange"));
+      setFlashTone("error");
+      return;
+    }
+
+    setIsStatementLoading(true);
+    try {
+      const report = await getPosMarketAccountStatement(
+        customerId,
+        { fromDate: statementFromDate, toDate: statementToDate },
+        token,
+      );
+      const printOptions = { generatedBy: user?.name ?? user?.username ?? null };
+      if (mode === "pdf") {
+        await exportMarketAccountStatementPdf(report, printOptions);
+      } else {
+        await printMarketAccountStatementA4(report, printOptions);
+      }
+    } catch (error) {
+      setFlashMessage(getErrorMessage(error, t("posMarket.statement.printError")));
+      setFlashTone("error");
+    } finally {
+      setIsStatementLoading(false);
+    }
+  };
 
   const tabClass = (tab: TabId) =>
     `rounded-xl px-4 py-2 text-sm font-bold transition ${
@@ -245,11 +297,11 @@ export function PosMarketReceivableDetailWorkspace({
     return null;
   }
 
-  return (
-    <PageShell>
-      <div className="mb-4">
+  const panel = (
+    <>
+      <div className={embedded ? "mb-4" : "mb-4"}>
         <Link
-          href="/pos-market/receivables"
+          href={backHref}
           className="inline-flex items-center gap-2 text-sm font-semibold"
           style={{ color: POS_MARKET_THEME.colors.primary }}
         >
@@ -258,13 +310,22 @@ export function PosMarketReceivableDetailWorkspace({
         </Link>
       </div>
 
-      <SectionHeading
-        title={detail?.customer.customerName ?? t("posMarket.statement.detailTitle")}
-        description={detail?.customer.customerCode ?? ""}
-      />
+      {embedded ? (
+        <div className="mb-4">
+          <div className="text-sm font-bold text-gray-900">
+            {detail?.customer.customerName ?? t("posMarket.statement.detailTitle")}
+          </div>
+          <div className="text-xs text-gray-500">{detail?.customer.customerCode ?? ""}</div>
+        </div>
+      ) : (
+        <SectionHeading
+          title={detail?.customer.customerName ?? t("posMarket.statement.detailTitle")}
+          description={detail?.customer.customerCode ?? ""}
+        />
+      )}
 
-      <div className="rounded-3xl border border-[#d5deea] p-1">
-        <Card className="rounded-[28px] border border-[#d5deea] p-6">
+      <div className={embedded ? "" : "rounded-3xl border border-[#d5deea] p-1"}>
+        <Card className={embedded ? "p-5" : "rounded-[28px] border border-[#d5deea] p-6"}>
           {detailQuery.isLoading ? (
             <p className="text-sm" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
               {t("common.loading")}
@@ -342,6 +403,57 @@ export function PosMarketReceivableDetailWorkspace({
                   {flashMessage}
                 </div>
               ) : null}
+
+              <div className="mt-6 rounded-2xl border p-4" style={{ borderColor: POS_MARKET_THEME.colors.outline }}>
+                <div className="text-sm font-black" style={{ color: POS_MARKET_THEME.colors.text }}>
+                  {t("posMarket.statement.periodTitle")}
+                </div>
+                <p className="mt-1 text-xs" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+                  {t("posMarket.statement.periodHint")}
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto_auto_auto] md:items-end">
+                  <Field label={t("posMarket.statement.fromDate")}>
+                    <Input
+                      type="date"
+                      value={statementFromDate}
+                      onChange={(event) => setStatementFromDate(event.target.value)}
+                    />
+                  </Field>
+                  <Field label={t("posMarket.statement.toDate")}>
+                    <Input
+                      type="date"
+                      value={statementToDate}
+                      onChange={(event) => setStatementToDate(event.target.value)}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    disabled={isStatementLoading}
+                    onClick={() => void handleStatementExport("print")}
+                    className="rounded-xl border px-4 py-2.5 text-sm font-black disabled:opacity-50"
+                    style={{
+                      borderColor: POS_MARKET_THEME.colors.outline,
+                      color: POS_MARKET_THEME.colors.text,
+                      backgroundColor: POS_MARKET_THEME.colors.cardSurface,
+                    }}
+                  >
+                    {isStatementLoading ? t("common.loading") : t("posMarket.statement.printA4")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isStatementLoading}
+                    onClick={() => void handleStatementExport("pdf")}
+                    className="rounded-xl border px-4 py-2.5 text-sm font-black disabled:opacity-50"
+                    style={{
+                      borderColor: POS_MARKET_THEME.colors.outline,
+                      color: POS_MARKET_THEME.colors.text,
+                      backgroundColor: POS_MARKET_THEME.colors.cardSurface,
+                    }}
+                  >
+                    {t("posMarket.statement.exportPdf")}
+                  </button>
+                </div>
+              </div>
 
               <div className="mt-6 grid gap-4 md:grid-cols-3">
                 <SummaryTile
@@ -459,6 +571,12 @@ export function PosMarketReceivableDetailWorkspace({
           </div>
         ) : null}
       </Modal>
-    </PageShell>
+    </>
   );
+
+  if (embedded) {
+    return <div className="space-y-6">{panel}</div>;
+  }
+
+  return <PageShell>{panel}</PageShell>;
 }

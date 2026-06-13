@@ -51,6 +51,22 @@ export class PosMarketController {
     return this.service.listMarketReceivableSalesReps(req.user);
   }
 
+  @Get("rep-statements")
+  getMarketRepStatement(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Query("salesRepId") salesRepId: string,
+    @Query("fromDate") fromDate: string,
+    @Query("toDate") toDate: string,
+    @Query("customerId") customerId?: string,
+    @Query("documentTypes") documentTypes?: string,
+    @Query("paymentTypes") paymentTypes?: string,
+  ) {
+    return this.service.getMarketRepStatement(
+      { salesRepId, customerId, fromDate, toDate, documentTypes, paymentTypes },
+      req.user,
+    );
+  }
+
   @Get("receivables")
   listMarketReceivables(
     @Req() req: Request & { user?: AuthorizedUser },
@@ -70,6 +86,16 @@ export class PosMarketController {
     @Param("customerId") customerId: string,
   ) {
     return this.service.getMarketReceivableDetail(customerId, req.user);
+  }
+
+  @Get("receivables/:customerId/statement")
+  getMarketReceivableStatement(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Param("customerId") customerId: string,
+    @Query("fromDate") fromDate: string,
+    @Query("toDate") toDate: string,
+  ) {
+    return this.service.getMarketReceivableStatement(customerId, { fromDate, toDate }, req.user);
   }
 
   @Get("receivables/:customerId/invoices")

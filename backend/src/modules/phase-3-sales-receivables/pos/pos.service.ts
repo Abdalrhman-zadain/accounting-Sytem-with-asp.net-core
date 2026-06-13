@@ -41,6 +41,16 @@ import { ReversalService } from "../../phase-1-accounting-foundation/accounting-
 import { InventoryPostingService } from "../../phase-5-inventory-management/inventory/shared/inventory-posting.service";
 import { RepCarStockService } from "../pos-market/rep-car-stock/rep-car-stock.service";
 import {
+  buildMarketStatementLedger,
+  parseMarketStatementDateRange,
+} from "./market-statement.utils";
+import {
+  buildMarketRepSalesReport,
+  parseMarketRepSalesReportDocumentTypes,
+  parseMarketRepSalesReportPaymentTypes,
+  parseMarketStatementDateRange as parseRepStatementDateRange,
+} from "./market-rep-sales-report.utils";
+import {
   ResolvedSalesLine,
   SalesReceivablesService,
 } from "../sales-receivables.service";
@@ -1081,7 +1091,7 @@ export class PosService {
     }
     const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
     if (isMarketSession) {
-      await this.assertMarketCustomerAccess(customerId, user);
+      await this.assertActiveDestinationMarket(customerId);
       if (!session.salesRepId) {
         throw new BadRequestException(
           "Market POS session must be linked to a sales representative before saving sales.",
@@ -1303,7 +1313,7 @@ export class PosService {
     }
     const customerId = await this.resolvePosSaleCustomerId(dto, isMarketSession);
     if (isMarketSession) {
-      await this.assertMarketCustomerAccess(customerId, user);
+      await this.assertActiveDestinationMarket(customerId);
       if (!session.salesRepId) {
         throw new BadRequestException(
           "Market POS session must be linked to a sales representative before completing sales.",
@@ -3319,6 +3329,13 @@ export class PosService {
     }
   }
 
+  private ensureMarketReceivablesViewPermission(user?: AuthorizedUser) {
+    if (user?.role === "ADMIN" || user?.role === "MANAGER") {
+      return;
+    }
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+  }
+
   assertKitchenViewPermission(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("RST_VIEW_KITCHEN_SCREEN", user);
   }
@@ -5117,32 +5134,17 @@ export class PosService {
     );
   }
 
-  private resolveMarketSalesRepScope(
-    user?: AuthorizedUser,
-    querySalesRepId?: string,
-  ): string | null | undefined {
-    if (this.isMarketRepScopedUser(user)) {
-      if (!user?.salesRepId) {
-        throw new ForbiddenException("Market sales rep account is not linked to a sales representative.");
-      }
-      return user.salesRepId;
-    }
+  private resolveMarketSalesRepFilter(querySalesRepId?: string): string | undefined {
     const normalized = querySalesRepId?.trim();
     return normalized || undefined;
   }
 
-  private async assertMarketCustomerAccess(
-    customerId: string,
-    user?: AuthorizedUser,
-    querySalesRepId?: string,
-  ) {
-    const salesRepScope = this.resolveMarketSalesRepScope(user, querySalesRepId);
+  private async assertActiveDestinationMarket(customerId: string) {
     const customer = await this.prisma.customer.findFirst({
       where: {
         id: customerId,
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
       },
       select: { id: true },
     });
@@ -5151,7 +5153,7 @@ export class PosService {
     }
   }
 
-  private marketOpenInvoiceWhere(salesRepScope?: string | null) {
+  private marketOpenInvoiceWhere() {
     return {
       invoiceType: SalesInvoiceType.POS,
       posOperationalStatus: PosOperationalStatus.COMPLETED,
@@ -5159,7 +5161,6 @@ export class PosService {
       customer: {
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
       },
       posSession: {
         posProduct: PosProduct.MARKET,
@@ -5177,7 +5178,7 @@ export class PosService {
       throw new BadRequestException("Market receivables are only available for market POS.");
     }
 
-    const salesRepScope = this.resolveMarketSalesRepScope(user, query.salesRepId);
+    const salesRepFilter = this.resolveMarketSalesRepFilter(query.salesRepId);
     const search = query.search?.trim();
     const balanceOnly = query.balanceOnly === true;
 
@@ -5185,7 +5186,7 @@ export class PosService {
       where: {
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
+        ...(salesRepFilter ? { salesRepId: salesRepFilter } : {}),
         ...(search
           ? {
               OR: [
@@ -5337,10 +5338,10 @@ export class PosService {
       throw new BadRequestException("Market receivables are only available for market POS.");
     }
 
-    await this.assertMarketCustomerAccess(customerId, user);
+    await this.assertActiveDestinationMarket(customerId);
     const invoices = await this.prisma.salesInvoice.findMany({
       where: {
-        ...this.marketOpenInvoiceWhere(this.resolveMarketSalesRepScope(user)),
+        ...this.marketOpenInvoiceWhere(),
         customerId,
       },
       select: {
@@ -5370,10 +5371,7 @@ export class PosService {
     }));
   }
 
-  private marketCompletedPosInvoiceWhere(
-    customerId: string,
-    salesRepScope?: string | null,
-  ) {
+  private marketCompletedPosInvoiceWhere(customerId: string) {
     return {
       invoiceType: SalesInvoiceType.POS,
       posOperationalStatus: PosOperationalStatus.COMPLETED,
@@ -5381,12 +5379,42 @@ export class PosService {
       customer: {
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
       },
       posSession: {
         posProduct: PosProduct.MARKET,
       },
     } satisfies Prisma.SalesInvoiceWhereInput;
+  }
+
+  private marketRepCompletedPosInvoiceWhere(salesRepId: string, customerId?: string) {
+    return {
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.COMPLETED,
+      ...(customerId ? { customerId } : {}),
+      customer: {
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+      },
+      posSession: {
+        posProduct: PosProduct.MARKET,
+        salesRepId,
+      },
+    } satisfies Prisma.SalesInvoiceWhereInput;
+  }
+
+  private marketRepCompletedPosReturnWhere(salesRepId: string, customerId?: string) {
+    return {
+      status: PosReturnStatus.COMPLETED,
+      ...(customerId ? { customerId } : {}),
+      customer: {
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+      },
+      posSession: {
+        posProduct: PosProduct.MARKET,
+        salesRepId,
+      },
+    } satisfies Prisma.PosReturnWhereInput;
   }
 
   private async sumMarketCustomerOutstanding(customerId: string) {
@@ -5454,15 +5482,13 @@ export class PosService {
       throw new BadRequestException("Market receivables are only available for market POS.");
     }
 
-    const salesRepScope = this.resolveMarketSalesRepScope(user);
-    await this.assertMarketCustomerAccess(customerId, user);
+    await this.assertActiveDestinationMarket(customerId);
 
     const customer = await this.prisma.customer.findFirst({
       where: {
         id: customerId,
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
       },
       select: {
         id: true,
@@ -5480,7 +5506,7 @@ export class PosService {
 
     const [deliveries, payments] = await Promise.all([
       this.prisma.salesInvoice.findMany({
-        where: this.marketCompletedPosInvoiceWhere(customerId, salesRepScope),
+        where: this.marketCompletedPosInvoiceWhere(customerId),
         select: {
           id: true,
           reference: true,
@@ -5581,7 +5607,44 @@ export class PosService {
     };
   }
 
-  async listMarketReceivableSalesReps(
+  private marketInvoiceEffectiveDateRangeWhere(
+    baseWhere: Prisma.SalesInvoiceWhereInput,
+    from: Date,
+    to: Date,
+  ): Prisma.SalesInvoiceWhereInput {
+    return {
+      AND: [
+        baseWhere,
+        {
+          OR: [
+            { posCompletedAt: { gte: from, lte: to } },
+            { posCompletedAt: null, invoiceDate: { gte: from, lte: to } },
+          ],
+        },
+      ],
+    };
+  }
+
+  private marketInvoiceEffectiveDateBeforeWhere(
+    baseWhere: Prisma.SalesInvoiceWhereInput,
+    before: Date,
+  ): Prisma.SalesInvoiceWhereInput {
+    return {
+      AND: [
+        baseWhere,
+        {
+          OR: [
+            { posCompletedAt: { lt: before } },
+            { posCompletedAt: null, invoiceDate: { lt: before } },
+          ],
+        },
+      ],
+    };
+  }
+
+  async getMarketReceivableStatement(
+    customerId: string,
+    query: { fromDate: string; toDate: string },
     user?: AuthorizedUser,
     posProduct: PosProduct = PosProduct.MARKET,
   ) {
@@ -5589,8 +5652,326 @@ export class PosService {
     if (posProduct !== PosProduct.MARKET) {
       throw new BadRequestException("Market receivables are only available for market POS.");
     }
+
+    const fromDate = query.fromDate?.trim();
+    const toDate = query.toDate?.trim();
+    if (!fromDate || !toDate) {
+      throw new BadRequestException("fromDate and toDate are required.");
+    }
+
+    let range: { from: Date; to: Date };
+    try {
+      range = parseMarketStatementDateRange(fromDate, toDate);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Invalid statement date range.",
+      );
+    }
+
+    await this.assertActiveDestinationMarket(customerId);
+
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        contactInfo: true,
+        salesRep: { select: { id: true, code: true, name: true } },
+      },
+    });
+    if (!customer) {
+      throw new NotFoundException("Destination market customer was not found.");
+    }
+
+    const invoiceBaseWhere = this.marketCompletedPosInvoiceWhere(customerId);
+    const paymentBaseWhere = {
+      customerId,
+      kind: BankCashTransactionKind.RECEIPT,
+      status: BankCashTransactionStatus.POSTED,
+    } satisfies Prisma.BankCashTransactionWhereInput;
+
+    const [openingDeliveredAgg, openingPaidAgg, deliveries, payments] = await Promise.all([
+      this.prisma.salesInvoice.aggregate({
+        where: this.marketInvoiceEffectiveDateBeforeWhere(invoiceBaseWhere, range.from),
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.bankCashTransaction.aggregate({
+        where: {
+          ...paymentBaseWhere,
+          transactionDate: { lt: range.from },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.salesInvoice.findMany({
+        where: this.marketInvoiceEffectiveDateRangeWhere(invoiceBaseWhere, range.from, range.to),
+        select: {
+          id: true,
+          reference: true,
+          posReceiptNumber: true,
+          invoiceDate: true,
+          totalAmount: true,
+          posCompletedAt: true,
+        },
+        orderBy: [{ posCompletedAt: "asc" }, { invoiceDate: "asc" }],
+      }),
+      this.prisma.bankCashTransaction.findMany({
+        where: {
+          ...paymentBaseWhere,
+          transactionDate: { gte: range.from, lte: range.to },
+        },
+        select: {
+          id: true,
+          reference: true,
+          transactionDate: true,
+          amount: true,
+          description: true,
+          bankCashAccount: { select: { name: true } },
+        },
+        orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }],
+      }),
+    ]);
+
+    const openingDelivered = Number(Number(openingDeliveredAgg._sum.totalAmount ?? 0).toFixed(3));
+    const openingPaid = Number(Number(openingPaidAgg._sum.amount ?? 0).toFixed(3));
+    const openingBalance = Number((openingDelivered - openingPaid).toFixed(3));
+
+    const ledger = buildMarketStatementLedger({
+      fromDate,
+      openingBalance,
+      deliveries: deliveries.map((invoice) => ({
+        id: invoice.id,
+        reference: invoice.reference,
+        receiptNumber: invoice.posReceiptNumber,
+        deliveredAt: (invoice.posCompletedAt ?? invoice.invoiceDate).toISOString(),
+        totalAmount: Number(invoice.totalAmount),
+      })),
+      payments: payments.map((payment) => ({
+        id: payment.id,
+        reference: payment.reference,
+        receiptDate: payment.transactionDate.toISOString(),
+        amount: Number(payment.amount),
+        description: payment.description,
+        bankCashAccountName: payment.bankCashAccount?.name ?? null,
+      })),
+    });
+
+    return {
+      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "Simple Account",
+      currencyLabel: "العملة المحلية",
+      fromDate,
+      toDate,
+      generatedAt: new Date().toISOString(),
+      customer: {
+        customerId: customer.id,
+        customerCode: customer.code,
+        customerName: customer.name,
+        contactInfo: customer.contactInfo,
+        salesRepId: customer.salesRep?.id ?? null,
+        salesRepCode: customer.salesRep?.code ?? null,
+        salesRepName: customer.salesRep?.name ?? null,
+      },
+      openingBalance: ledger.openingBalance,
+      lines: ledger.lines.map(({ sortKey: _sortKey, ...line }) => line),
+      totals: ledger.totals,
+    };
+  }
+
+  async getMarketRepStatement(
+    query: {
+      salesRepId?: string;
+      customerId?: string;
+      fromDate: string;
+      toDate: string;
+      documentTypes?: string;
+      paymentTypes?: string;
+    },
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensureMarketReceivablesViewPermission(user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market rep sales reports are only available for market POS.");
+    }
+
+    const fromDate = query.fromDate?.trim();
+    const toDate = query.toDate?.trim();
+    if (!fromDate || !toDate) {
+      throw new BadRequestException("fromDate and toDate are required.");
+    }
+
+    let range: { from: Date; to: Date };
+    try {
+      range = parseRepStatementDateRange(fromDate, toDate);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Invalid report date range.",
+      );
+    }
+
+    const documentTypes = parseMarketRepSalesReportDocumentTypes(query.documentTypes);
+    const paymentTypes = parseMarketRepSalesReportPaymentTypes(query.paymentTypes);
+
+    let effectiveSalesRepId: string;
     if (this.isMarketRepScopedUser(user)) {
-      throw new ForbiddenException("Sales rep filter is not available for market rep accounts.");
+      if (!user?.salesRepId) {
+        throw new ForbiddenException("Market rep user is not linked to a sales representative.");
+      }
+      const requestedRepId = query.salesRepId?.trim();
+      if (requestedRepId && requestedRepId !== user.salesRepId) {
+        throw new ForbiddenException("Market rep users can only view their own sales report.");
+      }
+      effectiveSalesRepId = user.salesRepId;
+    } else {
+      const requestedRepId = query.salesRepId?.trim();
+      if (!requestedRepId) {
+        throw new BadRequestException("salesRepId is required.");
+      }
+      await this.repCarStockService.ensureActiveSalesRep(requestedRepId);
+      effectiveSalesRepId = requestedRepId;
+    }
+
+    const customerId = query.customerId?.trim() || undefined;
+    if (customerId) {
+      await this.assertActiveDestinationMarket(customerId);
+    }
+
+    const salesRep = await this.prisma.salesRepresentative.findFirst({
+      where: { id: effectiveSalesRepId, status: "ACTIVE" },
+      select: { id: true, code: true, name: true },
+    });
+    if (!salesRep) {
+      throw new NotFoundException("Sales representative was not found.");
+    }
+
+    let customerFilter: {
+      customerId: string;
+      customerCode: string;
+      customerName: string;
+    } | null = null;
+    if (customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: {
+          id: customerId,
+          isActive: true,
+          code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        },
+        select: { id: true, code: true, name: true },
+      });
+      if (!customer) {
+        throw new NotFoundException("Destination market customer was not found.");
+      }
+      customerFilter = {
+        customerId: customer.id,
+        customerCode: customer.code,
+        customerName: customer.name,
+      };
+    }
+
+    const invoiceBaseWhere = this.marketRepCompletedPosInvoiceWhere(
+      effectiveSalesRepId,
+      customerId,
+    );
+    const returnBaseWhere = this.marketRepCompletedPosReturnWhere(
+      effectiveSalesRepId,
+      customerId,
+    );
+
+    const [salesInvoices, posReturns] = await Promise.all([
+      this.prisma.salesInvoice.findMany({
+        where: this.marketInvoiceEffectiveDateRangeWhere(invoiceBaseWhere, range.from, range.to),
+        select: {
+          id: true,
+          reference: true,
+          posReceiptNumber: true,
+          invoiceDate: true,
+          totalAmount: true,
+          posCompletedAt: true,
+          customer: { select: { code: true, name: true } },
+          posPayments: { select: { amount: true } },
+        },
+        orderBy: [{ posCompletedAt: "asc" }, { invoiceDate: "asc" }],
+      }),
+      this.prisma.posReturn.findMany({
+        where: {
+          ...returnBaseWhere,
+          returnDate: { gte: range.from, lte: range.to },
+        },
+        select: {
+          id: true,
+          reference: true,
+          returnDate: true,
+          totalAmount: true,
+          customer: { select: { code: true, name: true } },
+          salesInvoice: {
+            select: {
+              totalAmount: true,
+              posPayments: { select: { amount: true } },
+            },
+          },
+        },
+        orderBy: [{ returnDate: "asc" }, { createdAt: "asc" }],
+      }),
+    ]);
+
+    const report = buildMarketRepSalesReport({
+      salesRepName: salesRep.name,
+      documentTypes,
+      paymentTypes,
+      sales: salesInvoices.map((invoice) => ({
+        id: invoice.id,
+        reference: invoice.reference,
+        receiptNumber: invoice.posReceiptNumber,
+        soldAt: (invoice.posCompletedAt ?? invoice.invoiceDate).toISOString(),
+        totalAmount: Number(invoice.totalAmount),
+        posPaymentAmounts: invoice.posPayments.map((payment) => Number(payment.amount)),
+        customerCode: invoice.customer.code,
+        customerName: invoice.customer.name,
+      })),
+      returns: posReturns.map((posReturn) => ({
+        id: posReturn.id,
+        reference: posReturn.reference,
+        returnedAt: posReturn.returnDate.toISOString(),
+        totalAmount: Number(posReturn.totalAmount),
+        posPaymentAmounts: posReturn.salesInvoice.posPayments.map((payment) =>
+          Number(payment.amount),
+        ),
+        linkedInvoiceTotalAmount: Number(posReturn.salesInvoice.totalAmount),
+        customerCode: posReturn.customer.code,
+        customerName: posReturn.customer.name,
+      })),
+    });
+
+    return {
+      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "Simple Account",
+      currencyLabel: "العملة المحلية",
+      fromDate,
+      toDate,
+      generatedAt: new Date().toISOString(),
+      salesRep: {
+        salesRepId: salesRep.id,
+        salesRepCode: salesRep.code,
+        salesRepName: salesRep.name,
+      },
+      customerFilter,
+      documentTypes,
+      paymentTypes,
+      lines: report.lines.map(({ sortKey: _sortKey, ...line }) => line),
+      totals: report.totals,
+    };
+  }
+
+  async listMarketReceivableSalesReps(
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.MARKET,
+  ) {
+    this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("Market receivables are only available for market POS.");
     }
 
     const invoices = await this.prisma.salesInvoice.findMany({
@@ -5632,7 +6013,7 @@ export class PosService {
       throw new BadRequestException("Market receivables collection is only available for market POS.");
     }
 
-    await this.assertMarketCustomerAccess(dto.customerId, user);
+    await this.assertActiveDestinationMarket(dto.customerId);
     const customer = await this.prisma.customer.findUnique({
       where: { id: dto.customerId },
       select: { id: true, code: true, name: true },
@@ -5657,6 +6038,15 @@ export class PosService {
       throw new BadRequestException("Allocated amount cannot exceed the receipt amount.");
     }
 
+    let collectedBySalesRepId: string | undefined;
+    if (user?.userId) {
+      const collectingUser = await this.prisma.user.findUnique({
+        where: { id: user.userId },
+        select: { salesRepId: true },
+      });
+      collectedBySalesRepId = collectingUser?.salesRepId ?? undefined;
+    }
+
     const receipt = await this.salesReceivablesService.createCustomerReceipt(
       {
         customerId: dto.customerId,
@@ -5665,6 +6055,7 @@ export class PosService {
         bankCashAccountId: dto.bankCashAccountId,
         description: dto.description,
         sourceAction: "POST_AND_CREATE_RECEIPT",
+        collectedBySalesRepId,
       },
       { userId: user?.userId },
     );
@@ -5683,7 +6074,7 @@ export class PosService {
     } else if (paymentAmount > 0) {
       const openInvoices = await this.prisma.salesInvoice.findMany({
         where: {
-          ...this.marketOpenInvoiceWhere(this.resolveMarketSalesRepScope(user)),
+          ...this.marketOpenInvoiceWhere(),
           customerId: dto.customerId,
         },
         select: {
@@ -5744,13 +6135,10 @@ export class PosService {
       throw new BadRequestException("Destination markets are only available for market POS.");
     }
 
-    const salesRepScope = this.isMarketRepScopedUser(user) ? user?.salesRepId ?? null : undefined;
-
     return this.prisma.customer.findMany({
       where: {
         isActive: true,
         code: { not: POS_WALK_IN_CUSTOMER_CODE },
-        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
       },
       select: {
         id: true,

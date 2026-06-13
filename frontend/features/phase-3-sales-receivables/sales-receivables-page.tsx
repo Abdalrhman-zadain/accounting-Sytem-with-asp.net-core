@@ -49,6 +49,7 @@ import {
   getSalesInvoices,
   postCreditNote,
   postSalesInvoice,
+  unpostSalesInvoice,
   updateCreditNote,
   updateCustomer,
   updateSalesRepresentative,
@@ -97,8 +98,10 @@ import {
   getActiveSalesRepMarketLogin,
   SalesRepMarketLoginPanel,
 } from "./sales-rep-market-login-panel";
+import { PosMarketRepStatementWorkspace } from "@/features/pos-market/pos-market-rep-statement-workspace";
+import { PosMarketMarketStatementAdminWorkspace } from "@/features/pos-market/pos-market-market-statement-admin-workspace";
 
-type SalesTab = "customers" | "sales-reps" | "quotations" | "orders" | "invoices" | "receipts" | "credit-notes" | "aging";
+type SalesTab = "customers" | "sales-reps" | "quotations" | "orders" | "invoices" | "receipts" | "credit-notes" | "aging" | "rep-statement" | "market-statement";
 
 const SALES_TAB_BREADCRUMB_KEYS: Record<SalesTab, string> = {
   customers: "salesReceivables.tab.customers",
@@ -109,6 +112,8 @@ const SALES_TAB_BREADCRUMB_KEYS: Record<SalesTab, string> = {
   receipts: "salesReceivables.tab.receipts",
   "credit-notes": "salesReceivables.tab.creditNotes",
   aging: "salesReceivables.tab.aging",
+  "rep-statement": "salesReceivables.tab.repStatement",
+  "market-statement": "salesReceivables.tab.marketStatement",
 };
 
 type CustomerEditorState = {
@@ -373,7 +378,7 @@ export function SalesReceivablesPage() {
     const requestedTab = searchParams.get("tab");
     if (!requestedTab) return;
 
-    const allowedTabs: SalesTab[] = ["customers", "sales-reps", "quotations", "orders", "invoices", "receipts", "credit-notes", "aging"];
+    const allowedTabs: SalesTab[] = ["customers", "sales-reps", "quotations", "orders", "invoices", "receipts", "credit-notes", "aging", "rep-statement", "market-statement"];
     if (!allowedTabs.includes(requestedTab as SalesTab)) return;
     if (requestedTab === activeTab) return;
 
@@ -1301,6 +1306,28 @@ export function SalesReceivablesPage() {
     },
   });
 
+  const unpostInvoiceMutation = useMutation({
+    mutationFn: (id: string) => unpostSalesInvoice(id, token),
+    onSuccess: async (updated) => {
+      await invalidateSalesReceivables(queryClient);
+      setSelectedInvoiceId(updated.id);
+      setInvoiceEditor({
+        id: updated.id,
+        reference: updated.reference,
+        invoiceDate: updated.invoiceDate.slice(0, 10),
+        dueDate: updated.dueDate?.slice(0, 10) ?? "",
+        currencyCode: updated.currencyCode,
+        customerId: updated.customer.id,
+        description: updated.description ?? "",
+        lines: updated.lines.map(mapLineToEditor),
+        sourceQuotationId: updated.sourceQuotation?.id ?? "",
+        sourceSalesOrderId: updated.sourceSalesOrder?.id ?? "",
+      });
+      setInvoiceEditorClientError(null);
+      setIsInvoiceEditorOpen(true);
+    },
+  });
+
   const mapCreditNoteLines = () =>
     mapCreditNoteEditorLines(creditNoteEditor.lines);
 
@@ -1604,6 +1631,76 @@ export function SalesReceivablesPage() {
     [activeCreditNoteTypes, creditNoteEditor.creditNoteTypeId],
   );
 
+  const salesReturnCreditNoteType = useMemo(
+    () => activeCreditNoteTypes.find((type) => type.code === "CN-SALES-RETURN") ?? null,
+    [activeCreditNoteTypes],
+  );
+
+  const openReturnCreditNoteForInvoice = useCallback(
+    (invoice: SalesInvoice) => {
+      if (!salesReturnCreditNoteType) {
+        return;
+      }
+      setSelectedInvoiceId(null);
+      setCreditNoteEditor({
+        ...EMPTY_CREDIT_NOTE_EDITOR(),
+        customerId: invoice.customer.id,
+        salesInvoiceId: invoice.id,
+        currencyCode: invoice.currencyCode,
+        creditNoteTypeId: salesReturnCreditNoteType.id,
+        noteDate: new Date().toISOString().slice(0, 10),
+        lines: [
+          {
+            ...createEmptyLine(),
+            quantity: "1",
+            returnToStock: true,
+            salesInvoiceLineId: "",
+            itemCondition: "",
+          },
+        ],
+      });
+      setCreditNoteEditorClientError(null);
+      setIsCreditNoteEditorOpen(true);
+    },
+    [salesReturnCreditNoteType],
+  );
+
+  const renderCreditNoteEditor = (presentation: "modal" | "inline") => (
+    <CreditNoteEditorModal
+      presentation={presentation}
+      isOpen={isCreditNoteEditorOpen}
+      onClose={() => {
+        setCreditNoteEditorClientError(null);
+        setIsCreditNoteEditorOpen(false);
+      }}
+      title={
+        creditNoteEditor.id
+          ? t("salesReceivables.dialog.editCreditNoteDraft")
+          : t("salesReceivables.dialog.newCreditNote")
+      }
+      editor={creditNoteEditor}
+      customers={activeCustomers}
+      invoices={matchingCustomerInvoices}
+      creditNoteTypes={activeCreditNoteTypes}
+      revenueAccounts={revenueAccountsQuery.data ?? []}
+      warehouses={inventoryWarehousesQuery.data ?? []}
+      validationError={creditNoteEditorClientError ?? errorMessage}
+      isSubmitting={
+        createCreditNoteMutation.isPending ||
+        updateCreditNoteMutation.isPending ||
+        postCreditNoteMutation.isPending
+      }
+      onChange={(editor) =>
+        setCreditNoteEditor((current) => ({
+          ...current,
+          ...editor,
+        }))
+      }
+      onSubmit={saveCreditNoteFromEditor}
+      onSubmitAndPost={saveAndPostCreditNote}
+    />
+  );
+
   const matchingCustomerQuotations = useMemo(
     () => quotations.filter((quotation) => quotation.customer.id === orderEditor.customerId && quotation.status === "APPROVED"),
     [orderEditor.customerId, quotations],
@@ -1625,6 +1722,7 @@ export function SalesReceivablesPage() {
     createInvoiceMutation.error ??
     updateInvoiceMutation.error ??
     postInvoiceMutation.error ??
+    unpostInvoiceMutation.error ??
     createCreditNoteMutation.error ??
     updateCreditNoteMutation.error ??
     postCreditNoteMutation.error ??
@@ -2686,13 +2784,45 @@ export function SalesReceivablesPage() {
                                       </button>
                                     </>
                                   ) : (
-                                    <button
-                                      type="button"
-                                      className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                                      onClick={() => setSelectedInvoiceId(row.id)}
-                                    >
-                                      {t("salesReceivables.action.view")}
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                                        onClick={() => setSelectedInvoiceId(row.id)}
+                                      >
+                                        {t("salesReceivables.action.view")}
+                                      </button>
+                                      {row.canCreateReturn && salesReturnCreditNoteType ? (
+                                        <button
+                                          type="button"
+                                          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                                          onClick={() => openReturnCreditNoteForInvoice(row)}
+                                        >
+                                          {t("salesReceivables.action.createReturn")}
+                                        </button>
+                                      ) : null}
+                                      {row.canUnpost ? (
+                                        <button
+                                          type="button"
+                                          className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+                                          disabled={unpostInvoiceMutation.isPending}
+                                          onClick={() => {
+                                            setConfirmConfig({
+                                              title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
+                                              message: t("salesReceivables.confirm.unpostInvoice", {
+                                                reference: row.reference,
+                                              }),
+                                              tone: "warning",
+                                              onConfirm: () => {
+                                                unpostInvoiceMutation.mutate(row.id);
+                                              },
+                                            });
+                                          }}
+                                        >
+                                          {t("salesReceivables.action.unpostInvoice")}
+                                        </button>
+                                      ) : null}
+                                    </>
                                   )}
                                 </div>
                               </td>
@@ -2767,6 +2897,38 @@ export function SalesReceivablesPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
+                    {selectedInvoice.canCreateReturn && salesReturnCreditNoteType ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => openReturnCreditNoteForInvoice(selectedInvoice)}
+                      >
+                        {t("salesReceivables.action.createReturn")}
+                      </Button>
+                    ) : null}
+                    {selectedInvoice.canUnpost ? (
+                      <Button
+                        variant="secondary"
+                        disabled={unpostInvoiceMutation.isPending}
+                        onClick={() => {
+                          setConfirmConfig({
+                            title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
+                            message: t("salesReceivables.confirm.unpostInvoice", {
+                              reference: selectedInvoice.reference,
+                            }),
+                            tone: "warning",
+                            onConfirm: () => {
+                              unpostInvoiceMutation.mutate(selectedInvoice.id);
+                              setSelectedInvoiceId(null);
+                            },
+                          });
+                        }}
+                      >
+                        {t("salesReceivables.action.unpostInvoice")}
+                      </Button>
+                    ) : null}
                   </div>
               </div>
             ) : null}
@@ -2906,31 +3068,7 @@ export function SalesReceivablesPage() {
       {activeTab === "credit-notes" ? (
         <div className="space-y-6">
           {isCreditNoteEditorOpen ? (
-            <CreditNoteEditorModal
-              presentation="inline"
-              isOpen={isCreditNoteEditorOpen}
-              onClose={() => {
-                setCreditNoteEditorClientError(null);
-                setIsCreditNoteEditorOpen(false);
-              }}
-              title={creditNoteEditor.id ? t("salesReceivables.dialog.editCreditNoteDraft") : t("salesReceivables.dialog.newCreditNote")}
-              editor={creditNoteEditor}
-              customers={activeCustomers}
-              invoices={matchingCustomerInvoices}
-              creditNoteTypes={activeCreditNoteTypes}
-              revenueAccounts={revenueAccountsQuery.data ?? []}
-              warehouses={inventoryWarehousesQuery.data ?? []}
-              validationError={creditNoteEditorClientError ?? errorMessage}
-              isSubmitting={createCreditNoteMutation.isPending || updateCreditNoteMutation.isPending || postCreditNoteMutation.isPending}
-              onChange={(editor) =>
-                setCreditNoteEditor((current) => ({
-                  ...current,
-                  ...editor,
-                }))
-              }
-              onSubmit={saveCreditNoteFromEditor}
-              onSubmitAndPost={saveAndPostCreditNote}
-            />
+            renderCreditNoteEditor("inline")
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-3">
@@ -3146,6 +3284,14 @@ export function SalesReceivablesPage() {
           </>
           )}
         </div>
+      ) : null}
+
+      {activeTab === "rep-statement" ? (
+        <PosMarketRepStatementWorkspace embedded />
+      ) : null}
+
+      {activeTab === "market-statement" ? (
+        <PosMarketMarketStatementAdminWorkspace />
       ) : null}
 
       {activeTab === "aging" ? (
@@ -3768,6 +3914,10 @@ export function SalesReceivablesPage() {
           </div>
         </div>
       </SidePanel>
+
+      {isCreditNoteEditorOpen && activeTab !== "credit-notes"
+        ? renderCreditNoteEditor("modal")
+        : null}
 
       <ConfirmDialog
         isOpen={!!confirmConfig}

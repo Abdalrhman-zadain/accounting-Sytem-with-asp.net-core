@@ -217,6 +217,8 @@ What else to check:
 - sales-invoice posting must reject draft documents that are missing customer/date/currency/lines, any line revenue account, a required tax account, or a balanced posting result
 - the Sales Invoice form may offer a guided `Post & Create Receipt` action that still posts the invoice first, then opens a separate prefilled customer-receipt flow; do not merge the receipt posting into the invoice journal entry
 - the Sales Invoice form should keep `Save as Draft`, `Post Invoice`, and `Post & Create Receipt` as distinct actions: draft save creates no journal entry, normal post creates only the invoice journal entry, and the guided action posts the invoice first before opening the separate receipt flow
+- standard sales invoices may expose `POST /api/sales-receivables/invoices/:id/unpost` only when no receipt allocations and no linked credit notes exist; unpost must reverse ledger, customer balance, and inventory issue impact inside one transaction, then return the invoice to `DRAFT`
+- the Sales invoices UI should expose `Unpost for Edit` only when `canUnpost = true`, and `Create Return` should open a linked `CN-SALES-RETURN` credit-note draft when `canCreateReturn = true`
 - the Sales receipt UI may collect optional invoice-allocation input inside the same customer-receipt form instead of a separate workspace, but it must still create/post the receipt first and then run allocation without changing posting invariants
 - new customer receipt references should default to a daily sequential format such as `RCPT-20260524-1`, `RCPT-20260524-2`, and `RCPT-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching receipt references
 - customer-receipt posting must create a separate journal entry that debits the selected bank/cash posting account and credits the customer's receivable account for the receipt amount; receipts must never create tax lines or merge directly into invoice revenue posting
@@ -254,9 +256,10 @@ What else to check:
 - do not add market POS features to `frontend/features/pos` or `backend/.../pos`
 - do not import across `features/pos` and `features/pos-market`
 - market cashiers use role `MARKET_CASHIER`, routes `/pos-market/*`, and API `/api/pos-market/*`
-- market field reps use role `MARKET_REP` with required `User.salesRepId`; routes include `/pos-market/receivables` and `/pos-market/receivables/:customerId`; receivables APIs live under `/api/pos-market/receivables*`
+- market field reps use role `MARKET_REP` with required `User.salesRepId` for **session/car stock** identity; routes include `/pos-market/receivables`, `/pos-market/receivables/:customerId`, `/pos-market/rep-statement`, `/sales-receivables?tab=market-statement` (embedded market account statement), and `/sales-receivables?tab=rep-statement` (embedded rep sales report); receivables APIs live under `/api/pos-market/receivables*` including `GET /api/pos-market/receivables/:customerId/statement?fromDate=&toDate=` for A4 period statements; rep sales reports use `GET /api/pos-market/rep-statements?salesRepId=&fromDate=&toDate=&customerId=&documentTypes=&paymentTypes=` with utils in `backend/src/modules/phase-3-sales-receivables/pos/market-rep-sales-report.utils.ts` and A4 print in `frontend/features/pos-market/pos-market-rep-statement-a4-print.ts`; `ADMIN`/`MANAGER` may view market receivables and rep reports without `POS_MARKET_VIEW_RECEIVABLES`; customers are **not** restricted to a rep — any rider/cashier may sell to or collect from any active customer
+- Market POS collections set `BankCashTransaction.collectedBySalesRepId` from the collecting user's `User.salesRepId` when present; historical receipts may be backfilled from `AuditLog` (`CustomerReceipt` POST)
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE` for partial/pay-later market sales; collection uses `POS_MARKET_COLLECT_RECEIVABLE` on `/api/pos-market/receivables/collect` (FIFO allocation to oldest open deliveries when allocations are omitted)
-- market POS sales require a destination market (`customerId` on complete/hold/draft); walk-in (`POS-WALKIN`) is rejected in `pos.service.ts` for `PosProduct.MARKET`
+- market POS sales require a destination market (`customerId` on complete/hold/draft); walk-in (`POS-WALKIN`) is rejected in `pos.service.ts` for `PosProduct.MARKET`; register destination picker lists every active ERP customer (sales rep on the customer is optional for selling, still used for rep-scoped receivables views)
 - market POS sessions require `salesRepId` on open; register catalog uses `GET /api/pos-market/catalog?salesRepId=` (rep car on-hand, not warehouse on-hand)
 - rep car loads and stocktakes live in `backend/.../pos-market/rep-car-stock/` with routes under `/api/pos-market/rep-car-loads*` and `/api/pos-market/rep-car-stocktakes*`; permissions `POS_MARKET_MANAGE_REP_LOADS` and `POS_MARKET_REP_STOCKTAKE`
 - main-warehouse intake (buying stock in qty + cost) uses ERP `/inventory` goods receipts, not Market POS; rep loads only move warehouse → rep car
@@ -268,6 +271,8 @@ Checks to run:
 
 - backend build
 - frontend typecheck
+- `npm run check:market-preflight` after market seed or accounting prerequisite changes
+- when adding new market accounting prerequisites, extend [`market-readiness.service.ts`](../backend/src/modules/phase-3-sales-receivables/pos-market/market-readiness.service.ts)
 
 ## Add Or Change POS Payment Account Mapping
 

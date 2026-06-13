@@ -233,6 +233,24 @@ export const queryKeys = {
   posMarketReceivableDetail(token: string | null, customerId: string | null) {
     return ["pos-market-receivable-detail", token, customerId] as const;
   },
+  posMarketAccountStatement(
+    token: string | null,
+    customerId: string | null,
+    range: { fromDate: string; toDate: string } | null,
+  ) {
+    return ["pos-market-account-statement", token, customerId, range] as const;
+  },
+  posMarketRepStatement(
+    token: string | null,
+    filters: {
+      salesRepId: string | null;
+      customerId: string | null;
+      fromDate: string;
+      toDate: string;
+    } | null,
+  ) {
+    return ["pos-market-rep-statement", token, filters] as const;
+  },
   posMarketReceivableSalesReps(token: string | null) {
     return ["pos-market-receivable-sales-reps", token] as const;
   },

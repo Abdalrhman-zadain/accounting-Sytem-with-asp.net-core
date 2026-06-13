@@ -52,6 +52,7 @@ Accounting meaning:
 - operational bank/cash records wrap specific posting accounts for balance and history views
 - records typed as `Bank` require `bankName`; the operational `accountNumber`/reference is now derived from the linked chart-of-accounts account code instead of being entered manually
 - receipt, payment, and transfer records are stored as `BankCashTransaction` rows and affect balances only after posting creates a journal entry
+- customer receipts may optionally store `collectedBySalesRepId` (FK to `SalesRepresentative`) for Market POS rep-statement attribution; when null, rep may be inferred from `AuditLog` on post
 - reconciliation work is stored separately from operational transactions so statement lines and matching status do not alter balances directly
 - bank/cash opening balances are not stored as a separate balance field; they are posted as normal journal/ledger history against the linked account and an offset posting account
 
@@ -208,6 +209,8 @@ Accounting meaning:
 - when a sales-invoice line points to an inventory-tracked item, the draft line also resolves/stores a warehouse selection using the item preferred warehouse as the default when available; service lines keep `warehouseId` empty
 - when a sales invoice customer is selected, draft invoice lines inherit the customer's tax-treatment default tax; out-of-scope treatment clears line tax, and reverse-charge behavior currently follows the treatment's configured default tax when one exists, otherwise no tax is defaulted
 - invoices and credit notes can be drafted, then posted through Phase 1 journal/posting logic
+- standard sales invoices (`invoiceType = STANDARD`) may be returned to `DRAFT` through `POST /api/sales-receivables/invoices/:id/unpost` when they have no receipt allocations and no linked credit notes; unposting reverses the linked journal entry, customer balance increment, and any `SALES_ISSUE` inventory movements on the same invoice reference
+- posted standard sales invoices with outstanding balance expose `canCreateReturn`; the Sales UI opens a linked `CN-SALES-RETURN` credit note draft pre-filled from the invoice for full or partial returns
 - `CreditNoteType` is now dedicated master data for sales credit notes and stores `code`, `name`, `effect`, linked-invoice requirement, inventory/tax flags, one default posting account, helper text, and active status
 - `SupplierDebitNoteType` is now dedicated master data for supplier debit notes and stores `code`, `name`, `effect`, linked-purchase-invoice requirement, inventory/tax flags, one default posting account, helper text, and active status
 - each `CreditNote` now stores `creditNoteTypeId` so the selected business meaning is persisted historically instead of being inferred from one generic discount layout

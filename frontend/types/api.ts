@@ -515,6 +515,19 @@ export type InventoryItem = {
   updatedAt: string;
 };
 
+export type InventoryItemWarehouseStock = {
+  itemId: string;
+  itemCode: string;
+  trackInventory: boolean;
+  totalOnHand: string;
+  balances: Array<{
+    warehouseId: string;
+    warehouseCode: string;
+    warehouseName: string;
+    onHandQuantity: string;
+  }>;
+};
+
 export type InventoryItemUnitConversion = {
   id: string;
   unitId: string;
@@ -3080,6 +3093,8 @@ export type SalesInvoice = {
     taxTreatment: Customer["taxTreatment"];
   };
   lines: SalesLine[];
+  canUnpost?: boolean;
+  canCreateReturn?: boolean;
   createdAt: string;
   updatedAt: string;
 };

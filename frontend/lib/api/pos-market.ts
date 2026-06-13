@@ -570,6 +570,80 @@ export type PosMarketReceivableDetail = {
   payments: PosMarketReceivablePayment[];
 };
 
+export type PosMarketAccountStatementLine = {
+  documentType: string;
+  documentNumber: string;
+  documentDate: string;
+  details: string;
+  debit: string;
+  credit: string;
+  balance: string;
+};
+
+export type PosMarketAccountStatementReport = {
+  companyName: string;
+  currencyLabel: string;
+  fromDate: string;
+  toDate: string;
+  generatedAt: string;
+  customer: {
+    customerId: string;
+    customerCode: string;
+    customerName: string;
+    contactInfo: string | null;
+    salesRepId: string | null;
+    salesRepCode: string | null;
+    salesRepName: string | null;
+  };
+  openingBalance: string;
+  lines: PosMarketAccountStatementLine[];
+  totals: {
+    debit: string;
+    credit: string;
+    closingBalance: string;
+    transactionCount: number;
+  };
+};
+
+export type PosMarketRepStatementLine = {
+  documentType: string;
+  documentNumber: string;
+  documentDate: string;
+  paymentMode: string;
+  customerCode: string;
+  customerName: string;
+  salesRepName: string;
+  documentValue: string;
+};
+
+export type PosMarketRepStatementDocumentTypes = "sales" | "returns" | "both";
+export type PosMarketRepStatementPaymentTypes = "cash" | "credit" | "both";
+
+export type PosMarketRepStatementReport = {
+  companyName: string;
+  currencyLabel: string;
+  fromDate: string;
+  toDate: string;
+  generatedAt: string;
+  salesRep: {
+    salesRepId: string;
+    salesRepCode: string;
+    salesRepName: string;
+  };
+  customerFilter: {
+    customerId: string;
+    customerCode: string;
+    customerName: string;
+  } | null;
+  documentTypes: PosMarketRepStatementDocumentTypes;
+  paymentTypes: PosMarketRepStatementPaymentTypes;
+  lines: PosMarketRepStatementLine[];
+  totals: {
+    documentCount: number;
+    totalAmount: string;
+  };
+};
+
 export type PosMarketCollectReceivablesResponse = {
   id: string;
   reference: string;
@@ -617,6 +691,52 @@ export async function getPosMarketReceivableDetail(
 ) {
   return apiRequest<PosMarketReceivableDetail>(
     `/pos-market/receivables/${customerId}/detail`,
+    { token },
+  );
+}
+
+export async function getPosMarketAccountStatement(
+  customerId: string,
+  params: { fromDate: string; toDate: string },
+  token?: string | null,
+) {
+  const query = new URLSearchParams({
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+  });
+  return apiRequest<PosMarketAccountStatementReport>(
+    `/pos-market/receivables/${customerId}/statement?${query.toString()}`,
+    { token },
+  );
+}
+
+export async function getPosMarketRepStatement(
+  params: {
+    salesRepId: string;
+    fromDate: string;
+    toDate: string;
+    customerId?: string;
+    documentTypes?: PosMarketRepStatementDocumentTypes;
+    paymentTypes?: PosMarketRepStatementPaymentTypes;
+  },
+  token?: string | null,
+) {
+  const query = new URLSearchParams({
+    salesRepId: params.salesRepId,
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+  });
+  if (params.customerId) {
+    query.set("customerId", params.customerId);
+  }
+  if (params.documentTypes) {
+    query.set("documentTypes", params.documentTypes);
+  }
+  if (params.paymentTypes) {
+    query.set("paymentTypes", params.paymentTypes);
+  }
+  return apiRequest<PosMarketRepStatementReport>(
+    `/pos-market/rep-statements?${query.toString()}`,
     { token },
   );
 }

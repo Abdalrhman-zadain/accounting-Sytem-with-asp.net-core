@@ -321,6 +321,50 @@ export class ItemMasterService {
     return this.mapItem(item);
   }
 
+  async getWarehouseStock(id: string) {
+    const item = await this.getItemWithAccountsOrThrow(id);
+    if (item.type === "SERVICE" || !item.trackInventory) {
+      return {
+        itemId: item.id,
+        itemCode: item.code,
+        trackInventory: false,
+        totalOnHand: item.onHandQuantity.toString(),
+        balances: [],
+      };
+    }
+
+    const balances = await this.prisma.inventoryWarehouseBalance.findMany({
+      where: {
+        itemId: item.id,
+        warehouse: { isActive: true },
+      },
+      include: {
+        warehouse: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: [{ warehouse: { code: "asc" } }],
+    });
+
+    return {
+      itemId: item.id,
+      itemCode: item.code,
+      trackInventory: true,
+      totalOnHand: item.onHandQuantity.toString(),
+      balances: balances.map((row) => ({
+        warehouseId: row.warehouseId,
+        warehouseCode: row.warehouse.code,
+        warehouseName: row.warehouse.name,
+        onHandQuantity: row.onHandQuantity.toString(),
+      })),
+    };
+  }
+
   async generateBarcode() {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const barcode = this.buildBarcodeCandidate();

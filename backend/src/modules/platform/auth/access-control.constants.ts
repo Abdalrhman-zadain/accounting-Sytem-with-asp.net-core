@@ -155,6 +155,7 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
     "/pos-market/reports",
     "/pos-market/settings",
     "/pos-market/receivables",
+    "/pos-market/rep-statement",
     "/pos-market/rep-loads",
     "/pos-market/rep-stocktakes",
     "/pos/accounting-review",

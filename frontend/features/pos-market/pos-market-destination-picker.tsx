@@ -40,13 +40,7 @@ export function PosMarketDestinationPicker({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const marketCustomers = useMemo(
-    () =>
-      [...customers].sort((left, right) => {
-        const leftMarket = left.code.startsWith("MKT-") ? 0 : 1;
-        const rightMarket = right.code.startsWith("MKT-") ? 0 : 1;
-        if (leftMarket !== rightMarket) return leftMarket - rightMarket;
-        return left.name.localeCompare(right.name, "ar");
-      }),
+    () => [...customers].sort((left, right) => left.name.localeCompare(right.name, "ar")),
     [customers],
   );
 
@@ -158,7 +152,7 @@ export function PosMarketDestinationPicker({
               className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg"
               style={{ borderColor: POS_MARKET_THEME.colors.outline }}
             >
-              {filteredCustomers.slice(0, 12).map((customer) => (
+              {filteredCustomers.map((customer) => (
                 <button
                   key={customer.id}
                   type="button"

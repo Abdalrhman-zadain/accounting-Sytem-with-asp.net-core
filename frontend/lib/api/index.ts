@@ -7,6 +7,7 @@ import {
   AccountOption,
   AccountsQuery,
   InventoryItem,
+  InventoryItemWarehouseStock,
   InventoryGoodsIssue,
   InventoryGoodsIssuesResponse,
   InventoryGoodsIssuesQuery,
@@ -983,6 +984,12 @@ export async function updateInventoryPolicy(
 
 export async function getInventoryItemById(id: string, token?: string | null) {
   return apiRequest<InventoryItem>(`/inventory/items/${id}`, { token });
+}
+
+export async function getInventoryItemWarehouseStock(id: string, token?: string | null) {
+  return apiRequest<InventoryItemWarehouseStock>(`/inventory/items/${id}/warehouse-stock`, {
+    token,
+  });
 }
 
 export async function getInventoryWarehouseById(
@@ -2378,6 +2385,13 @@ export async function postSalesInvoice(
   return apiRequest<SalesInvoice>(`/sales-receivables/invoices/${id}/post`, {
     method: "POST",
     body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function unpostSalesInvoice(id: string, token?: string | null) {
+  return apiRequest<SalesInvoice>(`/sales-receivables/invoices/${id}/unpost`, {
+    method: "POST",
     token,
   });
 }

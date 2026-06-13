@@ -40,6 +40,7 @@ describe("SalesReceivablesService", () => {
     },
     inventoryStockMovement: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     inventoryWarehouseBalance: {
       findUnique: jest.fn(),
@@ -61,6 +62,7 @@ describe("SalesReceivablesService", () => {
   };
   const postingService = {
     post: jest.fn(),
+    unpost: jest.fn(),
   };
   const inventoryPostingService = {
     getCostingMethod: jest.fn(),
@@ -275,6 +277,67 @@ describe("SalesReceivablesService", () => {
     await expect(
       service.postInvoice("inv-1", { sourceAction: "STANDARD_POST" }, { userId: "user-1" }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("unposts a posted sales invoice back to draft when no receipts or credit notes exist", async () => {
+    const posted = {
+      ...salesInvoiceRow({
+        status: SalesInvoiceStatus.POSTED,
+        journalEntryId: "je-1",
+        invoiceType: "STANDARD",
+        postedAt: new Date("2026-05-12T09:00:00.000Z"),
+      }),
+      _count: { creditNotes: 0, receiptAllocations: 0 },
+      customer: { id: "cust-1", isActive: true },
+    };
+
+    prisma.salesInvoice.findUnique
+      .mockResolvedValueOnce(posted)
+      .mockResolvedValueOnce(posted)
+      .mockResolvedValueOnce(
+        salesInvoiceRow({
+          status: SalesInvoiceStatus.DRAFT,
+          journalEntryId: null,
+          postedAt: null,
+          _count: { creditNotes: 0, receiptAllocations: 0 },
+        }),
+      );
+    prisma.inventoryStockMovement.findMany.mockResolvedValue([]);
+    postingService.unpost.mockResolvedValue({ id: "je-1", status: "DRAFT" });
+    prisma.salesInvoice.update.mockResolvedValue({});
+
+    await service.unpostInvoice("inv-1", { userId: "user-1" });
+
+    expect(postingService.unpost).toHaveBeenCalledWith("je-1", prisma);
+    expect(prisma.customer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "cust-1" },
+      }),
+    );
+    expect(prisma.salesInvoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "inv-1" },
+        data: expect.objectContaining({
+          status: SalesInvoiceStatus.DRAFT,
+          journalEntryId: null,
+        }),
+      }),
+    );
+  });
+
+  it("prevents unposting sales invoices with receipt allocations", async () => {
+    prisma.salesInvoice.findUnique.mockResolvedValue({
+      ...salesInvoiceRow({
+        status: SalesInvoiceStatus.POSTED,
+        journalEntryId: "je-1",
+        allocatedAmount: decimal("50.00"),
+        invoiceType: "STANDARD",
+      }),
+      _count: { creditNotes: 0, receiptAllocations: 1 },
+      customer: { id: "cust-1", isActive: true },
+    });
+
+    await expect(service.unpostInvoice("inv-1")).rejects.toThrow(/receipt allocations/);
   });
 
   it("prevents posting invoices without a revenue account on each line", async () => {

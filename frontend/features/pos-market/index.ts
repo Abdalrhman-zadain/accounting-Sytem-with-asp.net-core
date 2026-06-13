@@ -5,6 +5,7 @@ export { PosMarketHeldWorkspace } from "./pos-market-held-workspace";
 export { PosMarketReviewWorkspace } from "./pos-market-review-workspace";
 export { PosMarketReturnsWorkspace } from "./pos-market-returns-workspace";
 export { PosMarketReportsWorkspace } from "./pos-market-reports-workspace";
+export { PosMarketMarketStatementAdminWorkspace } from "./pos-market-market-statement-admin-workspace";
 export { PosMarketReceivablesWorkspace } from "./pos-market-receivables-workspace";
 export { PosMarketReceivableDetailWorkspace } from "./pos-market-receivable-detail-workspace";
 export { PosMarketSettingsWorkspace } from "./pos-market-settings-workspace";

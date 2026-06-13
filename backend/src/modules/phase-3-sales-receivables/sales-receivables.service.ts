@@ -1556,6 +1556,105 @@ export class SalesReceivablesService {
     return this.mapInvoice(updated);
   }
 
+  async unpostInvoice(id: string, user?: AuthUser) {
+    const invoice = await this.prisma.salesInvoice.findUnique({
+      where: { id },
+      include: {
+        customer: { select: { id: true, isActive: true } },
+        _count: {
+          select: {
+            creditNotes: true,
+            receiptAllocations: true,
+          },
+        },
+      },
+    });
+    if (!invoice) {
+      throw new BadRequestException(`Sales invoice ${id} was not found.`);
+    }
+
+    const blockReason = this.describeInvoiceUnpostBlock(invoice);
+    if (blockReason) {
+      throw new BadRequestException(blockReason);
+    }
+
+    const journalEntryId = invoice.journalEntryId!;
+    const totalAmount = Number(invoice.totalAmount);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.salesInvoice.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              creditNotes: true,
+              receiptAllocations: true,
+            },
+          },
+        },
+      });
+      if (!locked) {
+        throw new BadRequestException(`Sales invoice ${id} was not found.`);
+      }
+
+      const lockedBlockReason = this.describeInvoiceUnpostBlock(locked);
+      if (lockedBlockReason) {
+        throw new BadRequestException(lockedBlockReason);
+      }
+
+      await this.reverseSalesInvoiceInventoryPosting(tx, {
+        id: locked.id,
+        reference: locked.reference,
+        invoiceDate: locked.invoiceDate,
+      });
+
+      await this.postingService.unpost(journalEntryId, tx as never);
+
+      await tx.customer.update({
+        where: { id: locked.customerId },
+        data: {
+          currentBalance: {
+            decrement: this.toAmount(totalAmount),
+          },
+        },
+      });
+
+      await tx.salesInvoice.update({
+        where: { id: locked.id },
+        data: {
+          status: SalesInvoiceStatus.DRAFT,
+          journalEntryId: null,
+          postedAt: null,
+          allocatedAmount: this.toAmount(0),
+          outstandingAmount: locked.totalAmount,
+          allocationStatus: "UNALLOCATED",
+        },
+      });
+
+      return {
+        invoiceId: locked.id,
+        invoiceReference: locked.reference,
+        journalEntryId,
+      };
+    });
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "SalesInvoice",
+      entityId: result.invoiceId,
+      action: AuditAction.UPDATE,
+      details: {
+        action: "UNPOST",
+        reference: result.invoiceReference,
+        journalEntryId: result.journalEntryId,
+      },
+    });
+
+    await this.refreshSalesOrderStatus(invoice.sourceSalesOrderId ?? undefined);
+    const updated = await this.getInvoiceOrThrow(id);
+    return this.mapInvoice(updated);
+  }
+
   async listCreditNotes(query: DocumentQuery = {}) {
     const search = query.search?.trim();
     const rows = await this.prisma.creditNote.findMany({
@@ -1909,6 +2008,18 @@ export class SalesReceivablesService {
       const description = dto.settlementReference?.trim() || dto.description?.trim() || null;
       const amount = Number(dto.amount.toFixed(2));
 
+      let collectedBySalesRepId: string | undefined;
+      if (dto.collectedBySalesRepId?.trim()) {
+        const salesRep = await tx.salesRepresentative.findFirst({
+          where: { id: dto.collectedBySalesRepId.trim(), status: "ACTIVE" },
+          select: { id: true },
+        });
+        if (!salesRep) {
+          throw new BadRequestException("Collecting sales representative was not found or is inactive.");
+        }
+        collectedBySalesRepId = salesRep.id;
+      }
+
       const created = await tx.bankCashTransaction.create({
         data: {
           kind: BankCashTransactionKind.RECEIPT,
@@ -1921,6 +2032,7 @@ export class SalesReceivablesService {
           counterAccountId: customer.receivableAccountId,
           counterpartyName: customer.name,
           description,
+          collectedBySalesRepId,
         },
         include: {
           customer: { select: { id: true, code: true, name: true } },
@@ -4146,6 +4258,145 @@ export class SalesReceivablesService {
     ];
   }
 
+  private canUnpostInvoice(row: {
+    status: SalesInvoiceStatus;
+    invoiceType: SalesInvoiceType;
+    journalEntryId: string | null;
+    allocatedAmount: Prisma.Decimal | number;
+    _count?: { creditNotes: number; receiptAllocations: number };
+  }) {
+    if (row.status === SalesInvoiceStatus.DRAFT) {
+      return false;
+    }
+    if (row.invoiceType && row.invoiceType !== SalesInvoiceType.STANDARD) {
+      return false;
+    }
+    if (!row.journalEntryId) {
+      return false;
+    }
+    if (Number(row.allocatedAmount) > 0) {
+      return false;
+    }
+    if ((row._count?.creditNotes ?? 0) > 0) {
+      return false;
+    }
+    if ((row._count?.receiptAllocations ?? 0) > 0) {
+      return false;
+    }
+    return true;
+  }
+
+  private canCreateReturnForInvoice(row: {
+    status: SalesInvoiceStatus;
+    invoiceType: SalesInvoiceType;
+    outstandingAmount: Prisma.Decimal | number;
+  }) {
+    if (row.status === SalesInvoiceStatus.DRAFT) {
+      return false;
+    }
+    if (row.invoiceType && row.invoiceType !== SalesInvoiceType.STANDARD) {
+      return false;
+    }
+    return Number(row.outstandingAmount) > 0;
+  }
+
+  private describeInvoiceUnpostBlock(invoice: {
+    status: SalesInvoiceStatus;
+    invoiceType: SalesInvoiceType;
+    journalEntryId: string | null;
+    allocatedAmount: Prisma.Decimal | number;
+    _count?: { creditNotes: number; receiptAllocations: number };
+  }) {
+    if (invoice.status === SalesInvoiceStatus.DRAFT) {
+      return "Only posted sales invoices can be unposted.";
+    }
+    if (invoice.invoiceType && invoice.invoiceType !== SalesInvoiceType.STANDARD) {
+      return "POS sales invoices must be corrected from the POS review workflow.";
+    }
+    if (!invoice.journalEntryId) {
+      return "Sales invoice does not have a posted journal entry to unpost.";
+    }
+    if (Number(invoice.allocatedAmount) > 0 || (invoice._count?.receiptAllocations ?? 0) > 0) {
+      return "Sales invoices with receipt allocations cannot be unposted. Use a credit note instead.";
+    }
+    if ((invoice._count?.creditNotes ?? 0) > 0) {
+      return "Sales invoices with linked credit notes cannot be unposted.";
+    }
+    return null;
+  }
+
+  private async reverseSalesInvoiceInventoryPosting(
+    tx: Prisma.TransactionClient,
+    invoice: { id: string; reference: string; invoiceDate: Date },
+  ) {
+    const movements = await tx.inventoryStockMovement.findMany({
+      where: {
+        transactionType: "SalesInvoice",
+        transactionId: invoice.id,
+        movementType: InventoryStockMovementType.SALES_ISSUE,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    for (const movement of movements) {
+      const quantity = new Prisma.Decimal(movement.quantityOut);
+      if (quantity.lte(0)) {
+        continue;
+      }
+
+      const totalCost = new Prisma.Decimal(movement.valueOut);
+      const unitCost = new Prisma.Decimal(movement.unitCost);
+
+      await tx.inventoryItem.update({
+        where: { id: movement.itemId },
+        data: {
+          onHandQuantity: { increment: quantity },
+          valuationAmount: { increment: totalCost },
+        },
+      });
+
+      const warehouseBalance = await this.inventoryPostingService.applyWarehouseBalance(tx, {
+        itemId: movement.itemId,
+        warehouseId: movement.warehouseId,
+        quantityDelta: quantity,
+        valueDelta: totalCost,
+      });
+
+      await this.inventoryPostingService.createMovement(tx, {
+        movementType: InventoryStockMovementType.SALES_RETURN,
+        transactionType: "SalesInvoice",
+        transactionId: invoice.id,
+        transactionLineId: movement.transactionLineId,
+        transactionReference: invoice.reference,
+        transactionDate: invoice.invoiceDate,
+        itemId: movement.itemId,
+        warehouseId: movement.warehouseId,
+        quantityIn: quantity,
+        quantityOut: new Prisma.Decimal(0),
+        unitCost,
+        valueIn: totalCost,
+        valueOut: new Prisma.Decimal(0),
+        balanceId: warehouseBalance.id,
+        runningQuantity: warehouseBalance.onHandQuantity,
+        runningValuation: warehouseBalance.valuationAmount,
+        description: `Unpost reversal ${invoice.reference}`,
+      });
+
+      await this.inventoryPostingService.addCostLayer(tx, {
+        itemId: movement.itemId,
+        warehouseId: movement.warehouseId,
+        quantity,
+        unitCost,
+        movementType: InventoryStockMovementType.SALES_RETURN,
+        sourceType: "SalesInvoice",
+        sourceId: invoice.id,
+        sourceLineId: movement.transactionLineId ?? undefined,
+        sourceReference: invoice.reference,
+        sourceDate: invoice.invoiceDate,
+      });
+    }
+  }
+
   private async applySalesInvoiceInventoryPosting(
     tx: Prisma.TransactionClient,
     invoice: {
@@ -4294,7 +4545,7 @@ export class SalesReceivablesService {
 
         if (enforceNonNegative && currentQuantity.lt(target.quantity)) {
           throw new BadRequestException(
-            `Item ${target.item.code} does not have enough available stock in the selected warehouse for line ${line.lineNumber}.`,
+            `Item ${target.item.code} does not have enough available stock in the selected warehouse for line ${line.lineNumber}. Available: ${currentQuantity.toString()}, requested: ${target.quantity.toString()}.`,
           );
         }
 
@@ -4529,6 +4780,12 @@ export class SalesReceivablesService {
         orderBy: { lineNumber: "asc" },
       },
       journalEntry: { select: { id: true, reference: true } },
+      _count: {
+        select: {
+          creditNotes: true,
+          receiptAllocations: true,
+        },
+      },
     } satisfies Prisma.SalesInvoiceInclude;
   }
 
@@ -4786,6 +5043,8 @@ export class SalesReceivablesService {
           : null,
       },
       lines: row.lines.map((line: any) => this.mapDocumentLine(line)),
+      canUnpost: this.canUnpostInvoice(row),
+      canCreateReturn: this.canCreateReturnForInvoice(row),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

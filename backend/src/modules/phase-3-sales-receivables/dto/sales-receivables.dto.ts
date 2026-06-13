@@ -630,6 +630,10 @@ export class CreateCustomerReceiptDto {
   @IsString()
   @IsIn(["STANDARD_RECEIPT", "POST_AND_CREATE_RECEIPT"])
   sourceAction?: "STANDARD_RECEIPT" | "POST_AND_CREATE_RECEIPT";
+
+  @IsOptional()
+  @IsString()
+  collectedBySalesRepId?: string;
 }
 
 export class AllocateReceiptDto {

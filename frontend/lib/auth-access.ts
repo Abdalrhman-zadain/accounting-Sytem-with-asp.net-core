@@ -281,6 +281,16 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   }
 
   if (
+    normalizedPath === "/pos-market/rep-statement" ||
+    normalizedPath.startsWith("/pos-market/rep-statement/")
+  ) {
+    if (user?.role === "ADMIN" || user?.role === "MANAGER") {
+      return true;
+    }
+    return hasPermission(user, "POS_MARKET_VIEW_RECEIVABLES");
+  }
+
+  if (
     normalizedPath === "/pos-market/rep-loads" ||
     normalizedPath.startsWith("/pos-market/rep-loads/")
   ) {

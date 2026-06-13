@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   LuCalendarDays as CalendarDays,
   LuCirclePlus as CirclePlus,
@@ -17,11 +17,17 @@ import {
 
 import { Button } from "@/components/ui";
 import { CurrencyAmountInput, Field, Input, Select } from "@/components/ui/forms";
-import { getActiveTaxes, getCurrencies } from "@/lib/api";
+import { getActiveTaxes, getCurrencies, getInventoryItemWarehouseStock } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn, formatItemServiceLabel } from "@/lib/utils";
-import type { Customer, InventoryItem, InventoryWarehouse, Tax, Currency } from "@/types/api";
+import type { Customer, InventoryItem, InventoryItemWarehouseStock, InventoryWarehouse, Tax, Currency } from "@/types/api";
 import { useAuth } from "@/providers/auth-provider";
+import {
+  lineTracksInventory,
+  pickBestWarehouseId,
+  validateSalesDocumentInventoryStock,
+  warehouseOnHandQuantity,
+} from "../sales-inventory-stock.utils";
 import {
   applyItemToSalesLine,
   calculateQuotationTotals,
@@ -125,6 +131,41 @@ export function SalesDocumentEditorModal({
   const totals = useMemo(() => calculateQuotationTotals(lines), [lines]);
   const isInline = presentation === "inline";
   const [activeTab, setActiveTab] = useState<"lines" | "journal" | "other">("lines");
+  const [stockValidationError, setStockValidationError] = useState<string | null>(null);
+
+  const inventoryLineItemIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          lines
+            .map((line) => line.itemId)
+            .filter((itemId): itemId is string => Boolean(itemId)),
+        ),
+      ],
+    [lines],
+  );
+
+  const warehouseStockQueries = useQueries({
+    queries: inventoryLineItemIds.map((itemId) => ({
+      queryKey: ["inventory-item-warehouse-stock", token, itemId],
+      queryFn: () => getInventoryItemWarehouseStock(itemId, token),
+      enabled: Boolean(isOpen && itemId),
+      staleTime: 30_000,
+    })),
+  });
+
+  const stockByItemId = useMemo(() => {
+    const map = new Map<string, InventoryItemWarehouseStock>();
+    inventoryLineItemIds.forEach((itemId, index) => {
+      const stock = warehouseStockQueries[index]?.data;
+      if (stock) {
+        map.set(itemId, stock);
+      }
+    });
+    return map;
+  }, [inventoryLineItemIds, warehouseStockQueries]);
+
+  const combinedValidationError = validationError ?? stockValidationError;
 
   const controlClassName = cn(
     "h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10",
@@ -173,6 +214,69 @@ export function SalesDocumentEditorModal({
         taxAmount: "",
       }),
     ]);
+  };
+
+  const handleInventoryItemChange = async (
+    lineKey: string,
+    item: InventoryItem | null,
+    currentLine: SalesLineEditorState,
+  ) => {
+    const customer = customers.find((row) => row.id === customerId) ?? null;
+    let shouldUpdatePrice = true;
+    if (currentLine.unitPrice && currentLine.unitPrice !== "0" && currentLine.itemId) {
+      const prevItem = inventoryItems.find((row) => row.id === currentLine.itemId);
+      if (prevItem && currentLine.unitPrice !== prevItem.defaultSalesPrice) {
+        if (!confirm(t("salesReceivables.message.confirmPriceUpdate"))) {
+          shouldUpdatePrice = false;
+        }
+      }
+    }
+
+    let nextLine = applyItemToSalesLine(currentLine, item, customer, taxes, shouldUpdatePrice);
+    if (item && lineTracksInventory(item)) {
+      try {
+        const stock = await getInventoryItemWarehouseStock(item.id, token);
+        nextLine = {
+          ...nextLine,
+          warehouseId: pickBestWarehouseId(item, stock),
+        };
+      } catch {
+        // Keep preferred warehouse when stock lookup fails.
+      }
+    }
+
+    updateLine(lineKey, () => nextLine);
+    setStockValidationError(null);
+  };
+
+  const ensureStockBeforePost = () => {
+    const stockError = validateSalesDocumentInventoryStock({
+      lines,
+      inventoryItems,
+      stockByItemId,
+      warehouses,
+      t,
+    });
+    if (stockError) {
+      setStockValidationError(stockError);
+      return false;
+    }
+    setStockValidationError(null);
+    return true;
+  };
+
+  const handlePostSubmit = () => {
+    if (!ensureStockBeforePost()) {
+      return;
+    }
+    onPostSubmit?.();
+  };
+
+  const handlePostAndCreateReceiptSubmit = () => {
+    if (!ensureStockBeforePost()) {
+      return;
+    }
+    onPostAndCreateReceiptSubmit?.();
   };
 
   if (!isOpen) {
@@ -250,9 +354,9 @@ export function SalesDocumentEditorModal({
               </div>
             ) : null}
 
-            {validationError ? (
+            {combinedValidationError ? (
               <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-base font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
-                {validationError}
+                {combinedValidationError}
               </div>
             ) : null}
 
@@ -435,9 +539,28 @@ export function SalesDocumentEditorModal({
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {lines.map((line, index) => {
                           const selectedItem = inventoryItems.find((row) => row.id === line.itemId) ?? null;
+                          const lineStock = line.itemId ? stockByItemId.get(line.itemId) : undefined;
+                          const tracksInventory = lineTracksInventory(selectedItem);
+                          const availableQty = tracksInventory
+                            ? warehouseOnHandQuantity(lineStock, line.warehouseId)
+                            : null;
+                          const requestedQty = Number(line.quantity);
+                          const insufficientStock =
+                            tracksInventory &&
+                            line.warehouseId &&
+                            Number.isFinite(requestedQty) &&
+                            requestedQty > 0 &&
+                            availableQty !== null &&
+                            availableQty + 1e-9 < requestedQty;
 
                           return (
-                            <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <tr
+                              key={line.key}
+                              className={cn(
+                                "transition align-top",
+                                insufficientStock ? "bg-red-50/70" : "hover:bg-slate-50/50",
+                              )}
+                            >
                               <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">
                                 {index + 1}
                               </td>
@@ -445,20 +568,9 @@ export function SalesDocumentEditorModal({
                                 <Select
                                   value={line.itemId}
                                   onChange={(event) => {
-                                    const item = inventoryItems.find((row) => row.id === event.target.value) ?? null;
-                                    const customer = customers.find((c) => c.id === customerId) ?? null;
-
-                                    let shouldUpdatePrice = true;
-                                    if (line.unitPrice && line.unitPrice !== "0" && line.itemId) {
-                                      const prevItem = inventoryItems.find((i) => i.id === line.itemId);
-                                      if (prevItem && line.unitPrice !== prevItem.defaultSalesPrice) {
-                                        if (!confirm(t("salesReceivables.message.confirmPriceUpdate"))) {
-                                          shouldUpdatePrice = false;
-                                        }
-                                      }
-                                    }
-
-                                    updateLine(line.key, (current) => applyItemToSalesLine(current, item, customer, taxes, shouldUpdatePrice));
+                                    const item =
+                                      inventoryItems.find((row) => row.id === event.target.value) ?? null;
+                                    void handleInventoryItemChange(line.key, item, line);
                                   }}
                                   className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
@@ -476,12 +588,13 @@ export function SalesDocumentEditorModal({
                                 <Select
                                   value={line.warehouseId}
                                   disabled={!selectedItem || selectedItem.type === "SERVICE"}
-                                  onChange={(event) =>
+                                  onChange={(event) => {
                                     updateLine(line.key, (current) => ({
                                       ...current,
                                       warehouseId: event.target.value,
-                                    }))
-                                  }
+                                    }));
+                                    setStockValidationError(null);
+                                  }}
                                   className="h-10 rounded-lg text-sm bg-white border-slate-200"
                                 >
                                   <option value="">
@@ -489,12 +602,48 @@ export function SalesDocumentEditorModal({
                                   </option>
                                   {warehouses
                                     .filter((warehouse) => warehouse.isActive)
-                                    .map((warehouse) => (
-                                      <option key={warehouse.id} value={warehouse.id}>
-                                        {warehouse.code} · {warehouse.name}
-                                      </option>
-                                    ))}
+                                    .map((warehouse) => {
+                                      const qty = warehouseOnHandQuantity(lineStock, warehouse.id);
+                                      const qtyLabel =
+                                        tracksInventory && lineStock
+                                          ? ` · ${isArabic ? "متوفر" : "Avail"} ${qty}`
+                                          : "";
+                                      return (
+                                        <option key={warehouse.id} value={warehouse.id}>
+                                          {warehouse.code} · {warehouse.name}
+                                          {qtyLabel}
+                                        </option>
+                                      );
+                                    })}
                                 </Select>
+                                {tracksInventory ? (
+                                  <div className="mt-1 space-y-0.5">
+                                    {line.warehouseId ? (
+                                      <p
+                                        className={cn(
+                                          "text-xs font-semibold",
+                                          insufficientStock ? "text-red-600" : "text-slate-500",
+                                        )}
+                                      >
+                                        {t("salesReceivables.stock.availableInWarehouse", {
+                                          available: availableQty ?? 0,
+                                        })}
+                                      </p>
+                                    ) : null}
+                                    {lineStock ? (
+                                      <p className="text-xs text-slate-400">
+                                        {t("salesReceivables.stock.totalOnHand", {
+                                          total: lineStock.totalOnHand,
+                                        })}
+                                      </p>
+                                    ) : null}
+                                    {lineStock?.balances.length === 0 ? (
+                                      <p className="text-xs font-semibold text-amber-700">
+                                        {t("salesReceivables.stock.noWarehouseStock")}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </td>
                               <td className="px-2.5 py-3.5">
                                 <Select
@@ -521,9 +670,10 @@ export function SalesDocumentEditorModal({
                                   min="0"
                                   step="1"
                                   value={line.quantity}
-                                  onChange={(event) =>
-                                    updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }))
-                                  }
+                                  onChange={(event) => {
+                                    updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }));
+                                    setStockValidationError(null);
+                                  }}
                                   className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200"
                                 />
                               </td>
@@ -668,7 +818,7 @@ export function SalesDocumentEditorModal({
             {onPostSubmit && postSubmitLabel ? (
               <Button
                 variant="secondary"
-                onClick={onPostSubmit}
+                onClick={handlePostSubmit}
                 disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
                 className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-emerald-700 hover:bg-emerald-50 font-bold text-base flex items-center gap-1.5"
               >
@@ -680,7 +830,7 @@ export function SalesDocumentEditorModal({
             {onPostAndCreateReceiptSubmit && postAndCreateReceiptLabel ? (
               <Button
                 variant="secondary"
-                onClick={onPostAndCreateReceiptSubmit}
+                onClick={handlePostAndCreateReceiptSubmit}
                 disabled={isSubmitting || isPostSubmitting || isPostAndCreateReceiptSubmitting}
                 title={postAndCreateReceiptTooltip}
                 className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sky-700 hover:bg-sky-50 font-bold text-base flex items-center gap-1.5"

@@ -203,6 +203,11 @@ export class SalesReceivablesController {
     return this.service.postInvoice(id, dto, req.user);
   }
 
+  @Post('invoices/:id/unpost')
+  unpostInvoice(@Req() req: Request & { user?: any }, @Param('id') id: string) {
+    return this.service.unpostInvoice(id, req.user);
+  }
+
   @Get('credit-notes')
   listCreditNotes(
     @Query('status') status?: string,

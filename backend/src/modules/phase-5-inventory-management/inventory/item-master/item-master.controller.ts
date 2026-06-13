@@ -65,6 +65,11 @@ export class ItemMasterController {
     return this.importService.import(dto);
   }
 
+  @Get(":id/warehouse-stock")
+  getWarehouseStock(@Param("id") id: string) {
+    return this.service.getWarehouseStock(id);
+  }
+
   @Get(":id")
   getById(@Param("id") id: string) {
     return this.service.getById(id);

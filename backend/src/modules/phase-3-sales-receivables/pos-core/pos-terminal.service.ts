@@ -47,6 +47,28 @@ export class PosTerminalService {
     return this.posService.getMarketReceivableDetail(customerId, user, this.product);
   }
 
+  getMarketReceivableStatement(
+    customerId: string,
+    query: { fromDate: string; toDate: string },
+    user?: AuthorizedUser,
+  ) {
+    return this.posService.getMarketReceivableStatement(customerId, query, user, this.product);
+  }
+
+  getMarketRepStatement(
+    query: {
+      salesRepId?: string;
+      customerId?: string;
+      fromDate: string;
+      toDate: string;
+      documentTypes?: string;
+      paymentTypes?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.posService.getMarketRepStatement(query, user, this.product);
+  }
+
   listMarketReceivableSalesReps(user?: AuthorizedUser) {
     return this.posService.listMarketReceivableSalesReps(user, this.product);
   }

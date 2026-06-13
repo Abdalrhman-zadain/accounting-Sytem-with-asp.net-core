@@ -29,6 +29,9 @@
     "refresh:shouq-catalog": "npm run clear:shouq && npm run clear:market-demo && npm run seed:shouq && npm run clear:shouq-stock",
     "seed:market-cashier": "ts-node prisma/setup-pos-market-cashier.ts",
     "seed:market-showcase": "ts-node prisma/seed-market-showcase.ts",
+    "check:market-preflight": "ts-node scripts/check-market-preflight.ts",
+    "check:market-golden-path": "ts-node scripts/market-golden-path.ts",
+    "check:market-integration": "npm run check:market-preflight && npm run check:market-golden-path",
     "prisma:migrate:account-codes:6-to-7": "ts-node prisma/migrate-6-to-7-digit-account-codes.ts",
     "seed": "ts-node prisma/seed.ts",
     "seed:volume": "ts-node prisma/seed-volume.ts"

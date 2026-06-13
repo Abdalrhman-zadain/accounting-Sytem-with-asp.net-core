@@ -2,6 +2,7 @@ import { PrismaClient } from '../src/generated/prisma';
 import { truncateDatabase } from './seed-database';
 import { runFoundationSeed } from './seed-foundation';
 import { seedPosMarketDemo } from './seed-pos-market';
+import { seedMarketPosRuntimeSettings } from './seed-market-pos-settings';
 import { seedPosRegisterDemo } from './seed-pos-register';
 import { setupPosKitchenUser } from './setup-pos-kitchen';
 import { setupPosMarketCashierUser } from './setup-pos-market-cashier';
@@ -23,6 +24,8 @@ async function main() {
   await seedPosMarketDemo(prisma, {
     adminUserId: ctx.admin.id,
   });
+
+  await seedMarketPosRuntimeSettings(prisma);
 
   await setupPosKitchenUser(prisma);
   await setupPosWaiterUser(prisma);

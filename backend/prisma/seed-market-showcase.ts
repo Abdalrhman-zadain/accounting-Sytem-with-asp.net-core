@@ -8,6 +8,7 @@ import {
 } from '../src/generated/prisma';
 
 import { postOpeningInventoryToGl } from './seed-shouq-catalog';
+import { seedMarketPosRuntimeSettings } from './seed-market-pos-settings';
 import { setupPosMarketCashierUser } from './setup-pos-market-cashier';
 
 export const MARKET_DEMO_CODE_PREFIX = 'MKT-DEMO-';
@@ -197,6 +198,7 @@ export async function seedMarketShowcase(
   console.log(
     `Market showcase ready: ${SHOWCASE_PRODUCTS.length} products (${MARKET_DEMO_CODE_PREFIX}*), ${totalWarehouseQty} units in WH-MAIN, ${totalRepCarQty} units on REP-MARKET-01 car.`,
   );
+  await seedMarketPosRuntimeSettings(prisma);
   printShowcaseGuide();
 }
 

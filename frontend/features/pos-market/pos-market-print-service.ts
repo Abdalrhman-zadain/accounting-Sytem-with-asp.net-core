@@ -4,6 +4,12 @@ import {
 } from "@/features/pos-market/pos-market-collection-receipt-print";
 import { buildPosMarketReceiptHtml, type PosMarketReceiptData } from "@/features/pos-market/pos-market-receipt-print";
 import {
+  buildPosMarketAccountStatementA4Html,
+} from "@/features/pos-market/pos-market-statement-a4-print";
+import {
+  buildPosMarketRepStatementA4Html,
+} from "@/features/pos-market/pos-market-rep-statement-a4-print";
+import {
   buildPosMarketAccountStatementHtml,
   type PosMarketAccountStatementData,
 } from "@/features/pos-market/pos-market-statement-print";
@@ -14,6 +20,7 @@ import {
   type PosMarketPrintBridgeStatus,
 } from "@/features/pos-market/pos-market-print-bridge";
 import { loadPosMarketPrinterConfig } from "@/features/pos-market/pos-market-printer-config";
+import type { PosMarketAccountStatementReport, PosMarketRepStatementReport } from "@/lib/api/pos-market";
 
 export type PosMarketPrintResult = {
   ok: boolean;
@@ -72,6 +79,42 @@ export async function printMarketAccountStatement(
     buildPosMarketAccountStatementHtml(statement),
     "pos-market-account-statement",
   );
+}
+
+export async function printMarketAccountStatementA4(
+  report: PosMarketAccountStatementReport,
+  options: { generatedBy?: string | null } = {},
+): Promise<PosMarketPrintResult> {
+  printHtmlWithBrowser(
+    buildPosMarketAccountStatementA4Html(report, options),
+    "pos-market-account-statement-a4",
+  );
+  return { ok: true, mode: "browser", fallback: false };
+}
+
+export async function exportMarketAccountStatementPdf(
+  report: PosMarketAccountStatementReport,
+  options: { generatedBy?: string | null } = {},
+): Promise<PosMarketPrintResult> {
+  return printMarketAccountStatementA4(report, options);
+}
+
+export async function printMarketRepStatementA4(
+  report: PosMarketRepStatementReport,
+  options: { generatedBy?: string | null } = {},
+): Promise<PosMarketPrintResult> {
+  printHtmlWithBrowser(
+    buildPosMarketRepStatementA4Html(report, options),
+    "pos-market-rep-statement-a4",
+  );
+  return { ok: true, mode: "browser", fallback: false };
+}
+
+export async function exportMarketRepStatementPdf(
+  report: PosMarketRepStatementReport,
+  options: { generatedBy?: string | null } = {},
+): Promise<PosMarketPrintResult> {
+  return printMarketRepStatementA4(report, options);
 }
 
 export async function testPosMarketReceiptPrinter(): Promise<PosMarketPrintResult> {

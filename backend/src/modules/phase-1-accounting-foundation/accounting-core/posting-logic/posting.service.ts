@@ -84,8 +84,8 @@ export class PostingService {
       : this.journalEntriesService.getById(postedEntryId);
   }
 
-  async unpost(entryId: string) {
-    const unpostedEntryId = await this.prisma.$transaction(async (tx) => {
+  async unpost(entryId: string, existingTx?: TransactionClient) {
+    const executeUnpost = async (tx: TransactionClient) => {
       const entry = await tx.journalEntry.findUnique({
         where: { id: entryId },
         include: { lines: { orderBy: { lineNumber: 'asc' } } },
@@ -128,9 +128,15 @@ export class PostingService {
       });
 
       return entryId;
-    });
+    };
 
-    return this.journalEntriesService.getById(unpostedEntryId);
+    const unpostedEntryId = existingTx
+      ? await executeUnpost(existingTx)
+      : await this.prisma.$transaction(async (tx) => executeUnpost(tx));
+
+    return existingTx
+      ? this.journalEntriesService.getById(unpostedEntryId, existingTx as never)
+      : this.journalEntriesService.getById(unpostedEntryId);
   }
 
   private async validatePostingAccounts(tx: TransactionClient, accountIds: string[]) {

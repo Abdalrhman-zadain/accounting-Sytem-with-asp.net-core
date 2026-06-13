@@ -70,3 +70,11 @@ export class CollectMarketReceivablesDto {
   @Type(() => CollectMarketReceivableAllocationDto)
   allocations?: CollectMarketReceivableAllocationDto[];
 }
+
+export class MarketReceivableStatementQueryDto {
+  @IsDateString()
+  fromDate!: string;
+
+  @IsDateString()
+  toDate!: string;
+}

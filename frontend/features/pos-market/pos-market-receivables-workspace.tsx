@@ -64,7 +64,13 @@ function buildStatementPayload(
   };
 }
 
-export function PosMarketReceivablesWorkspace() {
+export function PosMarketReceivablesWorkspace({
+  embedded = false,
+  detailHref = (customerId: string) => `/pos-market/receivables/${customerId}`,
+}: {
+  embedded?: boolean;
+  detailHref?: (customerId: string) => string;
+} = {}) {
   const { token, user, isHydrated } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -81,7 +87,7 @@ export function PosMarketReceivablesWorkspace() {
   const isRep = isHydrated && isMarketRepUser(user);
   const canCollect = isHydrated && hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
   const showRepFilter = isHydrated && !isRep;
-  const showBalanceOnlyFilter = showRepFilter;
+  const showBalanceOnlyFilter = isHydrated;
 
   const receivablesQuery = useQuery({
     queryKey: queryKeys.posMarketReceivables(token ?? null, {
@@ -189,13 +195,26 @@ export function PosMarketReceivablesWorkspace() {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-[28px] border border-[#d5deea] p-6">
-        <div className="text-2xl font-black arabic-heading" style={{ color: POS_MARKET_THEME.colors.text }}>
-          {isRep ? t("posMarket.statement.title") : t("posMarket.receivables.title")}
-        </div>
-        <p className="mt-1 text-sm" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
-          {isRep ? t("posMarket.statement.subtitle") : t("posMarket.receivables.subtitle")}
-        </p>
+      <Card className={embedded ? "p-5" : "rounded-[28px] border border-[#d5deea] p-6"}>
+        {embedded ? (
+          <div className="mb-4">
+            <div className="text-sm font-bold text-gray-900">
+              {isRep ? t("posMarket.statement.title") : t("posMarket.statement.detailTitle")}
+            </div>
+            <div className="text-xs text-gray-500">
+              {isRep ? t("posMarket.statement.subtitle") : t("posMarket.receivables.subtitle")}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="text-2xl font-black arabic-heading" style={{ color: POS_MARKET_THEME.colors.text }}>
+              {isRep ? t("posMarket.statement.title") : t("posMarket.receivables.title")}
+            </div>
+            <p className="mt-1 text-sm" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+              {isRep ? t("posMarket.statement.subtitle") : t("posMarket.receivables.subtitle")}
+            </p>
+          </>
+        )}
 
         {flashMessage ? (
           <div
@@ -282,6 +301,7 @@ export function PosMarketReceivablesWorkspace() {
                   row={row}
                   isRep={isRep}
                   canCollect={canCollect}
+                  detailHref={detailHref(row.customerId)}
                   onCollect={() => openCollectModal(row)}
                   onPrint={() => void handlePrintStatement(row)}
                   collectLabel={t("posMarket.receivables.collect")}
@@ -369,6 +389,7 @@ function ReceivableRow({
   row,
   isRep,
   canCollect,
+  detailHref,
   onCollect,
   onPrint,
   collectLabel,
@@ -378,6 +399,7 @@ function ReceivableRow({
   row: PosMarketReceivableCustomer;
   isRep: boolean;
   canCollect: boolean;
+  detailHref: string;
   onCollect: () => void;
   onPrint: () => void;
   collectLabel: string;
@@ -390,7 +412,7 @@ function ReceivableRow({
     <tr className="border-t" style={{ borderColor: POS_MARKET_THEME.colors.outline }}>
       <td className="px-4 py-3">
         <Link
-          href={`/pos-market/receivables/${row.customerId}`}
+          href={detailHref}
           className="text-start font-semibold hover:underline"
           style={{ color: POS_MARKET_THEME.colors.text }}
         >
@@ -407,7 +429,7 @@ function ReceivableRow({
       <td className="px-4 py-3 text-end">
         <div className="flex flex-wrap justify-end gap-2">
           <Link
-            href={`/pos-market/receivables/${row.customerId}`}
+            href={detailHref}
             className="rounded-lg border px-3 py-1.5 text-xs font-bold"
             style={{
               borderColor: POS_MARKET_THEME.colors.outline,

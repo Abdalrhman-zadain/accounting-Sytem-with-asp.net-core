@@ -712,6 +712,8 @@ model BankCashTransaction {
   journalEntryId               String?                   @unique
   journalEntry                 JournalEntry?             @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
   receiptAllocations           ReceiptAllocation[]       @relation("ReceiptTransactionAllocations")
+  collectedBySalesRepId        String?
+  collectedBySalesRep          SalesRepresentative?      @relation("ReceiptCollectedBySalesRep", fields: [collectedBySalesRepId], references: [id], onDelete: Restrict)
   supplierPayment              SupplierPayment?
   payrollPayment               PayrollPayment?
   postedAt                     DateTime?
@@ -724,6 +726,7 @@ model BankCashTransaction {
   @@index([destinationBankCashAccountId])
   @@index([counterAccountId])
   @@index([customerId])
+  @@index([collectedBySalesRepId])
 }
 
 model BankReconciliation {
@@ -1012,6 +1015,7 @@ model SalesRepresentative {
   repCarStocktakes            RepCarStocktake[]
   repCarStockMovements        RepCarStockMovement[]
   posSessions                 PosSession[]   @relation("PosSessionSalesRep")
+  collectedReceipts           BankCashTransaction[] @relation("ReceiptCollectedBySalesRep")
   createdAt                   DateTime       @default(now())
   updatedAt                   DateTime       @updatedAt
 
