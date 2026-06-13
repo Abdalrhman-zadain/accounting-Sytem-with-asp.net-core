@@ -2,6 +2,59 @@ import { PrismaClient, AccountType } from '../src/generated/prisma';
 import { FoundationContext } from './seed-foundation';
 import { postJournalEntry } from './seed-posting';
 
+async function allocateNextAccountCode(
+  prisma: PrismaClient,
+  parentId: string,
+): Promise<string> {
+  const parent = await prisma.account.findUniqueOrThrow({
+    where: { id: parentId },
+    select: { code: true },
+  });
+
+  // Find the last sibling code
+  const lastSibling = await prisma.account.findFirst({
+    where: { parentAccountId: parentId },
+    orderBy: { code: 'desc' },
+    select: { code: true },
+  });
+
+  let nextCodeCandidate: string;
+  if (lastSibling) {
+    const codeStr = lastSibling.code;
+    const match = codeStr.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const [, prefix, digits] = match;
+      const nextNum = (BigInt(digits) + 1n).toString();
+      nextCodeCandidate = prefix + nextNum.padStart(digits.length, '0');
+    } else {
+      nextCodeCandidate = `${codeStr}_1`;
+    }
+  } else {
+    // If no sibling, append "001" to parent code
+    nextCodeCandidate = `${parent.code}001`;
+  }
+
+  // Ensure unique globally
+  let code = nextCodeCandidate;
+  while (true) {
+    const taken = await prisma.account.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (!taken) {
+      return code;
+    }
+    const match = code.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const [, prefix, digits] = match;
+      const nextNum = (BigInt(digits) + 1n).toString();
+      code = prefix + nextNum.padStart(digits.length, '0');
+    } else {
+      code = `${code}_1`;
+    }
+  }
+}
+
 type OpeningLineRaw = {
   code: string;
   nameAr: string;
@@ -132,37 +185,75 @@ export async function seedOpeningJournalEntry(prisma: PrismaClient, ctx: Foundat
   let supplierSeq = 1;
 
   for (const line of rawLines) {
-    let acc = await prisma.account.findUnique({ where: { code: line.code } });
-
-    if (acc) {
-      // Update nameAr and English name to match
-      acc = await prisma.account.update({
-        where: { code: line.code },
-        data: {
-          nameAr: line.nameAr,
-          isActive: true,
-          isPosting: true,
-        },
-      });
-    } else {
-      // Find parent account ID
+    let acc;
+    if (line.isCustomer || line.isSupplier) {
+      // Find parent account
       const parentAcc = await prisma.account.findUniqueOrThrow({
         where: { code: line.parentCode },
       });
 
-      acc = await prisma.account.create({
-        data: {
-          code: line.code,
-          name: line.nameAr, // Fallback english name to Arabic
-          nameAr: line.nameAr,
-          type: line.accountType,
-          subtype: line.accountSubtype,
-          isPosting: true,
-          isActive: true,
+      // Check if there is already an account under this parent with the name matching nameAr
+      const existingAcc = await prisma.account.findFirst({
+        where: {
           parentAccountId: parentAcc.id,
-          createdById: admin.id,
+          nameAr: line.nameAr.trim(),
         },
       });
+
+      if (existingAcc) {
+        acc = existingAcc;
+      } else {
+        // Allocate a new code dynamically
+        const newCode = await allocateNextAccountCode(prisma, parentAcc.id);
+        acc = await prisma.account.create({
+          data: {
+            code: newCode,
+            name: line.nameAr.trim(),
+            nameAr: line.nameAr.trim(),
+            type: line.accountType,
+            subtype: line.accountSubtype,
+            isPosting: true,
+            isActive: true,
+            parentAccountId: parentAcc.id,
+            createdById: admin.id,
+            allowManualPosting: true,
+          },
+        });
+      }
+    } else {
+      // Normal accounts (Cash, Equity, Expense, Revenue)
+      acc = await prisma.account.findUnique({ where: { code: line.code } });
+
+      if (acc) {
+        // Update nameAr and English name to match
+        acc = await prisma.account.update({
+          where: { code: line.code },
+          data: {
+            nameAr: line.nameAr,
+            isActive: true,
+            isPosting: true,
+          },
+        });
+      } else {
+        // Find parent account ID
+        const parentAcc = await prisma.account.findUniqueOrThrow({
+          where: { code: line.parentCode },
+        });
+
+        acc = await prisma.account.create({
+          data: {
+            code: line.code,
+            name: line.nameAr, // Fallback english name to Arabic
+            nameAr: line.nameAr,
+            type: line.accountType,
+            subtype: line.accountSubtype,
+            isPosting: true,
+            isActive: true,
+            parentAccountId: parentAcc.id,
+            createdById: admin.id,
+          },
+        });
+      }
     }
 
     accountIdMap.set(line.code, acc.id);

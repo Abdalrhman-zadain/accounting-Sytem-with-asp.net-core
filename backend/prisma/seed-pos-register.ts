@@ -27,6 +27,59 @@ type PosProductSeed = {
 
 const POS_PRODUCTS: PosProductSeed[] = [];
 
+async function allocateNextAccountCode(
+  prisma: PrismaClient,
+  parentId: string,
+): Promise<string> {
+  const parent = await prisma.account.findUniqueOrThrow({
+    where: { id: parentId },
+    select: { code: true },
+  });
+
+  // Find the last sibling code
+  const lastSibling = await prisma.account.findFirst({
+    where: { parentAccountId: parentId },
+    orderBy: { code: 'desc' },
+    select: { code: true },
+  });
+
+  let nextCodeCandidate: string;
+  if (lastSibling) {
+    const codeStr = lastSibling.code;
+    const match = codeStr.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const [, prefix, digits] = match;
+      const nextNum = (BigInt(digits) + 1n).toString();
+      nextCodeCandidate = prefix + nextNum.padStart(digits.length, '0');
+    } else {
+      nextCodeCandidate = `${codeStr}_1`;
+    }
+  } else {
+    // If no sibling, append "001" to parent code
+    nextCodeCandidate = `${parent.code}001`;
+  }
+
+  // Ensure unique globally
+  let code = nextCodeCandidate;
+  while (true) {
+    const taken = await prisma.account.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (!taken) {
+      return code;
+    }
+    const match = code.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const [, prefix, digits] = match;
+      const nextNum = (BigInt(digits) + 1n).toString();
+      code = prefix + nextNum.padStart(digits.length, '0');
+    } else {
+      code = `${code}_1`;
+    }
+  }
+}
+
 export async function seedPosRegisterDemo(
   prisma: PrismaClient,
   options: { adminUserId: string; cashierUserId: string },
@@ -74,22 +127,50 @@ export async function seedPosRegisterDemo(
     type: string,
     subtype: string,
     parentId: string,
+    useDynamicCode: boolean = false,
   ) => {
-    let acc = await prisma.account.findUnique({ where: { code } });
-    if (!acc) {
-      acc = await prisma.account.create({
-        data: {
-          code,
-          name,
-          nameAr,
-          type: type as any,
-          subtype,
-          isPosting: true,
-          isActive: true,
+    let acc;
+    if (useDynamicCode) {
+      acc = await prisma.account.findFirst({
+        where: {
           parentAccountId: parentId,
-          createdById: options.adminUserId,
+          nameAr,
         },
       });
+      if (!acc) {
+        const newCode = await allocateNextAccountCode(prisma, parentId);
+        acc = await prisma.account.create({
+          data: {
+            code: newCode,
+            name,
+            nameAr,
+            type: type as any,
+            subtype,
+            isPosting: true,
+            isActive: true,
+            parentAccountId: parentId,
+            createdById: options.adminUserId,
+            allowManualPosting: true,
+          },
+        });
+      }
+    } else {
+      acc = await prisma.account.findUnique({ where: { code } });
+      if (!acc) {
+        acc = await prisma.account.create({
+          data: {
+            code,
+            name,
+            nameAr,
+            type: type as any,
+            subtype,
+            isPosting: true,
+            isActive: true,
+            parentAccountId: parentId,
+            createdById: options.adminUserId,
+          },
+        });
+      }
     }
     return acc;
   };
@@ -107,6 +188,7 @@ export async function seedPosRegisterDemo(
     'ASSET',
     'Receivable',
     tradeReceivablesParent.id,
+    true,
   );
   const careemAcc = await createAccountIfMissing(
     '1121003',
@@ -115,6 +197,7 @@ export async function seedPosRegisterDemo(
     'ASSET',
     'Receivable',
     tradeReceivablesParent.id,
+    true,
   );
   const jahezAcc = await createAccountIfMissing(
     '1121004',
@@ -123,6 +206,7 @@ export async function seedPosRegisterDemo(
     'ASSET',
     'Receivable',
     tradeReceivablesParent.id,
+    true,
   );
   const commissionAcc = await createAccountIfMissing(
     '5100013',
