@@ -1138,6 +1138,26 @@ Object.assign(arTranslations, {
     "يجب أن يكون مبلغ المقبوض أكبر من صفر.",
   "salesReceivables.validation.allocationExceedsOutstanding":
     "لا يجوز أن يتجاوز مبلغ التخصيص الرصيد المتبقي على الفاتورة.",
+  "salesReceivables.validation.insufficientWarehouseStock":
+    "لا يتوفر للصنف {code} مخزون كافٍ في المستودع المحدد للسطر {index}.",
+  "salesReceivables.validation.checkingWarehouseStock":
+    "جارٍ التحقق من توفر المخزون في المستودع...",
+  "salesReceivables.validation.stockCheckFailed":
+    "تعذر التحقق من مخزون المستودع الآن. حاول مرة أخرى.",
+  "salesReceivables.validation.headerAccountCannotPost":
+    'الحساب "{account}" حساب تجميعي ولا يمكن ترحيل قيود اليومية عليه. اختر حسابًا ترحيليًا بدلاً منه.',
+  "salesReceivables.validation.invalidCustomerReceivableAccount":
+    'يجب أن يكون حساب ذمم العميل "{account}" نشطًا وترحيليًا قبل ترحيل الفاتورة.',
+  "salesReceivables.validation.invalidRevenueAccountForLine":
+    'يجب أن يكون حساب الإيراد "{account}" نشطًا وترحيليًا للسطر {index}.',
+  "salesReceivables.validation.invalidInventoryAccountForItem":
+    'الصنف {code} مرتبط بحساب مخزون غير صالح "{account}". حدّث بطاقة المادة إلى حساب ترحيلي نشط قبل ترحيل الفاتورة.',
+  "salesReceivables.validation.invalidCogsAccountForItem":
+    'الصنف {code} مرتبط بحساب تكلفة بضاعة مباعة غير صالح "{account}". حدّث بطاقة المادة إلى حساب ترحيلي نشط قبل ترحيل الفاتورة.',
+  "salesReceivables.hint.selectedWarehouseStock":
+    "المتاح في المستودع المحدد: {quantity} {unit}",
+  "salesReceivables.hint.totalItemStock":
+    "إجمالي المخزون في كل المستودعات: {quantity} {unit}",
   "salesReceivables.validation.linkedInvoiceRequired":
     "يرجى اختيار فاتورة المبيعات المرتبطة بإشعار الدائن.",
   "salesReceivables.validation.creditNoteReasonRequired":

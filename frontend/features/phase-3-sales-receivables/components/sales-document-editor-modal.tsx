@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   LuCalendarDays as CalendarDays,
@@ -17,7 +17,7 @@ import {
 
 import { Button } from "@/components/ui";
 import { CurrencyAmountInput, Field, Input, Select } from "@/components/ui/forms";
-import { getActiveTaxes, getCurrencies, getInventoryItemWarehouseStock } from "@/lib/api";
+import { getActiveTaxes, getCurrencies, getInventoryItems, getInventoryItemWarehouseStock } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn, formatItemServiceLabel } from "@/lib/utils";
 import type { Customer, InventoryItem, InventoryItemWarehouseStock, InventoryWarehouse, Tax, Currency } from "@/types/api";
@@ -80,6 +80,85 @@ type SalesDocumentEditorModalProps = {
   isPostSubmitting?: boolean;
   isPostAndCreateReceiptSubmitting?: boolean;
 };
+
+function translateSalesDocumentError(
+  message: string | null | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (!message) {
+    return null;
+  }
+
+  const insufficientStockMatch = message.match(
+    /^Item\s+(.+?)\s+does not have enough available stock in the selected warehouse for line\s+(\d+)\.?$/i,
+  );
+  if (insufficientStockMatch) {
+    return t("salesReceivables.validation.insufficientWarehouseStock", {
+      code: insufficientStockMatch[1],
+      index: Number(insufficientStockMatch[2]),
+    });
+  }
+
+  const headerAccountMatch = message.match(
+    /^Account\s+"?(.+?)"?\s+is\s+a\s+header\s+account\s+and\s+cannot\s+receive\s+journal\s+entries\.?$/i,
+  );
+  if (headerAccountMatch) {
+    return t("salesReceivables.validation.headerAccountCannotPost", {
+      account: headerAccountMatch[1],
+    });
+  }
+
+  const invalidCustomerReceivableAccountMatch = message.match(
+    /^Customer receivable account\s+"(.+?)"\s+must be active and posting before posting the invoice\.?$/i,
+  );
+  if (invalidCustomerReceivableAccountMatch) {
+    return t("salesReceivables.validation.invalidCustomerReceivableAccount", {
+      account: invalidCustomerReceivableAccountMatch[1],
+    });
+  }
+
+  const invalidRevenueAccountMatch = message.match(
+    /^Revenue account\s+"(.+?)"\s+must be active and posting for line\s+(\d+)\.?$/i,
+  );
+  if (invalidRevenueAccountMatch) {
+    return t("salesReceivables.validation.invalidRevenueAccountForLine", {
+      account: invalidRevenueAccountMatch[1],
+      index: Number(invalidRevenueAccountMatch[2]),
+    });
+  }
+
+  const invalidInventoryAccountMatch = message.match(
+    /^Item\s+(.+?)\s+has an invalid inventory account\s+"(.+?)"\..*$/i,
+  );
+  if (invalidInventoryAccountMatch) {
+    return t("salesReceivables.validation.invalidInventoryAccountForItem", {
+      code: invalidInventoryAccountMatch[1],
+      account: invalidInventoryAccountMatch[2],
+    });
+  }
+
+  const invalidCogsAccountMatch = message.match(
+    /^Item\s+(.+?)\s+has an invalid cost of goods sold account\s+"(.+?)"\..*$/i,
+  );
+  if (invalidCogsAccountMatch) {
+    return t("salesReceivables.validation.invalidCogsAccountForItem", {
+      code: invalidCogsAccountMatch[1],
+      account: invalidCogsAccountMatch[2],
+    });
+  }
+
+  return message;
+}
+
+function toFiniteNumber(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 export function SalesDocumentEditorModal({
   isOpen,
@@ -172,6 +251,81 @@ export function SalesDocumentEditorModal({
     isArabic ? "text-right" : "text-left",
   );
 
+  const translatedValidationError = useMemo(
+    () => translateSalesDocumentError(combinedValidationError, t),
+    [combinedValidationError, t],
+  );
+  const [visibleValidationError, setVisibleValidationError] = useState<string | null>(
+    translatedValidationError,
+  );
+  const inventoryTrackedLines = useMemo(
+    () =>
+      lines
+        .map((line, index) => {
+          const item = inventoryItems.find((row) => row.id === line.itemId) ?? null;
+          if (!item || item.type === "SERVICE" || !item.trackInventory || !line.warehouseId) {
+            return null;
+          }
+
+          return {
+            key: `${item.id}:${line.warehouseId}`,
+            lineIndex: index,
+            item,
+            warehouseId: line.warehouseId,
+            quantity: toFiniteNumber(line.quantity) ?? 0,
+          };
+        })
+        .filter((value): value is NonNullable<typeof value> => Boolean(value)),
+    [inventoryItems, lines],
+  );
+  const inventoryAvailabilityQueries = useQueries({
+    queries: inventoryTrackedLines.map((entry) => ({
+      queryKey: ["sales-invoice-line-stock", token, entry.item.id, entry.warehouseId],
+      queryFn: async () => {
+        const response = await getInventoryItems(
+          {
+            isActive: "true",
+            warehouseId: entry.warehouseId,
+            search: entry.item.code,
+            page: 1,
+            limit: 100,
+          },
+          token,
+        );
+
+        return response.data.find((row) => row.id === entry.item.id) ?? null;
+      },
+      enabled: Boolean(token && entry.item.id && entry.warehouseId),
+      staleTime: 30_000,
+    })),
+  });
+  const stockAvailabilityByKey = useMemo(() => {
+    const map = new Map<string, InventoryItem | null>();
+    inventoryTrackedLines.forEach((entry, index) => {
+      map.set(entry.key, inventoryAvailabilityQueries[index]?.data ?? null);
+    });
+    return map;
+  }, [inventoryAvailabilityQueries, inventoryTrackedLines]);
+  const hasPendingStockCheck = inventoryAvailabilityQueries.some((query) => query.isLoading);
+  const hasFailedStockCheck = inventoryAvailabilityQueries.some((query) => query.isError);
+
+  useEffect(() => {
+    setVisibleValidationError(translatedValidationError);
+
+    if (!translatedValidationError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setVisibleValidationError(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [translatedValidationError]);
+
+  const controlBaseClass =
+    "w-full h-11 rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10";
+
   const labelClassName = cn("text-sm font-bold tracking-normal text-slate-700", isArabic && "arabic-ui");
 
   const tabs = [
@@ -185,6 +339,84 @@ export function SalesDocumentEditorModal({
   void title;
   void onReferenceChange;
   void onDescriptionChange;
+
+  const postActionBlockedReason = useMemo(() => {
+    if (!customerId) {
+      return t("salesReceivables.validation.customerRequired");
+    }
+
+    if (!lines.length) {
+      return t("salesReceivables.validation.lineRequired");
+    }
+
+    for (const [index, line] of lines.entries()) {
+      const lineAmount = toFiniteNumber(line.lineAmount) ?? 0;
+      if (lineAmount < 0.01) {
+        return t("salesReceivables.validation.lineAmountPositive", { index: index + 1 });
+      }
+
+      if (!line.revenueAccountId) {
+        return t("salesReceivables.validation.revenueAccountRequired", { index: index + 1 });
+      }
+
+      const item = inventoryItems.find((row) => row.id === line.itemId) ?? null;
+      if (item && item.type !== "SERVICE" && !line.warehouseId) {
+        return t("salesReceivables.validation.warehouseRequiredForInventory", { index: index + 1 });
+      }
+
+      if (item && item.type !== "SERVICE" && item.trackInventory) {
+        if (!item.inventoryAccount || !item.inventoryAccount.isActive || !item.inventoryAccount.isPosting) {
+          return t("salesReceivables.validation.invalidInventoryAccountForItem", {
+            code: item.code,
+            account: item.inventoryAccount?.name ?? item.inventoryAccount?.code ?? "",
+          });
+        }
+        if (!item.cogsAccount || !item.cogsAccount.isActive || !item.cogsAccount.isPosting) {
+          return t("salesReceivables.validation.invalidCogsAccountForItem", {
+            code: item.code,
+            account: item.cogsAccount?.name ?? item.cogsAccount?.code ?? "",
+          });
+        }
+      }
+    }
+
+    if (hasFailedStockCheck) {
+      return t("salesReceivables.validation.stockCheckFailed");
+    }
+
+    if (hasPendingStockCheck) {
+      return t("salesReceivables.validation.checkingWarehouseStock");
+    }
+
+    for (const [index, line] of lines.entries()) {
+      const item = inventoryItems.find((row) => row.id === line.itemId) ?? null;
+      if (!item || item.type === "SERVICE" || !item.trackInventory || !line.warehouseId) {
+        continue;
+      }
+
+      const availableItem = stockAvailabilityByKey.get(`${item.id}:${line.warehouseId}`);
+      const availableQuantity = toFiniteNumber(availableItem?.onHandQuantity) ?? 0;
+      const requiredQuantity = toFiniteNumber(line.quantity) ?? 0;
+
+      if (requiredQuantity > availableQuantity) {
+        return t("salesReceivables.validation.insufficientWarehouseStock", {
+          code: item.code,
+          index: index + 1,
+        });
+      }
+    }
+
+    return null;
+  }, [
+    customerId,
+    hasFailedStockCheck,
+    hasPendingStockCheck,
+    inventoryItems,
+    lines,
+    stockAvailabilityByKey,
+    t,
+  ]);
+  const disablePostActions = Boolean(postActionBlockedReason);
 
   const updateLine = (
     lineKey: string,
@@ -354,9 +586,9 @@ export function SalesDocumentEditorModal({
               </div>
             ) : null}
 
-            {combinedValidationError ? (
+            {visibleValidationError ? (
               <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-base font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
-                {combinedValidationError}
+                {visibleValidationError}
               </div>
             ) : null}
 
@@ -381,7 +613,7 @@ export function SalesDocumentEditorModal({
                       <Select
                         value={customerId}
                         onChange={(event) => onCustomerChange(event.target.value)}
-                        className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
+                        className={cn(controlBaseClass, isArabic ? "pl-3.5 pr-10 text-right" : "pr-3.5 pl-10 text-left")}
                       >
                         <option value="">{t("salesReceivables.empty.selectActiveCustomer")}</option>
                         {customers.map((row) => (
@@ -390,7 +622,7 @@ export function SalesDocumentEditorModal({
                           </option>
                         ))}
                       </Select>
-                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "right-3.5" : "left-3.5")} />
                     </div>
                   </Field>
                 </div>
@@ -403,9 +635,9 @@ export function SalesDocumentEditorModal({
                         type="date"
                         value={dateValue}
                         onChange={(event) => onDateChange(event.target.value)}
-                        className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
+                        className={cn(controlBaseClass, isArabic ? "pl-3.5 pr-10 text-right" : "pr-3.5 pl-10 text-left")}
                       />
-                      <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "right-3.5" : "left-3.5")} />
                     </div>
                   </Field>
                 </div>
@@ -419,9 +651,9 @@ export function SalesDocumentEditorModal({
                           type="date"
                           value={secondaryDateValue ?? ""}
                           onChange={(event) => onSecondaryDateChange(event.target.value)}
-                          className={cn(controlClassName, isArabic ? "pe-10" : "ps-10")}
+                          className={cn(controlBaseClass, isArabic ? "pl-3.5 pr-10 text-right" : "pr-3.5 pl-10 text-left")}
                         />
-                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "right-3.5" : "left-3.5")} />
                       </div>
                     </Field>
                   </div>
@@ -431,7 +663,7 @@ export function SalesDocumentEditorModal({
                       <Select
                         value={currencyCode}
                         onChange={(event) => onCurrencyChange(event.target.value)}
-                        className={controlClassName}
+                        className={cn(controlBaseClass, "px-3.5", isArabic ? "text-right" : "text-left")}
                       >
                         {currencies.length === 0 ? (
                           <>
@@ -459,7 +691,7 @@ export function SalesDocumentEditorModal({
                       <Select
                         value={currencyCode}
                         onChange={(event) => onCurrencyChange(event.target.value)}
-                        className={controlClassName}
+                        className={cn(controlBaseClass, "px-3.5", isArabic ? "text-right" : "text-left")}
                       >
                         {currencies.length === 0 ? (
                           <>
@@ -521,18 +753,18 @@ export function SalesDocumentEditorModal({
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <table className="min-w-[1360px] table-fixed border-collapse text-sm">
+                    <table className="min-w-[1730px] table-fixed border-collapse text-sm">
                       <thead className="bg-slate-50/75">
                         <tr>
-                          <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[240px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemOrService")} *</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("inventory.warehouse.title")} *</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")} *</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[100px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.quantity")} *</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.unitPrice")} *</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.discountAmount")}</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.tax")}</th>
-                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[140px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.lineAmount")}</th>
+                          <th scope="col" className="w-[60px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[320px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemOrService")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[220px]", isArabic ? "text-right" : "text-left")}>{t("inventory.warehouse.title")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[260px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[110px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.quantity")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[150px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.unitPrice")} *</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[150px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.discountAmount")}</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[220px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.tax")}</th>
+                          <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[160px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.lineAmount")}</th>
                           <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
                         </tr>
                       </thead>
@@ -553,6 +785,13 @@ export function SalesDocumentEditorModal({
                             availableQty !== null &&
                             availableQty + 1e-9 < requestedQty;
 
+                          const selectedWarehouseAvailable = availableQty ?? 0;
+                          const totalAvailable = toFiniteNumber(lineStock?.totalOnHand) ?? 0;
+                          const hasInsufficientSelectedWarehouseStock = insufficientStock;
+                          const shouldShowWarehouseStockHint = Boolean(
+                            tracksInventory && line.warehouseId
+                          );
+
                           return (
                             <tr
                               key={line.key}
@@ -572,7 +811,8 @@ export function SalesDocumentEditorModal({
                                       inventoryItems.find((row) => row.id === event.target.value) ?? null;
                                     void handleInventoryItemChange(line.key, item, line);
                                   }}
-                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                                  className="w-full rounded-lg text-sm bg-white border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                                  style={{ padding: "0 10px", height: "40px" }}
                                 >
                                   <option value="">
                                     {isInventoryItemsLoading ? t("salesReceivables.state.loadingItems") : t("salesReceivables.empty.selectItemOrService")}
@@ -585,65 +825,67 @@ export function SalesDocumentEditorModal({
                                 </Select>
                               </td>
                               <td className="px-2.5 py-3.5">
-                                <Select
-                                  value={line.warehouseId}
-                                  disabled={!selectedItem || selectedItem.type === "SERVICE"}
-                                  onChange={(event) => {
-                                    updateLine(line.key, (current) => ({
-                                      ...current,
-                                      warehouseId: event.target.value,
-                                    }));
-                                    setStockValidationError(null);
-                                  }}
-                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
-                                >
-                                  <option value="">
-                                    {selectedItem?.type === "SERVICE" ? t("inventory.common.notApplicable") : t("inventory.placeholder.selectWarehouse")}
-                                  </option>
-                                  {warehouses
-                                    .filter((warehouse) => warehouse.isActive)
-                                    .map((warehouse) => {
-                                      const qty = warehouseOnHandQuantity(lineStock, warehouse.id);
-                                      const qtyLabel =
-                                        tracksInventory && lineStock
-                                          ? ` · ${isArabic ? "متوفر" : "Avail"} ${qty}`
-                                          : "";
-                                      return (
-                                        <option key={warehouse.id} value={warehouse.id}>
-                                          {warehouse.code} · {warehouse.name}
-                                          {qtyLabel}
-                                        </option>
-                                      );
-                                    })}
-                                </Select>
-                                {tracksInventory ? (
-                                  <div className="mt-1 space-y-0.5">
-                                    {line.warehouseId ? (
-                                      <p
+                                <div className="space-y-1.5">
+                                  <Select
+                                    value={line.warehouseId}
+                                    disabled={!selectedItem || selectedItem.type === "SERVICE"}
+                                    onChange={(event) => {
+                                      updateLine(line.key, (current) => ({
+                                        ...current,
+                                        warehouseId: event.target.value,
+                                      }));
+                                      setStockValidationError(null);
+                                    }}
+                                    className="w-full rounded-lg text-sm bg-white border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 disabled:bg-slate-50 disabled:text-slate-400"
+                                    style={{ padding: "0 10px", height: "40px" }}
+                                  >
+                                    <option value="">
+                                      {selectedItem?.type === "SERVICE" ? t("inventory.common.notApplicable") : t("inventory.placeholder.selectWarehouse")}
+                                    </option>
+                                    {warehouses
+                                      .filter((warehouse) => warehouse.isActive)
+                                      .map((warehouse) => {
+                                        const qty = warehouseOnHandQuantity(lineStock, warehouse.id);
+                                        const qtyLabel =
+                                          tracksInventory && lineStock
+                                            ? ` · ${isArabic ? "متوفر" : "Avail"} ${qty}`
+                                            : "";
+                                        return (
+                                          <option key={warehouse.id} value={warehouse.id}>
+                                            {warehouse.code} · {warehouse.name}
+                                            {qtyLabel}
+                                          </option>
+                                        );
+                                      })}
+                                  </Select>
+                                  {shouldShowWarehouseStockHint ? (
+                                    <div className={cn("space-y-1 text-xs font-medium", isArabic ? "text-right" : "text-left")}>
+                                      <div
                                         className={cn(
-                                          "text-xs font-semibold",
-                                          insufficientStock ? "text-red-600" : "text-slate-500",
+                                          hasInsufficientSelectedWarehouseStock ? "text-red-600" : "text-slate-500",
                                         )}
                                       >
-                                        {t("salesReceivables.stock.availableInWarehouse", {
-                                          available: availableQty ?? 0,
+                                        {t("salesReceivables.hint.selectedWarehouseStock", {
+                                          quantity: selectedWarehouseAvailable,
+                                          unit: selectedItem?.unitOfMeasure ?? "",
                                         })}
-                                      </p>
-                                    ) : null}
-                                    {lineStock ? (
-                                      <p className="text-xs text-slate-400">
-                                        {t("salesReceivables.stock.totalOnHand", {
-                                          total: lineStock.totalOnHand,
-                                        })}
-                                      </p>
-                                    ) : null}
-                                    {lineStock?.balances.length === 0 ? (
-                                      <p className="text-xs font-semibold text-amber-700">
-                                        {t("salesReceivables.stock.noWarehouseStock")}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                ) : null}
+                                      </div>
+                                      {totalAvailable !== selectedWarehouseAvailable ? (
+                                        <div className="text-slate-400">
+                                          {t("salesReceivables.hint.totalItemStock", {
+                                            quantity: totalAvailable,
+                                            unit: selectedItem?.unitOfMeasure ?? "",
+                                          })}
+                                        </div>
+                                      ) : null}
+                                      {tracksInventory && lineStock?.balances.length === 0 ? (
+                                        <div className="text-amber-700 font-semibold">
+                                          {t("salesReceivables.stock.noWarehouseStock")}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                </div>
                               </td>
                               <td className="px-2.5 py-3.5">
                                 <Select
@@ -654,7 +896,8 @@ export function SalesDocumentEditorModal({
                                       revenueAccountId: event.target.value,
                                     }))
                                   }
-                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                                  className="w-full rounded-lg text-sm bg-white border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                                  style={{ padding: "0 10px", height: "40px" }}
                                 >
                                   <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
                                   {revenueAccounts.map((account) => (
@@ -674,7 +917,8 @@ export function SalesDocumentEditorModal({
                                     updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }));
                                     setStockValidationError(null);
                                   }}
-                                  className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200"
+                                  className="w-full rounded-lg text-sm font-mono text-center bg-white border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                                  style={{ padding: "0 10px", height: "40px" }}
                                 />
                               </td>
                               <td className="px-2.5 py-3.5">
@@ -687,7 +931,9 @@ export function SalesDocumentEditorModal({
                                   onChange={(event) =>
                                     updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
                                   }
-                                  className="h-10 rounded-lg text-sm"
+                                  className="h-full bg-transparent text-sm"
+                                  style={{ padding: "0 10px", height: "38px" }}
+                                  wrapperClassName="w-full h-10 rounded-lg border-slate-200 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-600/10"
                                 />
                               </td>
                               <td className="px-2.5 py-3.5">
@@ -700,7 +946,9 @@ export function SalesDocumentEditorModal({
                                   onChange={(event) =>
                                     updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
                                   }
-                                  className="h-10 rounded-lg text-sm"
+                                  className="h-full bg-transparent text-sm"
+                                  style={{ padding: "0 10px", height: "38px" }}
+                                  wrapperClassName="w-full h-10 rounded-lg border-slate-200 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-600/10"
                                 />
                               </td>
                               <td className="px-2.5 py-3.5">
@@ -715,7 +963,8 @@ export function SalesDocumentEditorModal({
                                       taxAmount: selectedTax ? current.taxAmount : "",
                                     }));
                                   }}
-                                  className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                                  className="w-full rounded-lg text-sm bg-white border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                                  style={{ padding: "0 10px", height: "40px" }}
                                 >
                                   <option value="">{t("salesReceivables.field.tax")}</option>
                                   {taxes.map((tax) => (
@@ -734,7 +983,9 @@ export function SalesDocumentEditorModal({
                                   value={line.lineAmount}
                                   readOnly
                                   disabled
-                                  className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                                  className="h-full bg-transparent text-sm"
+                                  style={{ padding: "0 10px", height: "38px" }}
+                                  wrapperClassName="w-full h-10 rounded-lg bg-slate-100 border-transparent text-emerald-700 font-bold opacity-100"
                                 />
                               </td>
                               <td className="px-2.5 py-3.5 text-center">

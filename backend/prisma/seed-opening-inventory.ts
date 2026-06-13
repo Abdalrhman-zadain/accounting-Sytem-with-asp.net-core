@@ -356,13 +356,40 @@ async function seedItems(
     where: { code: '4110001' },
     select: { id: true },
   });
-  const cogsAccount = await prisma.account.findFirst({
+  let cogsAccount = await prisma.account.findFirst({
     where: {
-      OR: [{ code: '5130001' }, { code: '5100000' }],
+      code: '5130001',
       isActive: true,
+      isPosting: true,
     },
     select: { id: true },
   });
+
+  if (!cogsAccount) {
+    const operatingExpenses = await prisma.account.findUnique({
+      where: { code: '5100000' },
+      select: { id: true },
+    });
+    const admin = await prisma.user.findFirst({
+      where: { username: 'admin' },
+      select: { id: true },
+    });
+    if (operatingExpenses && admin) {
+      cogsAccount = await prisma.account.create({
+        data: {
+          code: '5130001',
+          name: 'Cost of Goods Sold',
+          nameAr: 'تكلفة البضاعة المباعة',
+          type: 'EXPENSE',
+          isPosting: true,
+          subtype: 'Expense',
+          parentAccountId: operatingExpenses.id,
+          createdById: admin.id,
+        },
+        select: { id: true },
+      });
+    }
+  }
   const openingBalanceEquity = await prisma.account.findUnique({
     where: { code: '3410001' },
     select: { id: true },
@@ -453,20 +480,20 @@ async function seedItems(
       updateData.unitOfMeasureId = unit.id;
       changed = true;
     }
-    if (!existing.inventoryAccountId) {
+    if (existing.inventoryAccountId !== inventoryAccount.id) {
       updateData.inventoryAccountId = inventoryAccount.id;
       changed = true;
     }
-    if (!existing.cogsAccountId && cogsAccount?.id) {
-      updateData.cogsAccountId = cogsAccount.id;
+    if (existing.cogsAccountId !== (cogsAccount?.id ?? null)) {
+      updateData.cogsAccountId = cogsAccount?.id ?? null;
       changed = true;
     }
-    if (!existing.salesAccountId) {
+    if (existing.salesAccountId !== salesAccount.id) {
       updateData.salesAccountId = salesAccount.id;
       changed = true;
     }
-    if (!existing.adjustmentAccountId && openingBalanceEquity?.id) {
-      updateData.adjustmentAccountId = openingBalanceEquity.id;
+    if (existing.adjustmentAccountId !== (openingBalanceEquity?.id ?? null)) {
+      updateData.adjustmentAccountId = openingBalanceEquity?.id ?? null;
       changed = true;
     }
     if (!existing.currencyCode) {

@@ -1222,6 +1222,26 @@ Object.assign(enTranslations, {
     "Receipt amount must be greater than zero.",
   "salesReceivables.validation.allocationExceedsOutstanding":
     "Allocation amount cannot exceed the invoice outstanding balance.",
+  "salesReceivables.validation.insufficientWarehouseStock":
+    "Item {code} does not have enough available stock in the selected warehouse for line {index}.",
+  "salesReceivables.validation.checkingWarehouseStock":
+    "Checking warehouse stock availability...",
+  "salesReceivables.validation.stockCheckFailed":
+    "Could not verify warehouse stock right now. Try again.",
+  "salesReceivables.validation.headerAccountCannotPost":
+    'Account "{account}" is a header account and cannot receive journal entries. Select a posting account instead.',
+  "salesReceivables.validation.invalidCustomerReceivableAccount":
+    'Customer receivable account "{account}" must be active and posting before posting the invoice.',
+  "salesReceivables.validation.invalidRevenueAccountForLine":
+    'Revenue account "{account}" must be active and posting for line {index}.',
+  "salesReceivables.validation.invalidInventoryAccountForItem":
+    'Item {code} has an invalid inventory account "{account}". Update the item card to use an active posting account before posting the invoice.',
+  "salesReceivables.validation.invalidCogsAccountForItem":
+    'Item {code} has an invalid cost of goods sold account "{account}". Update the item card to use an active posting account before posting the invoice.',
+  "salesReceivables.hint.selectedWarehouseStock":
+    "Available in selected warehouse: {quantity} {unit}",
+  "salesReceivables.hint.totalItemStock":
+    "Total stock across all warehouses: {quantity} {unit}",
   "salesReceivables.validation.linkedInvoiceRequired":
     "Select the sales invoice this credit note applies to.",
   "salesReceivables.validation.creditNoteReasonRequired":

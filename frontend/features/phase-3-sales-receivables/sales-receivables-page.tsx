@@ -1719,9 +1719,9 @@ export function SalesReceivablesPage() {
     updateOrderMutation.error ??
     confirmOrderMutation.error ??
     cancelOrderMutation.error ??
-    createInvoiceMutation.error ??
-    updateInvoiceMutation.error ??
-    postInvoiceMutation.error ??
+    (!isInvoiceEditorOpen ? createInvoiceMutation.error : null) ??
+    (!isInvoiceEditorOpen ? updateInvoiceMutation.error : null) ??
+    (!isInvoiceEditorOpen ? postInvoiceMutation.error : null) ??
     unpostInvoiceMutation.error ??
     createCreditNoteMutation.error ??
     updateCreditNoteMutation.error ??
@@ -1729,7 +1729,18 @@ export function SalesReceivablesPage() {
     createReceiptMutation.error ??
     allocateReceiptMutation.error;
 
-  const errorMessage = currentError instanceof Error ? currentError.message : null;
+  const errorMessage = translateSalesReceivablesError(
+    currentError instanceof Error ? currentError.message : null,
+    t,
+  );
+  const invoiceMutationError = translateSalesReceivablesError(
+    getFirstErrorMessage(
+    createInvoiceMutation.error,
+    updateInvoiceMutation.error,
+    postInvoiceMutation.error,
+    ),
+    t,
+  );
   const saveCustomerFromEditor = () => {
     if (!customerEditor.taxTreatmentId) {
       setCustomerEditorClientError(t("salesReceivables.validation.taxTreatmentRequired"));
@@ -2589,7 +2600,7 @@ export function SalesReceivablesPage() {
               isInventoryItemsLoading={inventoryItemsQuery.isLoading}
               revenueAccounts={revenueAccountsQuery.data ?? []}
               isSubmitting={isInvoiceSaving || createInvoiceMutation.isPending || updateInvoiceMutation.isPending}
-              validationError={invoiceEditorClientError}
+              validationError={invoiceEditorClientError ?? invoiceMutationError}
               defaultLineTax={selectedInvoiceDefaultTax}
               allowTaxOverride={canOverrideInvoiceTax}
               onReferenceChange={(value) => setInvoiceEditor((current) => ({ ...current, reference: value }))}
@@ -4645,6 +4656,80 @@ function flattenPostingAccounts(nodes: AccountTreeNode[]): AccountTreeNode[] {
     ...(node.isPosting ? [node] : []),
     ...flattenPostingAccounts(node.children),
   ]);
+}
+
+function translateSalesReceivablesError(
+  message: string | null | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (!message) {
+    return null;
+  }
+
+  const insufficientStockMatch = message.match(
+    /^Item\s+(.+?)\s+does not have enough available stock in the selected warehouse for line\s+(\d+)\.?$/i,
+  );
+  if (insufficientStockMatch) {
+    return t("salesReceivables.validation.insufficientWarehouseStock", {
+      code: insufficientStockMatch[1],
+      index: Number(insufficientStockMatch[2]),
+    });
+  }
+
+  const headerAccountMatch = message.match(
+    /^Account\s+"?(.+?)"?\s+is\s+a\s+header\s+account\s+and\s+cannot\s+receive\s+journal\s+entries\.?$/i,
+  );
+  if (headerAccountMatch) {
+    return t("salesReceivables.validation.headerAccountCannotPost", {
+      account: headerAccountMatch[1],
+    });
+  }
+
+  const invalidCustomerReceivableAccountMatch = message.match(
+    /^Customer receivable account\s+"(.+?)"\s+must be active and posting before posting the invoice\.?$/i,
+  );
+  if (invalidCustomerReceivableAccountMatch) {
+    return t("salesReceivables.validation.invalidCustomerReceivableAccount", {
+      account: invalidCustomerReceivableAccountMatch[1],
+    });
+  }
+
+  const invalidRevenueAccountMatch = message.match(
+    /^Revenue account\s+"(.+?)"\s+must be active and posting for line\s+(\d+)\.?$/i,
+  );
+  if (invalidRevenueAccountMatch) {
+    return t("salesReceivables.validation.invalidRevenueAccountForLine", {
+      account: invalidRevenueAccountMatch[1],
+      index: Number(invalidRevenueAccountMatch[2]),
+    });
+  }
+
+  const invalidInventoryAccountMatch = message.match(
+    /^Item\s+(.+?)\s+has an invalid inventory account\s+"(.+?)"\..*$/i,
+  );
+  if (invalidInventoryAccountMatch) {
+    return t("salesReceivables.validation.invalidInventoryAccountForItem", {
+      code: invalidInventoryAccountMatch[1],
+      account: invalidInventoryAccountMatch[2],
+    });
+  }
+
+  const invalidCogsAccountMatch = message.match(
+    /^Item\s+(.+?)\s+has an invalid cost of goods sold account\s+"(.+?)"\..*$/i,
+  );
+  if (invalidCogsAccountMatch) {
+    return t("salesReceivables.validation.invalidCogsAccountForItem", {
+      code: invalidCogsAccountMatch[1],
+      account: invalidCogsAccountMatch[2],
+    });
+  }
+
+  return message;
+}
+
+function getFirstErrorMessage(...errors: unknown[]) {
+  const error = errors.find((value) => value instanceof Error);
+  return error instanceof Error ? error.message : null;
 }
 
 async function invalidateSalesReceivables(queryClient: ReturnType<typeof useQueryClient>) {

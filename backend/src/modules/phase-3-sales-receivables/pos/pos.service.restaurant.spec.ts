@@ -7,6 +7,7 @@ import {
   PosAccountingStatus,
   PosOperationalStatus,
   PosPaymentMethod,
+  PosProduct,
   TableStatus,
 } from "../../../generated/prisma";
 import { PosService } from "./pos.service";
@@ -1101,6 +1102,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         status: "OPEN",
         cashAccountId: "bc-1",
         warehouseId: "wh1",
+        posProduct: PosProduct.RESTAURANT,
       });
       prismaMock.customer.findFirst.mockResolvedValue({
         id: "cust-walkin",
@@ -1168,6 +1170,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         status: "OPEN",
         cashAccountId: "bc-1",
         warehouseId: "wh1",
+        posProduct: PosProduct.RESTAURANT,
       });
       prismaMock.customer.findFirst.mockResolvedValue({
         id: "cust-walkin",

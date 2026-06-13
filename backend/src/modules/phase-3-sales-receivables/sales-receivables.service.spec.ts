@@ -37,6 +37,7 @@ describe("SalesReceivablesService", () => {
     },
     account: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
     inventoryStockMovement: {
       findFirst: jest.fn(),
@@ -78,6 +79,12 @@ describe("SalesReceivablesService", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.account.findUnique.mockResolvedValue({
+      id: "some-id",
+      name: "Mock Account",
+      isActive: true,
+      isPosting: true,
+    });
     prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma as never));
     prisma.bankCashTransaction.findMany.mockResolvedValue([]);
     prisma.restaurantRecipe.findUnique.mockResolvedValue(null);

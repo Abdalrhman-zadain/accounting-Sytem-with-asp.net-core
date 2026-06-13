@@ -1442,6 +1442,12 @@ export class SalesReceivablesService {
       if (!invoice.customer.receivableAccountId) {
         throw new BadRequestException("Customer receivable account is not configured.");
       }
+      await this.ensureActivePostingAccount(
+        tx,
+        invoice.customer.receivableAccountId,
+        (accountName) =>
+          `Customer receivable account "${accountName}" must be active and posting before posting the invoice.`,
+      );
       if (!invoice.lines.length) {
         throw new BadRequestException("At least one invoice line is required.");
       }
@@ -1461,6 +1467,12 @@ export class SalesReceivablesService {
         if (!line.revenueAccountId) {
           throw new BadRequestException(`Revenue account is required for line ${line.lineNumber}.`);
         }
+        await this.ensureActivePostingAccount(
+          tx,
+          line.revenueAccountId,
+          (accountName) =>
+            `Revenue account "${accountName}" must be active and posting for line ${line.lineNumber}.`,
+        );
         if (this.lineTracksInventory(line.item)) {
           if (!line.item?.isActive) {
             throw new BadRequestException(
@@ -4519,6 +4531,18 @@ export class SalesReceivablesService {
             `Item ${target.item.code} requires inventory and COGS accounts before invoice posting.`,
           );
         }
+        await this.ensureActivePostingAccount(
+          tx,
+          target.item.inventoryAccountId,
+          (accountName) =>
+            `Item ${target.item.code} has an invalid inventory account "${accountName}". Update the item card to use an active posting account before posting the invoice.`,
+        );
+        await this.ensureActivePostingAccount(
+          tx,
+          target.item.cogsAccountId,
+          (accountName) =>
+            `Item ${target.item.code} has an invalid cost of goods sold account "${accountName}". Update the item card to use an active posting account before posting the invoice.`,
+        );
 
         const existingMovement = await tx.inventoryStockMovement.findFirst({
           where: {
@@ -4642,6 +4666,27 @@ export class SalesReceivablesService {
     if (totalDebit !== totalCredit) {
       throw new BadRequestException(`Journal entry is not balanced. Debit: ${totalDebit}, Credit: ${totalCredit}`);
     }
+  }
+
+  private async ensureActivePostingAccount(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    buildMessage: (accountName: string) => string,
+  ) {
+    const account = await tx.account.findUnique({
+      where: { id: accountId },
+      select: {
+        name: true,
+        isActive: true,
+        isPosting: true,
+      },
+    });
+
+    if (!account || !account.isActive || !account.isPosting) {
+      throw new BadRequestException(buildMessage(account?.name ?? accountId));
+    }
+
+    return account;
   }
 
   private mapCustomerReceiptTransaction(row: any) {

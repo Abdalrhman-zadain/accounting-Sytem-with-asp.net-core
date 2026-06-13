@@ -95,10 +95,16 @@ export const CurrencyAmountInput = forwardRef<
   InputHTMLAttributes<HTMLInputElement> & {
     currencyCode?: string;
     isRtl?: boolean;
+    wrapperClassName?: string;
   }
->(({ currencyCode = "JOD", isRtl = false, className, ...props }, ref) => {
+>(({ currencyCode = "JOD", isRtl = false, wrapperClassName, className, ...props }, ref) => {
   return (
-    <div className="relative flex overflow-hidden rounded-xl border border-gray-200 bg-white transition-all focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10">
+    <div
+      className={cn(
+        "relative flex overflow-hidden rounded-xl border border-gray-200 bg-white transition-all focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10",
+        wrapperClassName,
+      )}
+    >
       {/* Currency badge — left side for LTR, right side for RTL */}
       <span
         className={cn(

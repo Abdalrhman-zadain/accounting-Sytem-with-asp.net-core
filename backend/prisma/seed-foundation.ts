@@ -488,6 +488,15 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     subtype: 'Expense',
     parentAccountId: operatingExpenses.id,
   });
+  const cogsAccount = await createAccount({
+    code: '5130001',
+    name: 'Cost of Goods Sold',
+    nameAr: 'تكلفة البضاعة المباعة',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
 
   const mainCash = await createAccount({
     code: '1111001',

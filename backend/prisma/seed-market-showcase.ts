@@ -62,7 +62,7 @@ export async function seedMarketShowcase(
     prisma.account.findUniqueOrThrow({ where: { code: '4110001' } }),
     prisma.account.findFirstOrThrow({
       where: {
-        OR: [{ code: '5130001' }, { code: '5100000' }],
+        code: '5130001',
         isActive: true,
         isPosting: true,
       },

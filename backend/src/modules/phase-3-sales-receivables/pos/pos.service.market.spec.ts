@@ -32,6 +32,10 @@ describe("PosService market operations", () => {
     log: jest.fn(),
   };
 
+  const repCarStockServiceMock = {
+    ensureActiveSalesRep: jest.fn(),
+  };
+
   let service: PosService;
 
   const marketCashier = {
@@ -59,6 +63,7 @@ describe("PosService market operations", () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock as never),
     );
+    repCarStockServiceMock.ensureActiveSalesRep.mockResolvedValue(undefined);
     service = new PosService(
       prismaMock as never,
       auditServiceMock as never,
@@ -67,7 +72,7 @@ describe("PosService market operations", () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
+      repCarStockServiceMock as never,
     );
   });
 
@@ -101,6 +106,7 @@ describe("PosService market operations", () => {
         warehouseId: "wh-market",
         cashAccountId: "bc-market",
         openingCash: 100,
+        salesRepId: "rep-1",
       },
       marketCashier,
       PosProduct.MARKET,
