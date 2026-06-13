@@ -64,44 +64,6 @@ export async function seedPosRegisterDemo(
     },
   });
 
-  await prisma.customer.upsert({
-    where: { code: 'CUS-DEMO-01' },
-    update: {
-      name: 'Ahmed Ali / أحمد علي',
-      isActive: true,
-      taxTreatmentId: taxableTreatment.id,
-      creditLimit: new Prisma.Decimal(500),
-    },
-    create: {
-      code: 'CUS-DEMO-01',
-      name: 'Ahmed Ali / أحمد علي',
-      contactInfo: '+962 79 000 0001',
-      taxTreatmentId: taxableTreatment.id,
-      creditLimit: new Prisma.Decimal(500),
-      receivableAccountId: tradeReceivableAccount.id,
-      isActive: true,
-    },
-  });
-
-  await prisma.customer.upsert({
-    where: { code: 'CUS-DEMO-02' },
-    update: {
-      name: 'Sara Market / سارة ماركت',
-      isActive: true,
-      taxTreatmentId: taxableTreatment.id,
-      creditLimit: new Prisma.Decimal(2000),
-    },
-    create: {
-      code: 'CUS-DEMO-02',
-      name: 'Sara Market / سارة ماركت',
-      contactInfo: 'Wholesale customer demo',
-      taxTreatmentId: taxableTreatment.id,
-      creditLimit: new Prisma.Decimal(2000),
-      receivableAccountId: tradeReceivableAccount.id,
-      isActive: true,
-    },
-  });
-
   // --- RESTAURANT POS SEEDING ---
   
   // Helper to create accounts if missing
@@ -163,7 +125,7 @@ export async function seedPosRegisterDemo(
     tradeReceivablesParent.id,
   );
   const commissionAcc = await createAccountIfMissing(
-    '5100003',
+    '5100013',
     'Delivery Commission Expense',
     'مصروف عمولات التوصيل',
     'EXPENSE',
@@ -171,7 +133,7 @@ export async function seedPosRegisterDemo(
     operatingExpenses.id,
   );
   const serviceFeeAcc = await createAccountIfMissing(
-    '5100004',
+    '5100014',
     'Delivery Service Fees Expense',
     'مصروف رسوم خدمات التوصيل',
     'EXPENSE',
