@@ -1,23 +1,24 @@
 module.exports = {
   apps: [
     {
-      name: 'market-frontend',
+      name: 'account-frontend',
       cwd: './frontend',
       script: 'npm',
       args: 'run start',
       env: {
-        PORT: 3010,
-        NEXT_PUBLIC_API_BASE_URL: 'https://market.trusttechlimited.com/api'
+        PORT: 3000,
+        NEXT_PUBLIC_API_BASE_URL: 'https://sabina.trusttechlimited.com/api',
+        NEXT_API_PROXY_TARGET: 'http://127.0.0.1:3007/api'
       }
     },
     {
-      name: 'market-backend',
+      name: 'account-backend',
       cwd: './backend',
       script: 'npm',
       args: 'run start',
       env: {
-        PORT: 3017,
-        DATABASE_URL: 'postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public',
+        PORT: 3007,
+        DATABASE_URL: 'postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public',
         INVENTORY_ACCOUNTING_ENABLED: 'true'
       }
     }

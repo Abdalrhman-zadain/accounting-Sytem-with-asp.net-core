@@ -1,21 +1,21 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: simple-account-pos-m-ch-postgres
+    container_name: sabina-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: simple-account-pos-m-ch
+      POSTGRES_DB: simple_account
       POSTGRES_USER: simple_account_user
       POSTGRES_PASSWORD: simple_account_pass
     ports:
-      - "15433:5432"
+      - "15432:5432"
     volumes:
-      - postgres_pos_market_data:/var/lib/postgresql/data
+      - sabina_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U simple_account_user -d 'simple-account-pos-m-ch'"]
+      test: ["CMD-SHELL", "pg_isready -U simple_account_user -d simple_account"]
       interval: 5s
       timeout: 5s
       retries: 20
 
 volumes:
-  postgres_pos_market_data:
+  sabina_postgres_data:
