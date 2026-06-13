@@ -157,4 +157,132 @@ describe("ReportingService trial balance helpers", () => {
       },
     ]);
   });
+
+  it("keeps opening balance at zero when an opening journal is dated on fromDate and the default period logic is used", async () => {
+    const prisma = {
+      account: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "account-1",
+          code: "1121025",
+          name: "Customer",
+          nameAr: "عميل",
+          type: "ASSET",
+          currencyCode: "JOD",
+          segment3: null,
+          segment4: null,
+          segment5: null,
+          isPosting: true,
+          isActive: true,
+        }),
+      },
+      journalEntryLine: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            {
+              accountId: "account-1",
+              _sum: {
+                debitAmount: decimal("1611.00"),
+                creditAmount: decimal(0),
+              },
+            },
+          ]),
+      },
+      ledgerTransaction: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "lt-1",
+            reference: "JE-OPENING-2026",
+            journalEntryId: "je-1",
+            entryDate: new Date("2026-01-01T00:00:00.000Z"),
+            postedAt: new Date("2026-01-01T01:00:00.000Z"),
+            description: "Opening entry",
+            debitAmount: decimal("1611.00"),
+            creditAmount: decimal(0),
+            journalEntry: {
+              id: "je-1",
+              reference: "JE-OPENING-2026",
+              description: "Opening entry",
+            },
+          },
+        ]),
+      },
+    };
+
+    const reportingService = new ReportingService(prisma as never);
+
+    const result = await reportingService.getGeneralLedger(
+      {
+        accountId: "account-1",
+        dateFrom: "2026-01-01",
+        dateTo: "2026-01-31",
+      },
+      undefined,
+      false,
+    );
+
+    expect(result.openingBalance).toBe("0.00");
+    expect(result.totalDebit).toBe("1611.00");
+    expect(result.totalCredit).toBe("0.00");
+    expect(result.closingBalance).toBe("1611.00");
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].runningBalance).toBe("1611.00");
+  });
+
+  it("moves marked opening entries into the opening balance when treatOpeningEntriesAsOpeningBalance is enabled", async () => {
+    const prisma = {
+      account: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "account-1",
+          code: "1121025",
+          name: "Customer",
+          nameAr: "عميل",
+          type: "ASSET",
+          currencyCode: "JOD",
+          segment3: null,
+          segment4: null,
+          segment5: null,
+          isPosting: true,
+          isActive: true,
+        }),
+      },
+      journalEntryLine: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              accountId: "account-1",
+              _sum: {
+                debitAmount: decimal("1611.00"),
+                creditAmount: decimal(0),
+              },
+            },
+          ])
+          .mockResolvedValueOnce([]),
+      },
+      ledgerTransaction: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    };
+
+    const reportingService = new ReportingService(prisma as never);
+
+    const result = await reportingService.getGeneralLedger(
+      {
+        accountId: "account-1",
+        dateFrom: "2026-01-01",
+        dateTo: "2026-01-31",
+        treatOpeningEntriesAsOpeningBalance: "true",
+      },
+      undefined,
+      false,
+    );
+
+    expect(result.openingBalance).toBe("1611.00");
+    expect(result.totalDebit).toBe("0.00");
+    expect(result.totalCredit).toBe("0.00");
+    expect(result.closingBalance).toBe("1611.00");
+    expect(result.transactions).toEqual([]);
+  });
 });

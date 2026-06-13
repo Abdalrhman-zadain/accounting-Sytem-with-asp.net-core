@@ -117,6 +117,9 @@ Current implementation detail:
 Current implementation detail:
 
 - The general ledger detail table renders in the order `Date`, `Voucher Name`, `Description / Statement`, `Debit`, `Credit`, `Running Balance`, and `Reference`.
+- The general ledger opening balance is calculated from posted `JournalEntryLine` rows before `fromDate` only; rows dated on `fromDate` remain period rows by default, so an opening journal dated on the first day of the range is shown once in the table and is not added into opening balance.
+- The general ledger period debit/credit totals are calculated from posted `JournalEntryLine` rows inside the selected period only, and running balance starts from the derived opening net then adds each period row as `previous + debit - credit`.
+- An optional reporting query flag `treatOpeningEntriesAsOpeningBalance=true` reclassifies recognized opening entries into opening balance and excludes them from period transactions so they are not double counted.
 - Printable/exported general ledger output appends a closing summary section showing `Movement Balance`, `Total Debit`, `Total Credit`, `Total`, and `Final Balance`.
 - The reporting workspace subsections are reachable from sidebar children under `Reporting` using the same query-driven workspace pattern used by `Purchases`.
 

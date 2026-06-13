@@ -3692,6 +3692,9 @@ function buildReportingSearchParams(params: ReportingQuery = {}) {
   if (params.branchId) searchParams.set("branchId", params.branchId);
   if (params.segment5) searchParams.set("segment5", params.segment5);
   if (params.journalEntryTypeId) searchParams.set("journalEntryTypeId", params.journalEntryTypeId);
+  if (params.treatOpeningEntriesAsOpeningBalance !== undefined) {
+    searchParams.set("treatOpeningEntriesAsOpeningBalance", String(params.treatOpeningEntriesAsOpeningBalance));
+  }
   if (params.entity) searchParams.set("entity", params.entity);
   if (params.limit) searchParams.set("limit", String(params.limit));
   return searchParams.toString() ? `?${searchParams}` : "";

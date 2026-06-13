@@ -63,6 +63,11 @@ export class ReportingGeneralLedgerQueryDto extends ReportingQueryDto {
   @IsOptional()
   @IsString()
   accountId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["true", "false"])
+  treatOpeningEntriesAsOpeningBalance?: string;
 }
 
 export class ReportingAuditQueryDto extends ReportingQueryDto {

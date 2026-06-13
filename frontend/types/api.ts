@@ -4431,6 +4431,7 @@ export type ReportingQuery = {
   branchId?: string;
   segment5?: string;
   journalEntryTypeId?: string;
+  treatOpeningEntriesAsOpeningBalance?: boolean;
   entity?: string;
   limit?: number;
 };

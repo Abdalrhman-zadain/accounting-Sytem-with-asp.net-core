@@ -475,13 +475,13 @@ export class ReportingService {
       return emptyPayload;
     }
 
-    const [openingMap, transactions] = await Promise.all([
-      this.aggregateLedger([query.accountId!], query, undefined, query.dateFrom, true),
+    const [openingBalanceTotals, periodBalanceTotals, transactions] = await Promise.all([
+      this.getGeneralLedgerOpeningBalance(query.accountId!, query),
+      this.getGeneralLedgerPeriodBalance(query.accountId!, query),
       this.prisma.ledgerTransaction.findMany({
         where: {
           accountId: query.accountId,
-          entryDate: this.dateRange(query.dateFrom, query.dateTo),
-          journalEntry: this.buildJournalEntryWhere(query),
+          journalEntry: this.buildGeneralLedgerPeriodTransactionWhere(query),
         },
         include: {
           journalEntry: {
@@ -505,17 +505,17 @@ export class ReportingService {
             },
           },
         },
-        orderBy: [{ entryDate: "asc" }, { createdAt: "asc" }],
+        orderBy: [{ entryDate: "asc" }, { id: "asc" }],
       }),
     ]);
 
-    const openingBalance = this.net(openingMap.get(query.accountId!));
-    let runningBalance = openingBalance;
+    const openingBalance = openingBalanceTotals.debit.sub(openingBalanceTotals.credit);
+    let runningBalance = this.decimal(openingBalance);
 
     const rows = transactions.map((transaction) => {
-      const debit = Number(transaction.debitAmount);
-      const credit = Number(transaction.creditAmount);
-      runningBalance += debit - credit;
+      const debit = this.decimal(transaction.debitAmount);
+      const credit = this.decimal(transaction.creditAmount);
+      runningBalance = runningBalance.add(debit).sub(credit);
 
       return {
         id: transaction.id,
@@ -533,16 +533,15 @@ export class ReportingService {
       };
     });
 
-    const totalDebit = rows.reduce((sum, row) => sum + Number(row.debitAmount), 0);
-    const totalCredit = rows.reduce((sum, row) => sum + Number(row.creditAmount), 0);
+    const closingBalance = openingBalance.add(periodBalanceTotals.debit).sub(periodBalanceTotals.credit);
 
     const payload = {
       generatedAt: new Date().toISOString(),
       account: selectedAccount,
       openingBalance: this.toAmount(openingBalance),
-      totalDebit: this.toAmount(totalDebit),
-      totalCredit: this.toAmount(totalCredit),
-      closingBalance: this.toAmount(runningBalance),
+      totalDebit: this.toAmount(periodBalanceTotals.debit),
+      totalCredit: this.toAmount(periodBalanceTotals.credit),
+      closingBalance: this.toAmount(closingBalance),
       transactions: rows,
     };
 
@@ -1067,6 +1066,42 @@ export class ReportingService {
     return this.toDecimalBalanceMap(rows);
   }
 
+  private async getGeneralLedgerOpeningBalance(accountId: string, query: ReportingGeneralLedgerQueryDto) {
+    if (!query.dateFrom) {
+      return this.zeroDecimalBalance();
+    }
+
+    const rows = await this.prisma.journalEntryLine.groupBy({
+      by: ["accountId"],
+      where: {
+        accountId,
+        journalEntry: this.buildGeneralLedgerOpeningJournalWhere(query),
+      },
+      _sum: {
+        debitAmount: true,
+        creditAmount: true,
+      },
+    });
+
+    return this.toDecimalBalanceMap(rows).get(accountId) ?? this.zeroDecimalBalance();
+  }
+
+  private async getGeneralLedgerPeriodBalance(accountId: string, query: ReportingGeneralLedgerQueryDto) {
+    const rows = await this.prisma.journalEntryLine.groupBy({
+      by: ["accountId"],
+      where: {
+        accountId,
+        journalEntry: this.buildGeneralLedgerPeriodJournalWhere(query),
+      },
+      _sum: {
+        debitAmount: true,
+        creditAmount: true,
+      },
+    });
+
+    return this.toDecimalBalanceMap(rows).get(accountId) ?? this.zeroDecimalBalance();
+  }
+
   private calculateClosingBalance(
     openingDebit: Prisma.Decimal,
     openingCredit: Prisma.Decimal,
@@ -1235,6 +1270,78 @@ export class ReportingService {
           journalEntryTypeId: query.journalEntryTypeId,
         }
       : undefined;
+  }
+
+  private buildOpeningEntryMarkerWhere(): Prisma.JournalEntryWhereInput {
+    return {
+      OR: [
+        { sourceType: { contains: "OPENING", mode: "insensitive" } },
+        { sourceNumber: { contains: "OPENING", mode: "insensitive" } },
+        { reference: { contains: "OPENING", mode: "insensitive" } },
+        { description: { contains: "opening", mode: "insensitive" } },
+        { description: { contains: "افتتاح" } },
+        { journalEntryType: { name: { contains: "opening", mode: "insensitive" } } },
+      ],
+    };
+  }
+
+  private shouldTreatOpeningEntriesAsOpeningBalance(query: ReportingGeneralLedgerQueryDto) {
+    return query.treatOpeningEntriesAsOpeningBalance === "true" && Boolean(query.dateFrom);
+  }
+
+  private buildGeneralLedgerOpeningJournalWhere(query: ReportingGeneralLedgerQueryDto): Prisma.JournalEntryWhereInput {
+    const baseWhere: Prisma.JournalEntryWhereInput = {
+      ...this.buildPostedJournalEntryWhere(query),
+    };
+
+    if (!query.dateFrom) {
+      return {
+        ...baseWhere,
+        id: "__never__",
+      };
+    }
+
+    if (!this.shouldTreatOpeningEntriesAsOpeningBalance(query)) {
+      return {
+        ...baseWhere,
+        entryDate: this.dateRange(undefined, query.dateFrom, true),
+      };
+    }
+
+    return {
+      ...baseWhere,
+      OR: [
+        {
+          entryDate: this.dateRange(undefined, query.dateFrom, true),
+        },
+        {
+          AND: [
+            { entryDate: this.dateRange(query.dateFrom, query.dateTo) },
+            this.buildOpeningEntryMarkerWhere(),
+          ],
+        },
+      ],
+    };
+  }
+
+  private buildGeneralLedgerPeriodJournalWhere(query: ReportingGeneralLedgerQueryDto): Prisma.JournalEntryWhereInput {
+    const baseWhere: Prisma.JournalEntryWhereInput = {
+      ...this.buildPostedJournalEntryWhere(query),
+      entryDate: this.dateRange(query.dateFrom, query.dateTo),
+    };
+
+    if (!this.shouldTreatOpeningEntriesAsOpeningBalance(query)) {
+      return baseWhere;
+    }
+
+    return {
+      ...baseWhere,
+      NOT: this.buildOpeningEntryMarkerWhere(),
+    };
+  }
+
+  private buildGeneralLedgerPeriodTransactionWhere(query: ReportingGeneralLedgerQueryDto): Prisma.LedgerTransactionWhereInput["journalEntry"] {
+    return this.buildGeneralLedgerPeriodJournalWhere(query);
   }
 
   private buildPostedJournalEntryWhere(query?: ReportingQueryDto) {
@@ -1594,8 +1701,8 @@ export class ReportingService {
     return `Until ${dateTo}`;
   }
 
-  private toAmount(value: number) {
-    return value.toFixed(2);
+  private toAmount(value: Prisma.Decimal | string | number) {
+    return this.decimal(value).toFixed(2);
   }
 
   private toReportAmount(value: Prisma.Decimal | string | number, scale = 3) {
