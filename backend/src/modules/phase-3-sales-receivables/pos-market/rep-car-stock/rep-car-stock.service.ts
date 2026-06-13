@@ -12,6 +12,7 @@ import {
 import { PrismaService } from "../../../../common/prisma/prisma.service";
 import type { AuthorizedUser } from "../../../platform/auth/auth.types";
 import { ItemMasterService } from "../../../phase-5-inventory-management/inventory/item-master/item-master.service";
+import { isMarketInventoryItem } from "../market-inventory-item.utils";
 
 type RepBalanceDelta = {
   salesRepId: string;
@@ -84,6 +85,19 @@ export class RepCarStockService {
   ensureManageRepLoads(user?: AuthorizedUser) {
     if (!this.canManageRepLoads(user)) {
       throw new ForbiddenException("You do not have permission to manage rep car loads.");
+    }
+  }
+
+  canManageRepTransfers(user?: AuthorizedUser) {
+    if (!user) return false;
+    return user.role === "ADMIN" || user.role === "MANAGER";
+  }
+
+  ensureManageRepTransfers(user?: AuthorizedUser) {
+    if (!this.canManageRepTransfers(user)) {
+      throw new ForbiddenException(
+        "Only administrators can transfer stock between sales rep cars.",
+      );
     }
   }
 
@@ -412,12 +426,7 @@ export class RepCarStockService {
       });
       totalPages = catalog.totalPages;
       marketItems.push(
-        ...catalog.data.filter(
-          (item) =>
-            item.code.startsWith("MKT-") ||
-            item.itemGroup?.code?.startsWith("MARKET-") ||
-            item.itemGroup?.code?.startsWith("MKT-"),
-        ),
+        ...catalog.data.filter((item) => isMarketInventoryItem(item)),
       );
       page += 1;
     } while (page <= totalPages);

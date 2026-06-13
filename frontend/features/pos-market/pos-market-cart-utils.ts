@@ -138,14 +138,14 @@ export function getCartLineKey(
   return `${line.itemId}:${line.lineNote ?? ""}`;
 }
 
-function getLineBase(line: PosMarketCartLine) {
+export function getLineBase(line: PosMarketCartLine) {
   if (line.sellByWeight) {
     return line.quantity * (line.baseUnitPrice ?? line.unitPrice);
   }
   return line.quantity * line.unitPrice;
 }
 
-function getLineDiscountAmount(line: PosMarketCartLine) {
+export function getLineDiscountAmount(line: PosMarketCartLine) {
   const base = getLineBase(line);
   if (line.discountType === "PERCENT") {
     return Math.min(base, base * (line.discountValue / 100));

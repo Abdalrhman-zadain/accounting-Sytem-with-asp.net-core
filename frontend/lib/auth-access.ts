@@ -291,10 +291,24 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   }
 
   if (
+    normalizedPath === "/pos-market/stock-hub" ||
+    normalizedPath.startsWith("/pos-market/stock-hub/")
+  ) {
+    return hasPermission(user, "POS_MARKET_MANAGE_REP_LOADS");
+  }
+
+  if (
     normalizedPath === "/pos-market/rep-loads" ||
     normalizedPath.startsWith("/pos-market/rep-loads/")
   ) {
     return hasPermission(user, "POS_MARKET_MANAGE_REP_LOADS");
+  }
+
+  if (
+    normalizedPath === "/pos-market/rep-transfers" ||
+    normalizedPath.startsWith("/pos-market/rep-transfers/")
+  ) {
+    return user?.role === "ADMIN" || user?.role === "MANAGER";
   }
 
   if (

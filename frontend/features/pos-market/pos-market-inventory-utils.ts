@@ -4,6 +4,7 @@ import type { InventoryItem } from "@/types/api";
 export function filterMarketItems(items: InventoryItem[]) {
   return items.filter(
     (item) =>
+      /^[0-9]+$/.test(item.code) ||
       item.code.startsWith("MKT-") ||
       item.itemGroup?.code?.startsWith("MARKET-") ||
       item.itemGroup?.code?.startsWith("MKT-"),

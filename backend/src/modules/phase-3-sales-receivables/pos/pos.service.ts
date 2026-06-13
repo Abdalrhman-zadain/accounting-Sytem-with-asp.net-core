@@ -1348,7 +1348,7 @@ export class PosService {
 
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     await this.ensurePriceChangePermission(dto.lines, user);
-    this.ensureDiscountPermission(resolvedLines, user);
+    this.ensureDiscountPermission(resolvedLines, user, { isMarketSession });
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
 
     if (!isMarketSession) {
@@ -3536,7 +3536,16 @@ export class PosService {
     return existingUser?.id ?? null;
   }
 
-  private ensureDiscountPermission(lines: ResolvedSalesLine[], user?: AuthorizedUser) {
+  private ensureDiscountPermission(
+    lines: ResolvedSalesLine[],
+    user?: AuthorizedUser,
+    options?: { isMarketSession?: boolean },
+  ) {
+    // Market reps apply line/invoice discounts in the field; accountant review happens at session level.
+    if (options?.isMarketSession) {
+      return;
+    }
+
     const gross = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
     const discounts = lines.reduce((sum, line) => sum + line.discountAmount, 0);
     if (gross <= 0 || discounts <= 0) {

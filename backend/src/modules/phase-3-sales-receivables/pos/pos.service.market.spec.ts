@@ -243,4 +243,36 @@ describe("PosService market operations", () => {
     expect(normalized.totalApplied).toBe(40);
     expect(normalized.outstandingAmount).toBe(60);
   });
+
+  it("does not require POS_APPROVE_ACCOUNTING for high discounts on market sessions", () => {
+    expect(() =>
+      (service as any).ensureDiscountPermission(
+        [
+          {
+            quantity: 1,
+            unitPrice: 100,
+            discountAmount: 50,
+          },
+        ],
+        marketCashier,
+        { isMarketSession: true },
+      ),
+    ).not.toThrow();
+  });
+
+  it("requires POS_APPROVE_ACCOUNTING for high discounts on restaurant sessions", () => {
+    expect(() =>
+      (service as any).ensureDiscountPermission(
+        [
+          {
+            quantity: 1,
+            unitPrice: 100,
+            discountAmount: 50,
+          },
+        ],
+        marketCashier,
+        { isMarketSession: false },
+      ),
+    ).toThrow(/POS_APPROVE_ACCOUNTING/);
+  });
 });

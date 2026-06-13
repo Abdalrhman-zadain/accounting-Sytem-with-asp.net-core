@@ -6,7 +6,11 @@ import { LuPackage } from "react-icons/lu";
 import { Modal } from "@/components/ui";
 import {
   formatCurrency,
+  getLineBase,
+  getLineDiscountAmount,
+  getLineTotal,
   parseAmount,
+  type DiscountType,
 } from "@/features/pos-market/pos-market-cart-utils";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import { isWeightSaleItem } from "@/features/pos-market/pos-market-weight-utils";
@@ -17,6 +21,8 @@ import type { InventoryItem } from "@/types/api";
 export type PosMarketSaleEntry = {
   quantity: number;
   unitPrice: number;
+  discountType?: DiscountType;
+  discountValue?: number;
 };
 
 type PosMarketProductCardProps = {
@@ -43,7 +49,7 @@ export function PosMarketProductCard({
   onAdd,
   onSelectWeight,
 }: PosMarketProductCardProps) {
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
   const isAr = language === "ar";
   const defaultPrice = parseAmount(item.defaultSalesPrice);
   const sellByWeight = isWeightSaleItem(item);
@@ -52,21 +58,46 @@ export function PosMarketProductCard({
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [quantityInput, setQuantityInput] = React.useState("1");
   const [priceInput, setPriceInput] = React.useState("");
+  const [discountType, setDiscountType] = React.useState<DiscountType>("FIXED");
+  const [discountValueInput, setDiscountValueInput] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!isModalOpen) return;
     setQuantityInput("1");
     setPriceInput(defaultPrice > 0 ? defaultPrice.toFixed(2) : "");
+    setDiscountType("FIXED");
+    setDiscountValueInput("");
     setError(null);
   }, [defaultPrice, isModalOpen, item.id]);
 
   const parsedQuantity = parseQuantityInput(quantityInput);
   const parsedPrice = priceInput.trim() === "" ? null : parseAmount(priceInput);
-  const lineTotal =
+  const discountValue = Math.max(0, parseAmount(discountValueInput));
+
+  const previewLine =
     parsedQuantity != null && parsedPrice != null
-      ? Number((parsedQuantity * parsedPrice).toFixed(2))
+      ? {
+          itemId: item.id,
+          name: item.name,
+          code: item.code,
+          unit: item.unitOfMeasure,
+          itemType: item.type,
+          quantity: parsedQuantity,
+          unitPrice: parsedPrice,
+          baseUnitPrice: parsedPrice,
+          discountType,
+          discountValue,
+          taxRate: 0,
+          trackInventory: item.trackInventory,
+          unitCost: 0,
+          onHandQuantity: parseAmount(item.onHandQuantity),
+        }
       : null;
+
+  const lineBase = previewLine ? getLineBase(previewLine) : null;
+  const lineDiscount = previewLine ? getLineDiscountAmount(previewLine) : null;
+  const lineTotalAfterDiscount = previewLine ? getLineTotal(previewLine) : null;
 
   const handleOpen = () => {
     if (sellByWeight) {
@@ -103,7 +134,11 @@ export function PosMarketProductCard({
       }
     }
 
-    onAdd?.(item, { quantity, unitPrice });
+    onAdd?.(item, {
+      quantity,
+      unitPrice,
+      ...(discountValue > 0 ? { discountType, discountValue } : {}),
+    });
     setIsModalOpen(false);
   };
 
@@ -243,17 +278,66 @@ export function PosMarketProductCard({
             />
           </div>
 
-          {lineTotal != null ? (
+          <div
+            className="rounded-xl border p-3"
+            style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+          >
+            <p className="mb-2 text-xs font-bold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+              {t("posMarket.discount.repDiscount")}
+            </p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  setDiscountType((current) => (current === "FIXED" ? "PERCENT" : "FIXED"))
+                }
+                className="rounded-lg border px-2 py-1.5 text-[10px] font-semibold"
+                style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+              >
+                {discountType === "FIXED" ? t("posMarket.discount.fixed") : t("posMarket.discount.percent")}
+              </button>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={discountValueInput}
+                onChange={(event) => setDiscountValueInput(event.target.value)}
+                placeholder="0"
+                className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs font-semibold"
+                style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+                dir="ltr"
+              />
+            </div>
+          </div>
+
+          {lineBase != null ? (
             <div
-              className="rounded-xl border px-3 py-2 text-sm font-bold"
+              className="space-y-1 rounded-xl border px-3 py-2 text-xs font-semibold"
               style={{
                 borderColor: POS_MARKET_THEME.colors.outline,
                 backgroundColor: POS_MARKET_THEME.colors.primarySoft,
-                color: POS_MARKET_THEME.colors.primary,
+                color: POS_MARKET_THEME.colors.text,
               }}
             >
-              {isAr ? "إجمالي السطر: " : "Line total: "}
-              {formatCurrency(lineTotal, currencyCode)}
+              <div className="flex justify-between">
+                <span>{t("pos.review.subtotal")}</span>
+                <span dir="ltr">{formatCurrency(lineBase, currencyCode)}</span>
+              </div>
+              {lineDiscount != null && lineDiscount > 0 ? (
+                <div className="flex justify-between text-emerald-700">
+                  <span>{t("posMarket.discount.repDiscount")}</span>
+                  <span dir="ltr">-{formatCurrency(lineDiscount, currencyCode)}</span>
+                </div>
+              ) : null}
+              {lineTotalAfterDiscount != null ? (
+                <div
+                  className="flex justify-between border-t pt-1 text-sm font-bold"
+                  style={{ borderColor: POS_MARKET_THEME.colors.outline, color: POS_MARKET_THEME.colors.primary }}
+                >
+                  <span>{t("posMarket.discount.afterDiscount")}</span>
+                  <span dir="ltr">{formatCurrency(lineTotalAfterDiscount, currencyCode)}</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

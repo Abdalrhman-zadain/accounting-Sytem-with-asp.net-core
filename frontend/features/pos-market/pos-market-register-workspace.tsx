@@ -11,6 +11,7 @@ import {
   buildSaleLinesPayload,
   consumeStashedHeldSale,
   formatCurrency,
+  getCartLineKey,
   getErrorMessage,
   mapPosReceiptToPrintData,
   parseAmount,
@@ -23,7 +24,7 @@ import {
   printMarketCustomerReceipt,
   shouldAutoPrintReceiptOnPay,
 } from "@/features/pos-market/pos-market-print-service";
-import { PosMarketProductCard } from "@/features/pos-market/pos-market-product-card";
+import { PosMarketProductCard, type PosMarketSaleEntry } from "@/features/pos-market/pos-market-product-card";
 import { PosMarketRegisterLayout } from "@/features/pos-market/pos-market-register-layout";
 import { PosMarketSessionBar } from "@/features/pos-market/pos-market-session-bar";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
@@ -298,17 +299,19 @@ export function PosMarketRegisterWorkspace() {
   }, [catalog.items, search]);
 
   const addItemToCart = useCallback(
-    (
-      item: InventoryItem,
-      entry?: { quantity: number; unitPrice: number },
-    ) => {
+    (item: InventoryItem, entry?: PosMarketSaleEntry) => {
       if (!hasPermission(user, "POS_ADD_ITEM_TO_CART")) return;
       if (!activeSession) {
         pushMessage(t("pos.sales.alert.sessionClosed"), "error");
         return;
       }
       const result = entry
-        ? cart.addItem(item, { quantity: entry.quantity, unitPrice: entry.unitPrice })
+        ? cart.addItem(item, {
+            quantity: entry.quantity,
+            unitPrice: entry.unitPrice,
+            discountType: entry.discountType,
+            discountValue: entry.discountValue,
+          })
         : cart.addItem(item);
       if (result === "STOCK_EXCEEDED") {
         pushMessage(t("pos.sales.alert.stockExceeded", { item: item.name }), "error");
@@ -588,7 +591,24 @@ export function PosMarketRegisterWorkspace() {
             currencyCode={currencyCode}
             canHold={hasPermission(user, "POS_HOLD_SALE")}
             canVoid={Boolean(cart.editingInvoiceId) && hasPermission(user, "POS_VOID_DRAFT_SALE")}
+            canEditDiscount={hasPermission(user, "POS_COMPLETE_SALE")}
+            invoiceDiscountType={cart.invoiceDiscountType}
+            invoiceDiscountValue={cart.invoiceDiscountValue}
+            setInvoiceDiscountType={cart.setInvoiceDiscountType}
+            setInvoiceDiscountValue={cart.setInvoiceDiscountValue}
             onUpdateQuantity={cart.updateLineQuantity}
+            onUpdateLineDiscount={cart.updateLineDiscount}
+            onUpdateLineWeight={(lineKey, weight) => {
+              const result = cart.updateLineWeight(lineKey, weight);
+              if (result === "STOCK_EXCEEDED") {
+                const line = cart.cartLines.find((row) => getCartLineKey(row) === lineKey);
+                pushMessage(
+                  t("pos.sales.alert.stockExceeded", { item: line?.name ?? "" }),
+                  "error",
+                );
+              }
+              return result;
+            }}
             onRemoveLine={cart.removeLine}
             onHold={() => holdSaleMutation.mutate()}
             onVoid={() => cart.editingInvoiceId && voidSaleMutation.mutate(cart.editingInvoiceId)}
@@ -641,9 +661,13 @@ export function PosMarketRegisterWorkspace() {
         language={language}
         currencyCode={currencyCode}
         onClose={() => setWeightModalItem(null)}
-        onConfirm={(weight) => {
+        onConfirm={(payload) => {
           if (!weightModalItem) return;
-          const result = cart.addItem(weightModalItem, { weight });
+          const result = cart.addItem(weightModalItem, {
+            weight: payload.weight,
+            discountType: payload.discountType,
+            discountValue: payload.discountValue,
+          });
           if (result === "STOCK_EXCEEDED") {
             pushMessage(
               t("pos.sales.alert.stockExceeded", { item: weightModalItem.name }),

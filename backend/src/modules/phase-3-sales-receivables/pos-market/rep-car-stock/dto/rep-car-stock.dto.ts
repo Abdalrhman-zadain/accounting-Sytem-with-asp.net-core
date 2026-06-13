@@ -165,3 +165,137 @@ export class UpdateRepCarStocktakeDto {
   @Type(() => RepCarStocktakeLineDto)
   lines?: RepCarStocktakeLineDto[];
 }
+
+export class RepCarTransferLineDto {
+  @IsString()
+  itemId!: string;
+
+  @IsString()
+  @Matches(QTY_PATTERN)
+  quantity!: string;
+
+  @IsString()
+  @Length(1, 40)
+  unitOfMeasure!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+}
+
+export class CreateRepCarTransferDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  reference?: string;
+
+  @IsDateString()
+  transferDate!: string;
+
+  @IsString()
+  fromSalesRepId!: string;
+
+  @IsString()
+  toSalesRepId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RepCarTransferLineDto)
+  lines!: RepCarTransferLineDto[];
+}
+
+export class UpdateRepCarTransferDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  reference?: string;
+
+  @IsOptional()
+  @IsDateString()
+  transferDate?: string;
+
+  @IsOptional()
+  @IsString()
+  fromSalesRepId?: string;
+
+  @IsOptional()
+  @IsString()
+  toSalesRepId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RepCarTransferLineDto)
+  lines?: RepCarTransferLineDto[];
+}
+
+export class CreateRepCarUnloadDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  reference?: string;
+
+  @IsDateString()
+  unloadDate!: string;
+
+  @IsString()
+  warehouseId!: string;
+
+  @IsString()
+  salesRepId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RepCarLoadLineDto)
+  lines!: RepCarLoadLineDto[];
+}
+
+export class UpdateRepCarUnloadDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  reference?: string;
+
+  @IsOptional()
+  @IsDateString()
+  unloadDate?: string;
+
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
+  @IsOptional()
+  @IsString()
+  salesRepId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RepCarLoadLineDto)
+  lines?: RepCarLoadLineDto[];
+}

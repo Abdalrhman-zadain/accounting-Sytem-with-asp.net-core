@@ -4725,6 +4725,7 @@ export type AuditLogEntry = {
 };
 
 export type RepCarLoadStatus = "DRAFT" | "POSTED" | "CANCELLED" | "REVERSED";
+export type RepCarTransferStatus = "DRAFT" | "POSTED" | "CANCELLED" | "REVERSED";
 export type RepCarStocktakeStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 export type RepCarLoadLine = {
@@ -4765,6 +4766,105 @@ export type RepCarLoad = {
   updatedAt: string;
 };
 
+export type RepCarUnloadLine = {
+  id: string;
+  lineNumber: number;
+  itemId: string;
+  item: Pick<InventoryItem, "id" | "code" | "name" | "unitOfMeasure" | "trackInventory">;
+  quantity: number;
+  unitCost: number;
+  unitOfMeasure: string;
+  description?: string | null;
+  lineTotalAmount: number;
+};
+
+export type RepCarUnload = {
+  id: string;
+  reference: string;
+  status: RepCarLoadStatus;
+  unloadDate: string;
+  warehouseId: string;
+  warehouse: Pick<InventoryWarehouse, "id" | "code" | "name" | "isActive">;
+  salesRepId: string;
+  salesRep: Pick<SalesRepresentative, "id" | "code" | "name" | "status">;
+  description?: string | null;
+  totalQuantity: number;
+  totalAmount: number;
+  postedAt?: string | null;
+  postedByUser?: { id: string; username: string; name?: string | null } | null;
+  lines: RepCarUnloadLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketStockLocation = {
+  id: string;
+  type: "warehouse" | "rep";
+  code: string;
+  name: string;
+  isActive: boolean;
+  isTransit?: boolean;
+};
+
+export type MarketStockOverviewItem = {
+  id: string;
+  code: string;
+  name: string;
+  unitOfMeasure: string;
+};
+
+export type MarketStockOverviewBalance = {
+  locationId: string;
+  locationType: "warehouse" | "rep";
+  itemId: string;
+  onHandQuantity: number;
+  valuationAmount: number;
+};
+
+export type MarketStockOverview = {
+  locations: MarketStockLocation[];
+  items: MarketStockOverviewItem[];
+  balances: MarketStockOverviewBalance[];
+};
+
+export type RepCarTransferLine = {
+  id: string;
+  lineNumber: number;
+  itemId: string;
+  item: Pick<InventoryItem, "id" | "code" | "name" | "unitOfMeasure" | "trackInventory">;
+  quantity: number;
+  unitCost: number;
+  unitOfMeasure: string;
+  description?: string | null;
+  lineTotalAmount: number;
+  destOnHand?: number | null;
+  reverseShortfall?: number | null;
+};
+
+export type RepCarTransfer = {
+  id: string;
+  reference: string;
+  status: RepCarTransferStatus;
+  transferDate: string;
+  fromSalesRepId: string;
+  fromSalesRep: Pick<SalesRepresentative, "id" | "code" | "name" | "status">;
+  toSalesRepId: string;
+  toSalesRep: Pick<SalesRepresentative, "id" | "code" | "name" | "status">;
+  description?: string | null;
+  totalQuantity: number;
+  totalAmount: number;
+  postedAt?: string | null;
+  postedByUser?: { id: string; username: string; name?: string | null } | null;
+  reversedAt?: string | null;
+  reversedByUser?: { id: string; username: string; name?: string | null } | null;
+  canReverse?: boolean;
+  reverseBlockReasons?: string[];
+  hasSalesAfterPost?: boolean;
+  lines: RepCarTransferLine[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RepCarStocktakeLine = {
   id: string;
   lineNumber: number;
@@ -4799,9 +4899,12 @@ export type RepCarStocktake = {
 
 export type RepCarStockMovementType =
   | "LOAD_IN"
+  | "LOAD_OUT"
   | "SALE_OUT"
   | "STOCKTAKE_IN"
-  | "STOCKTAKE_OUT";
+  | "STOCKTAKE_OUT"
+  | "TRANSFER_IN"
+  | "TRANSFER_OUT";
 
 export type RepCarStockBalance = {
   salesRepId: string;
@@ -4851,6 +4954,34 @@ export type CreateRepCarLoadPayload = {
   loadDate: string;
   warehouseId: string;
   salesRepId: string;
+  description?: string;
+  lines: Array<{
+    itemId: string;
+    quantity: string;
+    unitOfMeasure: string;
+    description?: string;
+  }>;
+};
+
+export type CreateRepCarUnloadPayload = {
+  reference?: string;
+  unloadDate: string;
+  warehouseId: string;
+  salesRepId: string;
+  description?: string;
+  lines: Array<{
+    itemId: string;
+    quantity: string;
+    unitOfMeasure: string;
+    description?: string;
+  }>;
+};
+
+export type CreateRepCarTransferPayload = {
+  reference?: string;
+  transferDate: string;
+  fromSalesRepId: string;
+  toSalesRepId: string;
   description?: string;
   lines: Array<{
     itemId: string;

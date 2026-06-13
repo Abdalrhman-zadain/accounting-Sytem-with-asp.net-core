@@ -178,8 +178,8 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE`.
 - Register checkout allows **partial payment** or **pay later** (zero tender) when `allowCreditSale` is true in POS settings (permission or `POS_ALLOW_CREDIT_SALE`).
 - Outstanding balance is stored on the POS `SalesInvoice` (`outstandingAmount`, `PARTIALLY_PAID`) and debited to the customer's receivable account on accounting posting.
-- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip.
-- Each invoice shows **مدفوع اليوم**, **متبقي الفاتورة**, and a **ملخص حساب العميل** block (إجمالي المسلّم / المقبوض / الذمم) when selling to a destination market.
+- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip. Thermal layout is **compact** (one line per product, smaller font, tighter spacing) to reduce paper use.
+- Each invoice shows **مدفوع** / **متبقي** when relevant; **الذمم** (account balance) prints as a single line when outstanding. Full delivered/collected lifetime totals are on the receivables screens, not repeated on every slip.
 - **المندوب** (customer-linked sales rep) prints on the invoice when configured on the market customer.
 
 ### Market account statements (كشف حساب)
@@ -267,6 +267,8 @@ Market POS sells from stock loaded onto a sales rep's car, not directly from mai
 | Main warehouse | Single shared pool; goods receipts increase it; rep loads decrease it |
 | Rep car balance | `RepCarStockBalance` per `(salesRepId, itemId)` — what the register shows as on-hand |
 | Posted load undo | `POST /api/pos-market/rep-car-loads/:id/reverse` returns stock to the warehouse only when every line is still fully on the rep car and no `SALE_OUT` movement exists after the load was posted |
+| Rep unload | `POST /api/pos-market/rep-car-unloads` (+ post) returns stock from rep car to warehouse (`InventoryStockMovementType.REP_CAR_UNLOAD`); general-purpose alternative to reversing a specific load document |
+| Stock hub | `GET /api/pos-market/stock-overview` aggregates warehouse + all rep car balances; `/pos-market/stock-hub` routes transfers to load, unload, rep transfer, or ERP warehouse transfer APIs |
 | Session | Market sessions require `salesRepId` on open; cashiers pick a rep; `MARKET_REP` users are locked to `User.salesRepId` |
 | Sale | `completeSale` / `holdSale` deduct `RepCarStockBalance` only; warehouse is not decreased again |
 | Oversell | Blocked when cart quantity exceeds rep car on-hand (unless `POS_SELL_NEGATIVE_STOCK`) |
@@ -276,6 +278,9 @@ Market POS sells from stock loaded onto a sales rep's car, not directly from mai
 | Route | API | Permission | Purpose |
 |-------|-----|------------|---------|
 | `/pos-market/rep-loads` | `GET/POST/PATCH /api/pos-market/rep-car-loads` (+ post/cancel/reverse) | `POS_MARKET_MANAGE_REP_LOADS` | Admin load documents: warehouse → rep car; posted loads can be reversed only when the full quantity is still on the rep car and no sales happened after post |
+| `/pos-market/rep-car-unloads` (API) | `GET/POST/PATCH /api/pos-market/rep-car-unloads` (+ post/cancel) | `POS_MARKET_MANAGE_REP_LOADS` | Rep → warehouse unload documents (used by stock hub and direct API) |
+| `/pos-market/stock-hub` | `GET /api/pos-market/stock-overview` + routed transfer APIs | `POS_MARKET_MANAGE_REP_LOADS` (rep→rep requires `ADMIN`/`MANAGER`) | Unified network overview and transfer wizard |
+| `/pos-market/rep-transfers` | `GET/POST/PATCH /api/pos-market/rep-car-transfers` (+ post/cancel/reverse) | `ADMIN` / `MANAGER` only | Admin rep-to-rep transfer documents: move on-car stock between sales reps (no warehouse/GL); riders cannot access |
 | `/pos-market/rep-stocktakes` | `GET/POST/PATCH /api/pos-market/rep-car-stocktakes` (+ post/cancel) | `POS_MARKET_REP_STOCKTAKE` | Monthly rep-car physical count (per-product variance in UI) |
 | `/pos-market/my-stock` | `GET /api/pos-market/rep-car-stock`, `.../movements` | `MARKET_REP` only | Rep dashboard: on-hand + recent movements |
 | (register) | `GET /api/pos-market/catalog?salesRepId=` | session POS permissions | Catalog grid scoped to rep car on-hand |
@@ -297,7 +302,7 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 
 | Route | Workspace |
 |-------|-----------|
-| `/pos-market/register` | Register — destination market (customer) required, catalog, cart, checkout, receipt print; sell-by-weight items show quick-pick buttons (ربع كيلو / نص كيلو / 750 غم / كيلو) plus manual weight entry |
+| `/pos-market/register` | Register — destination market (customer) required, catalog, cart, checkout, **compact thermal receipt** print (one line per item); sell-by-weight items show quick-pick buttons (ربع كيلو / نص كيلو / 750 غم / كيلو) plus manual weight entry; **rep discount** on line (fixed or %) in the add-to-cart modal, weight modal, or cart; whole-invoice discount in cart; receipt shows **خصم المندوب** when applicable |
 | `/pos-market/sessions` | Shift list and session reports |
 | `/pos-market/held-sales` | Draft and held sales |
 | `/pos-market/accounting-review` | Pending sales approve/reject/reverse |
@@ -309,6 +314,9 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 | `/sales-receivables?tab=market-statement` | Same market receivables list + per-market A4 statement embedded in **Sales & Receivables** admin |
 | `/pos-market/rep-statement` | Rep sales report (كشف مبيعات مندوب) — sales invoices and returns, A4 print/PDF |
 | `/pos-market/rep-loads` | Rep car load documents (warehouse → rep) |
+| `/pos-market/stock-hub` | Network stock hub — transfer wizard + link to overview |
+| `/pos-market/stock-hub/overview` | Full-screen network stock overview grid (warehouses + all reps) |
+| `/pos-market/rep-transfers` | Rep car transfer documents (rep → rep) |
 | `/pos-market/rep-stocktakes` | Rep car monthly stocktake (جرد) with per-product variance |
 | `/pos-market/my-stock` | Rep car on-hand dashboard (`MARKET_REP` only) |
 | `/pos-market/settings` | Payment method GL account mappings |

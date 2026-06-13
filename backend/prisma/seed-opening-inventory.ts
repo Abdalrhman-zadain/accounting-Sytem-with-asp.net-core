@@ -91,6 +91,7 @@ type WarehouseSeedResult = {
 type ReceiptSeedResult = {
   createdLineCount: number;
   refreshedExistingReceipt: boolean;
+  skippedExisting?: boolean;
   receiptReference: string;
 };
 
@@ -803,6 +804,7 @@ async function ensureOpeningReceipt(
     description: string;
     warehouseId: string;
     rows: ImportedRow[];
+    addOnly?: boolean;
   },
 ) {
   const positiveRows = options.rows.filter((row) => row.quantity > 0);
@@ -836,6 +838,18 @@ async function ensureOpeningReceipt(
     throw new Error(
       `Receipt ${options.reference} already exists with status ${existing.status}. Delete or replace it manually before rerunning this import.`,
     );
+  }
+
+  if (existing && options.addOnly) {
+    console.log(
+      `Skipped existing opening receipt ${options.reference} (add-only mode; existing stock preserved).`,
+    );
+    return {
+      createdLineCount: 0,
+      refreshedExistingReceipt: false,
+      skippedExisting: true,
+      receiptReference: options.reference,
+    } satisfies ReceiptSeedResult;
   }
 
   const items = await prisma.inventoryItem.findMany({
@@ -957,7 +971,7 @@ async function ensureOpeningReceipt(
 
 export async function seedOpeningInventoryFromWorkbook(
   prisma: PrismaClient,
-  options: { dataPath?: string } = {},
+  options: { dataPath?: string; addOnly?: boolean } = {},
 ) {
   const { rows, skippedZeroQuantityLines, missingValueRows } =
     readOpeningInventoryRows(options.dataPath);
@@ -1003,11 +1017,14 @@ export async function seedOpeningInventoryFromWorkbook(
       description: config.receiptDescription,
       warehouseId: warehouse.id,
       rows: rows.filter((row) => row.warehouseKey === config.key),
+      addOnly: options.addOnly,
     });
 
     stockReceiptLinesCreated += receiptResult.createdLineCount;
 
-    if (receiptResult.refreshedExistingReceipt) {
+    if (receiptResult.skippedExisting) {
+      // logged inside ensureOpeningReceipt
+    } else if (receiptResult.refreshedExistingReceipt) {
       console.log(
         `Refreshed existing opening receipt ${receiptResult.receiptReference} for warehouse ${warehouse.code}.`,
       );
@@ -1054,11 +1071,14 @@ export async function seedOpeningInventoryFromWorkbook(
 
 async function main() {
   const prisma = new PrismaClient();
-  const dataPathArg = process.argv[2];
+  const cliArgs = process.argv.slice(2);
+  const addOnly = cliArgs.includes('--add-only');
+  const dataPathArg = cliArgs.find((arg) => !arg.startsWith('--'));
 
   try {
     await seedOpeningInventoryFromWorkbook(prisma, {
       dataPath: dataPathArg ? path.resolve(process.cwd(), dataPathArg) : DEFAULT_JSON_PATH,
+      addOnly,
     });
   } finally {
     await prisma.$disconnect();

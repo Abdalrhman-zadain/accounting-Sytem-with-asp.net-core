@@ -7,6 +7,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import { AccountOption, LedgerEntry } from "@/types/api";
 import { SectionHeading, Card } from "@/components/ui";
+import { AccountAutocomplete } from "@/features/accounting/chart-of-accounts/components/account-autocomplete";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { LuChartColumn as BarChart2, LuTrendingUp as TrendingUp, LuTrendingDown as TrendingDown } from "react-icons/lu";
 import { useTranslation } from "@/lib/i18n";
@@ -51,13 +52,14 @@ export function GeneralLedgerPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1.5">{t("ledger.filter.account")}</label>
-                        <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500/40">
-                            <option value="">{t("ledger.filter.selectPostingAccount")}</option>
-                            {postingAccounts.map((a: AccountOption) => (
-                                <option key={a.id} value={a.id}>{a.code} · {a.name}</option>
-                            ))}
-                        </select>
+                        <AccountAutocomplete
+                            accounts={postingAccounts}
+                            value={accountId}
+                            onChange={setAccountId}
+                            placeholder={t("ledger.filter.selectPostingAccount")}
+                            clearLabel={t("ledger.filter.selectPostingAccount")}
+                            inputClassName="rounded-xl bg-gray-100 py-2.5"
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1.5">{t("ledger.filter.dateFrom")}</label>

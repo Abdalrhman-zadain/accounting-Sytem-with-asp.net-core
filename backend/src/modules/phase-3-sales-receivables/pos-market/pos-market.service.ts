@@ -20,12 +20,19 @@ import {
 import {
   CreateRepCarLoadDto,
   CreateRepCarStocktakeDto,
+  CreateRepCarTransferDto,
+  CreateRepCarUnloadDto,
   UpdateRepCarLoadDto,
   UpdateRepCarStocktakeDto,
+  UpdateRepCarTransferDto,
+  UpdateRepCarUnloadDto,
 } from "./rep-car-stock/dto/rep-car-stock.dto";
 import { RepCarLoadService } from "./rep-car-stock/rep-car-load.service";
+import { MarketStockOverviewService } from "./rep-car-stock/market-stock-overview.service";
 import { RepCarStockService } from "./rep-car-stock/rep-car-stock.service";
 import { RepCarStocktakeService } from "./rep-car-stock/rep-car-stocktake.service";
+import { RepCarTransferService } from "./rep-car-stock/rep-car-transfer.service";
+import { RepCarUnloadService } from "./rep-car-stock/rep-car-unload.service";
 
 @Injectable()
 export class PosMarketService {
@@ -33,7 +40,10 @@ export class PosMarketService {
     private readonly terminal: PosTerminalService,
     private readonly repCarStockService: RepCarStockService,
     private readonly repCarLoadService: RepCarLoadService,
+    private readonly repCarUnloadService: RepCarUnloadService,
     private readonly repCarStocktakeService: RepCarStocktakeService,
+    private readonly repCarTransferService: RepCarTransferService,
+    private readonly marketStockOverviewService: MarketStockOverviewService,
   ) {}
 
   getHealth(user: AuthorizedUser) {
@@ -314,6 +324,90 @@ export class PosMarketService {
 
   reverseRepCarLoad(id: string, user?: AuthorizedUser) {
     return this.repCarLoadService.reverse(id, user);
+  }
+
+  getStockOverview(
+    query: { search?: string; itemId?: string; hideZero?: string },
+    user?: AuthorizedUser,
+  ) {
+    return this.marketStockOverviewService.getOverview(query, user);
+  }
+
+  listRepCarUnloads(
+    query: {
+      status?: string;
+      salesRepId?: string;
+      warehouseId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.repCarUnloadService.list(query, user);
+  }
+
+  getRepCarUnload(id: string, user?: AuthorizedUser) {
+    return this.repCarUnloadService.getById(id, user);
+  }
+
+  createRepCarUnload(dto: CreateRepCarUnloadDto, user?: AuthorizedUser) {
+    return this.repCarUnloadService.create(dto, user);
+  }
+
+  updateRepCarUnload(id: string, dto: UpdateRepCarUnloadDto, user?: AuthorizedUser) {
+    return this.repCarUnloadService.update(id, dto, user);
+  }
+
+  postRepCarUnload(id: string, user?: AuthorizedUser) {
+    return this.repCarUnloadService.post(id, user);
+  }
+
+  cancelRepCarUnload(id: string, user?: AuthorizedUser) {
+    return this.repCarUnloadService.cancel(id, user);
+  }
+
+  listRepCarTransfers(
+    query: {
+      status?: string;
+      fromSalesRepId?: string;
+      toSalesRepId?: string;
+      salesRepId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+    },
+    user?: AuthorizedUser,
+  ) {
+    return this.repCarTransferService.list(query, user);
+  }
+
+  getRepCarTransfer(id: string, user?: AuthorizedUser) {
+    return this.repCarTransferService.getById(id, user);
+  }
+
+  createRepCarTransfer(dto: CreateRepCarTransferDto, user?: AuthorizedUser) {
+    return this.repCarTransferService.create(dto, user);
+  }
+
+  updateRepCarTransfer(id: string, dto: UpdateRepCarTransferDto, user?: AuthorizedUser) {
+    return this.repCarTransferService.update(id, dto, user);
+  }
+
+  postRepCarTransfer(id: string, user?: AuthorizedUser) {
+    return this.repCarTransferService.post(id, user);
+  }
+
+  cancelRepCarTransfer(id: string, user?: AuthorizedUser) {
+    return this.repCarTransferService.cancel(id, user);
+  }
+
+  reverseRepCarTransfer(id: string, user?: AuthorizedUser) {
+    return this.repCarTransferService.reverse(id, user);
   }
 
   listRepCarStocktakes(

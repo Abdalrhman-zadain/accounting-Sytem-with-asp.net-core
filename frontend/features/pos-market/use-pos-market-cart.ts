@@ -110,7 +110,13 @@ export function usePosMarketCart({
   const addItem = useCallback(
     (
       item: InventoryItem,
-      options?: { weight?: number; quantity?: number; unitPrice?: number },
+      options?: {
+        weight?: number;
+        quantity?: number;
+        unitPrice?: number;
+        discountType?: DiscountType;
+        discountValue?: number;
+      },
     ): string | null => {
       const warehouseId = sessionWarehouseId ?? item.preferredWarehouseId ?? null;
       const sellByWeight = Boolean(item.allowFractionalQuantity);
@@ -137,20 +143,32 @@ export function usePosMarketCart({
         draftLine.baseUnitPrice = unitPrice;
       }
 
+      if (options?.discountType && parseAmount(options.discountValue) > 0) {
+        draftLine.discountType = options.discountType;
+        draftLine.discountValue = Math.max(0, parseAmount(options.discountValue));
+        draftLine.clientLineId = createLocalId();
+      }
+
+      const hasLineDiscount = draftLine.discountValue > 0;
+
       if (!sellByWeight) {
         let stockExceeded = false;
 
         setCartLines((current) => {
-          const existingIndex = hasExplicitEntry
-            ? current.findIndex(
-                (line) =>
-                  line.itemId === draftLine.itemId &&
-                  !line.sellByWeight &&
-                  line.unitPrice === draftLine.unitPrice,
-              )
-            : current.findIndex(
-                (line) => getCartLineKey(line) === getCartLineKey(draftLine),
-              );
+          const existingIndex =
+            hasExplicitEntry && !hasLineDiscount
+              ? current.findIndex(
+                  (line) =>
+                    line.itemId === draftLine.itemId &&
+                    !line.sellByWeight &&
+                    line.unitPrice === draftLine.unitPrice &&
+                    line.discountValue === 0,
+                )
+              : hasExplicitEntry || hasLineDiscount
+                ? -1
+                : current.findIndex(
+                    (line) => getCartLineKey(line) === getCartLineKey(draftLine),
+                  );
 
           const addQty = hasExplicitEntry ? draftLine.quantity : 1;
 
@@ -211,6 +229,47 @@ export function usePosMarketCart({
   const removeLine = useCallback((lineKey: string) => {
     setCartLines((current) => current.filter((line) => getCartLineKey(line) !== lineKey));
   }, []);
+
+  const updateLineDiscount = useCallback(
+    (lineKey: string, discountType: DiscountType, discountValue: number) => {
+      setCartLines((current) =>
+        current.map((line) => {
+          if (getCartLineKey(line) !== lineKey) return line;
+          return {
+            ...line,
+            discountType,
+            discountValue: Math.max(0, discountValue),
+          };
+        }),
+      );
+    },
+    [],
+  );
+
+  const updateLineWeight = useCallback(
+    (lineKey: string, weight: number): string | null => {
+      if (weight <= 0) {
+        setCartLines((current) => current.filter((line) => getCartLineKey(line) !== lineKey));
+        return null;
+      }
+
+      let stockExceeded = false;
+      setCartLines((current) =>
+        current.map((line) => {
+          if (getCartLineKey(line) !== lineKey) return line;
+          if (!line.sellByWeight) return line;
+          if (line.trackInventory && !negativeStockAllowed && weight > line.onHandQuantity) {
+            stockExceeded = true;
+            return line;
+          }
+          return { ...line, quantity: weight };
+        }),
+      );
+
+      return stockExceeded ? "STOCK_EXCEEDED" : null;
+    },
+    [negativeStockAllowed],
+  );
 
   const clearCart = useCallback(() => {
     setCartLines([]);
@@ -284,6 +343,8 @@ export function usePosMarketCart({
     setInvoiceDiscountValue,
     addItem,
     updateLineQuantity,
+    updateLineDiscount,
+    updateLineWeight,
     removeLine,
     clearCart,
     loadHeldSale,

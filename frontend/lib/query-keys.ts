@@ -281,6 +281,15 @@ export const queryKeys = {
   posMarketRepCarLoad(token: string | null, id: string | null) {
     return ["pos-market-rep-car-load", token, id] as const;
   },
+  posMarketStockOverview(token: string | null, search: string, hideZero: boolean) {
+    return ["pos-market-stock-overview", token, search, hideZero] as const;
+  },
+  posMarketRepCarTransfers(token: string | null) {
+    return ["pos-market-rep-car-transfers", token] as const;
+  },
+  posMarketRepCarTransfer(token: string | null, id: string | null) {
+    return ["pos-market-rep-car-transfer", token, id] as const;
+  },
   posMarketRepCarStocktakes(token: string | null) {
     return ["pos-market-rep-car-stocktakes", token] as const;
   },

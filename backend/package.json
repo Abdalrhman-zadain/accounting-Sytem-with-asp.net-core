@@ -26,6 +26,7 @@
     "clear:shouq": "ts-node prisma/clear-shouq-catalog.ts",
     "clear:shouq-stock": "ts-node prisma/clear-item-inventory-stock.ts",
     "clear:market-demo": "ts-node prisma/clear-legacy-market-demo.ts",
+    "clear:non-opening-inventory": "ts-node prisma/clear-non-opening-inventory-items.ts",
     "refresh:shouq-catalog": "npm run clear:shouq && npm run clear:market-demo && npm run seed:shouq && npm run clear:shouq-stock",
     "seed:market-cashier": "ts-node prisma/setup-pos-market-cashier.ts",
     "seed:market-showcase": "ts-node prisma/seed-market-showcase.ts",

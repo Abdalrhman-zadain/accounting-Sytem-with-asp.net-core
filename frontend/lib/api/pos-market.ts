@@ -75,9 +75,12 @@ import type {
   CompletePosSalePayload,
   CreateRepCarLoadPayload,
   CreateRepCarStocktakePayload,
+  CreateRepCarTransferPayload,
+  CreateRepCarUnloadPayload,
   CreatePosReturnPayload,
   HoldPosSalePayload,
   InventoryItem,
+  MarketStockOverview,
   PaginatedMeta,
   PosCompleteSaleResponse,
   PosInventoryImpactRow,
@@ -91,6 +94,8 @@ import type {
   PosSettings,
   PosTaxSummaryRow,
   RepCarLoad,
+  RepCarTransfer,
+  RepCarUnload,
   RepCarStockBalance,
   RepCarStockMovement,
   RepCarStocktake,
@@ -829,6 +834,136 @@ export async function cancelRepCarLoad(id: string, token?: string | null) {
 
 export async function reverseRepCarLoad(id: string, token?: string | null) {
   return apiRequest<RepCarLoad>(`/pos-market/rep-car-loads/${id}/reverse`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getMarketStockOverview(
+  params: { search?: string; itemId?: string; hideZero?: boolean } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.search) searchParams.set("search", params.search);
+  if (params.itemId) searchParams.set("itemId", params.itemId);
+  if (params.hideZero === false) searchParams.set("hideZero", "false");
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<MarketStockOverview>(`/pos-market/stock-overview${suffix}`, { token });
+}
+
+export async function getRepCarUnloads(
+  params: {
+    status?: string;
+    salesRepId?: string;
+    warehouseId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.salesRepId) searchParams.set("salesRepId", params.salesRepId);
+  if (params.warehouseId) searchParams.set("warehouseId", params.warehouseId);
+  if (params.search) searchParams.set("search", params.search);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<{ data: RepCarUnload[]; meta: PaginatedMeta }>(
+    `/pos-market/rep-car-unloads${suffix}`,
+    { token },
+  );
+}
+
+export async function createRepCarUnload(
+  payload: CreateRepCarUnloadPayload,
+  token?: string | null,
+) {
+  return apiRequest<RepCarUnload>("/pos-market/rep-car-unloads", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function postRepCarUnload(id: string, token?: string | null) {
+  return apiRequest<RepCarUnload>(`/pos-market/rep-car-unloads/${id}/post`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getRepCarTransfers(
+  params: {
+    status?: string;
+    fromSalesRepId?: string;
+    toSalesRepId?: string;
+    salesRepId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string | null,
+) {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.fromSalesRepId) searchParams.set("fromSalesRepId", params.fromSalesRepId);
+  if (params.toSalesRepId) searchParams.set("toSalesRepId", params.toSalesRepId);
+  if (params.salesRepId) searchParams.set("salesRepId", params.salesRepId);
+  if (params.search) searchParams.set("search", params.search);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  return apiRequest<{ data: RepCarTransfer[]; meta: PaginatedMeta }>(
+    `/pos-market/rep-car-transfers${suffix}`,
+    { token },
+  );
+}
+
+export async function getRepCarTransfer(id: string, token?: string | null) {
+  return apiRequest<RepCarTransfer>(`/pos-market/rep-car-transfers/${id}`, { token });
+}
+
+export async function createRepCarTransfer(
+  payload: CreateRepCarTransferPayload,
+  token?: string | null,
+) {
+  return apiRequest<RepCarTransfer>("/pos-market/rep-car-transfers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function updateRepCarTransfer(
+  id: string,
+  payload: Partial<CreateRepCarTransferPayload>,
+  token?: string | null,
+) {
+  return apiRequest<RepCarTransfer>(`/pos-market/rep-car-transfers/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function postRepCarTransfer(id: string, token?: string | null) {
+  return apiRequest<RepCarTransfer>(`/pos-market/rep-car-transfers/${id}/post`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function cancelRepCarTransfer(id: string, token?: string | null) {
+  return apiRequest<RepCarTransfer>(`/pos-market/rep-car-transfers/${id}/cancel`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function reverseRepCarTransfer(id: string, token?: string | null) {
+  return apiRequest<RepCarTransfer>(`/pos-market/rep-car-transfers/${id}/reverse`, {
     method: "POST",
     token,
   });

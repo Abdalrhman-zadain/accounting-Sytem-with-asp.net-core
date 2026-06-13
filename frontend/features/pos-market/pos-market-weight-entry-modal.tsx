@@ -5,7 +5,11 @@ import React from "react";
 import { Modal } from "@/components/ui";
 import {
   formatCurrency,
+  getLineBase,
+  getLineDiscountAmount,
+  getLineTotal,
   parseAmount,
+  type DiscountType,
 } from "@/features/pos-market/pos-market-cart-utils";
 import {
   buildWeightPresets,
@@ -17,8 +21,15 @@ import {
   parseWeightInput,
 } from "@/features/pos-market/pos-market-weight-utils";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
+import { useTranslation } from "@/lib/i18n";
 import { getLocalizedText } from "@/lib/utils";
 import type { InventoryItem } from "@/types/api";
+
+export type PosMarketWeightEntryPayload = {
+  weight: number;
+  discountType?: DiscountType;
+  discountValue?: number;
+};
 
 type PosMarketWeightEntryModalProps = {
   isOpen: boolean;
@@ -26,7 +37,7 @@ type PosMarketWeightEntryModalProps = {
   language: string;
   currencyCode?: string;
   onClose: () => void;
-  onConfirm: (weight: number) => void;
+  onConfirm: (payload: PosMarketWeightEntryPayload) => void;
 };
 
 export function PosMarketWeightEntryModal({
@@ -37,6 +48,7 @@ export function PosMarketWeightEntryModal({
   onClose,
   onConfirm,
 }: PosMarketWeightEntryModalProps) {
+  const { t } = useTranslation();
   const isAr = language === "ar";
   const precision = item ? getQuantityPrecision(item) : 3;
   const step = getWeightQuantityStep(precision);
@@ -46,6 +58,8 @@ export function PosMarketWeightEntryModal({
   const onHand = item?.trackInventory ? parseAmount(item.onHandQuantity) : null;
   const [weightInput, setWeightInput] = React.useState("");
   const [selectedPreset, setSelectedPreset] = React.useState<number | null>(null);
+  const [discountType, setDiscountType] = React.useState<DiscountType>("FIXED");
+  const [discountValueInput, setDiscountValueInput] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
   const weightPresets = React.useMemo(
@@ -62,12 +76,39 @@ export function PosMarketWeightEntryModal({
     if (!isOpen) return;
     setWeightInput("");
     setSelectedPreset(null);
+    setDiscountType("FIXED");
+    setDiscountValueInput("");
     setError(null);
   }, [isOpen, item?.id]);
 
   const parsedWeight = parseWeightInput(weightInput, precision);
-  const lineTotal =
-    parsedWeight != null ? Number((parsedWeight * unitPrice).toFixed(2)) : null;
+  const discountValue = Math.max(0, parseAmount(discountValueInput));
+
+  const previewLine =
+    parsedWeight != null && item
+      ? {
+          itemId: item.id,
+          name: item.name,
+          code: item.code,
+          unit: unitCode,
+          itemType: item.type,
+          quantity: parsedWeight,
+          unitPrice,
+          baseUnitPrice: unitPrice,
+          discountType,
+          discountValue,
+          taxRate: 0,
+          trackInventory: item.trackInventory,
+          unitCost: 0,
+          onHandQuantity: parseAmount(item.onHandQuantity),
+          sellByWeight: true,
+          quantityPrecision: precision,
+        }
+      : null;
+
+  const lineBase = previewLine ? getLineBase(previewLine) : null;
+  const lineDiscount = previewLine ? getLineDiscountAmount(previewLine) : null;
+  const lineTotalAfterDiscount = previewLine ? getLineTotal(previewLine) : null;
 
   const handlePresetSelect = (value: number) => {
     setSelectedPreset(value);
@@ -92,17 +133,23 @@ export function PosMarketWeightEntryModal({
       return;
     }
     if (item?.trackInventory) {
-      const onHand = parseAmount(item.onHandQuantity);
-      if (weight > onHand) {
+      const onHandQty = parseAmount(item.onHandQuantity);
+      if (weight > onHandQty) {
         setError(
           isAr
-            ? `الكمية المتاحة ${formatWeightQuantity(onHand, unitCode, precision)}`
-            : `Available stock is ${formatWeightQuantity(onHand, unitCode, precision)}`,
+            ? `الكمية المتاحة ${formatWeightQuantity(onHandQty, unitCode, precision)}`
+            : `Available stock is ${formatWeightQuantity(onHandQty, unitCode, precision)}`,
         );
         return;
       }
     }
-    onConfirm(weight);
+
+    const payload: PosMarketWeightEntryPayload = { weight };
+    if (discountValue > 0) {
+      payload.discountType = discountType;
+      payload.discountValue = discountValue;
+    }
+    onConfirm(payload);
   };
 
   return (
@@ -200,17 +247,66 @@ export function PosMarketWeightEntryModal({
             />
           </div>
 
-          {lineTotal != null ? (
+          <div
+            className="rounded-xl border p-3"
+            style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+          >
+            <p className="mb-2 text-xs font-bold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+              {t("posMarket.discount.repDiscount")}
+            </p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  setDiscountType((current) => (current === "FIXED" ? "PERCENT" : "FIXED"))
+                }
+                className="rounded-lg border px-2 py-1.5 text-[10px] font-semibold"
+                style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+              >
+                {discountType === "FIXED" ? t("posMarket.discount.fixed") : t("posMarket.discount.percent")}
+              </button>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={discountValueInput}
+                onChange={(event) => setDiscountValueInput(event.target.value)}
+                placeholder="0"
+                className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs font-semibold"
+                style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+                dir="ltr"
+              />
+            </div>
+          </div>
+
+          {lineBase != null ? (
             <div
-              className="rounded-xl border px-3 py-2 text-sm font-bold"
+              className="space-y-1 rounded-xl border px-3 py-2 text-xs font-semibold"
               style={{
                 borderColor: POS_MARKET_THEME.colors.outline,
                 backgroundColor: POS_MARKET_THEME.colors.primarySoft,
-                color: POS_MARKET_THEME.colors.primary,
+                color: POS_MARKET_THEME.colors.text,
               }}
             >
-              {isAr ? "إجمالي السطر: " : "Line total: "}
-              {formatCurrency(lineTotal, currencyCode)}
+              <div className="flex justify-between">
+                <span>{t("pos.review.subtotal")}</span>
+                <span dir="ltr">{formatCurrency(lineBase, currencyCode)}</span>
+              </div>
+              {lineDiscount != null && lineDiscount > 0 ? (
+                <div className="flex justify-between text-emerald-700">
+                  <span>{t("posMarket.discount.repDiscount")}</span>
+                  <span dir="ltr">-{formatCurrency(lineDiscount, currencyCode)}</span>
+                </div>
+              ) : null}
+              {lineTotalAfterDiscount != null ? (
+                <div
+                  className="flex justify-between border-t pt-1 text-sm font-bold"
+                  style={{ borderColor: POS_MARKET_THEME.colors.outline, color: POS_MARKET_THEME.colors.primary }}
+                >
+                  <span>{t("posMarket.discount.afterDiscount")}</span>
+                  <span dir="ltr">{formatCurrency(lineTotalAfterDiscount, currencyCode)}</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

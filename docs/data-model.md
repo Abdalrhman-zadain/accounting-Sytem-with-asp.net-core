@@ -167,6 +167,10 @@ Main models:
 - `RepCarStockBalance`
 - `RepCarLoad`
 - `RepCarLoadLine`
+- `RepCarUnload`
+- `RepCarUnloadLine`
+- `RepCarTransfer`
+- `RepCarTransferLine`
 - `RepCarStocktake`
 - `RepCarStocktakeLine`
 - `RepCarStockMovement`
@@ -184,6 +188,8 @@ Operational meaning:
 
 - posting a rep car load decreases main-warehouse stock through `InventoryPostingService` (`InventoryStockMovementType.REP_CAR_LOAD`) and increases the target rep's `RepCarStockBalance`
 - reversing a posted rep car load (`POST /api/pos-market/rep-car-loads/:id/reverse`) is allowed only when every loaded quantity is still on the rep car and no `SALE_OUT` movement exists after the load was posted; reversal writes `RepCarStockMovementType.LOAD_OUT`, restores warehouse stock via `InventoryStockMovementType.REP_CAR_LOAD_REVERSAL`, and marks the load `REVERSED`
+- rep car unload (`RepCarUnload`) posts rep → warehouse: decreases `RepCarStockBalance`, writes `RepCarStockMovementType.LOAD_OUT`, increases warehouse stock via `InventoryStockMovementType.REP_CAR_UNLOAD` at the rep's average unit cost
+- rep-to-rep transfers (`RepCarTransfer`) move stock between `RepCarStockBalance` rows only — no warehouse or GL posting; post writes `TRANSFER_OUT` on the source rep and `TRANSFER_IN` on the destination rep at the source's average unit cost; reverse is allowed only when the destination still holds the full transferred quantity and has no `SALE_OUT` after the transfer was posted
 - market POS sale completion deducts `RepCarStockBalance` for the session's `salesRepId` and writes `RepCarStockMovement` rows; it does not post a second warehouse issue for the same quantities
 - posting a rep car stocktake adjusts rep car balances to counted quantities and records variance movements; main-warehouse monthly جرد remains on ERP `InventoryAdjustment`
 - POS returns currently do not reverse rep car balances (documented limitation)

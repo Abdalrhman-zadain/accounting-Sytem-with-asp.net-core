@@ -8,7 +8,7 @@ import { formatCurrency } from "@/features/pos-market/pos-market-cart-utils";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import { getRepCarStock, getRepCarStockMovements } from "@/lib/api";
 import { isMarketRepUser } from "@/lib/auth-access";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -29,6 +29,12 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
       </div>
     </div>
   );
+}
+
+function movementLabel(movementType: string, t: (key: TranslationKey, vars?: Record<string, string | number>) => string) {
+  const key = `posMarket.myStock.movement.${movementType}` as TranslationKey;
+  const label = t(key);
+  return label === key ? movementType : label;
 }
 
 export function PosMarketMyStockWorkspace() {
@@ -163,7 +169,7 @@ export function PosMarketMyStockWorkspace() {
                     style={{ borderColor: POS_MARKET_THEME.colors.outline, color: POS_MARKET_THEME.colors.text }}
                   >
                     <td className="px-4 py-2">{row.transactionDate.slice(0, 10)}</td>
-                    <td className="px-4 py-2">{row.movementType}</td>
+                    <td className="px-4 py-2">{movementLabel(row.movementType, t)}</td>
                     <td className="px-4 py-2">{row.item.code}</td>
                     <td className="px-4 py-2">{row.transactionReference}</td>
                     <td className="px-4 py-2 text-end text-green-700">

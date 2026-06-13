@@ -8,6 +8,9 @@ import { PosMarketPrinterSettingsPanel } from "@/features/pos-market/pos-market-
 import { PosMarketReceivablesWorkspace } from "@/features/pos-market/pos-market-receivables-workspace";
 import { PosMarketMyStockWorkspace } from "@/features/pos-market/pos-market-my-stock-workspace";
 import { PosMarketRepLoadWorkspace } from "@/features/pos-market/pos-market-rep-load-workspace";
+import { PosMarketRepTransferWorkspace } from "@/features/pos-market/pos-market-rep-transfer-workspace";
+import { PosMarketStockHubWorkspace } from "@/features/pos-market/pos-market-stock-hub-workspace";
+import { PosMarketStockOverviewWorkspace } from "@/features/pos-market/pos-market-stock-overview-workspace";
 import { PosMarketRepStocktakeWorkspace } from "@/features/pos-market/pos-market-rep-stocktake-workspace";
 import { PosMarketRegisterWorkspace } from "@/features/pos-market/pos-market-register-workspace";
 import { PosMarketReportsWorkspace } from "@/features/pos-market/pos-market-reports-workspace";
@@ -29,6 +32,9 @@ type PosMarketWorkspace =
   | "printers"
   | "receivables"
   | "repLoads"
+  | "repTransfers"
+  | "stockHub"
+  | "stockOverview"
   | "repStocktakes"
   | "myStock"
   | "settings";
@@ -43,6 +49,9 @@ const pathnameWorkspaceMap: Record<string, PosMarketWorkspace> = {
   "/pos-market/printers": "printers",
   "/pos-market/receivables": "receivables",
   "/pos-market/rep-loads": "repLoads",
+  "/pos-market/rep-transfers": "repTransfers",
+  "/pos-market/stock-hub": "stockHub",
+  "/pos-market/stock-hub/overview": "stockOverview",
   "/pos-market/rep-stocktakes": "repStocktakes",
   "/pos-market/my-stock": "myStock",
   "/pos-market/settings": "settings",
@@ -58,6 +67,9 @@ const workspaceTitleKey: Record<PosMarketWorkspace, string> = {
   printers: "posMarket.workspace.printers",
   receivables: "posMarket.workspace.receivables",
   repLoads: "posMarket.workspace.repLoads",
+  repTransfers: "posMarket.workspace.repTransfers",
+  stockHub: "posMarket.workspace.stockHub",
+  stockOverview: "posMarket.stockHub.overviewTitle",
   repStocktakes: "posMarket.workspace.repStocktakes",
   myStock: "posMarket.workspace.myStock",
   settings: "posMarket.workspace.settings",
@@ -74,6 +86,7 @@ export function PosMarketPage() {
   const { user } = useAuth();
 
   const isFullBleedRegister = workspace === "register";
+  const isFullBleedStockOverview = workspace === "stockOverview";
   const workspaceDescriptionKey =
     workspace === "receivables" && isMarketRepUser(user)
       ? "posMarket.workspace.accountStatements"
@@ -99,6 +112,12 @@ export function PosMarketPage() {
         return <PosMarketReceivablesWorkspace />;
       case "repLoads":
         return <PosMarketRepLoadWorkspace />;
+      case "repTransfers":
+        return <PosMarketRepTransferWorkspace />;
+      case "stockHub":
+        return <PosMarketStockHubWorkspace />;
+      case "stockOverview":
+        return <PosMarketStockOverviewWorkspace />;
       case "repStocktakes":
         return <PosMarketRepStocktakeWorkspace />;
       case "myStock":
@@ -110,7 +129,7 @@ export function PosMarketPage() {
     }
   })();
 
-  if (isFullBleedRegister) {
+  if (isFullBleedRegister || isFullBleedStockOverview) {
     return content;
   }
 

@@ -21,8 +21,12 @@ import {
 import {
   CreateRepCarLoadDto,
   CreateRepCarStocktakeDto,
+  CreateRepCarTransferDto,
+  CreateRepCarUnloadDto,
   UpdateRepCarLoadDto,
   UpdateRepCarStocktakeDto,
+  UpdateRepCarTransferDto,
+  UpdateRepCarUnloadDto,
 } from "./rep-car-stock/dto/rep-car-stock.dto";
 import { PosMarketService } from "./pos-market.service";
 
@@ -441,6 +445,132 @@ export class PosMarketController {
   @Post("rep-car-loads/:id/reverse")
   reverseRepCarLoad(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
     return this.service.reverseRepCarLoad(id, req.user);
+  }
+
+  @Get("stock-overview")
+  getStockOverview(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Query("search") search?: string,
+    @Query("itemId") itemId?: string,
+    @Query("hideZero") hideZero?: string,
+  ) {
+    return this.service.getStockOverview({ search, itemId, hideZero }, req.user);
+  }
+
+  @Get("rep-car-unloads")
+  listRepCarUnloads(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Query("status") status?: string,
+    @Query("salesRepId") salesRepId?: string,
+    @Query("warehouseId") warehouseId?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.service.listRepCarUnloads(
+      { status, salesRepId, warehouseId, dateFrom, dateTo, search, page, limit },
+      req.user,
+    );
+  }
+
+  @Get("rep-car-unloads/:id")
+  getRepCarUnload(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.getRepCarUnload(id, req.user);
+  }
+
+  @Post("rep-car-unloads")
+  createRepCarUnload(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Body() dto: CreateRepCarUnloadDto,
+  ) {
+    return this.service.createRepCarUnload(dto, req.user);
+  }
+
+  @Patch("rep-car-unloads/:id")
+  updateRepCarUnload(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Param("id") id: string,
+    @Body() dto: UpdateRepCarUnloadDto,
+  ) {
+    return this.service.updateRepCarUnload(id, dto, req.user);
+  }
+
+  @Post("rep-car-unloads/:id/post")
+  postRepCarUnload(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.postRepCarUnload(id, req.user);
+  }
+
+  @Post("rep-car-unloads/:id/cancel")
+  cancelRepCarUnload(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.cancelRepCarUnload(id, req.user);
+  }
+
+  @Get("rep-car-transfers")
+  listRepCarTransfers(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Query("status") status?: string,
+    @Query("fromSalesRepId") fromSalesRepId?: string,
+    @Query("toSalesRepId") toSalesRepId?: string,
+    @Query("salesRepId") salesRepId?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.service.listRepCarTransfers(
+      {
+        status,
+        fromSalesRepId,
+        toSalesRepId,
+        salesRepId,
+        dateFrom,
+        dateTo,
+        search,
+        page,
+        limit,
+      },
+      req.user,
+    );
+  }
+
+  @Get("rep-car-transfers/:id")
+  getRepCarTransfer(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.getRepCarTransfer(id, req.user);
+  }
+
+  @Post("rep-car-transfers")
+  createRepCarTransfer(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Body() dto: CreateRepCarTransferDto,
+  ) {
+    return this.service.createRepCarTransfer(dto, req.user);
+  }
+
+  @Patch("rep-car-transfers/:id")
+  updateRepCarTransfer(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Param("id") id: string,
+    @Body() dto: UpdateRepCarTransferDto,
+  ) {
+    return this.service.updateRepCarTransfer(id, dto, req.user);
+  }
+
+  @Post("rep-car-transfers/:id/post")
+  postRepCarTransfer(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.postRepCarTransfer(id, req.user);
+  }
+
+  @Post("rep-car-transfers/:id/cancel")
+  cancelRepCarTransfer(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.cancelRepCarTransfer(id, req.user);
+  }
+
+  @Post("rep-car-transfers/:id/reverse")
+  reverseRepCarTransfer(@Req() req: Request & { user?: AuthorizedUser }, @Param("id") id: string) {
+    return this.service.reverseRepCarTransfer(id, req.user);
   }
 
   @Get("rep-car-stocktakes")

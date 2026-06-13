@@ -262,8 +262,8 @@ What else to check:
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE` for partial/pay-later market sales; collection uses `POS_MARKET_COLLECT_RECEIVABLE` on `/api/pos-market/receivables/collect` (FIFO allocation to oldest open deliveries when allocations are omitted)
 - market POS sales require a destination market (`customerId` on complete/hold/draft); walk-in (`POS-WALKIN`) is rejected in `pos.service.ts` for `PosProduct.MARKET`; register destination picker lists every active ERP customer (sales rep on the customer is optional for selling, still used for rep-scoped receivables views)
 - market POS sessions require `salesRepId` on open; register catalog uses `GET /api/pos-market/catalog?salesRepId=` (rep car on-hand, not warehouse on-hand)
-- rep car loads and stocktakes live in `backend/.../pos-market/rep-car-stock/` with routes under `/api/pos-market/rep-car-loads*` and `/api/pos-market/rep-car-stocktakes*`; permissions `POS_MARKET_MANAGE_REP_LOADS` and `POS_MARKET_REP_STOCKTAKE`
-- main-warehouse intake (buying stock in qty + cost) uses ERP `/inventory` goods receipts, not Market POS; rep loads only move warehouse → rep car
+- rep car loads, transfers, and stocktakes live in `backend/.../pos-market/rep-car-stock/` with routes under `/api/pos-market/rep-car-loads*`, `/api/pos-market/rep-car-transfers*`, and `/api/pos-market/rep-car-stocktakes*`; rep loads use `POS_MARKET_MANAGE_REP_LOADS`; rep-to-rep transfers are **admin/manager only** (not exposed to `MARKET_REP` riders)
+- main-warehouse intake (buying stock in qty + cost) uses ERP `/inventory` goods receipts, not Market POS; rep loads only move warehouse → rep car; rep transfers move rep car → rep car
 - `MARKET_REP` route `/pos-market/my-stock` uses `GET /api/pos-market/rep-car-stock` and is scoped to `User.salesRepId`
 - market `completeSale` deducts `RepCarStockBalance` via `RepCarStockService.applySaleDeduction`; do not add a parallel warehouse issue for market sales
 - restaurant cashiers must remain limited to `/api/pos/*` and must not receive `/api/pos-market/*` through the JWT cashier guard

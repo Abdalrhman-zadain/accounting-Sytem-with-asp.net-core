@@ -2,9 +2,9 @@
 
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { LuPlus as Plus, LuRefreshCw as RefreshCw, LuSend as Send, LuChevronDown as ChevronDown, LuChevronRight as ChevronRight, LuCircleAlert as AlertCircle, LuPencil as Pencil } from "react-icons/lu";
+import { AccountAutocomplete } from "@/features/accounting/chart-of-accounts/components/account-autocomplete";
 import {
     getJournalEntries,
     createJournalEntry,
@@ -39,200 +39,6 @@ function JournalStatusPill({ status }: { status: string }) {
 
 type LineForm = { accountId: string; description: string; debitAmount: string; creditAmount: string };
 const EMPTY_LINE: LineForm = { accountId: "", description: "", debitAmount: "", creditAmount: "" };
-
-function normalizeSearchText(value: string) {
-    return value.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function getLocalizedAccountName(account: Pick<AccountOption, "name" | "nameAr">, language: string) {
-    if (language === "ar") {
-        return account.nameAr?.trim() || account.name;
-    }
-
-    return account.name?.trim() || account.nameAr?.trim() || "";
-}
-
-function AccountAutocomplete({
-    accounts,
-    value,
-    onChange,
-    language,
-}: {
-    accounts: AccountOption[];
-    value: string;
-    onChange: (nextAccountId: string) => void;
-    language: string;
-}) {
-    const { t } = useTranslation();
-    const selected = accounts.find((a) => a.id === value) ?? null;
-    const [query, setQuery] = useState("");
-    const [open, setOpen] = useState(false);
-    const [activeIndex, setActiveIndex] = useState(0);
-    const rootRef = useRef<HTMLDivElement | null>(null);
-    const inputRef = useRef<HTMLInputElement | null>(null);
-    const menuRef = useRef<HTMLDivElement | null>(null);
-    const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
-
-    const filtered = useMemo(() => {
-        const q = normalizeSearchText(query);
-        if (!q) return accounts.slice(0, 50);
-
-        const starts: AccountOption[] = [];
-        const contains: AccountOption[] = [];
-
-        for (const a of accounts) {
-            const hay = normalizeSearchText(`${a.code} ${a.name} ${a.nameAr ?? ""}`);
-            if (hay.startsWith(q)) starts.push(a);
-            else if (hay.includes(q)) contains.push(a);
-            if (starts.length + contains.length >= 50) break;
-        }
-        return [...starts, ...contains];
-    }, [accounts, query]);
-
-    const displayValue = open ? query : selected ? `${selected.code} · ${getLocalizedAccountName(selected, language)}` : "";
-
-    useEffect(() => {
-        if (!open) return;
-        setActiveIndex(0);
-
-        const updateRect = () => {
-            const el = inputRef.current;
-            if (!el) return;
-            const r = el.getBoundingClientRect();
-            setMenuRect({ left: r.left, top: r.bottom + 6, width: r.width });
-        };
-
-        updateRect();
-
-        const onPointerDown = (event: PointerEvent) => {
-            const root = rootRef.current;
-            const menu = menuRef.current;
-            if (!root) return;
-            if (event.target instanceof Node && root.contains(event.target)) return;
-            if (event.target instanceof Node && menu?.contains(event.target)) return;
-            setOpen(false);
-        };
-
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                setOpen(false);
-            }
-        };
-
-        window.addEventListener("scroll", updateRect, true);
-        window.addEventListener("resize", updateRect);
-        document.addEventListener("pointerdown", onPointerDown);
-        document.addEventListener("keydown", onKeyDown);
-
-        return () => {
-            window.removeEventListener("scroll", updateRect, true);
-            window.removeEventListener("resize", updateRect);
-            document.removeEventListener("pointerdown", onPointerDown);
-            document.removeEventListener("keydown", onKeyDown);
-        };
-    }, [open]);
-
-    return (
-        <div ref={rootRef} className="relative">
-            <input
-                ref={inputRef}
-                value={displayValue}
-                onChange={(e) => {
-                    setQuery(e.target.value);
-                    setOpen(true);
-                }}
-                onFocus={() => setOpen(true)}
-                onKeyDown={(e) => {
-                    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-                        e.preventDefault();
-                        setOpen(true);
-                        return;
-                    }
-                    if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setActiveIndex((i) => Math.min(i + 1, filtered.length)); // 0 is "clear", so allow up to filtered.length
-                    }
-                    if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        setActiveIndex((i) => Math.max(i - 1, 0));
-                    }
-                    if (e.key === "Enter") {
-                        if (!open) return;
-                        e.preventDefault();
-                        if (activeIndex === 0) {
-                            onChange("");
-                        } else {
-                            const pick = filtered[activeIndex - 1];
-                            if (pick) onChange(pick.id);
-                        }
-                        setQuery("");
-                        setOpen(false);
-                    }
-                }}
-                placeholder={t("journal.accountSelect.searchPlaceholder")}
-                className="w-full rounded-lg border border-gray-200 bg-gray-100 px-2 py-2 text-xs text-gray-900 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
-            />
-
-            {open && menuRect
-                ? createPortal(
-                    <div
-                        ref={menuRef}
-                        className="fixed z-[1000] rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden"
-                        style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width }}
-                    >
-                        <div className="max-h-64 overflow-auto">
-                            <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                    onChange("");
-                                    setQuery("");
-                                    setOpen(false);
-                                }}
-                                className={cn(
-                                    "w-full px-3 py-2 text-xs text-gray-500 hover:bg-gray-50",
-                                    language === "ar" ? "text-right" : "text-left",
-                                    activeIndex === 0 && "bg-teal-500/10",
-                                )}
-                            >
-                                {t("journal.accountSelect.placeholder")}
-                            </button>
-                            {filtered.map((a, idx) => {
-                                const isActive = activeIndex === idx + 1;
-                                return (
-                                    <button
-                                        key={a.id}
-                                        type="button"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onMouseEnter={() => setActiveIndex(idx + 1)}
-                                        onClick={() => {
-                                            onChange(a.id);
-                                            setQuery("");
-                                            setOpen(false);
-                                        }}
-                                        className={cn(
-                                            "w-full px-3 py-2 text-xs hover:bg-gray-50",
-                                            language === "ar" ? "text-right" : "text-left",
-                                            isActive && "bg-teal-500/10",
-                                        )}
-                                    >
-                                        <span className={cn("font-mono text-gray-500", language === "ar" ? "ml-2" : "mr-2")}>{a.code}</span>
-                                        <span className="text-gray-900">{getLocalizedAccountName(a, language)}</span>
-                                    </button>
-                                );
-                            })}
-                            {filtered.length === 0 && (
-                                <div className="px-3 py-3 text-xs text-gray-500">{t("journal.accountSelect.noMatches")}</div>
-                            )}
-                        </div>
-                    </div>,
-                    document.body,
-                )
-                : null}
-        </div>
-    );
-}
 
 export function JournalEntriesPage() {
     const { token, user } = useAuth();
@@ -616,7 +422,6 @@ export function JournalEntriesPage() {
                                                     accounts={postingAccounts}
                                                     value={line.accountId}
                                                     onChange={(id) => updateLine(i, "accountId", id)}
-                                                    language={language}
                                                 />
                                             </td>
                                             <td className="px-4 py-3 align-top">

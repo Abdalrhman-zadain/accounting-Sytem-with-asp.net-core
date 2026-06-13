@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LuSave } from "react-icons/lu";
 
+import { AccountAutocomplete } from "@/features/accounting/chart-of-accounts/components/account-autocomplete";
 import { Card } from "@/components/ui";
 import { getErrorMessage } from "@/features/pos-market/pos-market-cart-utils";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
@@ -91,21 +92,17 @@ export function PosMarketSettingsWorkspace() {
               <span className="text-sm font-bold" style={{ color: POS_MARKET_THEME.colors.text }}>
                 {t(field.labelKey)}
               </span>
-              <select
-                value={mappings[field.key]}
-                onChange={(event) =>
-                  setMappings((current) => ({ ...current, [field.key]: event.target.value }))
-                }
-                className="mt-2 w-full rounded-[16px] border px-3 py-3 text-sm font-semibold"
-                style={{ borderColor: POS_MARKET_THEME.colors.outline }}
-              >
-                <option value="">{t("posMarket.settings.selectAccount")}</option>
-                {accountOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.code} · {option.name}
-                  </option>
-                ))}
-              </select>
+              <div className="mt-2">
+                <AccountAutocomplete
+                  accounts={accountOptions}
+                  value={mappings[field.key]}
+                  onChange={(accountId) =>
+                    setMappings((current) => ({ ...current, [field.key]: accountId }))
+                  }
+                  displayMode="arabicOnly"
+                  inputClassName="rounded-[16px] border px-3 py-3 text-sm font-semibold"
+                />
+              </div>
             </label>
           ))}
         </div>
