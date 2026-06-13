@@ -16,6 +16,8 @@ import { PosMarketReviewWorkspace } from "@/features/pos-market/pos-market-revie
 import { PosMarketSessionsWorkspace } from "@/features/pos-market/pos-market-sessions-workspace";
 import { PosMarketSettingsWorkspace } from "@/features/pos-market/pos-market-settings-workspace";
 import { useTranslation } from "@/lib/i18n";
+import { isMarketRepUser } from "@/lib/auth-access";
+import { useAuth } from "@/providers/auth-provider";
 
 type PosMarketWorkspace =
   | "register"
@@ -69,8 +71,13 @@ export function PosMarketPage() {
   const pathname = usePathname();
   const workspace = resolveWorkspace(pathname);
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   const isFullBleedRegister = workspace === "register";
+  const workspaceDescriptionKey =
+    workspace === "receivables" && isMarketRepUser(user)
+      ? "posMarket.workspace.accountStatements"
+      : workspaceTitleKey[workspace];
 
   const content = (() => {
     switch (workspace) {
@@ -111,7 +118,7 @@ export function PosMarketPage() {
     <PageShell>
       <SectionHeading
         title={t("posMarket.title")}
-        description={t(workspaceTitleKey[workspace])}
+        description={t(workspaceDescriptionKey)}
       />
       <div className="rounded-3xl border border-[#d5deea] p-1">
         {content}

@@ -13,14 +13,17 @@ import {
   getErrorMessage,
   parseAmount,
 } from "@/features/pos-market/pos-market-cart-utils";
-import { printMarketCollectionReceipt } from "@/features/pos-market/pos-market-print-service";
+import {
+  printMarketAccountStatement,
+  printMarketCollectionReceipt,
+} from "@/features/pos-market/pos-market-print-service";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import {
   collectPosMarketReceivables,
   getBankCashAccounts,
   getPosMarketReceivableDetail,
 } from "@/lib/api";
-import { hasPermission } from "@/lib/auth-access";
+import { hasPermission, isMarketRepUser } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
@@ -71,6 +74,7 @@ export function PosMarketReceivableDetailWorkspace({
   const [flashTone, setFlashTone] = useState<"success" | "error">("success");
 
   const canCollect = hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
+  const isRep = isMarketRepUser(user);
 
   const detailQuery = useQuery({
     queryKey: queryKeys.posMarketReceivableDetail(token ?? null, customerId),
@@ -250,12 +254,12 @@ export function PosMarketReceivableDetailWorkspace({
           style={{ color: POS_MARKET_THEME.colors.primary }}
         >
           <LuArrowRight className="h-4 w-4 rtl:rotate-180" />
-          {t("posMarket.receivables.detail.back")}
+          {t(isRep ? "posMarket.statement.back" : "posMarket.receivables.detail.back")}
         </Link>
       </div>
 
       <SectionHeading
-        title={detail?.customer.customerName ?? t("posMarket.receivables.detail.title")}
+        title={detail?.customer.customerName ?? t("posMarket.statement.detailTitle")}
         description={detail?.customer.customerCode ?? ""}
       />
 
@@ -284,20 +288,47 @@ export function PosMarketReceivableDetailWorkspace({
                     </p>
                   ) : null}
                 </div>
-                {canCollect && outstanding > 0 ? (
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      setCollectAmount(detail.summary.outstandingBalance);
-                      setCollectBankAccountId(bankAccounts[0]?.id ?? "");
-                      setIsCollectOpen(true);
+                      if (!detail) return;
+                      void printMarketAccountStatement({
+                        statementDate: new Date().toISOString(),
+                        companyName: "Simple Account",
+                        customerName: detail.customer.customerName,
+                        customerCode: detail.customer.customerCode,
+                        salesRepName: detail.customer.salesRepName,
+                        totalDelivered: parseAmount(detail.summary.totalDelivered),
+                        totalPaid: parseAmount(detail.summary.totalPaid),
+                        outstandingBalance: parseAmount(detail.summary.outstandingBalance),
+                        printedBy: user?.name ?? user?.username ?? null,
+                      });
                     }}
-                    className="rounded-xl px-4 py-2.5 text-sm font-black text-white"
-                    style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
+                    className="rounded-xl border px-4 py-2.5 text-sm font-black"
+                    style={{
+                      borderColor: POS_MARKET_THEME.colors.outline,
+                      color: POS_MARKET_THEME.colors.text,
+                      backgroundColor: POS_MARKET_THEME.colors.cardSurface,
+                    }}
                   >
-                    {t("posMarket.receivables.collect")}
+                    {t("posMarket.statement.print")}
                   </button>
-                ) : null}
+                  {canCollect && outstanding > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCollectAmount(detail.summary.outstandingBalance);
+                        setCollectBankAccountId(bankAccounts[0]?.id ?? "");
+                        setIsCollectOpen(true);
+                      }}
+                      className="rounded-xl px-4 py-2.5 text-sm font-black text-white"
+                      style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
+                    >
+                      {t("posMarket.receivables.collect")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               {flashMessage ? (
@@ -314,15 +345,15 @@ export function PosMarketReceivableDetailWorkspace({
 
               <div className="mt-6 grid gap-4 md:grid-cols-3">
                 <SummaryTile
-                  label={t("posMarket.receivables.detail.totalDelivered")}
+                  label={t("posMarket.statement.delivered")}
                   value={formatCurrency(parseAmount(detail.summary.totalDelivered))}
                 />
                 <SummaryTile
-                  label={t("posMarket.receivables.detail.totalPaid")}
+                  label={t("posMarket.statement.collected")}
                   value={formatCurrency(parseAmount(detail.summary.totalPaid))}
                 />
                 <SummaryTile
-                  label={t("posMarket.receivables.detail.outstanding")}
+                  label={t("posMarket.statement.remaining")}
                   value={formatCurrency(parseAmount(detail.summary.outstandingBalance))}
                 />
               </div>

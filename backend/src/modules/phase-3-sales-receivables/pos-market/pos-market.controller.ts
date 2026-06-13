@@ -56,8 +56,12 @@ export class PosMarketController {
     @Req() req: Request & { user?: AuthorizedUser },
     @Query("salesRepId") salesRepId?: string,
     @Query("search") search?: string,
+    @Query("balanceOnly") balanceOnly?: string,
   ) {
-    return this.service.listMarketReceivables({ salesRepId, search }, req.user);
+    return this.service.listMarketReceivables(
+      { salesRepId, search, balanceOnly: balanceOnly === "true" },
+      req.user,
+    );
   }
 
   @Get("receivables/:customerId/detail")

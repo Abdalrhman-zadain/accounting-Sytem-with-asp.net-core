@@ -223,7 +223,7 @@ export const queryKeys = {
   },
   posMarketReceivables(
     token: string | null,
-    filters?: { salesRepId?: string; search?: string },
+    filters?: { salesRepId?: string; search?: string; balanceOnly?: boolean },
   ) {
     return ["pos-market-receivables", token, filters ?? {}] as const;
   },

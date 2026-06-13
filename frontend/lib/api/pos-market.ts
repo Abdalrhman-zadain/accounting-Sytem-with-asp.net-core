@@ -495,6 +495,8 @@ export type PosMarketReceivableCustomer = {
   salesRepId: string | null;
   salesRepCode: string | null;
   salesRepName: string | null;
+  totalDelivered: string;
+  totalPaid: string;
   outstandingBalance: string;
   openInvoiceCount: number;
 };
@@ -502,6 +504,8 @@ export type PosMarketReceivableCustomer = {
 export type PosMarketReceivablesSummary = {
   totals: {
     customerCount: number;
+    totalDelivered: string;
+    totalPaid: string;
     totalOutstanding: string;
   };
   customers: PosMarketReceivableCustomer[];
@@ -586,12 +590,13 @@ export type PosMarketReceivableSalesRep = {
 };
 
 export async function getPosMarketReceivables(
-  params: { salesRepId?: string; search?: string } = {},
+  params: { salesRepId?: string; search?: string; balanceOnly?: boolean } = {},
   token?: string | null,
 ) {
   const query = new URLSearchParams();
   if (params.salesRepId) query.set("salesRepId", params.salesRepId);
   if (params.search) query.set("search", params.search);
+  if (params.balanceOnly) query.set("balanceOnly", "true");
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiRequest<PosMarketReceivablesSummary>(`/pos-market/receivables${suffix}`, { token });
 }

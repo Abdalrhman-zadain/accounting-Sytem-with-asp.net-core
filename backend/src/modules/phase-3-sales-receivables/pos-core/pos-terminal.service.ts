@@ -33,7 +33,7 @@ export class PosTerminalService {
   }
 
   listMarketReceivables(
-    query: { salesRepId?: string; search?: string },
+    query: { salesRepId?: string; search?: string; balanceOnly?: boolean },
     user?: AuthorizedUser,
   ) {
     return this.posService.listMarketReceivables(user, query, this.product);

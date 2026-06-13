@@ -4,6 +4,10 @@ import {
 } from "@/features/pos-market/pos-market-collection-receipt-print";
 import { buildPosMarketReceiptHtml, type PosMarketReceiptData } from "@/features/pos-market/pos-market-receipt-print";
 import {
+  buildPosMarketAccountStatementHtml,
+  type PosMarketAccountStatementData,
+} from "@/features/pos-market/pos-market-statement-print";
+import {
   getPosMarketPrintBridgeStatus,
   printHtmlWithBrowser,
   printHtmlWithQz,
@@ -58,6 +62,15 @@ export async function printMarketCollectionReceipt(
   return printConfiguredHtml(
     buildPosMarketCollectionReceiptHtml(receipt),
     "pos-market-collection-receipt",
+  );
+}
+
+export async function printMarketAccountStatement(
+  statement: PosMarketAccountStatementData,
+): Promise<PosMarketPrintResult> {
+  return printConfiguredHtml(
+    buildPosMarketAccountStatementHtml(statement),
+    "pos-market-account-statement",
   );
 }
 

@@ -51,6 +51,7 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   canAccessRoute,
   isKitchenOnlyUser,
+  isMarketRepUser,
   isWaiterOnlyUser,
   userHasPosProduct,
 } from "@/lib/auth-access";
@@ -570,7 +571,13 @@ export function SiteHeader({
           return {
             ...item,
             href: effectiveHref,
-            children: visibleChildren,
+            children: visibleChildren.map((child) => ({
+              ...child,
+              labelKey:
+                child.href === "/pos-market/receivables" && isMarketRepUser(user)
+                  ? "posMarket.workspace.accountStatements"
+                  : child.labelKey,
+            })),
           };
         })
         .filter(Boolean) as NavGroup["items"],

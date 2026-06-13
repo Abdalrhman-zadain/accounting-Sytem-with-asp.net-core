@@ -5169,7 +5169,7 @@ export class PosService {
 
   async listMarketReceivables(
     user?: AuthorizedUser,
-    query: { salesRepId?: string; search?: string } = {},
+    query: { salesRepId?: string; search?: string; balanceOnly?: boolean } = {},
     posProduct: PosProduct = PosProduct.MARKET,
   ) {
     this.ensurePosPermissionCode("POS_MARKET_VIEW_RECEIVABLES", user);
@@ -5179,79 +5179,134 @@ export class PosService {
 
     const salesRepScope = this.resolveMarketSalesRepScope(user, query.salesRepId);
     const search = query.search?.trim();
-    const invoices = await this.prisma.salesInvoice.findMany({
+    const balanceOnly = query.balanceOnly === true;
+
+    const customers = await this.prisma.customer.findMany({
       where: {
-        ...this.marketOpenInvoiceWhere(salesRepScope),
+        isActive: true,
+        code: { not: POS_WALK_IN_CUSTOMER_CODE },
+        ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
         ...(search
           ? {
-              customer: {
-                isActive: true,
-                code: { not: POS_WALK_IN_CUSTOMER_CODE },
-                ...(salesRepScope ? { salesRepId: salesRepScope } : {}),
-                OR: [
-                  { name: { contains: search, mode: "insensitive" } },
-                  { code: { contains: search, mode: "insensitive" } },
-                ],
-              },
+              OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { code: { contains: search, mode: "insensitive" } },
+              ],
             }
           : {}),
       },
       select: {
         id: true,
-        outstandingAmount: true,
-        customer: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            contactInfo: true,
-            salesRepId: true,
-            salesRep: { select: { id: true, code: true, name: true } },
-          },
-        },
+        code: true,
+        name: true,
+        contactInfo: true,
+        salesRepId: true,
+        salesRep: { select: { id: true, code: true, name: true } },
       },
-      orderBy: [{ customer: { name: "asc" } }, { invoiceDate: "desc" }],
+      orderBy: { name: "asc" },
     });
 
-    const byCustomer = new Map<
-      string,
-      {
-        customerId: string;
-        customerCode: string;
-        customerName: string;
-        contactInfo: string | null;
-        salesRepId: string | null;
-        salesRepCode: string | null;
-        salesRepName: string | null;
-        outstandingBalance: number;
-        openInvoiceCount: number;
-      }
-    >();
-
-    for (const invoice of invoices) {
-      const outstanding = Number(invoice.outstandingAmount);
-      if (outstanding <= 0) {
-        continue;
-      }
-      const current = byCustomer.get(invoice.customer.id) ?? {
-        customerId: invoice.customer.id,
-        customerCode: invoice.customer.code,
-        customerName: invoice.customer.name,
-        contactInfo: invoice.customer.contactInfo,
-        salesRepId: invoice.customer.salesRepId,
-        salesRepCode: invoice.customer.salesRep?.code ?? null,
-        salesRepName: invoice.customer.salesRep?.name ?? null,
-        outstandingBalance: 0,
-        openInvoiceCount: 0,
+    const customerIds = customers.map((customer) => customer.id);
+    if (customerIds.length === 0) {
+      return {
+        totals: {
+          customerCount: 0,
+          totalDelivered: "0.00",
+          totalPaid: "0.00",
+          totalOutstanding: "0.00",
+        },
+        customers: [],
       };
-      current.outstandingBalance = Number((current.outstandingBalance + outstanding).toFixed(2));
-      current.openInvoiceCount += 1;
-      byCustomer.set(invoice.customer.id, current);
     }
 
-    const rows = Array.from(byCustomer.values()).sort((a, b) =>
-      a.customerName.localeCompare(b.customerName),
+    const marketInvoiceBaseWhere = {
+      invoiceType: SalesInvoiceType.POS,
+      posOperationalStatus: PosOperationalStatus.COMPLETED,
+      customerId: { in: customerIds },
+      posSession: { posProduct: PosProduct.MARKET },
+    } satisfies Prisma.SalesInvoiceWhereInput;
+
+    const [deliveredGroups, paymentGroups, outstandingGroups] = await Promise.all([
+      this.prisma.salesInvoice.groupBy({
+        by: ["customerId"],
+        where: marketInvoiceBaseWhere,
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.bankCashTransaction.groupBy({
+        by: ["customerId"],
+        where: {
+          customerId: { in: customerIds },
+          kind: BankCashTransactionKind.RECEIPT,
+          status: BankCashTransactionStatus.POSTED,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.salesInvoice.groupBy({
+        by: ["customerId"],
+        where: {
+          ...marketInvoiceBaseWhere,
+          outstandingAmount: { gt: 0 },
+        },
+        _sum: { outstandingAmount: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    const deliveredByCustomer = new Map(
+      deliveredGroups.map((row) => [
+        row.customerId,
+        Number(Number(row._sum.totalAmount ?? 0).toFixed(2)),
+      ]),
     );
+    const paidByCustomer = new Map(
+      paymentGroups.map((row) => [
+        row.customerId,
+        Number(Number(row._sum.amount ?? 0).toFixed(2)),
+      ]),
+    );
+    const outstandingByCustomer = new Map(
+      outstandingGroups.map((row) => [
+        row.customerId,
+        {
+          outstandingBalance: Number(Number(row._sum.outstandingAmount ?? 0).toFixed(2)),
+          openInvoiceCount: row._count.id,
+        },
+      ]),
+    );
+
+    const rows = customers
+      .map((customer) => {
+        const outstandingEntry = outstandingByCustomer.get(customer.id);
+        const totalDelivered = deliveredByCustomer.get(customer.id) ?? 0;
+        const totalPaid = paidByCustomer.get(customer.id) ?? 0;
+        const outstandingBalance = outstandingEntry?.outstandingBalance ?? 0;
+        const openInvoiceCount = outstandingEntry?.openInvoiceCount ?? 0;
+
+        return {
+          customerId: customer.id,
+          customerCode: customer.code,
+          customerName: customer.name,
+          contactInfo: customer.contactInfo,
+          salesRepId: customer.salesRepId,
+          salesRepCode: customer.salesRep?.code ?? null,
+          salesRepName: customer.salesRep?.name ?? null,
+          totalDelivered,
+          totalPaid,
+          outstandingBalance,
+          openInvoiceCount,
+        };
+      })
+      .filter((row) => {
+        if (!balanceOnly) {
+          return true;
+        }
+        return row.outstandingBalance > 0;
+      });
+
+    const totalDelivered = Number(
+      rows.reduce((sum, row) => sum + row.totalDelivered, 0).toFixed(2),
+    );
+    const totalPaid = Number(rows.reduce((sum, row) => sum + row.totalPaid, 0).toFixed(2));
     const totalOutstanding = Number(
       rows.reduce((sum, row) => sum + row.outstandingBalance, 0).toFixed(2),
     );
@@ -5259,10 +5314,14 @@ export class PosService {
     return {
       totals: {
         customerCount: rows.length,
+        totalDelivered: totalDelivered.toFixed(2),
+        totalPaid: totalPaid.toFixed(2),
         totalOutstanding: totalOutstanding.toFixed(2),
       },
       customers: rows.map((row) => ({
         ...row,
+        totalDelivered: row.totalDelivered.toFixed(2),
+        totalPaid: row.totalPaid.toFixed(2),
         outstandingBalance: row.outstandingBalance.toFixed(2),
       })),
     };
@@ -5344,12 +5403,8 @@ export class PosService {
     return Number(Number(result._sum.outstandingAmount ?? 0).toFixed(2));
   }
 
-  private async buildMarketReceiptAccountSummary(customerId: string) {
-    const [customer, deliveredAgg, paymentsAgg, accountOutstanding] = await Promise.all([
-      this.prisma.customer.findUnique({
-        where: { id: customerId },
-        select: { salesRep: { select: { name: true } } },
-      }),
+  private async getMarketCustomerAccountSummary(customerId: string) {
+    const [deliveredAgg, paymentsAgg, accountOutstanding] = await Promise.all([
       this.prisma.salesInvoice.aggregate({
         where: this.marketCompletedPosInvoiceWhere(customerId),
         _sum: { totalAmount: true },
@@ -5366,10 +5421,26 @@ export class PosService {
     ]);
 
     return {
-      salesRepName: customer?.salesRep?.name ?? null,
       totalDelivered: Number(Number(deliveredAgg._sum.totalAmount ?? 0).toFixed(2)),
       totalPaid: Number(Number(paymentsAgg._sum.amount ?? 0).toFixed(2)),
-      accountOutstanding,
+      outstandingBalance: accountOutstanding,
+    };
+  }
+
+  private async buildMarketReceiptAccountSummary(customerId: string) {
+    const [customer, summary] = await Promise.all([
+      this.prisma.customer.findUnique({
+        where: { id: customerId },
+        select: { salesRep: { select: { name: true } } },
+      }),
+      this.getMarketCustomerAccountSummary(customerId),
+    ]);
+
+    return {
+      salesRepName: customer?.salesRep?.name ?? null,
+      totalDelivered: summary.totalDelivered,
+      totalPaid: summary.totalPaid,
+      accountOutstanding: summary.outstandingBalance,
     };
   }
 

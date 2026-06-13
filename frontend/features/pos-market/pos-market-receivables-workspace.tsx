@@ -11,8 +11,11 @@ import {
   getErrorMessage,
   parseAmount,
 } from "@/features/pos-market/pos-market-cart-utils";
+import {
+  printMarketAccountStatement,
+  printMarketCollectionReceipt,
+} from "@/features/pos-market/pos-market-print-service";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
-import { printMarketCollectionReceipt } from "@/features/pos-market/pos-market-print-service";
 import {
   collectPosMarketReceivables,
   getBankCashAccounts,
@@ -44,12 +47,30 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function buildStatementPayload(
+  row: PosMarketReceivableCustomer,
+  printedBy?: string | null,
+) {
+  return {
+    statementDate: new Date().toISOString(),
+    companyName: "Simple Account",
+    customerName: row.customerName,
+    customerCode: row.customerCode,
+    salesRepName: row.salesRepName,
+    totalDelivered: parseAmount(row.totalDelivered),
+    totalPaid: parseAmount(row.totalPaid),
+    outstandingBalance: parseAmount(row.outstandingBalance),
+    printedBy: printedBy ?? null,
+  };
+}
+
 export function PosMarketReceivablesWorkspace() {
   const { token, user, isHydrated } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [salesRepFilter, setSalesRepFilter] = useState("");
+  const [balanceOnly, setBalanceOnly] = useState(false);
   const [collectCustomer, setCollectCustomer] = useState<PosMarketReceivableCustomer | null>(null);
   const [collectAmount, setCollectAmount] = useState("");
   const [collectDate, setCollectDate] = useState(new Date().toISOString().slice(0, 10));
@@ -57,20 +78,23 @@ export function PosMarketReceivablesWorkspace() {
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [flashTone, setFlashTone] = useState<"success" | "error">("success");
 
-  const canCollect =
-    isHydrated && hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
-  const showRepFilter = isHydrated && !isMarketRepUser(user);
+  const isRep = isHydrated && isMarketRepUser(user);
+  const canCollect = isHydrated && hasPermission(user, "POS_MARKET_COLLECT_RECEIVABLE");
+  const showRepFilter = isHydrated && !isRep;
+  const showBalanceOnlyFilter = showRepFilter;
 
   const receivablesQuery = useQuery({
     queryKey: queryKeys.posMarketReceivables(token ?? null, {
       salesRepId: salesRepFilter || undefined,
       search: search.trim() || undefined,
+      balanceOnly: showBalanceOnlyFilter && balanceOnly ? true : undefined,
     }),
     queryFn: () =>
       getPosMarketReceivables(
         {
           salesRepId: salesRepFilter || undefined,
           search: search.trim() || undefined,
+          balanceOnly: showBalanceOnlyFilter && balanceOnly ? true : undefined,
         },
         token,
       ),
@@ -147,6 +171,17 @@ export function PosMarketReceivablesWorkspace() {
     setCollectBankAccountId("");
   };
 
+  const handlePrintStatement = async (row: PosMarketReceivableCustomer) => {
+    try {
+      await printMarketAccountStatement(
+        buildStatementPayload(row, user?.name ?? user?.username ?? null),
+      );
+    } catch {
+      setFlashMessage(t("posMarket.statement.printError"));
+      setFlashTone("error");
+    }
+  };
+
   useEffect(() => {
     if (!collectCustomer || collectBankAccountId || bankAccounts.length === 0) return;
     setCollectBankAccountId(bankAccounts[0]?.id ?? "");
@@ -156,10 +191,10 @@ export function PosMarketReceivablesWorkspace() {
     <div className="space-y-6">
       <Card className="rounded-[28px] border border-[#d5deea] p-6">
         <div className="text-2xl font-black arabic-heading" style={{ color: POS_MARKET_THEME.colors.text }}>
-          {t("posMarket.receivables.title")}
+          {isRep ? t("posMarket.statement.title") : t("posMarket.receivables.title")}
         </div>
         <p className="mt-1 text-sm" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
-          {t("posMarket.receivables.subtitle")}
+          {isRep ? t("posMarket.statement.subtitle") : t("posMarket.receivables.subtitle")}
         </p>
 
         {flashMessage ? (
@@ -174,18 +209,22 @@ export function PosMarketReceivablesWorkspace() {
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
           <SummaryTile
-            label={t("posMarket.receivables.totalOutstanding")}
-            value={formatCurrency(parseAmount(totals?.totalOutstanding ?? 0))}
+            label={t("posMarket.statement.delivered")}
+            value={formatCurrency(parseAmount(totals?.totalDelivered ?? 0))}
           />
           <SummaryTile
-            label={t("posMarket.receivables.customerCount")}
-            value={String(totals?.customerCount ?? 0)}
+            label={t("posMarket.statement.collected")}
+            value={formatCurrency(parseAmount(totals?.totalPaid ?? 0))}
+          />
+          <SummaryTile
+            label={t("posMarket.statement.remaining")}
+            value={formatCurrency(parseAmount(totals?.totalOutstanding ?? 0))}
           />
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto]">
+        <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto_auto]">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -206,6 +245,16 @@ export function PosMarketReceivablesWorkspace() {
               ))}
             </Select>
           ) : null}
+          {showBalanceOnlyFilter ? (
+            <label className="flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold" style={{ borderColor: POS_MARKET_THEME.colors.outline }}>
+              <input
+                type="checkbox"
+                checked={balanceOnly}
+                onChange={(event) => setBalanceOnly(event.target.checked)}
+              />
+              {t("posMarket.statement.balanceOnly")}
+            </label>
+          ) : null}
         </div>
 
         {receivablesQuery.isError ? (
@@ -217,9 +266,12 @@ export function PosMarketReceivablesWorkspace() {
             <thead style={{ backgroundColor: POS_MARKET_THEME.colors.primarySoft }}>
               <tr>
                 <th className="px-4 py-3 text-start font-bold">{t("posMarket.receivables.market")}</th>
-                <th className="px-4 py-3 text-start font-bold">{t("posMarket.receivables.rep")}</th>
-                <th className="px-4 py-3 text-start font-bold">{t("posMarket.receivables.balance")}</th>
-                <th className="px-4 py-3 text-start font-bold">{t("posMarket.receivables.invoices")}</th>
+                {!isRep ? (
+                  <th className="px-4 py-3 text-start font-bold">{t("posMarket.receivables.rep")}</th>
+                ) : null}
+                <th className="px-4 py-3 text-start font-bold">{t("posMarket.statement.delivered")}</th>
+                <th className="px-4 py-3 text-start font-bold">{t("posMarket.statement.collected")}</th>
+                <th className="px-4 py-3 text-start font-bold">{t("posMarket.statement.remaining")}</th>
                 <th className="px-4 py-3 text-end font-bold" />
               </tr>
             </thead>
@@ -228,16 +280,23 @@ export function PosMarketReceivablesWorkspace() {
                 <ReceivableRow
                   key={row.customerId}
                   row={row}
+                  isRep={isRep}
                   canCollect={canCollect}
                   onCollect={() => openCollectModal(row)}
+                  onPrint={() => void handlePrintStatement(row)}
                   collectLabel={t("posMarket.receivables.collect")}
-                  detailsLabel={t("posMarket.receivables.detail.view")}
+                  viewLabel={t("posMarket.statement.view")}
+                  printLabel={t("posMarket.statement.print")}
                 />
               ))}
               {!receivablesQuery.isLoading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
-                    {t("posMarket.receivables.noRows")}
+                  <td
+                    colSpan={isRep ? 5 : 6}
+                    className="px-4 py-8 text-center text-sm"
+                    style={{ color: POS_MARKET_THEME.colors.textMuted }}
+                  >
+                    {t("posMarket.statement.noRows")}
                   </td>
                 </tr>
               ) : null}
@@ -308,17 +367,25 @@ export function PosMarketReceivablesWorkspace() {
 
 function ReceivableRow({
   row,
+  isRep,
   canCollect,
   onCollect,
+  onPrint,
   collectLabel,
-  detailsLabel,
+  viewLabel,
+  printLabel,
 }: {
   row: PosMarketReceivableCustomer;
+  isRep: boolean;
   canCollect: boolean;
   onCollect: () => void;
+  onPrint: () => void;
   collectLabel: string;
-  detailsLabel: string;
+  viewLabel: string;
+  printLabel: string;
 }) {
+  const outstanding = parseAmount(row.outstandingBalance);
+
   return (
     <tr className="border-t" style={{ borderColor: POS_MARKET_THEME.colors.outline }}>
       <td className="px-4 py-3">
@@ -333,9 +400,10 @@ function ReceivableRow({
           </div>
         </Link>
       </td>
-      <td className="px-4 py-3">{row.salesRepName ?? "—"}</td>
-      <td className="px-4 py-3 font-bold">{formatCurrency(parseAmount(row.outstandingBalance))}</td>
-      <td className="px-4 py-3">{row.openInvoiceCount}</td>
+      {!isRep ? <td className="px-4 py-3">{row.salesRepName ?? "—"}</td> : null}
+      <td className="px-4 py-3">{formatCurrency(parseAmount(row.totalDelivered))}</td>
+      <td className="px-4 py-3">{formatCurrency(parseAmount(row.totalPaid))}</td>
+      <td className="px-4 py-3 font-bold">{formatCurrency(outstanding)}</td>
       <td className="px-4 py-3 text-end">
         <div className="flex flex-wrap justify-end gap-2">
           <Link
@@ -347,9 +415,21 @@ function ReceivableRow({
               backgroundColor: POS_MARKET_THEME.colors.primarySoft,
             }}
           >
-            {detailsLabel}
+            {viewLabel}
           </Link>
-          {canCollect ? (
+          <button
+            type="button"
+            onClick={onPrint}
+            className="rounded-lg border px-3 py-1.5 text-xs font-bold"
+            style={{
+              borderColor: POS_MARKET_THEME.colors.outline,
+              color: POS_MARKET_THEME.colors.text,
+              backgroundColor: POS_MARKET_THEME.colors.cardSurface,
+            }}
+          >
+            {printLabel}
+          </button>
+          {canCollect && outstanding > 0 ? (
             <button
               type="button"
               onClick={onCollect}

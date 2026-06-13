@@ -195,18 +195,31 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - Each invoice shows **مدفوع اليوم**, **متبقي الفاتورة**, and a **ملخص حساب العميل** block (إجمالي المسلّم / المقبوض / الذمم) when selling to a destination market.
 - **المندوب** (customer-linked sales rep) prints on the invoice when configured on the market customer.
 
-### Market receivables workspace
+### Market account statements (كشف حساب)
 
 | Route | API | Purpose |
 |-------|-----|---------|
-| `/pos-market/receivables` | `GET /api/pos-market/receivables` | Customers with open market POS balances |
-| `/pos-market/receivables/:customerId` | `GET /api/pos-market/receivables/:customerId/detail` | Market account — deliveries, collections, totals |
+| `/pos-market/receivables` | `GET /api/pos-market/receivables` | Per-market summary: **delivered / collected / remaining** for all assigned destination markets |
+| `/pos-market/receivables/:customerId` | `GET /api/pos-market/receivables/:customerId/detail` | Market statement detail — summary tiles, deliveries tab, collections tab, print |
 | | `GET /api/pos-market/receivables/:customerId/invoices` | Open invoices for one market |
 | | `GET /api/pos-market/receivables/sales-reps` | Rep filter list (accountant only) |
 | | `POST /api/pos-market/receivables/collect` | Posted customer receipt; FIFO allocation to oldest open deliveries when no manual allocations |
 
-- `MARKET_REP` users are scoped to `User.salesRepId` → only their assigned destination markets (register picker + receivables list).
-- Accountants see all markets and can filter by sales rep.
+**List query params**
+
+- `salesRepId` — accountant filter by sales rep
+- `search` — market name or code
+- `balanceOnly=true` — hide markets with zero remaining balance (accountant UI toggle; `MARKET_REP` always sees all assigned markets)
+
+**List response fields (per market)**
+
+- `totalDelivered` — sum of completed market POS `SalesInvoice.totalAmount`
+- `totalPaid` — sum of posted customer `BankCashTransaction` receipts
+- `outstandingBalance` — sum of open market POS invoice `outstandingAmount`
+- `openInvoiceCount` — count of invoices with outstanding balance
+
+- `MARKET_REP` users are scoped to `User.salesRepId` → all their assigned destination markets (including zero-balance markets), default route `/pos-market/receivables`, nav label **كشف الحساب**, thermal print from list or detail.
+- Accountants see all markets and can filter by sales rep or **أسواق عليها رصيد فقط**.
 - Full ERP collections remain in `/sales-receivables`; this screen is the rep-focused follow-up UI.
 
 ### Rep car stock (تحميل سيارة / جرد)
@@ -264,8 +277,8 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 | `/pos-market/returns` | Create returns from completed sales |
 | `/pos-market/reports` | Overview and report cards |
 | `/pos-market/printers` | Receipt printer setup (local browser storage) |
-| `/pos-market/receivables` | Destination market balances; link to per-market account detail |
-| `/pos-market/receivables/:customerId` | Deliveries (what they got), collections (what they paid), amount due |
+| `/pos-market/receivables` | Destination market account statements (delivered / collected / remaining); print thermal statement |
+| `/pos-market/receivables/:customerId` | Per-market statement detail — deliveries, collections, print |
 | `/pos-market/rep-loads` | Rep car load documents (warehouse → rep) |
 | `/pos-market/rep-stocktakes` | Rep car monthly stocktake (جرد) with per-product variance |
 | `/pos-market/my-stock` | Rep car on-hand dashboard (`MARKET_REP` only) |
