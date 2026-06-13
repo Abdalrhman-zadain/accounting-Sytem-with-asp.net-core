@@ -47,26 +47,12 @@ export async function seedPosMarketDemo(
     },
   });
 
-  const marketDestinationCustomers = [
-    {
-      code: 'MKT-AMMAN-01',
-      name: 'سوق عمان الشمال / Amman North Market',
-      contactInfo: '+962 79 100 0001',
-      salesRepId: marketRepNorth.id,
-    },
-    {
-      code: 'MKT-IRBID-02',
-      name: 'سوق إربد / Irbid Market',
-      contactInfo: '+962 79 100 0002',
-      salesRepId: marketRepNorth.id,
-    },
-    {
-      code: 'MKT-ZARQA-03',
-      name: 'سوق الزرقاء / Zarqa Market',
-      contactInfo: '+962 79 100 0003',
-      salesRepId: marketRepCentral.id,
-    },
-  ] as const;
+  const marketDestinationCustomers: Array<{
+    code: string;
+    name: string;
+    contactInfo: string;
+    salesRepId: string;
+  }> = [];
 
   for (const marketCustomer of marketDestinationCustomers) {
     await prisma.customer.upsert({

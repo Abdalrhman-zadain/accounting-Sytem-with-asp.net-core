@@ -480,9 +480,18 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
     parentAccountId: operatingExpenses.id,
   });
   const salariesExpense = await createAccount({
+    code: '5100003',
+    name: 'Salaries and Wages Expense',
+    nameAr: 'مصروف رواتب واجور',
+    type: 'EXPENSE',
+    isPosting: true,
+    subtype: 'Expense',
+    parentAccountId: operatingExpenses.id,
+  });
+  const fuelExpense = await createAccount({
     code: '5120001',
-    name: 'Salaries Expense',
-    nameAr: 'مصروف الرواتب',
+    name: 'Fuel Expense',
+    nameAr: 'مصروف محروقات',
     type: 'EXPENSE',
     isPosting: true,
     subtype: 'Expense',
@@ -500,8 +509,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
 
   const mainCash = await createAccount({
     code: '1111001',
-    name: 'Main Cash',
-    nameAr: 'الصندوق الرئيسي',
+    name: 'Cash Box',
+    nameAr: 'صندوق النقد',
     type: 'ASSET',
     isPosting: true,
     subtype: 'Cash',
@@ -509,8 +518,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '1111002',
-    name: 'Petty Cash',
-    nameAr: 'صندوق المصاريف النثرية',
+    name: 'Checks Box',
+    nameAr: 'صندوق شيكات',
     type: 'ASSET',
     isPosting: true,
     subtype: 'Cash',
@@ -518,8 +527,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '1111003',
-    name: 'Branch Cash - Amman',
-    nameAr: 'صندوق فرع عمّان',
+    name: 'Amer Al-Badareen Cash Box',
+    nameAr: 'صندوق عامر البدارين',
     type: 'ASSET',
     isPosting: true,
     subtype: 'Cash',
@@ -527,8 +536,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '1111004',
-    name: 'Branch Cash - Irbid',
-    nameAr: 'صندوق فرع إربد',
+    name: 'Mohammad Mansour Cash Box',
+    nameAr: 'صندوق محمد منصور',
     type: 'ASSET',
     isPosting: true,
     subtype: 'Cash',
@@ -1225,8 +1234,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '3210001',
-    name: 'Partner A Capital',
-    nameAr: 'رأس مال الشريك أ',
+    name: 'Partner Azzam Current Account',
+    nameAr: 'جاري شريك عزام',
     type: 'EQUITY',
     isPosting: true,
     subtype: 'Equity',
@@ -1234,8 +1243,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '3220001',
-    name: 'Partner B Capital',
-    nameAr: 'رأس مال الشريك ب',
+    name: 'Partner Mohammad Current Account',
+    nameAr: 'جاري شريك محمد',
     type: 'EQUITY',
     isPosting: true,
     subtype: 'Equity',
@@ -1243,8 +1252,8 @@ export async function runFoundationSeed(prisma: PrismaClient): Promise<Foundatio
   });
   await createAccount({
     code: '3230001',
-    name: 'Partners Current Accounts',
-    nameAr: 'الحسابات الجارية للشركاء',
+    name: 'Partner Opening Current Account',
+    nameAr: 'جاري شريك بداية المدة',
     type: 'EQUITY',
     isPosting: true,
     subtype: 'Equity',

@@ -8,6 +8,9 @@ import { setupPosKitchenUser } from './setup-pos-kitchen';
 import { setupPosMarketCashierUser } from './setup-pos-market-cashier';
 import { setupPosWaiterUser } from './setup-pos-waiter';
 
+import { seedOpeningJournalEntry } from './seed-opening-entry';
+import { seedOpeningInventoryFromWorkbook } from './seed-opening-inventory';
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -15,6 +18,10 @@ async function main() {
   await truncateDatabase(prisma);
 
   const ctx = await runFoundationSeed(prisma);
+
+  await seedOpeningJournalEntry(prisma, ctx);
+
+  await seedOpeningInventoryFromWorkbook(prisma);
 
   await seedPosRegisterDemo(prisma, {
     adminUserId: ctx.admin.id,
