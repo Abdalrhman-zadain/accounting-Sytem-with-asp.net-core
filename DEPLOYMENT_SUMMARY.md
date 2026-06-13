@@ -60,8 +60,8 @@ We use **PM2** to keep the application running 24/7.
 ### 5. Network Routing (Nginx Phase)
 Although handled by the system configuration, **Nginx** acts as the "Traffic Cop":
 *   It listens for hits on `https://market.trusttechlimited.com`.
-*   It routes requests starting with `/api` to the **Backend (Port 3007)**.
-*   It routes everything else to the **Frontend (Port 3000)**.
+*   It routes requests starting with `/api` to the **Backend (Port 3017)**.
+*   It routes everything else to the **Frontend (Port 3010)**.
 
 ### 6. Health Verification
 The final step is manual and automated verification:

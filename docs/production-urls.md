@@ -16,8 +16,8 @@ Although there are multiple subdomains, they both serve the same application ins
 ### How it Works
 
 *   **Nginx Configuration:** The server is configured to listen for both `market.trusttechlimited.com` and `sabina.trusttechlimited.com`. Regardless of which subdomain is requested, Nginx proxies the traffic to the same internal ports:
-    *   **Frontend:** Port `3000` (Next.js)
-    *   **Backend:** Port `3007` (NestJS API)
+    *   **Frontend:** Port `3010` (Market Next.js)
+    *   **Backend:** Port `3017` (Market NestJS API)
 *   **Unified Application:** Since both URLs point to the same running code, the user experience, database, and features are identical. A user navigating to `/journal-entries` on either subdomain is accessing the same accounting module.
 *   **Dynamic API Resolution:** The frontend code (`frontend/lib/config/api.ts`) detects the current hostname at runtime. It automatically routes API requests to the relative `/api` path, ensuring that database communication works seamlessly across all subdomains without hardcoded URLs.
 

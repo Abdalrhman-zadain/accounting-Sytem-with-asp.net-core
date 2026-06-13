@@ -242,8 +242,8 @@ npm run test:watch
 
 The project is deployed using **PM2** and **Nginx**.
 
-- **Backend:** Runs on port `3007` (to avoid conflicts with other local projects).
-- **Frontend:** Runs on port `3000`.
+- **Backend:** Runs on port `3017` (to avoid conflicts with other local projects).
+- **Frontend:** Runs on port `3010`.
 - **Domain:** `https://market.trusttechlimited.com`
 
 #### Managing with PM2
@@ -255,8 +255,8 @@ Use the following commands from the root directory:
 pm2 restart ecosystem.config.js
 
 # View live logs
-pm2 logs account-backend
-pm2 logs account-frontend
+pm2 logs market-backend
+pm2 logs market-frontend
 
 # Save current process list for reboot persistence
 pm2 save
@@ -271,8 +271,8 @@ pm2 save
 
 The Nginx configuration (typically in `/etc/nginx/sites-available/trusttech-apps`) routes domain traffic as follows:
 
-- `https://market.trusttechlimited.com/` -> Frontend (Port 3000)
-- `https://market.trusttechlimited.com/api/` -> Backend (Port 3007)
+- `https://market.trusttechlimited.com/` -> Frontend (Port 3010)
+- `https://market.trusttechlimited.com/api/` -> Backend (Port 3017)
 
 ---
 
