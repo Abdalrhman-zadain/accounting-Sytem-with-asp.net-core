@@ -1,88 +1,21 @@
 import {
-  InventoryStockMovementType,
   PosAccessRoleCode,
   PosPermissionCode,
   Prisma,
   PrismaClient,
-  RepCarLoadStatus,
-  RepCarStockMovementType,
 } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
-import { seedShouqCatalog, SHOUQ_CODE_PREFIX } from './seed-shouq-catalog';
-
-const MARKET_GROUPS = [
-  { id: 'GRP-MARKET-GROCERY', code: 'MARKET-GROCERY', name: 'بقالة', description: 'Market grocery' },
-  { id: 'GRP-MARKET-DAIRY', code: 'MARKET-DAIRY', name: 'ألبان', description: 'Market dairy' },
-  { id: 'GRP-MARKET-BAKERY', code: 'MARKET-BAKERY', name: 'مخبوزات', description: 'Market bakery' },
-  { id: 'GRP-MARKET-PRODUCE', code: 'MARKET-PRODUCE', name: 'خضار وفواكه', description: 'Market produce' },
-  { id: 'GRP-MARKET-MEAT', code: 'MARKET-MEAT', name: 'لحوم', description: 'Market meat' },
-  { id: 'GRP-MARKET-BEVERAGES', code: 'MARKET-BEVERAGES', name: 'مشروبات', description: 'Market beverages' },
-  { id: 'GRP-MARKET-SNACKS', code: 'MARKET-SNACKS', name: 'سناكات', description: 'Market snacks' },
-  { id: 'GRP-MARKET-HOUSEHOLD', code: 'MARKET-HOUSEHOLD', name: 'منظفات', description: 'Market household' },
-] as const;
-
 export async function seedPosMarketDemo(
   prisma: PrismaClient,
-  options: { adminUserId: string },
+  _options: { adminUserId: string },
 ) {
-  console.log('Seeding market POS (Shouq catalog, destination markets, reps)...');
+  console.log('Seeding market POS destination markets and reps...');
 
-  for (const group of MARKET_GROUPS) {
-    await prisma.inventoryItemGroup.upsert({
-      where: { code: group.code },
-      update: {
-        name: group.name,
-        description: group.description,
-        isActive: true,
-      },
-      create: {
-        id: group.id,
-        code: group.code,
-        name: group.name,
-        description: group.description,
-        isActive: true,
-      },
-    });
-  }
-
-  const groups = await prisma.inventoryItemGroup.findMany({
-    where: { code: { startsWith: 'MARKET-' } },
-    select: { id: true, code: true },
-  });
-  const groupIdByCode = new Map(groups.map((group) => [group.code, group.id]));
-
-  for (const group of MARKET_GROUPS) {
-    const groupId = groupIdByCode.get(group.code);
-    if (!groupId) {
-      continue;
-    }
-    await prisma.inventoryItemCategory.upsert({
-      where: { code: group.code },
-      update: {
-        name: group.name,
-        description: group.description,
-        itemGroupId: groupId,
-        isActive: true,
-      },
-      create: {
-        id: `CAT-${group.code}`,
-        code: group.code,
-        name: group.name,
-        description: group.description,
-        itemGroupId: groupId,
-        isActive: true,
-      },
-    });
-  }
-
-  const [operatingExpenses, tradeReceivableAccount, taxableTreatment, mainWarehouse] =
-    await Promise.all([
-      prisma.account.findUniqueOrThrow({ where: { code: '5100000' } }),
-      prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
-      prisma.taxTreatment.findFirstOrThrow({ where: { code: 'TAXABLE' } }),
-      prisma.inventoryWarehouse.findUniqueOrThrow({ where: { code: 'WH-MAIN' } }),
-    ]);
+  const [tradeReceivableAccount, taxableTreatment] = await Promise.all([
+    prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
+    prisma.taxTreatment.findFirstOrThrow({ where: { code: 'TAXABLE' } }),
+  ]);
 
   const marketRepNorth = await prisma.salesRepresentative.upsert({
     where: { code: 'REP-MARKET-01' },
@@ -114,7 +47,7 @@ export async function seedPosMarketDemo(
     },
   });
 
-  const MARKET_DESTINATION_CUSTOMERS = [
+  const marketDestinationCustomers = [
     {
       code: 'MKT-AMMAN-01',
       name: 'سوق عمان الشمال / Amman North Market',
@@ -135,16 +68,17 @@ export async function seedPosMarketDemo(
     },
   ] as const;
 
-  for (const marketCustomer of MARKET_DESTINATION_CUSTOMERS) {
+  for (const marketCustomer of marketDestinationCustomers) {
     await prisma.customer.upsert({
       where: { code: marketCustomer.code },
       update: {
         name: marketCustomer.name,
         contactInfo: marketCustomer.contactInfo,
         salesRepId: marketCustomer.salesRepId,
-        salesRepresentative: marketCustomer.salesRepId === marketRepNorth.id
-          ? marketRepNorth.name
-          : marketRepCentral.name,
+        salesRepresentative:
+          marketCustomer.salesRepId === marketRepNorth.id
+            ? marketRepNorth.name
+            : marketRepCentral.name,
         isActive: true,
         taxTreatmentId: taxableTreatment.id,
       },
@@ -153,9 +87,10 @@ export async function seedPosMarketDemo(
         name: marketCustomer.name,
         contactInfo: marketCustomer.contactInfo,
         salesRepId: marketCustomer.salesRepId,
-        salesRepresentative: marketCustomer.salesRepId === marketRepNorth.id
-          ? marketRepNorth.name
-          : marketRepCentral.name,
+        salesRepresentative:
+          marketCustomer.salesRepId === marketRepNorth.id
+            ? marketRepNorth.name
+            : marketRepCentral.name,
         taxTreatmentId: taxableTreatment.id,
         creditLimit: new Prisma.Decimal(1000),
         receivableAccountId: tradeReceivableAccount.id,
@@ -166,168 +101,9 @@ export async function seedPosMarketDemo(
 
   await seedMarketRepUser(prisma, marketRepNorth.id);
 
-  let cogsAccount = await prisma.account.findUnique({ where: { code: '5130001' } });
-  if (!cogsAccount) {
-    cogsAccount = await prisma.account.create({
-      data: {
-        code: '5130001',
-        name: 'Cost of Goods Sold',
-        nameAr: 'تكلفة البضاعة المباعة',
-        type: 'EXPENSE',
-        subtype: 'Expense',
-        isPosting: true,
-        isActive: true,
-        parentAccountId: operatingExpenses.id,
-        createdById: options.adminUserId,
-      },
-    });
-  }
-
-  const catalog = await seedShouqCatalog(prisma, { adminUserId: options.adminUserId });
-
-  const repLoadItemCode =
-    catalog.rows.find((row) => row.quantity > 0)?.code ?? `${SHOUQ_CODE_PREFIX}001`;
-
-  await seedRepCarStockDemo(prisma, marketRepNorth.id, mainWarehouse.id, repLoadItemCode);
-
   console.log(
-    `Market POS: ${catalog.created + catalog.updated} Shouq products (codes ${SHOUQ_CODE_PREFIX}*) and ${MARKET_DESTINATION_CUSTOMERS.length} destination markets.`,
+    `Market POS: seeded ${marketDestinationCustomers.length} destination markets and market rep access without inventory demo products.`,
   );
-}
-
-async function seedRepCarStockDemo(
-  prisma: PrismaClient,
-  salesRepId: string,
-  warehouseId: string,
-  itemCode: string,
-) {
-  const item = await prisma.inventoryItem.findUnique({
-    where: { code: itemCode },
-    select: { id: true, unitOfMeasure: true, onHandQuantity: true, valuationAmount: true },
-  });
-  if (!item) {
-    return;
-  }
-
-  const existing = await prisma.repCarLoad.findUnique({
-    where: { reference: 'RCL-DEMO-01' },
-  });
-  if (existing?.status === RepCarLoadStatus.POSTED) {
-    return;
-  }
-
-  const quantity = new Prisma.Decimal(50);
-  const balance = await prisma.inventoryWarehouseBalance.findUnique({
-    where: { itemId_warehouseId: { itemId: item.id, warehouseId } },
-  });
-  const whQty = balance?.onHandQuantity ?? new Prisma.Decimal(0);
-  const whVal = balance?.valuationAmount ?? new Prisma.Decimal(0);
-  const unitCost = whQty.gt(0) ? whVal.div(whQty) : new Prisma.Decimal(0.85);
-  const lineTotal = unitCost.mul(quantity);
-
-  await prisma.$transaction(async (tx) => {
-    const load = await tx.repCarLoad.upsert({
-      where: { reference: 'RCL-DEMO-01' },
-      update: {},
-      create: {
-        reference: 'RCL-DEMO-01',
-        status: RepCarLoadStatus.POSTED,
-        loadDate: new Date(),
-        warehouseId,
-        salesRepId,
-        description: 'Demo rep car load for market_rep register',
-        totalQuantity: quantity,
-        totalAmount: lineTotal,
-        postedAt: new Date(),
-        lines: {
-          create: {
-            lineNumber: 1,
-            itemId: item.id,
-            quantity,
-            unitCost,
-            unitOfMeasure: item.unitOfMeasure,
-            lineTotalAmount: lineTotal,
-          },
-        },
-      },
-      include: { lines: true },
-    });
-
-    await tx.inventoryItem.update({
-      where: { id: item.id },
-      data: {
-        onHandQuantity: { decrement: quantity },
-        valuationAmount: { decrement: lineTotal },
-      },
-    });
-
-    const warehouseBalance = await tx.inventoryWarehouseBalance.upsert({
-      where: { itemId_warehouseId: { itemId: item.id, warehouseId } },
-      create: {
-        itemId: item.id,
-        warehouseId,
-        onHandQuantity: whQty.sub(quantity),
-        valuationAmount: whVal.sub(lineTotal),
-      },
-      update: {
-        onHandQuantity: { decrement: quantity },
-        valuationAmount: { decrement: lineTotal },
-      },
-    });
-
-    await tx.inventoryStockMovement.create({
-      data: {
-        movementType: InventoryStockMovementType.REP_CAR_LOAD,
-        transactionType: 'RepCarLoad',
-        transactionId: load.id,
-        transactionLineId: load.lines[0]?.id,
-        transactionReference: load.reference,
-        transactionDate: load.loadDate,
-        itemId: item.id,
-        warehouseId,
-        quantityOut: quantity,
-        unitCost,
-        valueOut: lineTotal,
-        balanceId: warehouseBalance.id,
-        runningQuantity: warehouseBalance.onHandQuantity,
-        runningValuation: warehouseBalance.valuationAmount,
-      },
-    });
-
-    await tx.repCarStockBalance.upsert({
-      where: { salesRepId_itemId: { salesRepId, itemId: item.id } },
-      create: {
-        salesRepId,
-        itemId: item.id,
-        onHandQuantity: quantity,
-        valuationAmount: lineTotal,
-      },
-      update: {
-        onHandQuantity: quantity,
-        valuationAmount: lineTotal,
-      },
-    });
-
-    await tx.repCarStockMovement.create({
-      data: {
-        movementType: RepCarStockMovementType.LOAD_IN,
-        transactionType: 'RepCarLoad',
-        transactionId: load.id,
-        transactionLineId: load.lines[0]?.id,
-        transactionReference: load.reference,
-        transactionDate: load.loadDate,
-        salesRepId,
-        itemId: item.id,
-        quantityIn: quantity,
-        unitCost,
-        valueIn: lineTotal,
-        runningQuantity: quantity,
-        runningValuation: lineTotal,
-      },
-    });
-  });
-
-  console.log(`Demo rep car load RCL-DEMO-01: 50 x ${itemCode} on REP-MARKET-01`);
 }
 
 const marketRepPermissionCodes: PosPermissionCode[] = [

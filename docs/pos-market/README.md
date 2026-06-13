@@ -132,24 +132,24 @@ userHasPosProduct(user, "market");
 
 For a new site with many products, use **Inventory → Items → Import Products** instead of entering cards one by one.
 
-1. Ensure item **groups**, **categories**, and **units of measure** exist first (demo: `npm run seed:market` creates `MARKET-*` groups/categories and standard units).
+1. Ensure item **groups**, **categories**, and **units of measure** exist first. The core foundation seed still creates the standard inventory units, but item groups/categories and warehouses are no longer auto-seeded.
 2. Download the Excel template from the import modal (Arabic columns: `رمز المادة`, `وصف المادة`, `الوحدة`, `الكمية`, `الكلفة`, `سعر البيع`).
 3. Fill rows — `كيلو` / `حبة` map to `KG` / `PCS`; numeric `رمز المادة` becomes `MKT-SHQ-001` style codes for Market POS. Legacy English headers (`name`, `groupCode`, …) still work.
 4. Upload, review the preview (valid / skipped / error per row), then import. Existing codes are skipped automatically. KG rows get sell-by-weight enabled.
-5. Opening stock (`الكمية`) is **not** imported via the UI — use goods receipts or the Shouq seed script below. The Shouq seed posts warehouse opening stock and mirrors the total into GL (`1131001` Merchandise Inventory debited to `3410001` Opening Balance Equity, journal ref `JE-SHOUQ-OPENING-INV`).
+5. Opening stock (`الكمية`) is **not** imported via the UI — use goods receipts or the optional Shouq seed script below. The Shouq seed posts warehouse opening stock and mirrors the total into GL (`1131001` Merchandise Inventory debited to `3410001` Opening Balance Equity, journal ref `JE-SHOUQ-OPENING-INV`).
 
 ## Shouq catalog seed
 
-Market products are loaded from `backend/data/shouq.xlsx` (sweets/snacks catalog). Codes are `MKT-SHQ-*` under `MARKET-SNACKS`. Legacy demo products (`MKT-001` … `MKT-012`) are deactivated when this seed runs.
+Market products can be loaded from `backend/data/shouq.xlsx` (sweets/snacks catalog). Codes are `MKT-SHQ-*` under `MARKET-SNACKS`. This script now expects the target item group/category and warehouse to already exist. Legacy demo products (`MKT-001` … `MKT-012`) are deactivated when this seed runs.
 
 ```bash
-cd backend && npm run seed:market    # groups, destination markets, reps + Shouq catalog
-cd backend && npm run seed:shouq     # reload Shouq catalog only (requires foundation + MARKET-* groups)
+cd backend && npm run seed:market    # destination markets, reps, market logins
+cd backend && npm run seed:shouq     # load Shouq catalog inventory only (requires existing group/category + warehouse)
 ```
 
 Replace `backend/data/shouq.xlsx` with an updated spreadsheet (same column layout), then re-run `npm run seed:shouq`.
 
-Included in the main `npm run seed` flow after restaurant POS demo seed. Requires foundation data (`admin` user) when run standalone.
+`npm run seed:shouq` is optional and separate from the main `npm run seed` flow. It still requires foundation data (`admin` user) when run standalone.
 
 Market cashier login only (no catalog wipe):
 
@@ -157,22 +157,9 @@ Market cashier login only (no catalog wipe):
 cd backend && npm run seed:market-cashier
 ```
 
-### Boss demo showcase (warehouse + register stock)
+### Boss demo showcase
 
-Eight easy-to-demo products (`MKT-DEMO-01` … `MKT-DEMO-08`) with round warehouse quantities in **WH-MAIN**, rep car stock on **REP-MARKET-01**, and GL opening entry `JE-MKT-DEMO-OPENING-INV`. Safe to re-run (idempotent). Preserved when Shouq catalog seed runs.
-
-```bash
-cd backend && npm run seed:market-showcase
-```
-
-Requires foundation data (`admin` user). Runs `seed:market` automatically if `MARKET-SNACKS` is missing. Also ensures `market_cashier` / `market123`.
-
-| Screen | What to show |
-|--------|----------------|
-| `/inventory` | Search `MKT-DEMO` — warehouse on-hand in WH-MAIN |
-| `/accounts` | `1131001` Merchandise Inventory balance |
-| `/pos-market/register` | Login `market_cashier` / `market123`, open shift, pick rep + destination market, sell demo products |
-| `/pos-market/my-stock` | Login `market_rep` / `market123` — car quantities |
+The old hardcoded showcase inventory products (`MKT-DEMO-01` … `MKT-DEMO-08`) are no longer seeded. `npm run seed:market-showcase` now exits without creating inventory demo items so existing automation stays safe.
 
 ### Destination markets (customers)
 
@@ -183,7 +170,7 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - Walk-in customer (`POS-WALKIN`) is rejected for market sales.
 - Demo destination markets are seeded with codes `MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03` (`npm run seed:market`).
 - Session warehouse = main stock location for **loads** (تحميل سيارة); customer = who received the goods on sale.
-- Register catalog on-hand quantities are scoped to the **active sales rep's car balance** (`RepCarStockBalance`), not main-warehouse on-hand. Demo `MKT-*` stock is seeded into every active non-transit warehouse (`npm run seed:market`); demo rep load `RCL-DEMO-01` moves 50× `MKT-001` from the main warehouse onto `REP-MARKET-01`.
+- Register catalog on-hand quantities are scoped to the **active sales rep's car balance** (`RepCarStockBalance`), not main-warehouse on-hand. Provide actual market inventory through normal inventory entry/import/receipt flows or the optional `npm run seed:shouq` catalog load if you need seeded stock.
 - Demo markets are linked to sales reps `REP-MARKET-01` / `REP-MARKET-02` for receivables filtering.
 
 ### Credit sales (ذمم)
@@ -300,7 +287,7 @@ Shared payment GL mappings (`PosRuntimeSetting`) are used by both restaurant and
 ## Manual test checklist
 
 1. Login `market / market123` → lands on `/pos-market/register`
-2. Admin: post demo rep load (`RCL-DEMO-01` from `npm run seed:market`) or create/post a load at `/pos-market/rep-loads`
+2. Admin: create/post a rep load at `/pos-market/rep-loads`
 3. Open session (warehouse + cash account + **sales rep**) → **select destination market** (ERP customer, e.g. `MKT-AMMAN-01`) → add `MKT-*` products (on-hand = rep car) → pay → complete sale
 3. Hold/resume sale; close session with report
 4. Receipt print (browser fallback when QZ Tray unavailable)

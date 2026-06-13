@@ -136,24 +136,20 @@ export async function seedVolumeMasters(
   }
 
   const warehouses = await prisma.inventoryWarehouse.findMany({ take: 3 });
-  let warehouseIds = warehouses.map((row) => row.id);
-
-  if (!warehouseIds.length) {
-    const mainWarehouse = await prisma.inventoryWarehouse.create({
-      data: {
-        code: 'WH-AMM',
-        name: 'مستودع عمّان الرئيسي',
-        isActive: true,
-      },
-    });
-    warehouseIds = [mainWarehouse.id];
-  }
+  const warehouseIds = warehouses.map((row) => row.id);
 
   const uom = await prisma.inventoryUnitOfMeasure.findFirstOrThrow({ where: { code: 'PCS' } });
   const itemGroups = await prisma.inventoryItemGroup.findMany({ take: 6 });
   const categories = await prisma.inventoryItemCategory.findMany({ take: 12 });
 
+  if (!itemGroups.length || !categories.length) {
+    console.log('Volume masters: skipped inventory item seeds because no item groups/categories are seeded.');
+  }
+
   for (let index = 0; index < config.inventoryItems; index += 1) {
+    if (!itemGroups.length || !categories.length) {
+      break;
+    }
     const group = itemGroups[index % itemGroups.length];
     const category = categories[index % categories.length];
     if (!group || !category) continue;

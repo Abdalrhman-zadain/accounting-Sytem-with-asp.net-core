@@ -409,7 +409,7 @@ async function main() {
       select: { id: true },
     });
     if (!snackGroup) {
-      throw new Error(`${SHOUQ_GROUP_CODE} group not found. Run npm run seed:market first.`);
+      throw new Error(`${SHOUQ_GROUP_CODE} group not found. Create the item group/category and warehouse first.`);
     }
 
     await seedShouqCatalog(prisma, { adminUserId: admin.id });

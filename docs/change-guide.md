@@ -920,9 +920,9 @@ Where to edit:
 - category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
-- POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+- POS register demo setup (customers, cashier favorites, add-ons; no seeded warehouses/groups/categories or hardcoded inventory products): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
 - POS add-on demo groups (extras, cooking level, drink size) linked to sandwich/chips/drinks: `backend/prisma/seed-pos-addons.ts` (runs with register seed); refresh only add-ons on an existing DB with `npm run seed:pos-addons`
-- Market POS demo catalog (`MKT-*` products, barcodes, stock, images) and destination markets (`MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03`): `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
+- Market POS destination markets (`MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03`) and market-rep access: `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
 - Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`): `backend/prisma/setup-pos-market-cashier.ts`, invoked from full `npm run seed` or standalone `npm run seed:market-cashier`
 
 ### Volume seed (enterprise demo dataset)

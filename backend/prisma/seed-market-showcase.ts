@@ -25,85 +25,18 @@ type ShowcaseProduct = {
 };
 
 /** Round-number demo products for warehouse + market POS register demos. */
-const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
-  {
-    code: 'MKT-DEMO-01',
-    name: 'شوكولاتة بالحليب — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 500,
-    purchasePrice: 0.85,
-    salesPrice: 1.25,
-    repCarQty: 80,
-  },
-  {
-    code: 'MKT-DEMO-02',
-    name: 'بسكويت محشي — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 400,
-    purchasePrice: 0.6,
-    salesPrice: 0.95,
-    repCarQty: 60,
-  },
-  {
-    code: 'MKT-DEMO-03',
-    name: 'كيك شوكولا — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 200,
-    purchasePrice: 1.2,
-    salesPrice: 1.8,
-    repCarQty: 40,
-  },
-  {
-    code: 'MKT-DEMO-04',
-    name: 'حلاوة طحينية — عرض',
-    unitCode: 'KG',
-    warehouseQty: 150,
-    purchasePrice: 3.5,
-    salesPrice: 5.0,
-    repCarQty: 25,
-  },
-  {
-    code: 'MKT-DEMO-05',
-    name: 'مكسرات مشكلة — عرض',
-    unitCode: 'KG',
-    warehouseQty: 100,
-    purchasePrice: 8.0,
-    salesPrice: 12.0,
-    repCarQty: 15,
-  },
-  {
-    code: 'MKT-DEMO-06',
-    name: 'عصير برتقال — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 300,
-    purchasePrice: 0.45,
-    salesPrice: 0.75,
-    repCarQty: 50,
-  },
-  {
-    code: 'MKT-DEMO-07',
-    name: 'رقائق بطاطا — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 600,
-    purchasePrice: 0.35,
-    salesPrice: 0.55,
-    repCarQty: 100,
-  },
-  {
-    code: 'MKT-DEMO-08',
-    name: 'علكة نعناع — عرض',
-    unitCode: 'PCS',
-    warehouseQty: 800,
-    purchasePrice: 0.15,
-    salesPrice: 0.25,
-    repCarQty: 120,
-  },
-];
+const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [];
 
 export async function seedMarketShowcase(
   prisma: PrismaClient,
   options: { adminUserId: string },
 ) {
+  if (SHOWCASE_PRODUCTS.length === 0) {
+    await setupPosMarketCashierUser(prisma);
+    console.log('Market showcase seed skipped because showcase inventory demo items were removed.');
+    return;
+  }
+
   console.log('Seeding market showcase demo (MKT-DEMO-* products with warehouse + rep car stock)...');
 
   const snackGroup = await prisma.inventoryItemGroup.findUnique({
