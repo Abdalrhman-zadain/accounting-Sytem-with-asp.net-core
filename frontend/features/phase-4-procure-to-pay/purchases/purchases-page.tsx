@@ -21,6 +21,8 @@ import {
   LuUsers as Users,
   LuUserRound as UserRound,
   LuX as X,
+  LuChevronLeft as ChevronLeft,
+  LuChevronRight as ChevronRight,
 } from "react-icons/lu";
 
 import {
@@ -384,12 +386,14 @@ export function PurchasesPage() {
   const [inlineJournalReference, setInlineJournalReference] = useState<string | null>(null);
   const [isInvoiceEditorOpen, setIsInvoiceEditorOpen] = useState(false);
   const [invoiceEditor, setInvoiceEditor] = useState<PurchaseInvoiceEditorState>(EMPTY_INVOICE_EDITOR);
+  const [invoiceActiveTab, setInvoiceActiveTab] = useState<"lines" | "journal" | "other">("lines");
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [paymentSearch, setPaymentSearch] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<"" | "DRAFT" | "POSTED" | "CANCELLED" | "REVERSED">("");
   const [selectedSupplierPaymentId, setSelectedSupplierPaymentId] = useState<string | null>(null);
   const [isPaymentEditorOpen, setIsPaymentEditorOpen] = useState(false);
   const [paymentEditor, setPaymentEditor] = useState<SupplierPaymentEditorState>(EMPTY_PAYMENT_EDITOR);
+  const [paymentActiveTab, setPaymentActiveTab] = useState<"details" | "journal" | "other">("details");
   const [guidedPaymentSourceInvoice, setGuidedPaymentSourceInvoice] = useState<PurchaseInvoice | null>(null);
   const [debitNoteSearch, setDebitNoteSearch] = useState("");
   const [debitNoteStatusFilter, setDebitNoteStatusFilter] = useState<"" | "DRAFT" | "POSTED" | "APPLIED" | "CANCELLED" | "REVERSED">("");
@@ -398,6 +402,16 @@ export function PurchasesPage() {
   const [debitNoteEditor, setDebitNoteEditor] = useState<DebitNoteEditorState>(EMPTY_DEBIT_NOTE_EDITOR);
   const [isPaymentTermCreatorOpen, setIsPaymentTermCreatorOpen] = useState(false);
   const [paymentTermCreator, setPaymentTermCreator] = useState<{ name: string; nameAr: string; calculationMethod: DueDateCalculationMethod; numberOfDays: string }>({ name: "", nameAr: "", calculationMethod: "IMMEDIATE", numberOfDays: "" });
+
+  const isInlineRequestWorkspace = workspace === "requests" && isRequestEditorOpen;
+  const isInlineOrderWorkspace = workspace === "orders" && isOrderEditorOpen;
+  const isInlineInvoiceWorkspace = workspace === "invoices" && isInvoiceEditorOpen;
+  const isInlinePaymentWorkspace = workspace === "payments" && isPaymentEditorOpen;
+  const isInlineWorkspaceActive =
+    isInlineRequestWorkspace ||
+    isInlineOrderWorkspace ||
+    isInlineInvoiceWorkspace ||
+    isInlinePaymentWorkspace;
 
   const needsPayableAccountsTree = workspace === "suppliers" || isSupplierEditorOpen;
   const needsInvoiceAccounts = workspace === "invoices" || isInvoiceEditorOpen;
@@ -644,6 +658,28 @@ export function PurchasesPage() {
     },
     enabled: Boolean(inlineJournalReference),
   });
+
+  useEffect(() => {
+    const purchaseInvoiceRows = purchaseInvoicesQuery.data ?? [];
+    const supplierPaymentRows = supplierPaymentsQuery.data ?? [];
+    if (workspace === "invoices" && isInvoiceEditorOpen && invoiceActiveTab === "journal" && invoiceEditor.id) {
+      const ref = purchaseInvoiceRows.find((i) => i.id === invoiceEditor.id)?.journalReference ?? null;
+      setInlineJournalReference(ref);
+    } else if (workspace === "payments" && isPaymentEditorOpen && paymentActiveTab === "journal" && paymentEditor.id) {
+      const ref = supplierPaymentRows.find((p) => p.id === paymentEditor.id)?.journalReference ?? null;
+      setInlineJournalReference(ref);
+    }
+  }, [
+    workspace,
+    isInvoiceEditorOpen,
+    invoiceActiveTab,
+    invoiceEditor.id,
+    isPaymentEditorOpen,
+    paymentActiveTab,
+    paymentEditor.id,
+    purchaseInvoicesQuery.data,
+    supplierPaymentsQuery.data,
+  ]);
 
   const createSupplierMutation = useMutation({
     mutationFn: () =>
@@ -1598,20 +1634,154 @@ export function PurchasesPage() {
     workspace,
   ]);
 
+  const requestSummary = useMemo(
+    () => ({
+      totalItems: requestEditor.lines.length,
+      totalQuantity: requestEditor.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0),
+    }),
+    [requestEditor.lines],
+  );
+
+  const orderTotals = useMemo(
+    () =>
+      orderEditor.lines.reduce(
+        (totals, line) => {
+          const quantity = Number(line.quantity || 0);
+          const unitPrice = Number(line.unitPrice || 0);
+          const taxAmount = Number(line.taxAmount || 0);
+          const subtotal = Number((quantity * unitPrice).toFixed(2));
+          return {
+            subtotalAmount: Number((totals.subtotalAmount + subtotal).toFixed(2)),
+            taxAmount: Number((totals.taxAmount + taxAmount).toFixed(2)),
+            totalAmount: Number((totals.totalAmount + subtotal + taxAmount).toFixed(2)),
+          };
+        },
+        { subtotalAmount: 0, taxAmount: 0, totalAmount: 0 },
+      ),
+    [orderEditor.lines],
+  );
+
   return (
     <PageShell>
       <div className="space-y-8">
-        <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
-          <div className="text-right">
-            <h1 className="text-2xl font-black tracking-tight text-gray-950">
-              {t("purchases.title")}
-            </h1>
-          </div>
+        {!isInlineWorkspaceActive ? (
+          <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+            <div className="text-right">
+              <h1 className="text-2xl font-black tracking-tight text-gray-950">
+                {t("purchases.title")}
+              </h1>
+            </div>
 
-          <Button onClick={primaryWorkspaceAction.onClick}>
-            {primaryWorkspaceAction.label}
-          </Button>
-        </div>
+            <Button onClick={primaryWorkspaceAction.onClick}>
+              {primaryWorkspaceAction.label}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="font-medium text-gray-400">{isArabic ? "المشتريات" : "Procure-to-Pay"}</span>
+              {isArabic ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-400" />}
+              {isInlineRequestWorkspace ? (
+                <>
+                  <button onClick={closeRequestEditor} className="font-medium hover:text-emerald-700 transition-colors">
+                    {t("purchases.workspace.requests") || (isArabic ? "طلبات الشراء" : "Purchase Requests")}
+                  </button>
+                  {isArabic ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-400" />}
+                  <span className="font-bold text-gray-900">
+                    {requestEditor.id
+                      ? `${isArabic ? "تعديل طلب شراء" : "Edit Purchase Request"}`
+                      : (t("purchases.dialog.newRequest") || (isArabic ? "طلب شراء جديد" : "New Purchase Request"))}
+                  </span>
+                </>
+              ) : isInlineOrderWorkspace ? (
+                <>
+                  <button onClick={closeOrderEditor} className="font-medium hover:text-emerald-700 transition-colors">
+                    {t("purchases.workspace.orders") || (isArabic ? "أوامر الشراء" : "Purchase Orders")}
+                  </button>
+                  {isArabic ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-400" />}
+                  <span className="font-bold text-gray-900">
+                    {orderEditor.id
+                      ? (isArabic ? "تعديل أمر شراء" : "Edit Purchase Order")
+                      : (t("purchases.dialog.newOrder") || (isArabic ? "أمر شراء جديد" : "New Purchase Order"))}
+                  </span>
+                </>
+              ) : isInlineInvoiceWorkspace ? (
+                <>
+                  <button onClick={closeInvoiceEditor} className="font-medium hover:text-emerald-700 transition-colors">
+                    {t("purchases.workspace.invoices") || (isArabic ? "فواتير الشراء" : "Purchase Invoices")}
+                  </button>
+                  {isArabic ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-400" />}
+                  <span className="font-bold text-gray-900">
+                    {invoiceEditor.id
+                      ? `${isArabic ? "تعديل فاتورة شراء" : "Edit Purchase Invoice"} (${invoiceEditor.reference})`
+                      : (t("purchases.dialog.newInvoice") || (isArabic ? "فاتورة شراء جديدة" : "New Purchase Invoice"))}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <button onClick={closePaymentEditor} className="font-medium hover:text-emerald-700 transition-colors">
+                    {t("purchases.workspace.payments") || (isArabic ? "سندات الصرف لمورد" : "Supplier Payments")}
+                  </button>
+                  {isArabic ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronLeft className="h-4 w-4 text-gray-400" />}
+                  <span className="font-bold text-gray-900">
+                    {paymentEditor.id
+                      ? `${isArabic ? "تعديل دفعة لمورد" : "Edit Supplier Payment"} (${paymentEditor.reference})`
+                      : (t("purchases.dialog.newPayment") || (isArabic ? "تسجيل دفعة لمورد" : "Register Supplier Payment"))}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  if (isInlineRequestWorkspace) {
+                    closeRequestEditor();
+                  } else if (isInlineOrderWorkspace) {
+                    closeOrderEditor();
+                  } else if (isInlineInvoiceWorkspace) {
+                    setIsInvoiceEditorOpen(false);
+                    setInvoiceEditor(EMPTY_INVOICE_EDITOR);
+                  } else {
+                    setIsPaymentEditorOpen(false);
+                    setPaymentEditor(EMPTY_PAYMENT_EDITOR);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-gray-950"
+              >
+                {isArabic ? (
+                  <>
+                    <ChevronRight className="h-4 w-4" />
+                    <span>رجوع</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronLeft className="h-4 w-4" />
+                    <span>Back</span>
+                  </>
+                )}
+              </button>
+              <h2 className="text-xl font-black text-gray-950">
+                {isInlineRequestWorkspace ? (
+                  requestEditor.id
+                    ? (isArabic ? "تعديل طلب شراء" : "Edit Purchase Request")
+                    : (t("purchases.dialog.newRequest") || (isArabic ? "طلب شراء جديد" : "New Purchase Request"))
+                ) : isInlineOrderWorkspace ? (
+                  orderEditor.id
+                    ? (isArabic ? "تعديل أمر شراء" : "Edit Purchase Order")
+                    : (t("purchases.dialog.newOrder") || (isArabic ? "أمر شراء جديد" : "New Purchase Order"))
+                ) : isInlineInvoiceWorkspace ? (
+                  invoiceEditor.id
+                    ? `${isArabic ? "تعديل فاتورة شراء" : "Edit Purchase Invoice"} (${invoiceEditor.reference})`
+                    : (t("purchases.dialog.newInvoice") || (isArabic ? "فاتورة شراء جديدة" : "New Purchase Invoice"))
+                ) : (
+                  paymentEditor.id
+                    ? `${isArabic ? "تعديل دفعة لمورد" : "Edit Supplier Payment"} (${paymentEditor.reference})`
+                    : (t("purchases.dialog.newPayment") || (isArabic ? "تسجيل دفعة لمورد" : "Register Supplier Payment"))
+                )}
+              </h2>
+            </div>
+          </div>
+        )}
 
         {isSupplierEditorOpen && (
           <Card className="space-y-5 border border-gray-200 bg-white p-6 shadow-sm">
@@ -1902,6 +2072,177 @@ export function PurchasesPage() {
 
           </>
         ) : workspace === "requests" ? (
+          isRequestEditorOpen ? (
+            <div className="space-y-5" dir={isArabic ? "rtl" : "ltr"}>
+              {requestFormError ? (
+                <div className={cn("rounded-md border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold text-amber-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {requestFormError}
+                </div>
+              ) : null}
+              {requestSaveError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {requestSaveError}
+                </div>
+              ) : null}
+              {requestActionError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {requestActionError}
+                </div>
+              ) : null}
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="mb-4 flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <ScrollText className="h-4.5 w-4.5" />
+                  </div>
+                  <div className={isArabic ? "text-right" : "text-left"}>
+                    <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
+                      {isArabic ? "البيانات الأساسية" : "Basic Information"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <Field label={t("purchases.requests.field.requestDate")} required labelAlign={isArabic ? "end" : "start"}>
+                      <div className="relative">
+                        <Input
+                          type="date"
+                          value={requestEditor.requestDate}
+                          onChange={(event) => setRequestEditor((current) => ({ ...current, requestDate: event.target.value }))}
+                          className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic ? "pe-10 text-right" : "ps-10")}
+                        />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      </div>
+                    </Field>
+                  </div>
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <Field label={t("purchases.requests.field.description")} labelAlign={isArabic ? "end" : "start"}>
+                      <Textarea
+                        rows={2}
+                        value={requestEditor.description}
+                        onChange={(event) => setRequestEditor((current) => ({ ...current, description: event.target.value }))}
+                        placeholder={t("purchases.requests.field.descriptionPlaceholder")}
+                        className={cn("rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic && "text-right")}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                  <div className="rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm px-4 py-2 text-sm font-bold">
+                    {isArabic ? "بنود الطلب" : "Request Items"}
+                  </div>
+                  <div className="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 border border-transparent">
+                    {isArabic ? "معلومات أخرى" : "Other Info"}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <Package2 className="h-5 w-5 text-slate-500" />
+                      <span className="text-base font-bold">{isArabic ? "تفاصيل بنود الطلب" : "Request Line Items"}</span>
+                    </div>
+                    <Button type="button" variant="secondary" size="sm" onClick={addRequestLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
+                      <CirclePlus className="h-4 w-4" />
+                      <span>{isArabic ? "إضافة سطر" : "Add Line"}</span>
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table className="min-w-[1220px] table-fixed border-collapse text-sm">
+                      <thead className="bg-slate-50/75">
+                        <tr>
+                          <th className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                          <th className={cn("w-[250px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.requests.field.itemOrService")}</th>
+                          <th className={cn("w-[110px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.requests.field.quantity")}</th>
+                          <th className={cn("w-[170px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.requests.field.deliveryDate")}</th>
+                          <th className={cn("w-[220px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.requests.field.justification")}</th>
+                          <th className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.requests.field.lineDescription")}</th>
+                          <th className="w-[80px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">{isArabic ? "إجراء" : "Action"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {requestEditor.lines.map((line, index) => (
+                          <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.itemId}
+                                onChange={(event) => updateRequestLineFromItem(line.key, inventoryItems.find((i) => i.id === event.target.value) ?? null)}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{inventoryItemsQuery.isLoading ? t("purchases.requests.state.loadingItems") : t("purchases.requests.empty.selectItemOrService")}</option>
+                                {inventoryItems.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.code} · {cleanDisplayName(item.name)}
+                                  </option>
+                                ))}
+                              </Select>
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateRequestLine(line.key, "quantity", event.target.value)} className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200" />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input type="date" min={requestEditor.requestDate || "2000-01-01"} value={line.requestedDeliveryDate} onChange={(event) => updateRequestLine(line.key, "requestedDeliveryDate", event.target.value)} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input value={line.justification} onChange={(event) => updateRequestLine(line.key, "justification", event.target.value)} placeholder={t("purchases.requests.field.justificationPlaceholder")} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input value={line.description} onChange={(event) => updateRequestLine(line.key, "description", event.target.value)} placeholder={t("purchases.requests.field.lineDescriptionPlaceholder")} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                            </td>
+                            <td className="px-2.5 py-3.5 text-center">
+                              <Button type="button" variant="secondary" size="sm" onClick={() => removeRequestLine(line.key)} disabled={requestEditor.lines.length === 1} className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition">
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                    <div />
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-slate-500">{isArabic ? "عدد البنود" : "Total Items"}</span>
+                          <span className="font-bold text-slate-900">{requestSummary.totalItems}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-slate-500">{isArabic ? "إجمالي الكمية" : "Requested Quantity"}</span>
+                          <span className="font-bold text-slate-900">{requestSummary.totalQuantity}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                <Button variant="secondary" onClick={closeRequestEditor} className="rounded-xl px-6">
+                  {t("purchases.action.cancel")}
+                </Button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button variant="secondary" onClick={() => void savePurchaseRequestDraft()} disabled={Boolean(requestFormError) || createPurchaseRequestMutation.isPending || updatePurchaseRequestMutation.isPending || submitPurchaseRequestMutation.isPending} className="rounded-xl px-6">
+                    <Save className="h-4 w-4" />
+                    {requestEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button onClick={() => void confirmPurchaseRequest()} disabled={Boolean(requestFormError) || createPurchaseRequestMutation.isPending || updatePurchaseRequestMutation.isPending || submitPurchaseRequestMutation.isPending} className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700">
+                    <Check className="h-4 w-4" />
+                    {isArabic ? "تأكيد طلب الشراء" : "Confirm Purchase Request"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <SummaryCard label={t("purchases.requests.summary.total")} value={String(totalRequests)} hint={t("purchases.requests.summary.totalHint")} />
@@ -2060,7 +2401,220 @@ export function PurchasesPage() {
               </div>
             </Card>
           </>
+          )
         ) : workspace === "orders" ? (
+          isOrderEditorOpen ? (
+            <div className="space-y-5" dir={isArabic ? "rtl" : "ltr"}>
+              {orderFormError ? (
+                <div className={cn("rounded-md border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold text-amber-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {orderFormError}
+                </div>
+              ) : null}
+              {orderSaveError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {orderSaveError}
+                </div>
+              ) : null}
+              {orderActionError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {orderActionError}
+                </div>
+              ) : null}
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="mb-4 flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <FilePlus className="h-4.5 w-4.5" />
+                  </div>
+                  <div className={isArabic ? "text-right" : "text-left"}>
+                    <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
+                      {isArabic ? "البيانات الأساسية" : "Basic Information"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="sm:col-span-2">
+                    <Field label={t("purchases.orders.field.supplier")} required labelAlign={isArabic ? "end" : "start"}>
+                      <div className="relative">
+                        <Select
+                          value={orderEditor.supplierId}
+                          onChange={(event) => {
+                            const supplier = activeSuppliers.find((row) => row.id === event.target.value);
+                            setOrderEditor((current) => ({
+                              ...current,
+                              supplierId: event.target.value,
+                              currencyCode: current.id ? current.currencyCode : supplier?.defaultCurrency || current.currencyCode,
+                            }));
+                          }}
+                          className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic ? "pe-10 text-right" : "ps-10")}
+                        >
+                          <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
+                          {activeSuppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.code} · {cleanDisplayName(supplier.name)}
+                            </option>
+                          ))}
+                        </Select>
+                        <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      </div>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label={t("purchases.orders.field.orderDate")} required labelAlign={isArabic ? "end" : "start"}>
+                      <div className="relative">
+                        <Input type="date" value={orderEditor.orderDate} onChange={(event) => setOrderEditor((current) => ({ ...current, orderDate: event.target.value }))} className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic ? "pe-10 text-right" : "ps-10")} />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      </div>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label={t("purchases.requests.field.currency")} required labelAlign={isArabic ? "end" : "start"}>
+                      <Select value={orderEditor.currencyCode} onChange={(event) => setOrderEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))} className="h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10">
+                        {currencies.length === 0 ? (
+                          <option value="JOD">{t("purchases.currency.jod")}</option>
+                        ) : (
+                          currencies.filter((c) => c.isActive).map((curr) => (
+                            <option key={curr.id} value={curr.code}>
+                              {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                            </option>
+                          ))
+                        )}
+                      </Select>
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Field label={t("purchases.orders.field.description")} labelAlign={isArabic ? "end" : "start"}>
+                    <Textarea rows={2} value={orderEditor.description} onChange={(event) => setOrderEditor((current) => ({ ...current, description: event.target.value }))} placeholder={t("purchases.orders.field.descriptionPlaceholder")} className={cn("rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic && "text-right")} />
+                  </Field>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                  {[
+                    isArabic ? "بنود الأمر" : "Order Items",
+                    isArabic ? "عناصر اليومية" : "Journal Entries",
+                    isArabic ? "معلومات أخرى" : "Other Info",
+                  ].map((label, index) => (
+                    <div key={label} className={cn("rounded-xl px-4 py-2 text-sm font-bold border", index === 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200/50 shadow-sm" : "text-slate-600 border-transparent")}>
+                      {label}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <Package2 className="h-5 w-5 text-slate-500" />
+                      <span className="text-base font-bold">{isArabic ? "تفاصيل بنود الأمر" : "Purchase Order Lines"}</span>
+                    </div>
+                    <Button type="button" variant="secondary" size="sm" onClick={addOrderLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
+                      <CirclePlus className="h-4 w-4" />
+                      <span>{isArabic ? "إضافة سطر" : "Add Line"}</span>
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table className="min-w-[1260px] table-fixed border-collapse text-sm">
+                      <thead className="bg-slate-50/75">
+                        <tr>
+                          <th className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                          <th className={cn("w-[250px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.itemOrService")}</th>
+                          <th className={cn("w-[160px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.deliveryDate")}</th>
+                          <th className={cn("w-[90px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.quantity")}</th>
+                          <th className={cn("w-[120px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.unitPrice")}</th>
+                          <th className={cn("w-[180px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.tax")}</th>
+                          <th className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.lineDescription")}</th>
+                          <th className={cn("w-[140px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.orders.field.lineTotal")}</th>
+                          <th className="w-[80px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">{isArabic ? "إجراء" : "Action"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {orderEditor.lines.map((line, index) => {
+                          const lineTotal = Number((Number(line.quantity || 0) * Number(line.unitPrice || 0) + Number(line.taxAmount || 0)).toFixed(2));
+                          return (
+                            <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                              <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                              <td className="px-2.5 py-3.5">
+                                <Select value={line.itemId} onChange={(event) => updateOrderLineFromItem(line.key, inventoryItems.find((i) => i.id === event.target.value) ?? null)} className="h-10 rounded-lg text-sm bg-white border-slate-200">
+                                  <option value="">{inventoryItemsQuery.isLoading ? t("purchases.orders.state.loadingItems") : t("purchases.orders.empty.selectItemOrService")}</option>
+                                  {inventoryItems.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.code} · {cleanDisplayName(item.name)}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Input type="date" value={line.requestedDeliveryDate} onChange={(event) => updateOrderLine(line.key, "requestedDeliveryDate", event.target.value)} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateOrderLine(line.key, "quantity", event.target.value)} className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200" />
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => updateOrderLine(line.key, "unitPrice", event.target.value)} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Select value={line.taxId} onChange={(event) => updateOrderLineTax(line.key, activeTaxes.find((tax) => tax.id === event.target.value) ?? null)} className="h-10 rounded-lg text-sm bg-white border-slate-200">
+                                  <option value="">{t("purchases.orders.field.tax")}</option>
+                                  {activeTaxes.map((tax) => (
+                                    <option key={tax.id} value={tax.id}>
+                                      {tax.taxName} {Number(tax.rate).toFixed(2)}%
+                                    </option>
+                                  ))}
+                                </Select>
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Input value={line.description} onChange={(event) => updateOrderLine(line.key, "description", event.target.value)} placeholder={t("purchases.orders.field.lineDescriptionPlaceholder")} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                              </td>
+                              <td className="px-2.5 py-3.5">
+                                <Input value={lineTotal.toFixed(2)} readOnly disabled className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent" />
+                              </td>
+                              <td className="px-2.5 py-3.5 text-center">
+                                <Button type="button" variant="secondary" size="sm" onClick={() => removeOrderLine(line.key)} disabled={orderEditor.lines.length === 1} className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition">
+                                  <Trash2 className="h-5 w-5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                    <div />
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{isArabic ? "الإجمالي قبل الضريبة" : "Subtotal"}</span><span className="font-bold text-slate-900">{formatCurrency(orderTotals.subtotalAmount)}</span></div>
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{isArabic ? "الضريبة" : "Tax"}</span><span className="font-bold text-slate-900">{formatCurrency(orderTotals.taxAmount)}</span></div>
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{isArabic ? "الإجمالي" : "Order Total"}</span><span className="font-bold text-emerald-700">{formatCurrency(orderTotals.totalAmount)}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                <Button variant="secondary" onClick={closeOrderEditor} className="rounded-xl px-6">
+                  {t("purchases.action.cancel")}
+                </Button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button variant="secondary" onClick={() => void savePurchaseOrderDraft()} disabled={Boolean(orderFormError) || createPurchaseOrderMutation.isPending || updatePurchaseOrderMutation.isPending || issuePurchaseOrderMutation.isPending} className="rounded-xl px-6">
+                    <Save className="h-4 w-4" />
+                    {orderEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button onClick={() => void confirmPurchaseOrder()} disabled={Boolean(orderFormError) || createPurchaseOrderMutation.isPending || updatePurchaseOrderMutation.isPending || issuePurchaseOrderMutation.isPending} className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700">
+                    <Check className="h-4 w-4" />
+                    {isArabic ? "إصدار أمر الشراء" : "Issue Purchase Order"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <SummaryCard label={t("purchases.orders.summary.total")} value={String(totalOrders)} hint={t("purchases.orders.summary.totalHint")} />
@@ -2237,89 +2791,540 @@ export function PurchasesPage() {
             </Card>
 
           </>
+          )
         ) : workspace === "invoices" ? (
-          <>
-            <div className="grid gap-4 md:grid-cols-3">
-              <SummaryCard label={t("purchases.invoices.summary.total")} value={String(totalInvoices)} hint={t("purchases.invoices.summary.totalHint")} />
-              <SummaryCard label={t("purchases.invoices.summary.draft")} value={String(draftInvoices)} hint={t("purchases.invoices.summary.draftHint")} />
-              <SummaryCard label={t("purchases.invoices.summary.linkedOrders")} value={String(linkedOrderInvoices)} hint={t("purchases.invoices.summary.linkedOrdersHint")} />
-            </div>
-
-            <Card className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label={t("purchases.invoices.filters.search")}>
-                  <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} placeholder={t("purchases.invoices.filters.searchPlaceholder")} />
-                </Field>
-                <Field label={t("purchases.invoices.filters.status")}>
-                  <Select value={invoiceStatusFilter} onChange={(event) => setInvoiceStatusFilter(event.target.value as typeof invoiceStatusFilter)}>
-                    <option value="">{t("purchases.filters.allStatuses")}</option>
-                    <option value="DRAFT">{t("purchases.status.draft")}</option>
-                    <option value="POSTED">{t("purchases.invoices.status.posted")}</option>
-                    <option value="PARTIALLY_PAID">{t("purchases.invoices.status.partiallyPaid")}</option>
-                    <option value="FULLY_PAID">{t("purchases.invoices.status.fullyPaid")}</option>
-                    <option value="CANCELLED">{t("purchases.status.cancelled")}</option>
-                    <option value="REVERSED">{t("purchases.status.reversed")}</option>
-                  </Select>
-                </Field>
-                <div className="flex items-end">
-                  <Button variant="secondary" onClick={() => { setInvoiceSearch(""); setInvoiceStatusFilter(""); }}>
-                    {t("purchases.action.clearFilters")}
+          isInvoiceEditorOpen ? (
+            <div className="space-y-6">
+              {/* Header/Actions Panel */}
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-gray-900">
+                      {invoiceEditor.id
+                        ? `${isArabic ? "تعديل فاتورة شراء" : "Edit Purchase Invoice"} (${invoiceEditor.reference})`
+                        : (isArabic ? "فاتورة شراء جديدة" : "New Purchase Invoice")}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {isArabic ? "قم بإدخال تفاصيل الفاتورة والبنود المرتبطة بها" : "Enter purchase invoice details and related items"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={closeInvoiceEditor} disabled={isInvoiceEditorBusy}>
+                    {t("purchases.action.cancel")}
+                  </Button>
+                  <Button
+                    onClick={() => savePurchaseInvoiceFromEditor()}
+                    disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <Save className="h-4 w-4 mr-1.5" />
+                    {invoiceEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => saveAndPostPurchaseInvoiceFromEditor()}
+                    disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
+                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <FileText className="h-4 w-4 mr-1.5" />
+                    {t("purchases.action.postInvoice")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => saveAndCreateSupplierPaymentFromInvoiceEditor()}
+                    disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
+                    title={t("purchases.tooltip.postAndCreateSupplierPayment")}
+                    className="border-sky-200 text-sky-700 hover:bg-sky-50"
+                  >
+                    <ReceiptText className="h-4 w-4 mr-1.5" />
+                    {t("purchases.action.postAndCreateSupplierPayment")}
                   </Button>
                 </div>
               </div>
-              <ExportActions
-                onAction={handlePurchaseInvoicesExport}
-                permissions={exportPermissions}
-                disabled={purchaseInvoicesQuery.isLoading}
-              />
 
-              <div className="overflow-hidden rounded-2xl border border-gray-200">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <TableHead>{t("purchases.invoices.table.reference")}</TableHead>
-                      <TableHead>{t("purchases.invoices.table.supplier")}</TableHead>
-                      <TableHead>{t("purchases.invoices.table.date")}</TableHead>
-                      <TableHead>{t("purchases.invoices.table.total")}</TableHead>
-                      <TableHead>{t("purchases.invoices.table.status")}</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purchaseInvoices.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
-                          {t("purchases.invoices.empty.list")}
-                        </td>
-                      </tr>
-                    ) : (
-                      purchaseInvoices.map((row) => (
-                        <tr
-                          key={row.id}
-                          onClick={() => setSelectedPurchaseInvoiceId(row.id)}
-                          className={cn("border-b border-gray-100 last:border-0 transition-colors hover:bg-gray-50 cursor-pointer", selectedPurchaseInvoiceId === row.id && "bg-gray-50")}
+              {/* Error alerts */}
+              {invoiceFormError && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {invoiceFormError}
+                </div>
+              )}
+              {invoiceSaveError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {invoiceSaveError}
+                </div>
+              )}
+              {invoiceActionError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {invoiceActionError}
+                </div>
+              )}
+
+              {/* Layout Grid */}
+              <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
+                {/* Sidebar */}
+                <Card className="h-fit space-y-4 border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                    {isArabic ? "معلومات أساسية" : "Basic Information"}
+                  </div>
+                  <Field label={t("purchases.invoices.field.invoiceDate")} required>
+                    <div className="relative">
+                      <Input
+                        type="date"
+                        value={invoiceEditor.invoiceDate}
+                        onChange={(event) => setInvoiceEditor((current) => ({ ...current, invoiceDate: event.target.value }))}
+                        className={cn("border-slate-200 bg-slate-50/70", isArabic ? "pe-12 text-right" : "ps-12")}
+                      />
+                      <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
+                    </div>
+                  </Field>
+
+                  <Field label={t("purchases.invoices.field.supplier")} required>
+                    <div className="relative">
+                      <Select
+                        value={invoiceEditor.supplierId}
+                        onChange={(event) => {
+                          const supplierId = event.target.value;
+                          const supplier = activeSuppliers.find((row) => row.id === supplierId);
+                          setInvoiceEditor((current) => ({
+                            ...current,
+                            supplierId,
+                            currencyCode: current.id ? current.currencyCode : supplier?.defaultCurrency || current.currencyCode,
+                          }));
+                        }}
+                        className={cn("border-slate-200 bg-slate-50/70", isArabic ? "pe-12 text-right" : "ps-12")}
+                      >
+                        <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
+                        {activeSuppliers.map((supplier) => (
+                          <option key={supplier.id} value={supplier.id}>
+                            {supplier.code} · {cleanDisplayName(supplier.name)}
+                          </option>
+                        ))}
+                      </Select>
+                      <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-4" : "right-4")} />
+                    </div>
+                  </Field>
+
+                  <Field label={t("purchases.invoices.field.currency")} required>
+                    <Select
+                      value={invoiceEditor.currencyCode}
+                      onChange={(event) => setInvoiceEditor((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
+                      className="border-slate-200 bg-slate-50/70 text-sm"
+                    >
+                      {currencies.length === 0 ? (
+                        <option value="JOD">JOD — دينار أردني</option>
+                      ) : (
+                        currencies
+                          .filter((c) => c.isActive)
+                          .map((curr) => (
+                            <option key={curr.id} value={curr.code}>
+                              {curr.code} — {isArabic ? curr.nameAr || curr.name : curr.name || curr.code}
+                            </option>
+                          ))
+                      )}
+                    </Select>
+                  </Field>
+
+                  <Field label={t("purchases.invoices.field.sourceOrder")}>
+                    <Select
+                      value={invoiceEditor.sourcePurchaseOrderId}
+                      onChange={(event) => setInvoiceEditor((current) => ({ ...current, sourcePurchaseOrderId: event.target.value }))}
+                      disabled={Boolean(invoiceEditor.sourcePurchaseRequestId)}
+                      className="border-slate-200 bg-slate-50/70 text-sm"
+                    >
+                      <option value="">{t("purchases.invoices.empty.manual")}</option>
+                      {purchaseOrders
+                        .filter((order) => ["ISSUED", "PARTIALLY_RECEIVED", "FULLY_RECEIVED", "CLOSED"].includes(order.status))
+                        .map((order) => (
+                          <option key={order.id} value={order.id}>
+                            {order.reference}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+
+                  {invoiceEditor.sourcePurchaseRequestId && (
+                    <Field label={t("purchases.invoices.field.sourceRequest")}>
+                      <Input
+                        value={sourcePurchaseRequestQuery.data?.reference ?? invoiceEditor.sourcePurchaseRequestId}
+                        readOnly
+                        disabled
+                        className="border-slate-200 bg-slate-100 text-slate-700 disabled:opacity-100"
+                      />
+                    </Field>
+                  )}
+                </Card>
+
+                {/* Main Content Area */}
+                <div className="space-y-6">
+                  {/* Tabs */}
+                  <div className="flex border-b border-gray-200 bg-slate-100/70 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceActiveTab("lines")}
+                      className={cn(
+                        "flex-1 py-2 text-center text-sm font-bold rounded-lg transition-colors",
+                        invoiceActiveTab === "lines"
+                          ? "bg-white text-emerald-800 shadow-sm"
+                          : "text-gray-500 hover:text-gray-900"
+                      )}
+                    >
+                      {isArabic ? "التفاصيل والبنود" : "Details & Lines"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceActiveTab("journal")}
+                      className={cn(
+                        "flex-1 py-2 text-center text-sm font-bold rounded-lg transition-colors",
+                        invoiceActiveTab === "journal"
+                          ? "bg-white text-emerald-800 shadow-sm"
+                          : "text-gray-500 hover:text-gray-900"
+                      )}
+                    >
+                      {isArabic ? "عناصر اليومية" : "Journal Entries"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceActiveTab("other")}
+                      className={cn(
+                        "flex-1 py-2 text-center text-sm font-bold rounded-lg transition-colors",
+                        invoiceActiveTab === "other"
+                          ? "bg-white text-emerald-800 shadow-sm"
+                          : "text-gray-500 hover:text-gray-900"
+                      )}
+                    >
+                      {isArabic ? "معلومات إضافية" : "Other Info"}
+                    </button>
+                  </div>
+
+                  {/* Tab content */}
+                  {invoiceActiveTab === "lines" && (
+                    <Card className="border border-gray-200 bg-white p-5 shadow-sm space-y-6">
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                        <div className="flex items-center gap-2">
+                          <Package2 className="h-5 w-5 text-slate-500" />
+                          <h3 className="font-extrabold text-gray-950">
+                            {t("purchases.invoices.section.editorLines")}
+                          </h3>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={addInvoiceLine}
+                          className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                         >
-                          <td className="px-6 py-4 align-top">
-                            <div className="font-bold text-gray-900">{row.reference}</div>
-                            <div className="text-xs text-gray-500">
-                              {row.sourcePurchaseOrder?.reference || row.sourcePurchaseRequest?.reference || t("purchases.invoices.empty.manual")}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 align-top">
-                            <div className="font-bold text-gray-900">{row.supplier.code} · {row.supplier.name}</div>
-                            <div className="text-xs text-gray-500">{row.currencyCode}</div>
-                          </td>
-                          <td className="px-6 py-4 align-top">{formatDate(row.invoiceDate)}</td>
-                          <td className="px-6 py-4 align-top">{formatCurrency(row.totalAmount)}</td>
-                          <td className="px-6 py-4 align-top">
-                            <StatusPill label={translatePurchaseInvoiceStatus(row.status, t)} tone={purchaseInvoiceStatusTone(row.status)} />
+                          <CirclePlus className="h-4 w-4 mr-1.5" />
+                          {t("purchases.action.addLine")}
+                        </Button>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="w-full min-w-[1200px] text-sm text-gray-700">
+                          <thead className="bg-slate-50 font-bold text-gray-700">
+                            <tr className="border-b border-gray-200">
+                              <th className="px-4 py-3 text-start w-12">#</th>
+                              <th className="px-2 py-3 text-start w-64">{t("purchases.invoices.field.itemOrService")}</th>
+                              <th className="px-2 py-3 text-start w-48">{t("purchases.invoices.field.itemSnapshot")}</th>
+                              <th className="px-2 py-3 text-start w-40">{t("purchases.invoices.field.warehouse")}</th>
+                              <th className="px-2 py-3 text-start w-52">{t("purchases.invoices.field.account")}</th>
+                              <th className="px-2 py-3 text-center w-24">{t("purchases.invoices.field.quantity")}</th>
+                              <th className="px-2 py-3 text-end w-28">{t("purchases.invoices.field.unitPrice")}</th>
+                              <th className="px-2 py-3 text-end w-28">{t("purchases.invoices.field.discountAmount")}</th>
+                              <th className="px-2 py-3 text-start w-32">{t("purchases.invoices.field.taxAmount")}</th>
+                              <th className="px-2 py-3 text-start w-48">{t("purchases.invoices.field.lineDescription")}</th>
+                              <th className="px-2 py-3 text-end w-32 pr-4">{t("purchases.invoices.field.lineTotal")}</th>
+                              <th className="px-2 py-3 text-center w-12"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {invoiceEditor.lines.map((line, index) => {
+                              const selectedInventoryItem = inventoryItems.find((item) => item.id === line.itemId) ?? null;
+                              const lineAccountOptions = getPurchaseInvoiceLineAccountOptions(
+                                selectedInventoryItem,
+                                purchaseInvoiceDebitAccounts,
+                              );
+                              const lineTotal = calculateInvoiceLineTotal(line);
+
+                              return (
+                                <tr key={line.key} className="border-b border-gray-100 hover:bg-slate-50/50">
+                                  <td className="px-4 py-2 align-middle font-bold text-gray-500">
+                                    {index + 1}
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Select
+                                      value={line.itemId}
+                                      onChange={(event) => updateInvoiceLineFromItem(line.key, inventoryItems.find((item) => item.id === event.target.value) ?? null)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    >
+                                      <option value="">
+                                        {inventoryItemsQuery.isLoading ? t("purchases.invoices.state.loadingItems") : t("purchases.invoices.empty.selectItemOrService")}
+                                      </option>
+                                      {inventoryItems.map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                          {item.code} · {cleanDisplayName(item.name)}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Input
+                                      value={line.itemName}
+                                      onChange={(event) => updateInvoiceLine(line.key, "itemName", event.target.value)}
+                                      placeholder={t("purchases.invoices.field.itemSnapshotPlaceholder")}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Select
+                                      value={line.warehouseId}
+                                      onChange={(event) => updateInvoiceLine(line.key, "warehouseId", event.target.value)}
+                                      disabled={!doesPurchaseInvoiceItemTrackInventory(inventoryItems.find((item) => item.id === line.itemId))}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    >
+                                      <option value="">{t("purchases.invoices.empty.selectWarehouse")}</option>
+                                      {activeInventoryWarehouses.map((warehouse) => (
+                                        <option key={warehouse.id} value={warehouse.id}>
+                                          {warehouse.code} · {cleanDisplayName(warehouse.name)}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Select
+                                      value={line.accountId}
+                                      onChange={(event) => updateInvoiceLine(line.key, "accountId", event.target.value)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    >
+                                      <option value="">{t("purchases.invoices.empty.selectAccount")}</option>
+                                      {lineAccountOptions.map((account) => (
+                                        <option key={account.id} value={account.id}>
+                                          {account.code} · {cleanDisplayName(isArabic ? account.nameAr || account.name : account.name)?.replace(/^أ:\s*/, "")} ({account.currencyCode})
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={line.quantity}
+                                      onChange={(event) => updateInvoiceLine(line.key, "quantity", event.target.value)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-center text-sm"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={line.unitPrice}
+                                      onChange={(event) => updateInvoiceLine(line.key, "unitPrice", event.target.value)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-end text-sm"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={line.discountAmount}
+                                      onChange={(event) => updateInvoiceLine(line.key, "discountAmount", event.target.value)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-end text-sm"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Select
+                                      value={line.taxId}
+                                      onChange={(event) => updateInvoiceLineTax(line.key, activeTaxes.find((tax) => tax.id === event.target.value) ?? null)}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    >
+                                      <option value="">{t("purchases.invoices.field.taxAmount")}</option>
+                                      {activeTaxes.map((tax) => (
+                                        <option key={tax.id} value={tax.id}>{tax.taxName} {Number(tax.rate).toFixed(2)}%</option>
+                                      ))}
+                                    </Select>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <Input
+                                      value={line.description}
+                                      onChange={(event) => updateInvoiceLine(line.key, "description", event.target.value)}
+                                      placeholder={t("purchases.invoices.field.lineDescriptionPlaceholder")}
+                                      className="h-10 text-sm py-1 border-gray-300 rounded-lg text-sm"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2 align-middle font-bold text-gray-700 text-end pr-4 text-sm">
+                                    {formatCurrency(lineTotal)}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeInvoiceLine(line.key)}
+                                      disabled={invoiceEditor.lines.length === 1}
+                                      className="rounded-lg border border-red-200 bg-white p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                        <div></div>
+                        <div className="rounded-2xl border border-gray-100 bg-slate-50/70 p-5 space-y-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">{t("purchases.invoices.metric.subtotal")}</span>
+                            <span className="font-extrabold text-gray-950">
+                              {invoiceEditor.currencyCode || "JOD"} {invoiceTotals.subtotalAmount.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">{t("purchases.invoices.metric.tax")}</span>
+                            <span className="font-extrabold text-gray-950">
+                              {invoiceEditor.currencyCode || "JOD"} {invoiceTotals.taxAmount.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-t border-gray-200 pt-3 text-base">
+                            <span className="font-bold text-emerald-800">{t("purchases.invoices.metric.total")}</span>
+                            <span className="text-lg font-black text-emerald-800">
+                              {invoiceEditor.currencyCode || "JOD"} {invoiceTotals.totalAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+
+                  {invoiceActiveTab === "journal" && (
+                    <Card className="border border-gray-200 bg-white p-5 shadow-sm">
+                      <h3 className="mb-4 text-lg font-black text-gray-900">
+                        {t("purchases.journalEntries.title") || "Journal Entries"}
+                      </h3>
+                      {invoiceEditor.id ? (
+                        <InlineJournalEntryCard
+                          journalEntry={inlineJournalQuery.data ?? null}
+                          isLoading={inlineJournalQuery.isLoading}
+                          errorMessage={inlineJournalQuery.error instanceof Error ? inlineJournalQuery.error.message : null}
+                        />
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-gray-300 py-12 text-center text-sm text-gray-500">
+                          {isArabic
+                            ? "سيظهر هنا عرض عناصر اليومية المرتبطة بالفاتورة بعد ترحيلها."
+                            : "Associated journal items view will appear here after posting."}
+                        </div>
+                      )}
+                    </Card>
+                  )}
+
+                  {invoiceActiveTab === "other" && (
+                    <Card className="border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+                      <h3 className="text-lg font-black text-gray-900">
+                        {isArabic ? "معلومات إضافية" : "Additional Information"}
+                      </h3>
+                      <Field label={t("purchases.invoices.field.description")}>
+                        <Textarea
+                          rows={4}
+                          value={invoiceEditor.description}
+                          onChange={(event) => setInvoiceEditor((current) => ({ ...current, description: event.target.value }))}
+                          placeholder={t("purchases.invoices.field.descriptionPlaceholder")}
+                          className="border-slate-200 bg-slate-50/70"
+                        />
+                      </Field>
+                    </Card>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <SummaryCard label={t("purchases.invoices.summary.total")} value={String(totalInvoices)} hint={t("purchases.invoices.summary.totalHint")} />
+                <SummaryCard label={t("purchases.invoices.summary.draft")} value={String(draftInvoices)} hint={t("purchases.invoices.summary.draftHint")} />
+                <SummaryCard label={t("purchases.invoices.summary.linkedOrders")} value={String(linkedOrderInvoices)} hint={t("purchases.invoices.summary.linkedOrdersHint")} />
+              </div>
+
+              <Card className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Field label={t("purchases.invoices.filters.search")}>
+                    <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} placeholder={t("purchases.invoices.filters.searchPlaceholder")} />
+                  </Field>
+                  <Field label={t("purchases.invoices.filters.status")}>
+                    <Select value={invoiceStatusFilter} onChange={(event) => setInvoiceStatusFilter(event.target.value as typeof invoiceStatusFilter)}>
+                      <option value="">{t("purchases.filters.allStatuses")}</option>
+                      <option value="DRAFT">{t("purchases.status.draft")}</option>
+                      <option value="POSTED">{t("purchases.invoices.status.posted")}</option>
+                      <option value="PARTIALLY_PAID">{t("purchases.invoices.status.partiallyPaid")}</option>
+                      <option value="FULLY_PAID">{t("purchases.invoices.status.fullyPaid")}</option>
+                      <option value="CANCELLED">{t("purchases.status.cancelled")}</option>
+                      <option value="REVERSED">{t("purchases.status.reversed")}</option>
+                    </Select>
+                  </Field>
+                  <div className="flex items-end">
+                    <Button variant="secondary" onClick={() => { setInvoiceSearch(""); setInvoiceStatusFilter(""); }}>
+                      {t("purchases.action.clearFilters")}
+                    </Button>
+                  </div>
+                </div>
+                <ExportActions
+                  onAction={handlePurchaseInvoicesExport}
+                  permissions={exportPermissions}
+                  disabled={purchaseInvoicesQuery.isLoading}
+                />
+
+                <div className="overflow-hidden rounded-2xl border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <TableHead>{t("purchases.invoices.table.reference")}</TableHead>
+                        <TableHead>{t("purchases.invoices.table.supplier")}</TableHead>
+                        <TableHead>{t("purchases.invoices.table.date")}</TableHead>
+                        <TableHead>{t("purchases.invoices.table.total")}</TableHead>
+                        <TableHead>{t("purchases.invoices.table.status")}</TableHead>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseInvoices.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
+                            {t("purchases.invoices.empty.list")}
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                      ) : (
+                        purchaseInvoices.map((row) => (
+                          <tr
+                            key={row.id}
+                            onClick={() => setSelectedPurchaseInvoiceId(row.id)}
+                            className={cn("border-b border-gray-100 last:border-0 transition-colors hover:bg-gray-50 cursor-pointer", selectedPurchaseInvoiceId === row.id && "bg-gray-50")}
+                          >
+                            <td className="px-6 py-4 align-top">
+                              <div className="font-bold text-gray-900">{row.reference}</div>
+                              <div className="text-xs text-gray-500">
+                                {row.sourcePurchaseOrder?.reference || row.sourcePurchaseRequest?.reference || t("purchases.invoices.empty.manual")}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 align-top">
+                              <div className="font-bold text-gray-900">{row.supplier.code} · {row.supplier.name}</div>
+                              <div className="text-xs text-gray-500">{row.currencyCode}</div>
+                            </td>
+                            <td className="px-6 py-4 align-top">{formatDate(row.invoiceDate)}</td>
+                            <td className="px-6 py-4 align-top">{formatCurrency(row.totalAmount)}</td>
+                            <td className="px-6 py-4 align-top">
+                              <StatusPill label={translatePurchaseInvoiceStatus(row.status, t)} tone={purchaseInvoiceStatusTone(row.status)} />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
 
             <Modal
               isOpen={!!selectedPurchaseInvoice}
@@ -2440,7 +3445,198 @@ export function PurchasesPage() {
               ) : null}
             </Modal>
           </>
+          )
         ) : workspace === "payments" ? (
+          isPaymentEditorOpen ? (
+            <div className="space-y-5" dir={isArabic ? "rtl" : "ltr"}>
+              {paymentFormError ? (
+                <div className={cn("rounded-md border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold text-amber-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {paymentFormError}
+                </div>
+              ) : null}
+              {paymentSaveError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {paymentSaveError}
+                </div>
+              ) : null}
+              {paymentActionError ? (
+                <div className={cn("rounded-md border border-rose-200 bg-rose-50 px-5 py-4 text-base font-semibold text-rose-900 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                  {paymentActionError}
+                </div>
+              ) : null}
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="mb-4 flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <ReceiptText className="h-4.5 w-4.5" />
+                  </div>
+                  <div className={isArabic ? "text-right" : "text-left"}>
+                    <div className="text-lg font-bold text-slate-950 arabic-ui-heading">
+                      {isArabic ? "البيانات الأساسية" : "Basic Information"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="sm:col-span-2">
+                    <Field label={t("purchases.payments.field.supplier")} required labelAlign={isArabic ? "end" : "start"}>
+                      <div className="relative">
+                        <Select
+                          value={paymentEditor.supplierId}
+                          onChange={(event) =>
+                            setPaymentEditor((current) => ({
+                              ...current,
+                              supplierId: event.target.value,
+                              allocations: current.allocations.map((allocation) => ({ ...allocation, purchaseInvoiceId: "" })),
+                            }))
+                          }
+                          className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic ? "pe-10 text-right" : "ps-10")}
+                        >
+                          <option value="">{t("purchases.requests.empty.selectSupplier")}</option>
+                          {activeSuppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.code} · {cleanDisplayName(supplier.name)}
+                            </option>
+                          ))}
+                        </Select>
+                        <UserRound className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      </div>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label={t("purchases.payments.field.paymentDate")} required labelAlign={isArabic ? "end" : "start"}>
+                      <div className="relative">
+                        <Input type="date" value={paymentEditor.paymentDate} onChange={(event) => setPaymentEditor((current) => ({ ...current, paymentDate: event.target.value }))} className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic ? "pe-10 text-right" : "ps-10")} />
+                        <CalendarDays className={cn("pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400", isArabic ? "left-3.5" : "right-3.5")} />
+                      </div>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label={t("purchases.payments.field.bankCash")} required labelAlign={isArabic ? "end" : "start"}>
+                      <Select value={paymentEditor.bankCashAccountId} onChange={(event) => setPaymentEditor((current) => ({ ...current, bankCashAccountId: event.target.value }))} className="h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10">
+                        <option value="">{t("purchases.payments.empty.selectBankCash")}</option>
+                        {(bankCashAccountsQuery.data ?? []).map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.name} · {row.type}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Field label={t("purchases.payments.field.amount")} required labelAlign={isArabic ? "end" : "start"}>
+                    <Input type="number" min="0.01" step="0.01" value={paymentEditor.amount} onChange={(event) => setPaymentEditor((current) => ({ ...current, amount: event.target.value }))} className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic && "text-right")} />
+                  </Field>
+                  <Field label={t("purchases.payments.field.description")} labelAlign={isArabic ? "end" : "start"}>
+                    <Input value={paymentEditor.description} onChange={(event) => setPaymentEditor((current) => ({ ...current, description: event.target.value }))} placeholder="مثال: دفعة شراء مستلزمات مكتبية لشهر يونيو" className={cn("h-11 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-base shadow-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10", isArabic && "text-right")} />
+                  </Field>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                  {[
+                    isArabic ? "تخصيص الدفعة" : "Payment Allocations",
+                    isArabic ? "عناصر اليومية" : "Journal Entries",
+                    isArabic ? "معلومات أخرى" : "Other Info",
+                  ].map((label, index) => (
+                    <div key={label} className={cn("rounded-xl px-4 py-2 text-sm font-bold border", index === 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200/50 shadow-sm" : "text-slate-600 border-transparent")}>
+                      {label}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <FileText className="h-5 w-5 text-slate-500" />
+                      <span className="text-base font-bold">{isArabic ? "الفواتير المخصصة" : "Allocated Invoices"}</span>
+                    </div>
+                    <Button type="button" variant="secondary" size="sm" onClick={addPaymentAllocation} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
+                      <CirclePlus className="h-4 w-4" />
+                      <span>{t("purchases.action.addAllocation")}</span>
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table className="min-w-[1080px] table-fixed border-collapse text-sm">
+                      <thead className="bg-slate-50/75">
+                        <tr>
+                          <th className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                          <th className={cn("w-[240px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.payments.field.purchaseInvoice")}</th>
+                          <th className={cn("w-[160px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.payments.field.invoiceDate")}</th>
+                          <th className={cn("w-[170px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.payments.field.invoiceTotal")}</th>
+                          <th className={cn("w-[170px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.payments.metric.remainingOnInvoice")}</th>
+                          <th className={cn("w-[170px] px-3 py-3.5 text-sm font-bold text-slate-500 uppercase", isArabic ? "text-right" : "text-left")}>{t("purchases.payments.field.allocationAmount")}</th>
+                          <th className="w-[80px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">{isArabic ? "إجراء" : "Action"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {paymentEditor.allocations.map((allocation, index) => {
+                          const selectedInvoice = paymentEligibleInvoices.find((invoice) => invoice.id === allocation.purchaseInvoiceId);
+                          return (
+                            <tr key={allocation.key} className="hover:bg-slate-50/50 transition align-top">
+                              <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                              <td className="px-2.5 py-3.5">
+                                <Select value={allocation.purchaseInvoiceId} onChange={(event) => updatePaymentAllocation(allocation.key, "purchaseInvoiceId", event.target.value)} className="h-10 rounded-lg text-sm bg-white border-slate-200">
+                                  <option value="">{t("purchases.payments.empty.selectInvoice")}</option>
+                                  {paymentEligibleInvoices.map((invoice) => (
+                                    <option key={invoice.id} value={invoice.id}>
+                                      {invoice.reference}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </td>
+                              <td className="px-2.5 py-3.5 font-medium text-slate-700">{selectedInvoice ? formatDate(selectedInvoice.invoiceDate) : "-"}</td>
+                              <td className="px-2.5 py-3.5 font-medium text-slate-700">{selectedInvoice ? formatCurrency(selectedInvoice.totalAmount) : "-"}</td>
+                              <td className="px-2.5 py-3.5 font-bold text-emerald-700">{selectedInvoice ? formatCurrency(selectedInvoice.outstandingAmount) : "-"}</td>
+                              <td className="px-2.5 py-3.5">
+                                <Input type="number" min="0.01" step="0.01" value={allocation.amount} onChange={(event) => updatePaymentAllocation(allocation.key, "amount", event.target.value)} className="h-10 rounded-lg text-sm bg-white border-slate-200" />
+                              </td>
+                              <td className="px-2.5 py-3.5 text-center">
+                                <Button type="button" variant="secondary" size="sm" onClick={() => removePaymentAllocation(allocation.key)} disabled={paymentEditor.allocations.length === 1} className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition">
+                                  <Trash2 className="h-5 w-5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                    <div />
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{t("purchases.payments.metric.amount")}</span><span className="font-bold text-slate-900">{formatCurrency(paymentEditor.amount || 0)}</span></div>
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{t("purchases.payments.metric.allocated")}</span><span className="font-bold text-slate-900">{formatCurrency(paymentAllocatedAmount)}</span></div>
+                      <div className="flex items-center justify-between text-sm"><span className="font-medium text-slate-500">{t("purchases.payments.metric.unapplied")}</span><span className="font-bold text-emerald-700">{formatCurrency(paymentUnallocatedAmount)}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                <Button variant="secondary" onClick={closePaymentEditor} className="rounded-xl px-6">
+                  {t("purchases.action.cancel")}
+                </Button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button onClick={() => (paymentEditor.id ? updateSupplierPaymentMutation.mutate() : createSupplierPaymentMutation.mutate())} disabled={Boolean(paymentFormError) || createSupplierPaymentMutation.isPending || updateSupplierPaymentMutation.isPending || postSupplierPaymentMutation.isPending} className="rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700">
+                    <Save className="h-4 w-4" />
+                    {paymentEditor.id ? t("purchases.action.saveChanges") : t("purchases.action.saveDraft")}
+                  </Button>
+                  <Button variant="secondary" onClick={() => { void saveAndPostSupplierPaymentFromEditor(); }} disabled={Boolean(paymentFormError) || createSupplierPaymentMutation.isPending || updateSupplierPaymentMutation.isPending || postSupplierPaymentMutation.isPending} className="rounded-xl border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50">
+                    <FileText className="h-4 w-4" />
+                    {t("purchases.action.postPayment")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <SummaryCard label={t("purchases.payments.summary.total")} value={String(totalPayments)} hint={t("purchases.payments.summary.totalHint")} />
@@ -2637,6 +3833,7 @@ export function PurchasesPage() {
               ) : null}
             </Modal>
           </>
+          )
         ) : (
           <>
             <div className="grid gap-4 md:grid-cols-3">
@@ -2992,7 +4189,7 @@ export function PurchasesPage() {
           </div>
         </SidePanel>
 
-        {isRequestEditorOpen ? (
+        {false && isRequestEditorOpen ? (
           <div className="fixed inset-0 z-50 p-3 sm:p-6">
             <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={closeRequestEditor} />
             <div
@@ -3236,7 +4433,7 @@ export function PurchasesPage() {
           </div>
         ) : null}
 
-        {isOrderEditorOpen ? (
+        {false && isOrderEditorOpen ? (
           <div className="fixed inset-0 z-50 p-3 sm:p-6">
             <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={closeOrderEditor} />
             <div
@@ -3634,7 +4831,7 @@ export function PurchasesPage() {
           </div>
         </SidePanel>
 
-        {isInvoiceEditorOpen ? (
+        {false && isInvoiceEditorOpen ? (
           <div className="fixed inset-0 z-50 p-3 sm:p-6">
             <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={closeInvoiceEditor} />
             <div
@@ -4091,7 +5288,7 @@ export function PurchasesPage() {
           </div>
         ) : null}
 
-        {isPaymentEditorOpen ? (
+        {false && isPaymentEditorOpen ? (
           <div className="fixed inset-0 z-50 p-3 sm:p-6">
             <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" onClick={closePaymentEditor} />
             <div
@@ -5261,6 +6458,7 @@ export function PurchasesPage() {
       supplierId: defaultSupplier?.id ?? "",
       currencyCode: defaultSupplier?.defaultCurrency ?? "JOD",
     });
+    setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(true);
   }
 
@@ -5293,6 +6491,7 @@ export function PurchasesPage() {
         accountId: line.account.id,
       })),
     });
+    setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(true);
   }
 
@@ -5302,6 +6501,7 @@ export function PurchasesPage() {
     postPurchaseInvoiceMutation.reset();
     setIsInvoiceSaving(false);
     setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+    setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(false);
   }
 
@@ -5464,6 +6664,7 @@ export function PurchasesPage() {
     updateSupplierPaymentMutation.reset();
     setGuidedPaymentSourceInvoice(null);
     setPaymentEditor(EMPTY_PAYMENT_EDITOR());
+    setPaymentActiveTab("details");
     setIsPaymentEditorOpen(true);
   }
 
@@ -5487,6 +6688,7 @@ export function PurchasesPage() {
         }))
         : [createEmptyPaymentAllocation()],
     });
+    setPaymentActiveTab("details");
     setIsPaymentEditorOpen(true);
   }
 
@@ -5511,6 +6713,7 @@ export function PurchasesPage() {
         },
       ],
     });
+    setPaymentActiveTab("details");
     setIsPaymentEditorOpen(true);
   }
 
@@ -5519,6 +6722,7 @@ export function PurchasesPage() {
     updateSupplierPaymentMutation.reset();
     setGuidedPaymentSourceInvoice(null);
     setPaymentEditor(EMPTY_PAYMENT_EDITOR());
+    setPaymentActiveTab("details");
     setIsPaymentEditorOpen(false);
   }
 

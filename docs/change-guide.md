@@ -374,7 +374,8 @@ What else to check:
 - purchase-order list `عرض` actions may open the dedicated `/purchases/orders/[id]` details page so users can review summary, lines, and receipt history without overloading the workspace list
 - purchase-order workflow actions should stay in the main `/purchases?tab=orders` table `الإجراءات` column, including issue, receive, partial/full receive transitions, cancel, and close; the dedicated `/purchases/orders/[id]` screen should remain a clean details/history view
 - purchase-request references now follow the daily sequence format `PR-YYYYMMDD-N`; new logic must ignore legacy random codes when calculating the next daily number
-- purchase-request and purchase-order editor modals now expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
+- purchase request, purchase order, purchase invoice, and supplier payment create/edit forms should open inline inside their respective `/purchases?tab=...` workspaces using the same in-page workspace flow and visual shell used by the Sales Invoice editor, rather than full-screen overlay modals
+- purchase-request and purchase-order inline editors must expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
 - purchase-request request dates and requested-delivery dates must now be realistic business dates (year `2000` or later), and a requested delivery date must not be earlier than the request date
 - purchase-request status-history writes must tolerate stale or missing authenticated user IDs by storing a null audit user reference instead of failing the request transaction on the `PurchaseRequestStatusHistory.userId` foreign key
 - shared audit-log writes must also tolerate stale or reseeded authenticated user IDs by retrying with a null `AuditLog.userId` instead of surfacing a false `Internal server error` after the business transaction already succeeded
@@ -1020,3 +1021,43 @@ Key rules:
 - pass `reservationId` in `HoldPosSaleDto` / `SavePosDraftDto` to trigger skip of table activation in `saveDraftLikeSale`
 - `preOrderSaleId` is stored inside the `PosTableReservation.notes` JSON blob alongside `orderNotes`, `attendanceStatus`, etc.
 - one pre-order per reservation at a time; a new pre-order replaces the link if the previous sale is no longer DRAFT/HELD
+
+## Purchase Request UI Modernization
+
+Where to edit:
+
+- Purchase Request form, layout, and tabs: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
+
+Rules:
+
+- The Purchase Request form design, styling, and layout must match the Sales Invoice editor (`SalesDocumentEditorModal`).
+- The modal uses the emerald theme, featuring card-based containers with `rounded-lg` borders and premium shadows.
+- The details and lines tables utilize a tabbed layout (Request Items and Other Info tabs) for high-fidelity UX.
+- The lines table is consistent in cell sizing, spacing (`px-2.5 py-3.5`), select input styling, and action triggers.
+- Provides a summary box in the bottom right of the lines tab (displaying total items and total requested quantity) to visually balance the layout similarly to the Sales Invoice's totals box.
+
+## Purchase Order UI Modernization
+
+Where to edit:
+
+- Purchase Order form, layout, and tabs: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
+
+Rules:
+
+- The Purchase Order form design, styling, and layout must match the Sales Invoice editor (`SalesDocumentEditorModal`) in inline presentation mode.
+- The editor uses the emerald theme, featuring card-based containers with `rounded-2xl` borders, premium shadows, and conditional inline workspace presentation (`isInlineOrderWorkspace`).
+- The details and lines tables utilize a tabbed layout (Order Items, Journal Entries, and Other Info tabs) for high-fidelity UX.
+- The lines table is consistent in cell sizing, spacing (`px-2.5 py-3.5`), select input styling, `CurrencyAmountInput` for unit prices and line totals, and action triggers.
+- Provides a summary box in the bottom right of the lines tab (displaying total amount before tax, tax, and order total) to visually balance the layout similarly to the Sales Invoice's totals box.
+
+## Purchase Invoice And Supplier Payment UI Modernization
+
+Where to edit:
+
+- Purchase Invoice and Supplier Payment inline forms: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
+
+Rules:
+
+- The Purchase Invoice and Supplier Payment editors should stay inline inside the `/purchases` workspace and use the same breadcrumb/header/back-navigation pattern as the Sales Invoice editor.
+- Basic information, tab headers, line/allocation tables, validation alerts, and bottom summary cards should follow the Sales Invoice editor's spacing, card treatment, and emerald-accent visual language.
+- Posting actions remain separate from draft save, and the guided Purchase Invoice -> Supplier Payment handoff must still post the invoice first before opening the prefilled supplier-payment editor.
