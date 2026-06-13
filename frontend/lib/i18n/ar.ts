@@ -989,6 +989,8 @@ Object.assign(arTranslations, {
   "salesReceivables.metric.creditLimit": "حد الائتمان",
   "salesReceivables.metric.availableCredit": "الائتمان المتاح",
   "salesReceivables.metric.invoiceTotal": "إجمالي الفاتورة",
+  "salesReceivables.metric.quotationTotal": "إجمالي عرض السعر",
+  "salesReceivables.metric.orderTotal": "إجمالي أمر البيع",
   "salesReceivables.metric.allocated": "المخصص",
   "salesReceivables.metric.status": "الحالة",
   "salesReceivables.metric.creditNoteTotal": "إجمالي إشعار الدائن",

@@ -8,6 +8,7 @@ import {
   LuCirclePlus as CirclePlus,
   LuFileText as FileText,
   LuInfo as Info,
+  LuPlus as Plus,
   LuSave as Save,
   LuTag as Tag,
   LuTrash2 as Trash2,
@@ -566,351 +567,508 @@ onChange({
               </div>
             </section>
 
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
-              <div className={cn("mb-5 text-lg text-slate-950", isArabic ? "arabic-ui-heading text-right" : "font-black")}>
-                {t("salesReceivables.creditNote.section.lines")}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <FileText className="h-5 w-5 text-slate-500" />
+                  <span className="text-base font-bold">{t("salesReceivables.creditNote.section.lines")}</span>
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
+                  <Plus className="h-4 w-4" />
+                  <span>
+                    {typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.addSettlementLine") : t("salesReceivables.creditNote.addDiscountLine")}
+                  </span>
+                </Button>
               </div>
 
-              <div className="space-y-3">
-                {editor.lines.map((line, index) => {
-                  const sourceLine = invoiceLineOptions.find(
-                    (candidate) => candidate.id === line.salesInvoiceLineId,
-                  );
-                  return (
-                    <div key={line.key} className="rounded-xl border border-slate-100 bg-slate-50/45 p-3">
-                      <div className="mb-2.5 flex items-center justify-between">
-                        <div className="text-sm font-bold text-slate-900">#{index + 1}</div>
-                        <button
-                          type="button"
-                          onClick={() => removeLine(line.key)}
-                          disabled={editor.lines.length === 1}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                        >
-                          <span className="sr-only">{t("salesReceivables.action.remove")}</span>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                {typeCode === "CN-SALES-RETURN" && (
+                  <table className="min-w-[1250px] table-fixed border-collapse text-sm">
+                    <thead className="bg-slate-50/75">
+                      <tr>
+                        <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[260px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.invoiceLine")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.returnedQuantity")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[120px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.returnToStock")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[240px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.warehouse")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.itemCondition")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.metric.total")}</th>
+                        <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {editor.lines.map((line, index) => {
+                        const sourceLine = invoiceLineOptions.find((candidate) => candidate.id === line.salesInvoiceLineId);
+                        return (
+                          <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.salesInvoiceLineId || ""}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    salesInvoiceLineId: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
+                                {invoiceLineOptions.map((invoiceLine) => (
+                                  <option key={invoiceLine.id} value={invoiceLine.id}>
+                                    {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                  </option>
+                                ))}
+                              </Select>
+                              {sourceLine ? (
+                                <div className="mt-1.5 text-xs font-semibold text-slate-500 max-w-[240px] truncate">
+                                  {sourceLine.itemName || sourceLine.description || "Line"}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={line.quantity}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    quantity: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm text-center bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.returnToStock ? "true" : "false"}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    returnToStock: event.target.value === "true",
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="true">{t("inventory.boolean.yes")}</option>
+                                <option value="false">{t("inventory.boolean.no")}</option>
+                              </Select>
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.warehouseId || ""}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    warehouseId: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.creditNote.selectWarehouse")}</option>
+                                {warehouses.map((warehouse) => (
+                                  <option key={warehouse.id} value={warehouse.id}>
+                                    {warehouse.code} - {warehouse.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Input
+                                value={line.itemCondition || ""}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    itemCondition: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.lineAmount}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5 text-center">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => removeLine(line.key)}
+                                disabled={editor.lines.length === 1}
+                                className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
 
-                      {typeCode === "CN-SALES-RETURN" && (
-                        <div className="grid gap-4 lg:grid-cols-6">
-                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
-                            <Select
-                              value={line.salesInvoiceLineId || ""}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  salesInvoiceLineId: event.target.value,
-                                }))
-                              }
-                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                            >
-                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
-                              {invoiceLineOptions.map((invoiceLine) => (
-                                <option key={invoiceLine.id} value={invoiceLine.id}>
-                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.returnedQuantity")}>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.001"
-                              value={line.quantity}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  quantity: event.target.value,
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white text-center"
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.returnToStock")}>
-                            <Select
-                              value={line.returnToStock ? "true" : "false"}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  returnToStock: event.target.value === "true",
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white"
-                            >
-                              <option value="true">{t("inventory.boolean.yes")}</option>
-                              <option value="false">{t("inventory.boolean.no")}</option>
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.warehouse")}>
-                            <Select
-                              value={line.warehouseId || ""}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  warehouseId: event.target.value,
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white"
-                            >
-                              <option value="">{t("salesReceivables.creditNote.selectWarehouse")}</option>
-                              {warehouses.map((warehouse) => (
-                                <option key={warehouse.id} value={warehouse.id}>
-                                  {warehouse.code} - {warehouse.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.itemCondition")}>
-                            <Input
-                              value={line.itemCondition || ""}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  itemCondition: event.target.value,
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white"
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.metric.total")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
-                          </Field>
-                        </div>
-                      )}
+                {typeCode === "CN-PRICE-DIFF" && (
+                  <table className="min-w-[1150px] table-fixed border-collapse text-sm">
+                    <thead className="bg-slate-50/75">
+                      <tr>
+                        <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[280px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.invoiceLine")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.originalPrice")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.correctedPrice")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.correctedTax")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.metric.total")}</th>
+                        <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {editor.lines.map((line, index) => {
+                        const sourceLine = invoiceLineOptions.find((candidate) => candidate.id === line.salesInvoiceLineId);
+                        return (
+                          <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.salesInvoiceLineId || ""}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    salesInvoiceLineId: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
+                                {invoiceLineOptions.map((invoiceLine) => (
+                                  <option key={invoiceLine.id} value={invoiceLine.id}>
+                                    {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                  </option>
+                                ))}
+                              </Select>
+                              {sourceLine ? (
+                                <div className="mt-1.5 text-xs font-semibold text-slate-500 max-w-[240px] truncate">
+                                  {sourceLine.itemName || sourceLine.description || "Line"}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.originalUnitPrice || ""}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 border-transparent text-slate-700 disabled:opacity-100"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.correctedUnitPrice || ""}
+                                onChange={(value) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    correctedUnitPrice: value,
+                                  }))
+                                }
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.correctedTaxAmount || ""}
+                                onChange={(value) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    correctedTaxAmount: value,
+                                  }))
+                                }
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.lineAmount}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5 text-center">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => removeLine(line.key)}
+                                disabled={editor.lines.length === 1}
+                                className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
 
-                      {typeCode === "CN-PRICE-DIFF" && (
-                        <div className="grid gap-4 lg:grid-cols-5">
-                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
-                            <Select
-                              value={line.salesInvoiceLineId || ""}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  salesInvoiceLineId: event.target.value,
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white"
-                            >
-                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
-                              {invoiceLineOptions.map((invoiceLine) => (
-                                <option key={invoiceLine.id} value={invoiceLine.id}>
-                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.originalPrice")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.originalUnitPrice || ""} readOnly isArabic={isArabic} />
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.correctedPrice")}>
-                            <CurrencyInput
-                              currencyCode={currencyCode}
-                              value={line.correctedUnitPrice || ""}
-                              onChange={(value) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  correctedUnitPrice: value,
-                                }))
-                              }
-                              isArabic={isArabic}
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.correctedTax")}>
-                            <CurrencyInput
-                              currencyCode={currencyCode}
-                              value={line.correctedTaxAmount || ""}
-                              onChange={(value) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  correctedTaxAmount: value,
-                                }))
-                              }
-                              isArabic={isArabic}
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.metric.total")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
-                          </Field>
-                        </div>
-                      )}
+                {typeCode === "CN-TAX-CORRECTION" && (
+                  <table className="min-w-[1050px] table-fixed border-collapse text-sm">
+                    <thead className="bg-slate-50/75">
+                      <tr>
+                        <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[320px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.invoiceLine")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.originalTax")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.correctedTax")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.metric.total")}</th>
+                        <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {editor.lines.map((line, index) => {
+                        const sourceLine = invoiceLineOptions.find((candidate) => candidate.id === line.salesInvoiceLineId);
+                        return (
+                          <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.salesInvoiceLineId || ""}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    salesInvoiceLineId: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
+                                {invoiceLineOptions.map((invoiceLine) => (
+                                  <option key={invoiceLine.id} value={invoiceLine.id}>
+                                    {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
+                                  </option>
+                                ))}
+                              </Select>
+                              {sourceLine ? (
+                                <div className="mt-1.5 text-xs font-semibold text-slate-500 max-w-[240px] truncate">
+                                  {sourceLine.itemName || sourceLine.description || "Line"}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.originalTaxAmount || ""}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 border-transparent text-slate-700 disabled:opacity-100"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.correctedTaxAmount || ""}
+                                onChange={(value) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    correctedTaxAmount: value,
+                                  }))
+                                }
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.lineAmount}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5 text-center">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => removeLine(line.key)}
+                                disabled={editor.lines.length === 1}
+                                className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
 
-                      {typeCode === "CN-TAX-CORRECTION" && (
-                        <div className="grid gap-4 lg:grid-cols-4">
-                          <Field label={t("salesReceivables.creditNote.invoiceLine")}>
-                            <Select
-                              value={line.salesInvoiceLineId || ""}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  salesInvoiceLineId: event.target.value,
-                                }))
-                              }
-                              className="h-12 border-slate-200 bg-white"
-                            >
-                              <option value="">{t("salesReceivables.creditNote.selectInvoiceLine")}</option>
-                              {invoiceLineOptions.map((invoiceLine) => (
-                                <option key={invoiceLine.id} value={invoiceLine.id}>
-                                  {invoiceLine.lineNumber} - {invoiceLine.itemName || invoiceLine.description || "Line"}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.originalTax")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.originalTaxAmount || ""} readOnly isArabic={isArabic} />
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.correctedTax")}>
-                            <CurrencyInput
-                              currencyCode={currencyCode}
-                              value={line.correctedTaxAmount || ""}
-                              onChange={(value) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  correctedTaxAmount: value,
-                                }))
-                              }
-                              isArabic={isArabic}
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.metric.total")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
-                          </Field>
-                        </div>
-                      )}
-
-                      {(typeCode === "CN-CUSTOMER-SETTLEMENT" || !typeCode || typeCode === "CN-DISCOUNT") && (
-                        <div className="grid gap-4 lg:grid-cols-5">
-                          <Field label={typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.settlementReason") : t("salesReceivables.creditNote.discountType")}>
-                            <Input
-                              value={line.itemName || defaultDiscountLabel}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  itemName: event.target.value,
-                                }))
-                              }
-                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.field.revenueAccount")}>
-                            <Select
-                              value={line.revenueAccountId}
-                              onChange={(event) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  revenueAccountId: event.target.value,
-                                }))
-                              }
-                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                            >
-                              <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
-                              {revenueAccounts.map((account) => (
-                                <option key={account.id} value={account.id}>
-                                  {account.code} - {isArabic ? account.nameAr || account.name : account.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.creditNote.amountBeforeTax")}>
-                            <CurrencyInput
-                              currencyCode={currencyCode}
-                              value={line.unitPrice}
-                              onChange={(value) =>
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  quantity: "1",
-                                  unitPrice: value,
-                                  discountAmount: "",
-                                }))
-                              }
-                              isArabic={isArabic}
-                            />
-                          </Field>
-                          <Field label={t("salesReceivables.field.taxAmount")}>
-                            <Select
-                              value={line.taxId}
-                              onChange={(event) => {
-                                const selectedTax = taxes.find((tax) => tax.id === event.target.value);
-                                updateLine(line.key, (current) => ({
-                                  ...current,
-                                  taxId: selectedTax?.id ?? "",
-                                  taxRate: selectedTax ? String(selectedTax.rate) : "",
-                                  taxAmount:
-                                    selectedTax && Number(current.unitPrice || 0) > 0
-                                      ? formatAmount(
-                                          Number(current.unitPrice || 0) *
-                                            (Number(selectedTax.rate) / 100),
-                                        )
-                                      : "0.000",
-                                }));
-                              }}
-                              className={cn("h-12 border-slate-200 bg-white", isArabic && "text-right")}
-                            >
-                              <option value="">{t("salesReceivables.field.taxAmount")}</option>
-                              {taxes.map((tax) => (
-                                <option key={tax.id} value={tax.id}>
-                                  {tax.taxName} {Number(tax.rate).toFixed(2)}%
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Field label={t("salesReceivables.metric.total")}>
-                            <CurrencyInput currencyCode={currencyCode} value={line.lineAmount} readOnly isArabic={isArabic} />
-                          </Field>
-                        </div>
-                      )}
-                      {sourceLine ? (
-                        <div className="mt-3 text-xs font-medium text-slate-500">
-                          {t("salesReceivables.creditNote.selectedLine")}: {sourceLine.lineNumber} - {sourceLine.itemName || sourceLine.description || "Line"}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                {(typeCode === "CN-CUSTOMER-SETTLEMENT" || !typeCode || typeCode === "CN-DISCOUNT") && (
+                  <table className="min-w-[1190px] table-fixed border-collapse text-sm">
+                    <thead className="bg-slate-50/75">
+                      <tr>
+                        <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[280px]", isArabic ? "text-right" : "text-left")}>{typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.settlementReason") : t("salesReceivables.creditNote.discountType")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[280px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.creditNote.amountBeforeTax")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.taxAmount")}</th>
+                        <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.metric.total")}</th>
+                        <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {editor.lines.map((line, index) => {
+                        return (
+                          <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                            <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-2.5 py-3.5">
+                              <Input
+                                value={line.itemName || defaultDiscountLabel}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    itemName: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.revenueAccountId}
+                                onChange={(event) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    revenueAccountId: event.target.value,
+                                  }))
+                                }
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
+                                {revenueAccounts.map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.code} - {isArabic ? account.nameAr || account.name : account.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.unitPrice}
+                                onChange={(value) =>
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    quantity: "1",
+                                    unitPrice: value,
+                                    discountAmount: "",
+                                  }))
+                                }
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <Select
+                                value={line.taxId}
+                                onChange={(event) => {
+                                  const selectedTax = taxes.find((tax) => tax.id === event.target.value);
+                                  updateLine(line.key, (current) => ({
+                                    ...current,
+                                    taxId: selectedTax?.id ?? "",
+                                    taxRate: selectedTax ? String(selectedTax.rate) : "",
+                                    taxAmount:
+                                      selectedTax && Number(current.unitPrice || 0) > 0
+                                        ? formatAmount(
+                                            Number(current.unitPrice || 0) *
+                                              (Number(selectedTax.rate) / 100),
+                                          )
+                                        : "0.000",
+                                  }));
+                                }}
+                                className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                              >
+                                <option value="">{t("salesReceivables.field.taxAmount")}</option>
+                                {taxes.map((tax) => (
+                                  <option key={tax.id} value={tax.id}>
+                                    {tax.taxName} {Number(tax.rate).toFixed(2)}%
+                                  </option>
+                                ))}
+                              </Select>
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <CurrencyInput
+                                currencyCode={currencyCode}
+                                value={line.lineAmount}
+                                readOnly
+                                isArabic={isArabic}
+                                className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
+                              />
+                            </td>
+                            <td className="px-2.5 py-3.5 text-center">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => removeLine(line.key)}
+                                disabled={editor.lines.length === 1}
+                                className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
+              {/* Totals Section */}
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
                   <div></div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-5">
-                    <div className={cn("mb-4 text-sm font-bold text-slate-950", isArabic && "text-right")}>
+                  <div className="rounded-2xl bg-slate-50/70 p-5 border border-slate-100 space-y-3">
+                    <div className={cn("text-sm font-bold tracking-wide text-slate-500 mb-1", isArabic ? "text-right" : "text-left")}>
                       {t("salesReceivables.creditNote.summary")}
                     </div>
-                    <SummaryRow label={t("salesReceivables.summary.subtotalBeforeTax")} value={`${currencyCode} ${totals.subtotalAmount.toFixed(3)}`} isArabic={isArabic} />
-                    <SummaryRow label={t("salesReceivables.field.taxAmount")} value={`${currencyCode} ${totals.taxAmount.toFixed(3)}`} isArabic={isArabic} />
-                    <div className="mt-3 border-t border-slate-200 pt-3">
-                      <SummaryRow
-                        label={t("salesReceivables.creditNote.totalDiscount")}
-                        value={`${currencyCode} ${totals.totalAmount.toFixed(3)}`}
-                        isArabic={isArabic}
-                        strong
-                        highlight={exceedsOutstanding}
-                      />
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
+                      <span>{t("salesReceivables.summary.subtotalBeforeTax")}</span>
+                      <span className="font-mono text-slate-900 font-bold">
+                        {currencyCode} {totals.subtotalAmount.toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
+                      <span>{t("salesReceivables.field.taxAmount")}</span>
+                      <span className="font-mono text-slate-900 font-bold">
+                        {currencyCode} {totals.taxAmount.toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="border-t border-slate-200 pt-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-base font-black text-slate-950">{t("salesReceivables.creditNote.totalDiscount")}</span>
+                        <span className={cn("font-mono text-xl font-black", exceedsOutstanding ? "text-red-700" : "text-emerald-700")}>
+                          {currencyCode} {totals.totalAmount.toFixed(3)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-
-              <div className="mt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={addLine}
-                  className="inline-flex min-w-[260px] items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-500 bg-white px-5 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
-                >
-                  <CirclePlus className="h-4 w-4" />
-                  {typeCode === "CN-CUSTOMER-SETTLEMENT" ? t("salesReceivables.creditNote.addSettlementLine") : t("salesReceivables.creditNote.addDiscountLine")}
-                </button>
-              </div>
-            </section>
-
-            <section className="grid gap-4 lg:grid-cols-3">
-              <MetricCard label={t("salesReceivables.field.taxAmount")} value={`${currencyCode} ${totals.taxAmount.toFixed(2)}`} />
-              <MetricCard label={t("salesReceivables.summary.subtotalBeforeTax")} value={`${currencyCode} ${totals.subtotalAmount.toFixed(2)}`} />
-              <MetricCard
-                label={t("salesReceivables.creditNote.totalDiscount")}
-                value={`${currencyCode} ${totals.totalAmount.toFixed(2)}`}
-                highlight
-              />
             </section>
           </div>
         </div>

@@ -12,6 +12,7 @@ import {
   LuTrash2 as Trash2,
   LuUserRound as UserRound,
   LuX as X,
+  LuPlus as Plus,
 } from "react-icons/lu";
 
 import { Button } from "@/components/ui";
@@ -497,215 +498,166 @@ export function QuotationEditorModal({
               </div>
             </section>
 
-            <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)] sm:p-6">
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <Package2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className={cn("text-lg text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
-                      {t("salesReceivables.section.documentLines")}
-                    </div>
-                    <div className="text-sm text-slate-500">{t("salesReceivables.section.documentLinesDescription")}</div>
-                  </div>
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 transition-all duration-200 hover:shadow-md">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Package2 className="h-5 w-5 text-slate-500" />
+                  <span className="text-base font-bold">{isArabic ? "تفاصيل بنود عرض السعر" : "Quotation Line Items"}</span>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={addLine}
-                  className="rounded-2xl border-emerald-200 px-4 text-emerald-700 hover:bg-emerald-50"
-                >
-                  <CirclePlus className="h-4 w-4" />
-                  {t("salesReceivables.action.addLine")}
+                <Button type="button" variant="secondary" size="sm" onClick={addLine} className="rounded-xl text-sm flex items-center gap-1.5 py-1.5 px-3">
+                  <Plus className="h-4 w-4" />
+                  <span>{isArabic ? "إضافة سطر" : "Add Line"}</span>
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                {editor.lines.map((line, index) => (
-                  <div key={line.key} className="rounded-[1.5rem] border border-slate-200 bg-slate-50/45 p-4">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div className={cn("flex items-center gap-3", isArabic ? "flex-row-reverse text-right" : "text-left")}>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
-                          <span className="text-sm font-extrabold">{index + 1}</span>
-                        </div>
-                        <div>
-                          <div className={cn("text-sm text-slate-900", isArabic ? "arabic-ui-heading" : "font-extrabold")}>
-                            {t("salesReceivables.line.label", { index: index + 1 })}
-                          </div>
-                          <div className="text-xs text-slate-500">{formatCurrency(Number(line.lineAmount || 0))}</div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeLine(line.key)}
-                        disabled={editor.lines.length === 1}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        {t("salesReceivables.action.remove")}
-                      </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[1400px]">
-                        <div className="mb-3 grid grid-cols-[0.4fr_2.4fr_2.1fr_2.1fr_0.7fr_0.9fr_0.9fr_2fr] gap-3">
-                          {[
-                            "#",
-                            t("salesReceivables.field.itemOrService"),
-                            t("salesReceivables.field.itemSnapshot"),
-                            t("salesReceivables.field.revenueAccount"),
-                            t("salesReceivables.field.quantity"),
-                            t("salesReceivables.field.unitPrice"),
-                            t("salesReceivables.field.discountAmount"),
-                            t("salesReceivables.field.tax"),
-                          ].map((label, labelIndex) => (
-                            <div
-                              key={`${line.key}-label-${labelIndex}`}
-                              className={cn(
-                                "px-1 text-sm font-bold text-slate-900",
-                                isArabic ? "arabic-ui text-right" : "text-left",
-                              )}
-                            >
-                              {label}
-                              {labelIndex > 0 &&
-                              labelIndex !== 2 &&
-                              labelIndex !== 6 &&
-                              labelIndex !== 7 ? (
-                                <span className="ms-1 text-red-500">*</span>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="grid grid-cols-[0.4fr_2.4fr_2.1fr_2.1fr_0.7fr_0.9fr_0.9fr_2fr] gap-3">
-                          <div className="flex h-full items-center justify-center rounded-2xl bg-white text-base font-extrabold text-slate-900 shadow-sm">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <table className="min-w-[1450px] table-fixed border-collapse text-sm">
+                  <thead className="bg-slate-50/75">
+                    <tr>
+                      <th scope="col" className="w-[50px] px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase">#</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[240px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemOrService")} *</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.itemSnapshot")}</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[200px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.revenueAccount")} *</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[100px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.quantity")} *</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.unitPrice")} *</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[130px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.discountAmount")}</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[180px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.tax")}</th>
+                      <th scope="col" className={cn("px-3 py-3.5 text-sm font-bold text-slate-500 uppercase tracking-wider w-[140px]", isArabic ? "text-right" : "text-left")}>{t("salesReceivables.field.lineAmount")}</th>
+                      <th scope="col" className="px-3 py-3.5 text-center text-sm font-bold text-slate-500 uppercase tracking-wider w-[80px]">{isArabic ? "إجراء" : "Action"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {editor.lines.map((line, index) => {
+                      return (
+                        <tr key={line.key} className="hover:bg-slate-50/50 transition align-top">
+                          <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-slate-400 text-sm">
                             {index + 1}
-                          </div>
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <Select
+                              value={line.itemId}
+                              onChange={(event) => {
+                                const item = inventoryItems.find((row) => row.id === event.target.value) ?? null;
+                                const customer = customers.find((c) => c.id === editor.customerId) ?? null;
 
-                          <Select
-                            value={line.itemId}
-                            onChange={(event) => {
-                              const item = inventoryItems.find((row) => row.id === event.target.value) ?? null;
-                              const customer = customers.find((c) => c.id === editor.customerId) ?? null;
-
-                              let shouldUpdatePrice = true;
-                              if (line.unitPrice && line.unitPrice !== "0" && line.itemId) {
-                                const prevItem = inventoryItems.find((i) => i.id === line.itemId);
-                                if (prevItem && line.unitPrice !== prevItem.defaultSalesPrice) {
-                                  if (!confirm(t("salesReceivables.message.confirmPriceUpdate"))) {
-                                    shouldUpdatePrice = false;
+                                let shouldUpdatePrice = true;
+                                if (line.unitPrice && line.unitPrice !== "0" && line.itemId) {
+                                  const prevItem = inventoryItems.find((i) => i.id === line.itemId);
+                                  if (prevItem && line.unitPrice !== prevItem.defaultSalesPrice) {
+                                    if (!confirm(t("salesReceivables.message.confirmPriceUpdate"))) {
+                                      shouldUpdatePrice = false;
+                                    }
                                   }
                                 }
+
+                                updateLine(line.key, (current) =>
+                                  applyItemToSalesLine(current, item, customer, taxes, shouldUpdatePrice),
+                                );
+                              }}
+                              className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                            >
+                              <option value="">
+                                {isInventoryItemsLoading
+                                  ? t("salesReceivables.state.loadingItems")
+                                  : t("salesReceivables.empty.selectItemOrService")}
+                              </option>
+                              {inventoryItems.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {formatItemServiceLabel(item.code, item.name)}
+                                </option>
+                              ))}
+                            </Select>
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <Input
+                              value={line.itemName}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({ ...current, itemName: event.target.value }))
                               }
-
-                              updateLine(line.key, (current) =>
-                                applyItemToSalesLine(current, item, customer, taxes, shouldUpdatePrice),
-                              );
-                            }}
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                          >
-                            <option value="">
-                              {isInventoryItemsLoading
-                                ? t("salesReceivables.state.loadingItems")
-                                : t("salesReceivables.empty.selectItemOrService")}
-                            </option>
-                            {inventoryItems.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {formatItemServiceLabel(item.code, item.name)}
-                              </option>
-                            ))}
-                          </Select>
-
-                          <Input
-                            value={line.itemName}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({ ...current, itemName: event.target.value }))
-                            }
-                            placeholder={t("salesReceivables.field.itemSnapshotPlaceholder")}
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                          />
-
-                          <Select
-                            value={line.revenueAccountId}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({
-                                ...current,
-                                revenueAccountId: event.target.value,
-                              }))
-                            }
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                          >
-                            <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
-                            {revenueAccounts.map((account) => (
-                              <option key={account.id} value={account.id}>
-                                {account.code} · {isArabic ? account.nameAr || account.name : account.name}
-                              </option>
-                            ))}
-                          </Select>
-
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={line.quantity}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }))
-                            }
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                          />
-
-                          <CurrencyAmountInput
-                            currencyCode={editor.currencyCode || "JOD"}
-                            isRtl={isArabic}
-                            min="0"
-                            step="0.01"
-                            value={line.unitPrice}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
-                            }
-                            className={cn(isArabic && "arabic-ui")}
-                          />
-
-                          <CurrencyAmountInput
-                            currencyCode={editor.currencyCode || "JOD"}
-                            isRtl={isArabic}
-                            min="0"
-                            step="0.01"
-                            value={line.discountAmount}
-                            onChange={(event) =>
-                              updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
-                            }
-                            className={cn(isArabic && "arabic-ui")}
-                          />
-
-                          <Select
-                            value={line.taxId}
-                            onChange={(event) => {
-                              const selectedTax = taxes.find((tax) => tax.id === event.target.value);
-                              updateLine(line.key, (current) => ({
-                                ...current,
-                                taxId: selectedTax?.id ?? "",
-                                taxRate: selectedTax ? String(selectedTax.rate) : "",
-                                taxAmount: selectedTax ? current.taxAmount : "",
-                              }));
-                            }}
-                            className={cn("border-slate-200 bg-white", isArabic && "arabic-ui text-right")}
-                          >
-                            <option value="">{t("salesReceivables.field.tax")}</option>
-                            {taxes.map((tax) => (
-                              <option key={tax.id} value={tax.id}>{tax.taxName} {Number(tax.rate).toFixed(2)}%</option>
-                            ))}
-                          </Select>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-[1fr_1fr_1.35fr] gap-3">
-                          <div />
-                          <div />
-                          <div>
-                            <div className={cn("mb-2 px-1 text-sm font-bold text-slate-900", isArabic ? "arabic-ui text-right" : "text-left")}>
-                              {t("salesReceivables.field.lineAmount")}
-                            </div>
+                              placeholder={t("salesReceivables.field.itemSnapshotPlaceholder")}
+                              className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                            />
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <Select
+                              value={line.revenueAccountId}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  revenueAccountId: event.target.value,
+                                }))
+                              }
+                              className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                            >
+                              <option value="">{t("salesReceivables.empty.selectRevenueAccount")}</option>
+                              {revenueAccounts.map((account) => (
+                                <option key={account.id} value={account.id}>
+                                  {account.code} · {isArabic ? account.nameAr || account.name : account.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={line.quantity}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({ ...current, quantity: event.target.value }))
+                              }
+                              className="h-10 rounded-lg text-sm font-mono text-center bg-white border-slate-200"
+                            />
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <CurrencyAmountInput
+                              currencyCode={editor.currencyCode || "JOD"}
+                              isRtl={isArabic}
+                              min="0"
+                              step="0.01"
+                              value={line.unitPrice}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({ ...current, unitPrice: event.target.value }))
+                              }
+                              className="h-10 rounded-lg text-sm"
+                            />
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <CurrencyAmountInput
+                              currencyCode={editor.currencyCode || "JOD"}
+                              isRtl={isArabic}
+                              min="0"
+                              step="0.01"
+                              value={line.discountAmount}
+                              onChange={(event) =>
+                                updateLine(line.key, (current) => ({ ...current, discountAmount: event.target.value }))
+                              }
+                              className="h-10 rounded-lg text-sm"
+                            />
+                          </td>
+                          <td className="px-2.5 py-3.5">
+                            <Select
+                              value={line.taxId}
+                              onChange={(event) => {
+                                const selectedTax = taxes.find((tax) => tax.id === event.target.value);
+                                updateLine(line.key, (current) => ({
+                                  ...current,
+                                  taxId: selectedTax?.id ?? "",
+                                  taxRate: selectedTax ? String(selectedTax.rate) : "",
+                                  taxAmount: selectedTax ? current.taxAmount : "",
+                                }));
+                              }}
+                              className="h-10 rounded-lg text-sm bg-white border-slate-200"
+                            >
+                              <option value="">{t("salesReceivables.field.tax")}</option>
+                              {taxes.map((tax) => (
+                                <option key={tax.id} value={tax.id}>
+                                  {tax.taxName} {Number(tax.rate).toFixed(2)}%
+                                </option>
+                              ))}
+                            </Select>
+                          </td>
+                          <td className="px-2.5 py-3.5">
                             <CurrencyAmountInput
                               currencyCode={editor.currencyCode || "JOD"}
                               isRtl={isArabic}
@@ -714,34 +666,57 @@ export function QuotationEditorModal({
                               value={line.lineAmount}
                               readOnly
                               disabled
-                              className={cn("bg-slate-100 text-emerald-700 disabled:opacity-100", isArabic && "arabic-ui")}
+                              className="h-10 rounded-lg text-sm bg-slate-100 text-emerald-700 font-bold disabled:opacity-100 border-transparent"
                             />
-                          </div>
-                        </div>
+                          </td>
+                          <td className="px-2.5 py-3.5 text-center">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => removeLine(line.key)}
+                              disabled={editor.lines.length === 1}
+                              className="h-9 w-9 rounded-lg border-red-200 p-0 text-red-500 hover:bg-red-50 transition"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals Section */}
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+                  <div></div>
+                  <div className="rounded-2xl bg-slate-50/70 p-5 border border-slate-100 space-y-3">
+                    <div className={cn("text-sm font-bold tracking-wide text-slate-500 mb-1", isArabic ? "text-right" : "text-left")}>
+                      {t("salesReceivables.metric.quotationTotal")}
+                    </div>
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
+                      <span>{isArabic ? "المبلغ قبل الضريبة" : "Amount before Tax"}</span>
+                      <span className="font-mono text-slate-900 font-bold">
+                        {editor.currencyCode || "JOD"} {totals.subtotalAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 text-sm font-semibold text-slate-600">
+                      <span>{t("salesReceivables.metric.tax")}</span>
+                      <span className="font-mono text-slate-900 font-bold">
+                        {editor.currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="border-t border-slate-200 pt-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-base font-black text-slate-950">{t("salesReceivables.metric.total")}</span>
+                        <span className="font-mono text-xl font-black text-emerald-700">
+                          {editor.currencyCode || "JOD"} {totals.totalAmount.toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="grid gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
-              <div className="rounded-[1.75rem] border border-emerald-200 bg-emerald-50/80 p-5 shadow-[0_10px_24px_rgba(16,185,129,0.08)]">
-                <div className="text-sm font-bold text-emerald-700">{t("salesReceivables.metric.total")}</div>
-                <div className="mt-2 text-3xl font-black text-emerald-700">
-                  {editor.currencyCode || "JOD"} {totals.totalAmount.toFixed(2)}
-                </div>
-              </div>
-              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
-                <div className="text-sm font-bold text-slate-500">{t("salesReceivables.metric.subtotal")}</div>
-                <div className="mt-2 text-2xl font-black text-slate-900">
-                  {editor.currencyCode || "JOD"} {totals.subtotalAmount.toFixed(2)}
-                </div>
-              </div>
-              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
-                <div className="text-sm font-bold text-slate-500">{t("salesReceivables.metric.tax")}</div>
-                <div className="mt-2 text-2xl font-black text-slate-900">
-                  {editor.currencyCode || "JOD"} {totals.taxAmount.toFixed(2)}
                 </div>
               </div>
             </section>

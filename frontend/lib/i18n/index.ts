@@ -1065,6 +1065,8 @@ Object.assign(enTranslations, {
   "salesReceivables.metric.creditLimit": "Credit Limit",
   "salesReceivables.metric.availableCredit": "Available Credit",
   "salesReceivables.metric.invoiceTotal": "Invoice Total",
+  "salesReceivables.metric.quotationTotal": "Quotation Total",
+  "salesReceivables.metric.orderTotal": "Order Total",
   "salesReceivables.metric.total": "Total",
   "salesReceivables.metric.subtotal": "Subtotal",
   "salesReceivables.metric.tax": "Tax",
