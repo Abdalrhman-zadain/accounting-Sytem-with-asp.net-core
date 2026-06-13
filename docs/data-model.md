@@ -12,7 +12,7 @@ Local demo data is synthetic only — not production imports.
 
 - **Basic seed** (`npm run seed` / `npx prisma db seed`): full chart of accounts and masters, empty accounting history so journal entry workflows start from scratch, and POS demo catalog.
 - **Volume seed** (`npm run seed:volume`, opt-in): same foundation, then three fiscal years (2024–2026) of batched posted journals, per-customer receivable sub-accounts, suppliers, inventory items, reporting `AuditLog` samples, and quarterly operational documents for module UI walkthroughs.
-- **Opening inventory import seed** (`npm run seed:opening-inventory`, opt-in): reads `backend/data/opening-inventory-2026-05-31.json` (generated from the checked-in workbook), upserts inventory items, creates/reuses the target warehouses, and creates deterministic opening-stock goods receipts dated `2026-05-31` without truncating unrelated tables.
+- **Opening inventory import seed** (`npm run seed:opening-inventory`, opt-in): reads `backend/data/opening-inventory-2026-05-31.json` (generated from the checked-in workbook), upserts inventory items, creates/reuses the target warehouses, and creates deterministic opening-stock goods receipts dated `2026-05-31` without truncating unrelated tables. Reruns now refresh those same opening receipts by reference when no later stock activity exists for the affected warehouse items, so a corrected workbook split can be reapplied safely.
 
 The destructive demo seeds (`npm run seed` and `npm run seed:volume`) truncate public tables before insert. The opening inventory import seed does not. See `README.md` and `docs/change-guide.md` (Volume seed subsection).
 
@@ -372,6 +372,7 @@ Accounting meaning:
 - optional inventory accounting integration creates and posts Journal Entries for goods receipts, goods issues, and inventory adjustments when `INVENTORY_ACCOUNTING_ENABLED` is enabled
 - stock movement history is stored in `InventoryStockMovement` for inquiry filters and source-document drill-down behavior
 - items can now point to a dedicated preferred warehouse record, while `preferredWarehouseCode` remains as a compatibility/reference mirror
+- warehouse master item counts should be interpreted from positive `InventoryWarehouseBalance` rows, not from how many item cards happen to mark that warehouse as their preferred default
 
 ### Payroll
 

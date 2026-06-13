@@ -30,22 +30,25 @@ export class WarehousesService {
             ]
           : undefined,
       },
-      include: {
-        _count: {
-          select: {
-            items: true,
-          },
-        },
-      },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     });
 
-    return rows.map((row) => this.mapWarehouse(row));
+    const stockedItemCountByWarehouseId = await this.getStockedItemCountMap(
+      rows.map((row) => row.id),
+    );
+
+    return rows.map((row) =>
+      this.mapWarehouse(row, stockedItemCountByWarehouseId.get(row.id) ?? 0),
+    );
   }
 
   async getById(id: string) {
     const warehouse = await this.getWarehouseOrThrow(id);
-    return this.mapWarehouse(warehouse);
+    const stockedItemCountByWarehouseId = await this.getStockedItemCountMap([id]);
+    return this.mapWarehouse(
+      warehouse,
+      stockedItemCountByWarehouseId.get(id) ?? 0,
+    );
   }
 
   async create(dto: CreateInventoryWarehouseDto) {
@@ -74,13 +77,6 @@ export class WarehousesService {
             isTransit,
             isDefaultTransit,
           },
-          include: {
-            _count: {
-              select: {
-                items: true,
-              },
-            },
-          },
         });
       })
       .catch((error: unknown) => {
@@ -90,7 +86,7 @@ export class WarehousesService {
         throw error;
       });
 
-    return this.mapWarehouse(created);
+    return this.mapWarehouse(created, 0);
   }
 
   async update(id: string, dto: UpdateInventoryWarehouseDto) {
@@ -125,13 +121,6 @@ export class WarehousesService {
           isActive: dto.isActive,
           isDefaultTransit: dto.isDefaultTransit,
         },
-        include: {
-          _count: {
-            select: {
-              items: true,
-            },
-          },
-        },
       });
     });
 
@@ -139,7 +128,11 @@ export class WarehousesService {
       await this.syncPreferredWarehouseCode(updated.id, updated.code);
     }
 
-    return this.mapWarehouse(updated);
+    const stockedItemCountByWarehouseId = await this.getStockedItemCountMap([id]);
+    return this.mapWarehouse(
+      updated,
+      stockedItemCountByWarehouseId.get(id) ?? 0,
+    );
   }
 
   async deactivate(id: string) {
@@ -148,16 +141,13 @@ export class WarehousesService {
     const updated = await this.prisma.inventoryWarehouse.update({
       where: { id },
       data: { isActive: false },
-      include: {
-        _count: {
-          select: {
-            items: true,
-          },
-        },
-      },
     });
 
-    return this.mapWarehouse(updated);
+    const stockedItemCountByWarehouseId = await this.getStockedItemCountMap([id]);
+    return this.mapWarehouse(
+      updated,
+      stockedItemCountByWarehouseId.get(id) ?? 0,
+    );
   }
 
   async getActiveWarehouseReference(id?: string) {
@@ -190,13 +180,6 @@ export class WarehousesService {
   private async getWarehouseOrThrow(id: string) {
     const warehouse = await this.prisma.inventoryWarehouse.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: {
-            items: true,
-          },
-        },
-      },
     });
 
     if (!warehouse) {
@@ -206,17 +189,7 @@ export class WarehousesService {
     return warehouse;
   }
 
-  private mapWarehouse(
-    row: Prisma.InventoryWarehouseGetPayload<{
-      include: {
-        _count: {
-          select: {
-            items: true;
-          };
-        };
-      };
-    }>,
-  ) {
+  private mapWarehouse(row: Prisma.InventoryWarehouseGetPayload<object>, itemCount: number) {
     return {
       id: row.id,
       code: row.code,
@@ -227,10 +200,29 @@ export class WarehousesService {
       isDefaultTransit: row.isDefaultTransit,
       isActive: row.isActive,
       status: row.isActive ? 'ACTIVE' : 'INACTIVE',
-      itemCount: row._count.items,
+      itemCount,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async getStockedItemCountMap(warehouseIds: string[]) {
+    if (warehouseIds.length === 0) {
+      return new Map<string, number>();
+    }
+
+    const rows = await this.prisma.inventoryWarehouseBalance.groupBy({
+      by: ['warehouseId'],
+      where: {
+        warehouseId: { in: warehouseIds },
+        onHandQuantity: { gt: 0 },
+      },
+      _count: {
+        itemId: true,
+      },
+    });
+
+    return new Map(rows.map((row) => [row.warehouseId, row._count.itemId]));
   }
 
   private generateReference(prefix: string) {

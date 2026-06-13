@@ -474,6 +474,10 @@ What else to check:
 - keep the inventory module split by subdomain ownership such as item master, warehouses, goods receipts, issues, transfers, adjustments, costing, inquiry, posting/accounting, and validation/control
 - inventory list reads (`/inventory/items`, `/inventory/goods-receipts`, `/inventory/goods-issues`, `/inventory/transfers`, `/inventory/adjustments`, `/inventory/stock-ledger`) should use `page`/`limit` and keep frontend pagination state/controls in the owning Phase 5 feature page
 - the inventory items list is full-width and rendered as a compact table (matching the POS Session Review row-styling), where selecting an item from the list displays the item details in a dedicated Accountant Review-style view with separate, properly scaled cards for barcodes and QR codes, and a button to open the full-form editor modal
+- inventory item list filters should stay server-backed through `GET /inventory/items`; availability-style filters must use actual on-hand stock (`InventoryItem.onHandQuantity`, or warehouse balance when the request is warehouse-scoped) rather than client-only row hiding
+- when the item list is filtered by warehouse, `GET /inventory/items?warehouseId=` should drive both the displayed on-hand quantity and stock-based filters so seeded opening stock such as `WH-MAIN` vs `WH-AMER` stays explorable from the item-master screen
+  The warehouse selector must also narrow the item result set itself through `warehouseBalances`, not only change the displayed quantity column for otherwise unfiltered rows.
+- inventory item search text that claims warehouse support should match real warehouse balances (`warehouseBalances -> warehouse.code/name`), not only the item's preferred warehouse metadata
 - the inventory item details view may expose both `Deactivate` and `Delete Item`; permanent deletion must be blocked whenever the item has stock balances, costing/movement history, recipe or POS addon links, or any upstream/downstream document references, so historical traceability remains intact
 - item records that point to a preferred warehouse should reference the Phase 5 warehouse master slice instead of introducing parallel free-text warehouse registries
 - item barcode values must remain unique across all inventory items; use the dedicated item-master workflow for manual entry, scanner entry, or internal barcode generation
@@ -925,6 +929,7 @@ Where to edit:
 - Market POS destination markets (`MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03`) and market-rep access: `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
 - Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`): `backend/prisma/setup-pos-market-cashier.ts`, invoked from full `npm run seed` or standalone `npm run seed:market-cashier`
 - Opening inventory workbook import (non-destructive to unrelated tables): `backend/prisma/seed-opening-inventory.ts`, invoked with `npm run seed:opening-inventory`; reads `backend/data/opening-inventory-2026-05-31.json` (snapshot generated from the checked-in workbook), upserts items, creates/reuses the two warehouses, and posts deterministic opening goods receipts dated `2026-05-31`
+  Rerunning the import now refreshes those two deterministic opening receipts by reference instead of silently reusing an older posted result, but only when no later stock movement exists for the affected warehouse items.
 
 ### Volume seed (enterprise demo dataset)
 

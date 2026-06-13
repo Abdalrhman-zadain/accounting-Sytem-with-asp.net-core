@@ -782,6 +782,7 @@ export async function getInventoryItems(
   const searchParams = new URLSearchParams();
   if (params.isActive) searchParams.set("isActive", params.isActive);
   if (params.type) searchParams.set("type", params.type);
+  if (params.stockStatus) searchParams.set("stockStatus", params.stockStatus);
   if (params.itemGroupId) searchParams.set("itemGroupId", params.itemGroupId);
   if (params.itemCategoryId) searchParams.set("itemCategoryId", params.itemCategoryId);
   if (params.search?.trim()) searchParams.set("search", params.search.trim());

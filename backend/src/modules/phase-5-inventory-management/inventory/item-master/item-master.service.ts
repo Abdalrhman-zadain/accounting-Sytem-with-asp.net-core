@@ -17,6 +17,7 @@ type InventoryItemListQuery = {
   isActive?: string;
   search?: string;
   type?: string;
+  stockStatus?: string;
   itemGroupId?: string;
   itemCategoryId?: string;
   page?: string;
@@ -164,6 +165,13 @@ export class ItemMasterService {
     });
     const skip = (page - 1) * limit;
     const search = query.search?.trim();
+    const warehouseWhere = this.buildWarehouseFilterWhere(
+      query.warehouseId?.trim(),
+    );
+    const stockWhere = this.buildStockFilterWhere(
+      query.stockStatus,
+      query.warehouseId?.trim(),
+    );
     const where: Prisma.InventoryItemWhereInput = {
       isActive:
         query.isActive === undefined || query.isActive === ""
@@ -198,8 +206,29 @@ export class ItemMasterService {
                 name: { contains: search, mode: "insensitive" },
               },
             },
+            {
+              warehouseBalances: {
+                some: {
+                  warehouse: {
+                    code: { contains: search, mode: "insensitive" },
+                  },
+                },
+              },
+            },
+            {
+              warehouseBalances: {
+                some: {
+                  warehouse: {
+                    name: { contains: search, mode: "insensitive" },
+                  },
+                },
+              },
+            },
           ]
         : undefined,
+      AND: [warehouseWhere, stockWhere].filter(
+        (clause): clause is Prisma.InventoryItemWhereInput => Boolean(clause),
+      ),
     };
 
     const [total, rows] = await Promise.all([
@@ -224,6 +253,67 @@ export class ItemMasterService {
       total,
       totalPages,
     };
+  }
+
+  private buildWarehouseFilterWhere(
+    warehouseId?: string,
+  ): Prisma.InventoryItemWhereInput | undefined {
+    if (!warehouseId) {
+      return undefined;
+    }
+
+    return {
+      warehouseBalances: {
+        some: {
+          warehouseId,
+        },
+      },
+    };
+  }
+
+  private buildStockFilterWhere(
+    stockStatus?: string,
+    warehouseId?: string,
+  ): Prisma.InventoryItemWhereInput | undefined {
+    if (!stockStatus || stockStatus === "") {
+      return undefined;
+    }
+
+    if (stockStatus === "in_stock") {
+      if (warehouseId) {
+        return {
+          warehouseBalances: {
+            some: {
+              warehouseId,
+              onHandQuantity: { gt: 0 },
+            },
+          },
+        };
+      }
+
+      return {
+        onHandQuantity: { gt: 0 },
+      };
+    }
+
+    if (stockStatus === "out_of_stock") {
+      if (warehouseId) {
+        return {
+          warehouseBalances: {
+            none: {
+              warehouseId,
+              onHandQuantity: { gt: 0 },
+            },
+          },
+        };
+      }
+
+      return {
+        onHandQuantity: { lte: 0 },
+      };
+    }
+
+    throw new BadRequestException("Unsupported stock filter.");
   }
 
   async getById(id: string) {

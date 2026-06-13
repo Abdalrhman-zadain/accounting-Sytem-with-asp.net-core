@@ -2743,6 +2743,10 @@ Object.assign(enTranslations, {
   "inventory.filters.activeOnly": "Active only",
   "inventory.filters.inactiveOnly": "Inactive only",
   "inventory.filters.allTypes": "All item types",
+  "inventory.filters.allStockLevels": "All stock levels",
+  "inventory.filters.inStockOnly": "In stock only",
+  "inventory.filters.outOfStockOnly": "Out of stock only",
+  "inventory.filters.allWarehouses": "All warehouses",
   "inventory.metrics.total": "Items",
   "inventory.metrics.active": "Active",
   "inventory.metrics.inactive": "Inactive",
@@ -2897,7 +2901,7 @@ Object.assign(enTranslations, {
   "inventory.warehouses.filters.transitOnly": "Transit only",
   "inventory.warehouses.mode.storage": "Storage",
   "inventory.warehouses.mode.transit": "Transit / Staging",
-  "inventory.warehouses.itemCount": "{count} linked items",
+  "inventory.warehouses.itemCount": "{count} stocked items",
   "inventory.warehouses.field.code": "Warehouse Code",
   "inventory.warehouses.field.codeHint":
     "Leave blank to let the system generate one.",
@@ -2906,7 +2910,7 @@ Object.assign(enTranslations, {
   "inventory.warehouses.field.responsiblePerson": "Responsible Person",
   "inventory.warehouses.field.mode": "Warehouse Mode",
   "inventory.warehouses.detail.mode": "Mode",
-  "inventory.warehouses.detail.itemCount": "Linked Items",
+  "inventory.warehouses.detail.itemCount": "Stocked Items",
   "inventory.warehouses.details.empty":
     "Select a warehouse to review its details.",
   "inventory.warehouses.editor.createTitle": "Create Warehouse",

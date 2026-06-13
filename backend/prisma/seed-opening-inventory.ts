@@ -90,7 +90,7 @@ type WarehouseSeedResult = {
 
 type ReceiptSeedResult = {
   createdLineCount: number;
-  reusedPostedReceipt: boolean;
+  refreshedExistingReceipt: boolean;
   receiptReference: string;
 };
 
@@ -649,6 +649,126 @@ async function postOpeningReceipt(
   });
 }
 
+async function assertReceiptCanBeRefreshed(
+  tx: Prisma.TransactionClient,
+  receipt: {
+    id: string;
+    warehouseId: string;
+    lines: Array<{
+      itemId: string;
+    }>;
+  },
+) {
+  const itemIds = [...new Set(receipt.lines.map((line) => line.itemId))];
+  if (itemIds.length === 0) {
+    return;
+  }
+
+  const downstreamMovement = await tx.inventoryStockMovement.findFirst({
+    where: {
+      itemId: { in: itemIds },
+      warehouseId: receipt.warehouseId,
+      transactionId: { not: receipt.id },
+    },
+    select: {
+      id: true,
+      transactionReference: true,
+      transactionType: true,
+      itemId: true,
+    },
+  });
+
+  if (downstreamMovement) {
+    throw new Error(
+      `Opening receipt refresh is blocked because warehouse activity already exists for one of its items (reference ${downstreamMovement.transactionReference}, type ${downstreamMovement.transactionType}). Clear or reverse later stock activity before rerunning the opening inventory seed.`,
+    );
+  }
+}
+
+async function rollbackPostedOpeningReceipt(
+  tx: Prisma.TransactionClient,
+  receipt: {
+    id: string;
+    warehouseId: string;
+    lines: Array<{
+      itemId: string;
+      quantity: Prisma.Decimal;
+      lineTotalAmount: Prisma.Decimal;
+    }>;
+  },
+) {
+  await assertReceiptCanBeRefreshed(tx, receipt);
+
+  for (const line of receipt.lines) {
+    await tx.inventoryItem.update({
+      where: { id: line.itemId },
+      data: {
+        onHandQuantity: {
+          decrement: line.quantity,
+        },
+        valuationAmount: {
+          decrement: line.lineTotalAmount,
+        },
+      },
+    });
+
+    const warehouseBalance = await tx.inventoryWarehouseBalance.findUnique({
+      where: {
+        itemId_warehouseId: {
+          itemId: line.itemId,
+          warehouseId: receipt.warehouseId,
+        },
+      },
+      select: {
+        id: true,
+        onHandQuantity: true,
+        valuationAmount: true,
+      },
+    });
+
+    if (!warehouseBalance) {
+      throw new Error(
+        `Warehouse balance was not found while refreshing opening receipt ${receipt.id}.`,
+      );
+    }
+
+    const nextQuantity = warehouseBalance.onHandQuantity.minus(line.quantity);
+    const nextValuation = warehouseBalance.valuationAmount.minus(
+      line.lineTotalAmount,
+    );
+
+    if (nextQuantity.lt(0) || nextValuation.lt(0)) {
+      throw new Error(
+        `Warehouse balance would become negative while refreshing opening receipt ${receipt.id}.`,
+      );
+    }
+
+    if (nextQuantity.eq(0) && nextValuation.eq(0)) {
+      await tx.inventoryWarehouseBalance.delete({
+        where: { id: warehouseBalance.id },
+      });
+    } else {
+      await tx.inventoryWarehouseBalance.update({
+        where: { id: warehouseBalance.id },
+        data: {
+          onHandQuantity: nextQuantity,
+          valuationAmount: nextValuation,
+        },
+      });
+    }
+  }
+
+  await tx.inventoryStockMovement.deleteMany({
+    where: { transactionType: 'InventoryGoodsReceipt', transactionId: receipt.id },
+  });
+  await tx.inventoryCostLayer.deleteMany({
+    where: {
+      sourceTransactionType: 'InventoryGoodsReceipt',
+      sourceTransactionId: receipt.id,
+    },
+  });
+}
+
 async function ensureOpeningReceipt(
   prisma: PrismaClient,
   options: {
@@ -662,7 +782,7 @@ async function ensureOpeningReceipt(
   if (positiveRows.length === 0) {
     return {
       createdLineCount: 0,
-      reusedPostedReceipt: false,
+      refreshedExistingReceipt: false,
       receiptReference: options.reference,
     } satisfies ReceiptSeedResult;
   }
@@ -673,22 +793,18 @@ async function ensureOpeningReceipt(
       lines: {
         select: {
           id: true,
+          itemId: true,
+          quantity: true,
+          lineTotalAmount: true,
         },
       },
     },
   });
 
-  if (existing?.status === InventoryReceiptStatus.POSTED) {
-    return {
-      createdLineCount: 0,
-      reusedPostedReceipt: true,
-      receiptReference: options.reference,
-    } satisfies ReceiptSeedResult;
-  }
-
   if (
     existing &&
-    existing.status !== InventoryReceiptStatus.DRAFT
+    existing.status !== InventoryReceiptStatus.DRAFT &&
+    existing.status !== InventoryReceiptStatus.POSTED
   ) {
     throw new Error(
       `Receipt ${options.reference} already exists with status ${existing.status}. Delete or replace it manually before rerunning this import.`,
@@ -742,19 +858,32 @@ async function ensureOpeningReceipt(
 
   await prisma.$transaction(async (tx) => {
     let receiptId = existing?.id ?? null;
+    let refreshedExistingReceipt = false;
 
     if (existing) {
+      if (existing.status === InventoryReceiptStatus.POSTED) {
+        await rollbackPostedOpeningReceipt(tx, {
+          id: existing.id,
+          warehouseId: existing.warehouseId,
+          lines: existing.lines,
+        });
+        refreshedExistingReceipt = true;
+      }
+
       await tx.inventoryGoodsReceiptLine.deleteMany({
         where: { goodsReceiptId: existing.id },
       });
       await tx.inventoryGoodsReceipt.update({
         where: { id: existing.id },
         data: {
+          status: InventoryReceiptStatus.DRAFT,
           receiptDate: OPENING_STOCK_DATE,
           warehouseId: options.warehouseId,
           description: options.description,
           totalQuantity,
           totalAmount,
+          postedAt: null,
+          reversedAt: null,
         },
       });
       receiptId = existing.id;
@@ -788,11 +917,13 @@ async function ensureOpeningReceipt(
     });
 
     await postOpeningReceipt(tx, receiptId!);
+
+    return refreshedExistingReceipt;
   });
 
   return {
     createdLineCount: lineDrafts.length,
-    reusedPostedReceipt: false,
+    refreshedExistingReceipt: existing?.status === InventoryReceiptStatus.POSTED,
     receiptReference: options.reference,
   } satisfies ReceiptSeedResult;
 }
@@ -849,9 +980,9 @@ export async function seedOpeningInventoryFromWorkbook(
 
     stockReceiptLinesCreated += receiptResult.createdLineCount;
 
-    if (receiptResult.reusedPostedReceipt) {
+    if (receiptResult.refreshedExistingReceipt) {
       console.log(
-        `Reused existing posted opening receipt ${receiptResult.receiptReference} for warehouse ${warehouse.code}.`,
+        `Refreshed existing opening receipt ${receiptResult.receiptReference} for warehouse ${warehouse.code}.`,
       );
     } else if (receiptResult.createdLineCount > 0) {
       console.log(

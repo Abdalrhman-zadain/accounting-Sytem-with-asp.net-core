@@ -440,6 +440,8 @@ export function InventoryPage() {
   const [itemSearch, setItemSearch] = useState("");
   const [itemStatusFilter, setItemStatusFilter] = useState<"" | "true" | "false">("");
   const [itemTypeFilter, setItemTypeFilter] = useState<InventoryItemType | "">("");
+  const [itemStockFilter, setItemStockFilter] = useState<"" | "in_stock" | "out_of_stock">("");
+  const [itemWarehouseFilter, setItemWarehouseFilter] = useState("");
   const [itemGroupFilter, setItemGroupFilter] = useState("");
   const [itemCategoryFilter, setItemCategoryFilter] = useState("");
   const [itemPage, setItemPage] = useState(1);
@@ -519,6 +521,8 @@ export function InventoryPage() {
       search: itemSearch,
       isActive: itemStatusFilter,
       type: itemTypeFilter,
+      stockStatus: itemStockFilter,
+      warehouseId: itemWarehouseFilter || undefined,
       itemGroupId: itemGroupFilter || undefined,
       itemCategoryId: itemCategoryFilter || undefined,
       page: itemPage,
@@ -530,6 +534,8 @@ export function InventoryPage() {
           search: itemSearch,
           isActive: itemStatusFilter,
           type: itemTypeFilter,
+          stockStatus: itemStockFilter,
+          warehouseId: itemWarehouseFilter || undefined,
           itemGroupId: itemGroupFilter || undefined,
           itemCategoryId: itemCategoryFilter || undefined,
           page: itemPage,
@@ -609,6 +615,12 @@ export function InventoryPage() {
         { search: warehouseSearch, isActive: warehouseStatusFilter, isTransit: warehouseTransitFilter },
         token,
       ),
+  });
+
+  const activeItemWarehousesQuery = useQuery({
+    queryKey: queryKeys.inventoryWarehouses(token, { isActive: "true" }),
+    queryFn: () => getInventoryWarehouses({ isActive: "true" }, token),
+    staleTime: 5 * 60 * 1000,
   });
 
   const goodsReceiptsQuery = useQuery({
@@ -765,7 +777,7 @@ export function InventoryPage() {
 
   useEffect(() => {
     setItemPage(1);
-  }, [itemSearch, itemStatusFilter, itemTypeFilter, itemGroupFilter, itemCategoryFilter]);
+  }, [itemSearch, itemStatusFilter, itemTypeFilter, itemStockFilter, itemWarehouseFilter, itemGroupFilter, itemCategoryFilter]);
 
   useEffect(() => {
     if (!itemGroupFilter && itemCategoryFilter) return;
@@ -2266,7 +2278,7 @@ export function InventoryPage() {
 
               <div className="w-full">
             <Card className="space-y-5">
-              <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_220px]">
+              <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_180px_180px_180px_220px_220px_220px]">
                 <div className="relative">
                   <span className={cn("absolute inset-y-0 flex items-center text-gray-400", isArabic ? "left-3" : "right-3")}>
                     <LuSearch size={16} />
@@ -2307,6 +2319,20 @@ export function InventoryPage() {
                 </select>
 
                 <select
+                  value={itemStockFilter}
+                  onChange={(event) =>
+                    setItemStockFilter(
+                      event.target.value as "" | "in_stock" | "out_of_stock",
+                    )
+                  }
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
+                  <option value="">{t("inventory.filters.allStockLevels")}</option>
+                  <option value="in_stock">{t("inventory.filters.inStockOnly")}</option>
+                  <option value="out_of_stock">{t("inventory.filters.outOfStockOnly")}</option>
+                </select>
+
+                <select
                   value={itemGroupFilter}
                   onChange={(event) => {
                     setItemGroupFilter(event.target.value);
@@ -2318,6 +2344,19 @@ export function InventoryPage() {
                   {activeItemGroups.map((group) => (
                     <option key={group.id} value={group.id}>
                       {formatCodeNameText(group.code, group.name, isArabic)}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={itemWarehouseFilter}
+                  onChange={(event) => setItemWarehouseFilter(event.target.value)}
+                  className="rounded-[16px] border border-[#d6e1d9] bg-[#fafcfb] px-3 py-2.5 text-sm font-semibold text-[#233329] focus:outline-none focus:ring-2 focus:ring-[#5f8a67]/20"
+                >
+                  <option value="">{t("inventory.filters.allWarehouses")}</option>
+                  {(activeItemWarehousesQuery.data ?? []).map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {formatCodeNameText(warehouse.code, warehouse.name, isArabic)}
                     </option>
                   ))}
                 </select>

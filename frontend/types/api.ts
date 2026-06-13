@@ -533,6 +533,7 @@ export type InventoryItemsQuery = {
   isActive?: "true" | "false" | "";
   search?: string;
   type?: InventoryItemType | "";
+  stockStatus?: "in_stock" | "out_of_stock" | "";
   itemGroupId?: string;
   itemCategoryId?: string;
   page?: number;
