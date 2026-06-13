@@ -5277,7 +5277,7 @@ function mapUnitEditorToPayload(editor: UnitEditorState) {
 
 function mapWarehouseEditorToPayload(editor: WarehouseEditorState) {
   return {
-    code: editor.code.trim() || undefined,
+    code: editor.id ? undefined : editor.code.trim() || undefined,
     name: editor.name.trim(),
     address: editor.address.trim() || undefined,
     responsiblePerson: editor.responsiblePerson.trim() || undefined,
