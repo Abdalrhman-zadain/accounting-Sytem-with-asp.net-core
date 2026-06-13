@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -80,5 +81,10 @@ export class ItemMasterController {
   @Post(":id/deactivate")
   deactivate(@Param("id") id: string) {
     return this.service.deactivate(id);
+  }
+
+  @Delete(":id")
+  remove(@Param("id") id: string) {
+    return this.service.delete(id);
   }
 }

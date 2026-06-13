@@ -21,6 +21,7 @@ import {
   LuSearch,
   LuSettings2 as Settings2,
   LuTags as Tags,
+  LuTrash2 as Trash2,
   LuWarehouse as Warehouse,
 } from "react-icons/lu";
 
@@ -43,6 +44,7 @@ import {
   deactivateInventoryItemGroup,
   deactivateInventoryUnitOfMeasure,
   deactivateInventoryWarehouse,
+  deleteInventoryItem,
   generateInventoryBarcode,
   getActiveTaxes,
   getAccountOptions,
@@ -105,7 +107,7 @@ import type {
   InventoryUnitOfMeasure,
   InventoryWarehouse,
 } from "@/types/api";
-import { Button, Card, PageShell, SidePanel, StatusPill } from "@/components/ui";
+import { Button, Card, Modal, PageShell, SidePanel, StatusPill } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/ui/forms";
 import { ItemImportModal } from "./item-import-modal";
 import {
@@ -157,6 +159,16 @@ type InventoryWorkspace =
   | "transfers"
   | "adjustments"
   | "stockLedger";
+
+type ItemDeleteDialogState =
+  | {
+      itemId: string;
+      itemCode: string;
+      itemName: string;
+      phase: "confirm" | "success" | "error";
+      message?: string;
+    }
+  | null;
 
 const INVENTORY_WORKSPACE_TABS: Array<{
   id: InventoryWorkspace;
@@ -437,6 +449,7 @@ export function InventoryPage() {
   const [itemEditor, setItemEditor] = useState<ItemEditorState>(createEmptyItemEditor);
   const itemSaveModeRef = useRef<"save" | "saveAndClose">("saveAndClose");
   const [showItemCodePreview, setShowItemCodePreview] = useState(false);
+  const [itemDeleteDialog, setItemDeleteDialog] = useState<ItemDeleteDialogState>(null);
 
   const [itemGroupSearch, setItemGroupSearch] = useState("");
   const [itemGroupStatusFilter, setItemGroupStatusFilter] = useState<"" | "true" | "false">("");
@@ -919,6 +932,17 @@ export function InventoryPage() {
       await queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
       await queryClient.invalidateQueries({ queryKey: ["inventory-warehouses"] });
       setSelectedItemId(updated.id);
+    },
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: (id: string) => deleteInventoryItem(id, token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
+      await queryClient.invalidateQueries({ queryKey: ["inventory-warehouses"] });
+      await queryClient.invalidateQueries({ queryKey: ["inventory-stock-ledger"] });
+      setSelectedItemId(null);
+      setIsItemEditorOpen(false);
     },
   });
 
@@ -1978,6 +2002,15 @@ export function InventoryPage() {
                     className="rounded-full px-4 py-2 text-xs font-bold"
                   >
                     {t("inventory.button.deactivate")}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => confirmDeleteItem(selectedItem)}
+                    disabled={deleteItemMutation.isPending}
+                    className="rounded-full px-4 py-2 text-xs font-bold flex items-center gap-1.5"
+                  >
+                    <Trash2 size={13} />
+                    <span>{isArabic ? "حذف المادة" : "Delete Item"}</span>
                   </Button>
                 </div>
               </div>
@@ -4021,6 +4054,97 @@ export function InventoryPage() {
           await queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
         }}
       />
+      <Modal
+        isOpen={itemDeleteDialog !== null}
+        onClose={closeItemDeleteDialog}
+        title={
+          itemDeleteDialog?.phase === "success"
+            ? isArabic
+              ? "تم حذف المادة"
+              : "Item Deleted"
+            : itemDeleteDialog?.phase === "error"
+              ? isArabic
+                ? "تعذر حذف المادة"
+                : "Unable to Delete Item"
+              : isArabic
+                ? "تأكيد حذف المادة"
+                : "Confirm Item Deletion"
+        }
+        size="md"
+      >
+        {itemDeleteDialog ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-[#e1e7e2] bg-[#fafcfb] px-4 py-4">
+              <div className="text-xs font-black uppercase tracking-[0.16em] text-[#7d8c83]">
+                {isArabic ? "المادة المحددة" : "Selected Item"}
+              </div>
+              <div className="mt-2 text-sm font-bold text-[#233329]">
+                {itemDeleteDialog.itemCode} {isArabic ? "·" : "·"} {itemDeleteDialog.itemName}
+              </div>
+            </div>
+
+            {itemDeleteDialog.phase === "confirm" ? (
+              <>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                  {isArabic
+                    ? "سيتم حذف بطاقة المادة نهائيًا فقط إذا لم تكن مرتبطة بأرصدة مخزون أو حركات أو مستندات سابقة أو وصفات أو إعدادات نقاط البيع."
+                    : "The item card will be permanently deleted only if it has no stock balances, movement history, document links, recipes, or POS setup."}
+                </div>
+                <p className="text-sm leading-7 text-[#66756d]">
+                  {isArabic
+                    ? "إذا كانت المادة مرتبطة بأي بيانات تشغيلية فسيتم إيقاف الحذف وسيظهر السبب مباشرة."
+                    : "If the item is linked to operational data, deletion will be blocked and the exact reason will be shown here."}
+                </p>
+              </>
+            ) : itemDeleteDialog.phase === "success" ? (
+              <SuccessBox
+                message={
+                  itemDeleteDialog.message ??
+                  (isArabic
+                    ? "تم حذف المادة بنجاح ولم تعد مرتبطة بالقائمة الحالية."
+                    : "The item was deleted successfully and removed from the current list.")
+                }
+              />
+            ) : (
+              <ErrorBox
+                message={
+                  itemDeleteDialog.message ??
+                  (isArabic
+                    ? "لم يتم حذف المادة. يوجد ارتباط أو قيد يمنع الحذف."
+                    : "The item was not deleted because it is still linked to other data.")
+                }
+              />
+            )}
+
+            <div className="flex flex-wrap justify-end gap-3">
+              {itemDeleteDialog.phase === "confirm" ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={closeItemDeleteDialog}
+                    disabled={deleteItemMutation.isPending}
+                  >
+                    {isArabic ? "إلغاء" : "Cancel"}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => void submitDeleteItem()}
+                    disabled={deleteItemMutation.isPending}
+                    className="gap-2"
+                  >
+                    <Trash2 size={14} />
+                    <span>{deleteItemMutation.isPending ? (isArabic ? "جارٍ الحذف..." : "Deleting...") : isArabic ? "تأكيد الحذف" : "Delete Item"}</span>
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={closeItemDeleteDialog}>
+                  {isArabic ? "حسنًا" : "OK"}
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 
@@ -4314,6 +4438,60 @@ export function InventoryPage() {
     }
   }
 
+  function confirmDeleteItem(item: InventoryItem) {
+    deleteItemMutation.reset();
+    setItemDeleteDialog({
+      itemId: item.id,
+      itemCode: item.code,
+      itemName: item.name,
+      phase: "confirm",
+    });
+  }
+
+  async function submitDeleteItem() {
+    if (!itemDeleteDialog || itemDeleteDialog.phase !== "confirm") {
+      return;
+    }
+
+    try {
+      await deleteItemMutation.mutateAsync(itemDeleteDialog.itemId);
+      setItemDeleteDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: "success",
+              message: isArabic
+                ? "تم حذف المادة بنجاح لأنه لا توجد أي أرصدة أو حركات أو مستندات مرتبطة بها."
+                : "The item was deleted successfully because it has no linked balances, movements, or documents.",
+            }
+          : current,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? translateInventoryMutationError(error.message) : null;
+      setItemDeleteDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: "error",
+              message:
+                message ??
+                (isArabic
+                  ? "لم يتم حذف المادة بسبب وجود ارتباطات تمنع الحذف."
+                  : "The item was not deleted because it still has linked records."),
+            }
+          : current,
+      );
+    }
+  }
+
+  function closeItemDeleteDialog() {
+    if (deleteItemMutation.isPending) {
+      return;
+    }
+    setItemDeleteDialog(null);
+    deleteItemMutation.reset();
+  }
+
   function confirmDeactivateWarehouse(id: string) {
     if (typeof window === "undefined" || window.confirm(t("inventory.warehouses.confirm.deactivate"))) {
       void deactivateWarehouseMutation.mutate(id);
@@ -4600,6 +4778,10 @@ function EmptyState({ message }: { message: string }) {
 
 function ErrorBox({ message }: { message: string }) {
   return <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">{message}</div>;
+}
+
+function SuccessBox({ message }: { message: string }) {
+  return <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">{message}</div>;
 }
 
 type MasterDataRow = {
@@ -5503,6 +5685,12 @@ function translateInventoryMutationError(message: string) {
       return "Service or non-stock item lines must post to an active expense account. يجب ترحيل بنود الخدمات أو الأصناف غير المخزنية إلى حساب مصروف نشط.";
     case "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account.":
       return "Each purchase invoice line must use an active posting inventory, fixed asset, or expense account. يجب أن يستخدم كل سطر حساب ترحيل نشط من نوع مخزون أو أصل ثابت أو مصروف.";
+    case "Inventory item cannot be deleted because it still has stock quantity or inventory value. لا يمكن حذف المادة لأن لها كمية مخزون أو قيمة مخزون حالية.":
+    case "Inventory item cannot be deleted because it has stock balances or inventory movement history. لا يمكن حذف المادة لأنها مرتبطة بأرصدة مخزون أو بحركات مخزنية سابقة.":
+    case "Inventory item cannot be deleted because it is linked to sales or purchase documents. لا يمكن حذف المادة لأنها مرتبطة بمستندات مبيعات أو مشتريات سابقة.":
+    case "Inventory item cannot be deleted because it is linked to recipe or POS setup. لا يمكن حذف المادة لأنها مرتبطة بوصفات أو بإعدادات نقاط البيع.":
+    case "Inventory item cannot be deleted because it is still referenced by other records. لا يمكن حذف المادة لأنها ما زالت مرتبطة بسجلات أخرى.":
+      return message;
     default:
       return message;
   }

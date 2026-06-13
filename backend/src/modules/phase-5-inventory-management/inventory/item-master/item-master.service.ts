@@ -47,6 +47,11 @@ type InventoryItemWithAccounts = Prisma.InventoryItemGetPayload<{
 
 type InventoryItemCodeDb = Pick<Prisma.TransactionClient, "inventoryItem" | "$queryRaw" | "$executeRaw">;
 
+type ItemDeletionBlockResult = {
+  blocked: boolean;
+  reason?: string;
+};
+
 const ITEM_CODE_PREFIX = "ITM";
 const ITEM_CODE_DIGITS = 6;
 const ITEM_CREATE_MAX_ATTEMPTS = 5;
@@ -578,6 +583,36 @@ export class ItemMasterService {
     return this.mapItem(updated);
   }
 
+  async delete(id: string) {
+    const item = await this.getItemOrThrow(id);
+    const deletionBlocked = await this.hasDeletionBlockers(id, item);
+
+    if (deletionBlocked.blocked) {
+      throw new BadRequestException(
+        deletionBlocked.reason ??
+          "Inventory item cannot be deleted because it is linked to other records. لا يمكن حذف المادة لأنها مرتبطة بسجلات أخرى.",
+      );
+    }
+
+    try {
+      await this.prisma.inventoryItem.delete({
+        where: { id },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === "P2003" || error.code === "P2014")
+      ) {
+        throw new BadRequestException(
+          "Inventory item cannot be deleted because it is still referenced by other records. لا يمكن حذف المادة لأنها ما زالت مرتبطة بسجلات أخرى.",
+        );
+      }
+      throw error;
+    }
+
+    return { id };
+  }
+
   async ensureActiveItem(id: string) {
     const item = await this.getItemOrThrow(id);
     if (!item.isActive) {
@@ -605,6 +640,122 @@ export class ItemMasterService {
       throw new BadRequestException(`Inventory item ${id} was not found.`);
     }
     return item;
+  }
+
+  private async hasDeletionBlockers(
+    id: string,
+    item: Awaited<ReturnType<ItemMasterService["getItemOrThrow"]>>,
+  ): Promise<ItemDeletionBlockResult> {
+    if (
+      Number(item.onHandQuantity) !== 0 ||
+      Number(item.valuationAmount) !== 0
+    ) {
+      return {
+        blocked: true,
+        reason:
+          "Inventory item cannot be deleted because it still has stock quantity or inventory value. لا يمكن حذف المادة لأن لها كمية مخزون أو قيمة مخزون حالية.",
+      };
+    }
+
+    const [
+      goodsReceiptLines,
+      goodsIssueLines,
+      transferLines,
+      adjustmentLines,
+      salesQuotationLines,
+      salesOrderLines,
+      salesInvoiceLines,
+      creditNoteLines,
+      debitNoteLines,
+      posReturnLines,
+      purchaseRequestLines,
+      purchaseOrderLines,
+      purchaseInvoiceLines,
+      warehouseBalances,
+      costLayers,
+      stockMovements,
+      repCarStockBalances,
+      repCarLoadLines,
+      repCarStocktakeLines,
+      repCarStockMovements,
+      posAddonLinks,
+      recipe,
+      recipesAsIngredient,
+    ] = await this.prisma.$transaction([
+      this.prisma.inventoryGoodsReceiptLine.count({ where: { itemId: id } }),
+      this.prisma.inventoryGoodsIssueLine.count({ where: { itemId: id } }),
+      this.prisma.inventoryTransferLine.count({ where: { itemId: id } }),
+      this.prisma.inventoryAdjustmentLine.count({ where: { itemId: id } }),
+      this.prisma.salesQuotationLine.count({ where: { itemId: id } }),
+      this.prisma.salesOrderLine.count({ where: { itemId: id } }),
+      this.prisma.salesInvoiceLine.count({ where: { itemId: id } }),
+      this.prisma.creditNoteLine.count({ where: { itemId: id } }),
+      this.prisma.debitNoteLine.count({ where: { itemId: id } }),
+      this.prisma.posReturnLine.count({ where: { itemId: id } }),
+      this.prisma.purchaseRequestLine.count({ where: { itemId: id } }),
+      this.prisma.purchaseOrderLine.count({ where: { itemId: id } }),
+      this.prisma.purchaseInvoiceLine.count({ where: { itemId: id } }),
+      this.prisma.inventoryWarehouseBalance.count({ where: { itemId: id } }),
+      this.prisma.inventoryCostLayer.count({ where: { itemId: id } }),
+      this.prisma.inventoryStockMovement.count({ where: { itemId: id } }),
+      this.prisma.repCarStockBalance.count({ where: { itemId: id } }),
+      this.prisma.repCarLoadLine.count({ where: { itemId: id } }),
+      this.prisma.repCarStocktakeLine.count({ where: { itemId: id } }),
+      this.prisma.repCarStockMovement.count({ where: { itemId: id } }),
+      this.prisma.posItemAddonGroup.count({ where: { itemId: id } }),
+      this.prisma.restaurantRecipe.count({ where: { itemId: id } }),
+      this.prisma.restaurantRecipeIngredient.count({
+        where: { ingredientItemId: id },
+      }),
+    ]);
+
+    if (
+      goodsReceiptLines > 0 ||
+      goodsIssueLines > 0 ||
+      transferLines > 0 ||
+      adjustmentLines > 0 ||
+      warehouseBalances > 0 ||
+      costLayers > 0 ||
+      stockMovements > 0 ||
+      repCarStockBalances > 0 ||
+      repCarLoadLines > 0 ||
+      repCarStocktakeLines > 0 ||
+      repCarStockMovements > 0
+    ) {
+      return {
+        blocked: true,
+        reason:
+          "Inventory item cannot be deleted because it has stock balances or inventory movement history. لا يمكن حذف المادة لأنها مرتبطة بأرصدة مخزون أو بحركات مخزنية سابقة.",
+      };
+    }
+
+    if (
+      salesQuotationLines > 0 ||
+      salesOrderLines > 0 ||
+      salesInvoiceLines > 0 ||
+      creditNoteLines > 0 ||
+      debitNoteLines > 0 ||
+      posReturnLines > 0 ||
+      purchaseRequestLines > 0 ||
+      purchaseOrderLines > 0 ||
+      purchaseInvoiceLines > 0
+    ) {
+      return {
+        blocked: true,
+        reason:
+          "Inventory item cannot be deleted because it is linked to sales or purchase documents. لا يمكن حذف المادة لأنها مرتبطة بمستندات مبيعات أو مشتريات سابقة.",
+      };
+    }
+
+    if (posAddonLinks > 0 || recipe > 0 || recipesAsIngredient > 0) {
+      return {
+        blocked: true,
+        reason:
+          "Inventory item cannot be deleted because it is linked to recipe or POS setup. لا يمكن حذف المادة لأنها مرتبطة بوصفات أو بإعدادات نقاط البيع.",
+      };
+    }
+
+    return { blocked: false };
   }
 
   private async validateInventoryAccount(id?: string) {

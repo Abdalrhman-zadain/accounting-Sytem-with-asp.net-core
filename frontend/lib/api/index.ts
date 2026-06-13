@@ -1282,6 +1282,16 @@ export async function deactivateInventoryItem(
   });
 }
 
+export async function deleteInventoryItem(
+  id: string,
+  token?: string | null,
+) {
+  return apiRequest<{ id: string }>(`/inventory/items/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function deactivateInventoryItemGroup(
   id: string,
   token?: string | null,
