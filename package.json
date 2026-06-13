@@ -4,6 +4,7 @@
     "seed": "npm run seed --prefix backend",
     "seed:volume": "npm run seed:volume --prefix backend",
     "seed:market": "npm run seed:market --prefix backend",
+    "seed:opening-inventory": "npm run seed:opening-inventory --prefix backend",
     "seed:market-cashier": "npm run seed:market-cashier --prefix backend"
   },
   "dependencies": {

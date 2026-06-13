@@ -168,7 +168,7 @@ Current limitation:
 
 - item master, warehouses, goods receipts, goods issues, transfers, adjustments, stock-ledger inquiry, warehouse balances, and costing/accounting integration are implemented; posted inventory documents now support reverse status workflows, but reverse currently marks status/audit history only and does not yet create stock-rollback or accounting-reversal entries.
 - sales-invoice posting now participates in inventory by creating `SALES_ISSUE` stock movements and warehouse-level stock relief for inventory-tracked lines, but reversal/rollback for those sales-linked stock movements is not implemented yet because sales-invoice reversal is not currently part of the Phase 3 workflow.
-- inventory master data now includes item groups, item categories, units of measure, and enforced group/category/material selection in the item card UI/API.
+- inventory master data now includes item groups, item categories, and units of measure; item-group and item-category selection on the item card is optional in the current UI/API, so environments that rely on strict classification should treat missing item-group/category values as valid current behavior rather than a data-entry bug.
 - item cards now support default prices and unit-conversion setup, but inventory, sales, and purchase transaction lines still operate on their current implemented unit workflow; do not assume document-line unit conversion/storage is live until those modules are updated.
 - `docs/phase-5-inventory-requirements.md` remains the planning/reference document for the full inventory roadmap and translation alignment.
 - inventory accounting entries are conditional and only run when `INVENTORY_ACCOUNTING_ENABLED` is enabled.

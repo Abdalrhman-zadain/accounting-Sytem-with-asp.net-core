@@ -79,11 +79,13 @@ export class CreateInventoryItemDto {
   @Length(0, 120)
   category?: string;
 
+  @IsOptional()
   @IsString()
-  itemGroupId!: string;
+  itemGroupId?: string;
 
+  @IsOptional()
   @IsString()
-  itemCategoryId!: string;
+  itemCategoryId?: string;
 
   @IsEnum(InventoryItemType)
   type!: InventoryItemType;

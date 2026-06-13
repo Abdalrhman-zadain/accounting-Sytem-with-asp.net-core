@@ -176,12 +176,13 @@ http://localhost:5555
 
 ## Seeding the database
 
-From the `backend` folder, choose a seed command. **Both commands truncate all public tables** — back up any important data first.
+From the `backend` folder, choose a seed command. The two demo reset commands truncate all public tables; the opening inventory import does not.
 
 | Command | When to use | What you get | Typical runtime |
 |---------|-------------|--------------|-----------------|
 | `npm run seed` or `npx prisma db seed` | Daily dev, CI, quick reset | Full chart of accounts, masters, users, empty journal history, POS demo | ~30–60s |
 | `npm run seed:volume` | Reporting screenshots, module walkthroughs, “big company” demos | Same foundation **plus** fiscal years 2024–2026, ~15k+ posted journals, enterprise masters, reporting audit activity, quarterly operational samples, POS demo | ~2–8 min |
+| `npm run seed:opening-inventory` | Import the attached opening stock workbook into an existing DB | Upserts item masters, creates/reuses the two warehouses, and posts deterministic opening inventory receipts dated `2026-05-31` without truncating unrelated tables | ~10–30s |
 
 Login after either seed: **admin** / **admin123** (cashier: **cashier** / **cashier123**).
 
@@ -200,15 +201,19 @@ npm run seed
 
 # Enterprise volume demo (opt-in; not wired to prisma db seed)
 npm run seed:volume
+
+# Non-destructive opening inventory import
+npm run seed:opening-inventory
 ```
 
-From the **repository root**, the same commands work via `npm run seed` and `npm run seed:volume` (they forward to `backend/`). If you see `Missing script: "seed:volume"`, you are not in `backend/` or the repo root — `cd` into one of those first.
+From the **repository root**, the same commands work via `npm run seed`, `npm run seed:volume`, and `npm run seed:opening-inventory` (they forward to `backend/`). If you see `Missing script: "seed:volume"`, you are not in `backend/` or the repo root — `cd` into one of those first.
 
 Optional volume tuning via environment variables (see `backend/prisma/seed-volume/config.ts`): `SEED_VOLUME_YEARS`, `SEED_MONTHLY_JOURNALS`, `SEED_CUSTOMERS`, `SEED_SUPPLIERS`, `SEED_AUDIT_EVENTS`, etc.
 
 Notes:
 
 - `npx prisma db seed` always runs the **basic** seed only (`prisma/seed.ts`).
+- `npm run seed:opening-inventory` reads `backend/data/opening-inventory-2026-05-31.json` by default. The original workbook is kept beside it as source input at `backend/data/opening-inventory-2026-05-31.xlsx`.
 - If seeding fails, verify `DATABASE_URL` and that Postgres is reachable.
 
 ## Run Tests

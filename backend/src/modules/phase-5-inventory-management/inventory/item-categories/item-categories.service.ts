@@ -114,6 +114,14 @@ export class ItemCategoriesService {
     return category;
   }
 
+  async ensureActiveCategory(categoryId: string) {
+    const category = await this.getCategoryOrThrow(categoryId);
+    if (!category.isActive) {
+      throw new BadRequestException('Item category must be active.');
+    }
+    return category;
+  }
+
   private include() {
     return {
       itemGroup: { select: this.groupSelect },

@@ -924,6 +924,7 @@ Where to edit:
 - POS add-on demo groups (extras, cooking level, drink size) linked to sandwich/chips/drinks: `backend/prisma/seed-pos-addons.ts` (runs with register seed); refresh only add-ons on an existing DB with `npm run seed:pos-addons`
 - Market POS destination markets (`MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03`) and market-rep access: `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
 - Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`): `backend/prisma/setup-pos-market-cashier.ts`, invoked from full `npm run seed` or standalone `npm run seed:market-cashier`
+- Opening inventory workbook import (non-destructive to unrelated tables): `backend/prisma/seed-opening-inventory.ts`, invoked with `npm run seed:opening-inventory`; reads `backend/data/opening-inventory-2026-05-31.json` (snapshot generated from the checked-in workbook), upserts items, creates/reuses the two warehouses, and posts deterministic opening goods receipts dated `2026-05-31`
 
 ### Volume seed (enterprise demo dataset)
 
@@ -938,6 +939,7 @@ Commands:
 
 - `npm run seed` — fast basic dataset (`prisma/seed.ts`); also used by `npx prisma db seed`
 - `npm run seed:volume` — same foundation plus 3 fiscal years of bulk GL, enterprise masters, reporting audit rows, and quarterly operational samples (truncates DB; ~2–8 min)
+- `npm run seed:opening-inventory` — import the Excel opening stock workbook into existing inventory tables only (does not truncate unrelated tables)
 
 Checks to run after volume seed changes:
 

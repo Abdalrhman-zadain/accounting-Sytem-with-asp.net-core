@@ -257,6 +257,8 @@ export class ItemMasterService {
           const barcode = this.normalizeOptionalText(dto.barcode);
           const qrCodeValue = this.normalizeOptionalText(dto.qrCodeValue);
           const trackInventory = this.resolveTrackInventory(dto.type, dto.trackInventory);
+          const itemGroupInput = this.normalizeOptionalText(dto.itemGroupId);
+          const itemCategoryInput = this.normalizeOptionalText(dto.itemCategoryId);
           const [
             inventoryAccountId,
             expenseAccountId,
@@ -266,8 +268,6 @@ export class ItemMasterService {
             adjustmentAccountId,
             defaultTaxId,
             preferredWarehouse,
-            itemGroup,
-            itemCategory,
             unitOfMeasure,
             uniqueBarcode,
           ] = await Promise.all([
@@ -279,11 +279,11 @@ export class ItemMasterService {
             this.validateAdjustmentAccount(dto.adjustmentAccountId),
             this.validateTax(dto.taxable ? dto.defaultTaxId : undefined),
             this.validateWarehouse(dto.preferredWarehouseId),
-            this.itemGroupsService.ensureActiveGroup(dto.itemGroupId),
-            this.itemCategoriesService.ensureActiveCategoryInGroup(dto.itemCategoryId, dto.itemGroupId),
             this.unitsOfMeasureService.ensureActiveUnit(dto.unitOfMeasureId),
             this.ensureUniqueBarcode(barcode),
           ]);
+          const { itemGroup, itemCategory } =
+            await this.resolveItemClassification(itemGroupInput, itemCategoryInput);
           const unitConversions = await this.validateUnitConversions(
             dto.unitConversions,
             unitOfMeasure.id,
@@ -304,9 +304,9 @@ export class ItemMasterService {
               qrCodeValue,
               unitOfMeasure: dto.unitOfMeasure?.trim() || unitOfMeasure.code,
               unitOfMeasureId: unitOfMeasure.id,
-              category: dto.category?.trim() || itemCategory.name,
-              itemGroupId: itemGroup.id,
-              itemCategoryId: itemCategory.id,
+              category: dto.category?.trim() || itemCategory?.name || null,
+              itemGroupId: itemGroup?.id ?? null,
+              itemCategoryId: itemCategory?.id ?? null,
               type: dto.type,
               inventoryAccountId,
               expenseAccountId,
@@ -386,6 +386,14 @@ export class ItemMasterService {
       nextType,
       dto.trackInventory ?? current.trackInventory,
     );
+    const itemGroupInput =
+      dto.itemGroupId === undefined
+        ? undefined
+        : this.normalizeOptionalText(dto.itemGroupId);
+    const itemCategoryInput =
+      dto.itemCategoryId === undefined
+        ? undefined
+        : this.normalizeOptionalText(dto.itemCategoryId);
 
     const [
       inventoryAccountId,
@@ -396,8 +404,6 @@ export class ItemMasterService {
       adjustmentAccountId,
       defaultTaxId,
       preferredWarehouse,
-      nextGroup,
-      nextCategory,
       nextUnit,
       uniqueBarcode,
     ] = await Promise.all([
@@ -431,15 +437,6 @@ export class ItemMasterService {
       dto.preferredWarehouseId !== undefined
         ? this.validateWarehouse(dto.preferredWarehouseId || undefined)
         : Promise.resolve(undefined),
-      dto.itemGroupId !== undefined
-        ? this.itemGroupsService.ensureActiveGroup(dto.itemGroupId)
-        : Promise.resolve(undefined),
-      dto.itemCategoryId !== undefined || dto.itemGroupId !== undefined
-        ? this.itemCategoriesService.ensureActiveCategoryInGroup(
-            dto.itemCategoryId ?? current.itemCategoryId ?? "",
-            dto.itemGroupId ?? current.itemGroupId ?? "",
-          )
-        : Promise.resolve(undefined),
       dto.unitOfMeasureId !== undefined
         ? this.unitsOfMeasureService.ensureActiveUnit(dto.unitOfMeasureId)
         : Promise.resolve(undefined),
@@ -447,6 +444,12 @@ export class ItemMasterService {
         ? this.ensureUniqueBarcode(barcode, id)
         : Promise.resolve(undefined),
     ]);
+    const nextClassification =
+      dto.itemGroupId !== undefined || dto.itemCategoryId !== undefined
+        ? await this.resolveItemClassificationForUpdate(current, itemGroupInput, itemCategoryInput)
+        : null;
+    const nextGroup = nextClassification?.itemGroup;
+    const nextCategory = nextClassification?.itemCategory;
     const nextBaseUnitId = nextUnit?.id ?? current.unitOfMeasureId ?? "";
     const nextItemBarcode = dto.barcode === undefined ? current.barcode : uniqueBarcode;
     const unitConversions =
@@ -492,9 +495,14 @@ export class ItemMasterService {
             dto.category === undefined
               ? nextCategory?.name
               : dto.category.trim() || nextCategory?.name || null,
-          itemGroupId: dto.itemGroupId === undefined ? undefined : nextGroup?.id,
+          itemGroupId:
+            dto.itemGroupId === undefined && dto.itemCategoryId === undefined
+              ? undefined
+              : nextGroup?.id ?? null,
           itemCategoryId:
-            dto.itemCategoryId === undefined ? undefined : nextCategory?.id,
+            dto.itemGroupId === undefined && dto.itemCategoryId === undefined
+              ? undefined
+              : nextCategory?.id ?? null,
           type: dto.type,
           inventoryAccountId,
           expenseAccountId,
@@ -1152,6 +1160,107 @@ export class ItemMasterService {
     const nextNumber = Number.isFinite(lastNumber) ? lastNumber + 1 : 1;
 
     return `${ITEM_CODE_PREFIX}-${nextNumber.toString().padStart(ITEM_CODE_DIGITS, "0")}`;
+  }
+
+  private async resolveItemClassification(
+    itemGroupId?: string | null,
+    itemCategoryId?: string | null,
+  ) {
+    const normalizedGroupId = this.normalizeOptionalText(itemGroupId);
+    const normalizedCategoryId = this.normalizeOptionalText(itemCategoryId);
+
+    if (!normalizedGroupId && !normalizedCategoryId) {
+      return {
+        itemGroup: null,
+        itemCategory: null,
+      };
+    }
+
+    if (!normalizedCategoryId) {
+      return {
+        itemGroup: await this.itemGroupsService.ensureActiveGroup(normalizedGroupId!),
+        itemCategory: null,
+      };
+    }
+
+    if (!normalizedGroupId) {
+      const itemCategory =
+        await this.itemCategoriesService.ensureActiveCategory(normalizedCategoryId);
+      return {
+        itemGroup: await this.itemGroupsService.ensureActiveGroup(itemCategory.itemGroupId),
+        itemCategory,
+      };
+    }
+
+    const itemGroup =
+      await this.itemGroupsService.ensureActiveGroup(normalizedGroupId);
+    const itemCategory =
+      await this.itemCategoriesService.ensureActiveCategoryInGroup(
+        normalizedCategoryId,
+        normalizedGroupId,
+      );
+
+    return {
+      itemGroup,
+      itemCategory,
+    };
+  }
+
+  private async resolveItemClassificationForUpdate(
+    current: InventoryItemWithAccounts,
+    itemGroupId?: string | null,
+    itemCategoryId?: string | null,
+  ) {
+    const groupSpecified = itemGroupId !== undefined;
+    const categorySpecified = itemCategoryId !== undefined;
+
+    if (!groupSpecified && !categorySpecified) {
+      return {
+        itemGroup: current.itemGroup ?? null,
+        itemCategory: current.itemCategory ?? null,
+      };
+    }
+
+    if (groupSpecified && !this.normalizeOptionalText(itemGroupId) && !categorySpecified) {
+      return {
+        itemGroup: null,
+        itemCategory: null,
+      };
+    }
+
+    if (categorySpecified && !this.normalizeOptionalText(itemCategoryId)) {
+      const normalizedGroupId = groupSpecified
+        ? this.normalizeOptionalText(itemGroupId)
+        : current.itemGroupId;
+      return {
+        itemGroup: normalizedGroupId
+          ? await this.itemGroupsService.ensureActiveGroup(normalizedGroupId)
+          : null,
+        itemCategory: null,
+      };
+    }
+
+    if (groupSpecified && !categorySpecified) {
+      const normalizedGroupId = this.normalizeOptionalText(itemGroupId);
+      if (!normalizedGroupId) {
+        return {
+          itemGroup: null,
+          itemCategory: null,
+        };
+      }
+
+      if (normalizedGroupId !== current.itemGroupId) {
+        return {
+          itemGroup: await this.itemGroupsService.ensureActiveGroup(normalizedGroupId),
+          itemCategory: null,
+        };
+      }
+    }
+
+    return this.resolveItemClassification(
+      groupSpecified ? itemGroupId : (current.itemGroupId ?? null),
+      categorySpecified ? itemCategoryId : (current.itemCategoryId ?? null),
+    );
   }
 
   private isCodeConflict(error: unknown) {

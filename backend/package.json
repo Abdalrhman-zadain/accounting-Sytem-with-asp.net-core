@@ -22,6 +22,7 @@
     "seed:pos-addons": "ts-node prisma/seed-pos-addons-only.ts",
     "seed:market": "ts-node prisma/seed-pos-market.ts",
     "seed:shouq": "ts-node prisma/seed-shouq-catalog.ts",
+    "seed:opening-inventory": "ts-node prisma/seed-opening-inventory.ts",
     "clear:shouq": "ts-node prisma/clear-shouq-catalog.ts",
     "clear:shouq-stock": "ts-node prisma/clear-item-inventory-stock.ts",
     "clear:market-demo": "ts-node prisma/clear-legacy-market-demo.ts",

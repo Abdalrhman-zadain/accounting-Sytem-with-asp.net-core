@@ -12,8 +12,9 @@ Local demo data is synthetic only — not production imports.
 
 - **Basic seed** (`npm run seed` / `npx prisma db seed`): full chart of accounts and masters, empty accounting history so journal entry workflows start from scratch, and POS demo catalog.
 - **Volume seed** (`npm run seed:volume`, opt-in): same foundation, then three fiscal years (2024–2026) of batched posted journals, per-customer receivable sub-accounts, suppliers, inventory items, reporting `AuditLog` samples, and quarterly operational documents for module UI walkthroughs.
+- **Opening inventory import seed** (`npm run seed:opening-inventory`, opt-in): reads `backend/data/opening-inventory-2026-05-31.json` (generated from the checked-in workbook), upserts inventory items, creates/reuses the target warehouses, and creates deterministic opening-stock goods receipts dated `2026-05-31` without truncating unrelated tables.
 
-Both seed commands truncate public tables before insert. See `README.md` and `docs/change-guide.md` (Volume seed subsection).
+The destructive demo seeds (`npm run seed` and `npm run seed:volume`) truncate public tables before insert. The opening inventory import seed does not. See `README.md` and `docs/change-guide.md` (Volume seed subsection).
 
 ## Core Model Groups
 
@@ -317,7 +318,7 @@ Main models:
 
 Key fields:
 
-- item `code`, `name`, `description`, optional `internalNotes`, optional `itemImageUrl`, optional `attachmentsText`, optional unique `barcode`, optional `qrCodeValue`, `unitOfMeasure`, `unitOfMeasureId`, `category`, `itemGroupId`, `itemCategoryId`, `type`, optional default sales/purchase prices, optional `currencyCode`, optional taxable/default-tax configuration, optional item-level sales-return account, optional `trackInventory`, `allowFractionalQuantity` (sell-by-weight flag; requires base unit `unitType = WEIGHT`), optional `minSalesQuantity` (minimum weight per POS sale when fractional sales are enabled), and `isActive`
+- item `code`, `name`, `description`, optional `internalNotes`, optional `itemImageUrl`, optional `attachmentsText`, optional unique `barcode`, optional `qrCodeValue`, `unitOfMeasure`, `unitOfMeasureId`, optional free-text `category`, optional `itemGroupId`, optional `itemCategoryId`, `type`, optional default sales/purchase prices, optional `currencyCode`, optional taxable/default-tax configuration, optional item-level sales-return account, optional `trackInventory`, `allowFractionalQuantity` (sell-by-weight flag; requires base unit `unitType = WEIGHT`), optional `minSalesQuantity` (minimum weight per POS sale when fractional sales are enabled), and `isActive`
 - item group `code`, `name`, `description`, optional `parentGroupId`, `isActive`, and optional default posting accounts
 - item category `code`, `name`, `description`, required `itemGroupId`, and `isActive`
 - unit of measure `code`, `name`, `description`, optional `unitType`, `decimalPrecision`, and `isActive`
@@ -365,6 +366,7 @@ Accounting meaning:
 - inventory transfers can be saved as drafts, updated while still in draft, cancelled before posting, and posted as warehouse-to-warehouse operational documents with both transfer-out and transfer-in stock movement rows
 - transfer posting validates active source/destination warehouses, enforces source availability based on warehouse balance, and preserves item-level totals while moving warehouse-level balances and valuation
 - inventory adjustments can be saved as drafts, updated while still in draft, cancelled before posting, and posted as warehouse-linked variance documents
+- item cards may be saved without item-group or item-category classification; when a category is selected, the system still validates that it belongs to the resolved item group and auto-fills the group when possible
 - adjustment posting supports positive/negative variance lines, updates warehouse and item balances, and records adjustment-in/adjustment-out movement history with costing-aware values
 - posted inventory receipts/issues/transfers/adjustments can be marked `REVERSED` for audit history, with reverse action entries logged in `InventoryTransactionAuditLog`
 - optional inventory accounting integration creates and posts Journal Entries for goods receipts, goods issues, and inventory adjustments when `INVENTORY_ACCOUNTING_ENABLED` is enabled

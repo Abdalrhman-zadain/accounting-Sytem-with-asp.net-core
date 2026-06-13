@@ -316,9 +316,9 @@ function parseBackendErrors(errorMsg: string | null | undefined, isArabic: boole
     if (lower.includes("name")) {
       result.name = isArabic ? "اسم المادة مطلوب" : "Material name is required";
     } else if (lower.includes("itemgroupid") || lower.includes("item group")) {
-      result.itemGroupId = isArabic ? "مجموعة الأصناف مطلوبة" : "Item group is required";
+      result.itemGroupId = isArabic ? "تحقق من مجموعة المواد" : "Check the item group";
     } else if (lower.includes("itemcategoryid") || lower.includes("category")) {
-      result.itemCategoryId = isArabic ? "تصنيف الصنف مطلوب" : "Item category is required";
+      result.itemCategoryId = isArabic ? "تحقق من فئة المادة" : "Check the item category";
     } else if (lower.includes("unitofmeasureid") || lower.includes("unit of measure") || lower.includes("baseunitofmeasureid")) {
       result.unitOfMeasureId = isArabic ? "وحدة القياس الأساسية مطلوبة" : "Base unit of measure is required";
     } else if (lower.includes("base unit conversion row") || lower.includes("base unit row") || lower.includes("conversion factor") || lower.includes("duplicate units") || lower.includes("each conversion row")) {
@@ -417,14 +417,18 @@ export function ItemEditorModal({
       errors.name = isArabic ? "اسم المادة مطلوب" : "Material name is required";
     }
 
-    // Item Group
-    if (!editorState.itemGroupId) {
-      errors.itemGroupId = isArabic ? "مجموعة الأصناف مطلوبة" : "Item group is required";
-    }
-
-    // Item Category
-    if (!editorState.itemCategoryId) {
-      errors.itemCategoryId = isArabic ? "فئة الصنف مطلوبة" : "Item category is required";
+    if (
+      editorState.itemGroupId &&
+      editorState.itemCategoryId &&
+      !activeItemCategories.some(
+        (category) =>
+          category.id === editorState.itemCategoryId &&
+          category.itemGroupId === editorState.itemGroupId,
+      )
+    ) {
+      errors.itemCategoryId = isArabic
+        ? "فئة المادة المختارة لا تتبع مجموعة المواد المحددة"
+        : "Selected item category does not belong to the selected item group";
     }
 
     // Base Unit of Measure (required unless it is a Service item)
@@ -703,7 +707,9 @@ export function ItemEditorModal({
     onChange(updater);
   };
 
-  const itemEditorCategories = activeItemCategories.filter((row) => row.itemGroupId === editor.itemGroupId);
+  const itemEditorCategories = editor.itemGroupId
+    ? activeItemCategories.filter((row) => row.itemGroupId === editor.itemGroupId)
+    : activeItemCategories;
 
   const addUnitConversionRow = () => {
     clearFieldError("unitConversions");
@@ -899,7 +905,7 @@ export function ItemEditorModal({
                   </Field>
                 </div>
                 <div>
-                  <Field id="item-field-itemGroupId" label={isArabic ? "مجموعة المواد" : "Item Group"} required error={localErrors.itemGroupId} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-itemGroupId" label={isArabic ? "مجموعة المواد" : "Item Group"} error={localErrors.itemGroupId} labelAlign={isArabic ? "end" : "start"}>
                     <Select
                       value={editor.itemGroupId}
                       onChange={(e) => {
@@ -916,17 +922,19 @@ export function ItemEditorModal({
                   </Field>
                 </div>
                 <div>
-                  <Field id="item-field-itemCategoryId" label={isArabic ? "فئة المادة" : "Item Category"} required error={localErrors.itemCategoryId} labelAlign={isArabic ? "end" : "start"}>
+                  <Field id="item-field-itemCategoryId" label={isArabic ? "فئة المادة" : "Item Category"} error={localErrors.itemCategoryId} labelAlign={isArabic ? "end" : "start"}>
                     <Select
                       value={editor.itemCategoryId}
                       onChange={(e) => {
                         const category = activeItemCategories.find((row) => row.id === e.target.value);
                         updateEditor((current) => ({
                           ...current,
+                          itemGroupId: category?.itemGroupId ?? current.itemGroupId,
                           itemCategoryId: e.target.value,
                           category: category?.name ?? current.category,
                         }));
                         clearFieldError("itemCategoryId");
+                        clearFieldError("itemGroupId");
                       }}
                       className={cn("bg-slate-50/50", isArabic ? "text-right" : "text-left", localErrors.itemCategoryId ? "border-red-500 focus:border-red-500 focus:ring-red-500/10" : "border-slate-200")}
                     >

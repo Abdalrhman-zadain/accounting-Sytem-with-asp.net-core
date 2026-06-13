@@ -678,8 +678,8 @@ export type CreateInventoryItemPayload = {
   unitOfMeasure?: string;
   unitOfMeasureId: string;
   category?: string;
-  itemGroupId: string;
-  itemCategoryId: string;
+  itemGroupId?: string;
+  itemCategoryId?: string;
   type: InventoryItemType;
   inventoryAccountId?: string;
   expenseAccountId?: string;
