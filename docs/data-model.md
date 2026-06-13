@@ -98,7 +98,9 @@ Key fields:
 
 Accounting meaning:
 
-- Phase 8 reporting reads posted balances from `LedgerTransaction`, account metadata from `Account`, bank/cash reporting scope from `BankCashAccount`, and operational visibility from `AuditLog`
+- Phase 8 reporting reads posted accounting data from `LedgerTransaction`, `JournalEntry`, and `JournalEntryLine` alongside account metadata from `Account`, bank/cash reporting scope from `BankCashAccount`, and operational visibility from `AuditLog`
+- the trial balance specifically derives opening balances (`entryDate < fromDate`) and period movement (`fromDate <= entryDate <= toDate`) from `JournalEntryLine` rows whose parent `JournalEntry.status = POSTED`; it does not read `Account.currentBalance` or any separate opening-balance field
+- trial-balance parent/header rows are computed recursively from descendant accounts so header balances remain derived rollups rather than duplicated direct-plus-child totals, while report totals and balancing rows are summed from posting/detail accounts only
 - reusable reporting definitions and persisted report snapshots are currently stored in runtime-managed PostgreSQL tables named `ReportDefinition` and `ReportSnapshot`
 - those reporting-control tables are created by the Phase 8 reporting service with SQL guards (`CREATE TABLE IF NOT EXISTS`) and a process-level initialization lock because Prisma client regeneration is not yet part of the current Windows-safe workflow
 

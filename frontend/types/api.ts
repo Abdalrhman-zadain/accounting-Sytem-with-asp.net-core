@@ -4428,6 +4428,7 @@ export type ReportingQuery = {
   currencyCode?: string;
   segment3?: string;
   segment4?: string;
+  branchId?: string;
   segment5?: string;
   journalEntryTypeId?: string;
   entity?: string;
@@ -4547,12 +4548,25 @@ export type ReportingTrialBalanceRow = {
   accountNameAr?: string | null;
   accountType: AccountType;
   currencyCode: string;
-  openingBalance: string;
-  debitTotal: string;
-  creditTotal: string;
-  closingBalance: string;
-  closingSide: "DEBIT" | "CREDIT" | "ZERO";
+  openingDebit: string;
+  openingCredit: string;
+  periodDebit: string;
+  periodCredit: string;
+  closingDebit: string;
+  closingCredit: string;
+  side: "DEBIT" | "CREDIT" | "ZERO";
+  sideLabel?: "مدين" | "دائن" | "-";
   drillDownPath?: string;
+};
+
+export type ReportingTrialBalanceSummaryRow = {
+  kind: "total" | "difference";
+  openingDebit: string;
+  openingCredit: string;
+  periodDebit: string;
+  periodCredit: string;
+  closingDebit: string;
+  closingCredit: string;
 };
 
 export type ReportingTrialBalanceReport = {
@@ -4560,13 +4574,25 @@ export type ReportingTrialBalanceReport = {
   basis: ReportingBasis;
   period: string;
   totals: {
-    opening: string;
-    debit: string;
-    credit: string;
+    totalOpeningDebit: string;
+    totalOpeningCredit: string;
+    totalPeriodDebit: string;
+    totalPeriodCredit: string;
+    totalClosingDebit: string;
+    totalClosingCredit: string;
+    openingDebit: string;
+    openingCredit: string;
+    periodDebit: string;
+    periodCredit: string;
     closingDebit: string;
     closingCredit: string;
+    openingDifference: string;
+    periodDifference: string;
+    closingDifference: string;
     difference: string;
+    isBalanced: boolean;
   };
+  summaryRows: ReportingTrialBalanceSummaryRow[];
   rows: ReportingTrialBalanceRow[];
 };
 

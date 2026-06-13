@@ -25,9 +25,35 @@ type AccountRow = {
   segment5: string | null;
   isActive: boolean;
   isPosting: boolean;
+  parentAccountId?: string | null;
 };
 
 type AmountMap = Map<string, { debit: number; credit: number }>;
+type DecimalBalance = { debit: Prisma.Decimal; credit: Prisma.Decimal };
+type DecimalBalanceMap = Map<string, DecimalBalance>;
+type TrialBalanceRollup = {
+  account: AccountRow;
+  openingDebitRaw: Prisma.Decimal;
+  openingCreditRaw: Prisma.Decimal;
+  periodDebit: Prisma.Decimal;
+  periodCredit: Prisma.Decimal;
+  openingDebit: Prisma.Decimal;
+  openingCredit: Prisma.Decimal;
+  closingDebit: Prisma.Decimal;
+  closingCredit: Prisma.Decimal;
+  side: "DEBIT" | "CREDIT" | "ZERO";
+  sideLabel: "مدين" | "دائن" | "-";
+  children: TrialBalanceRollup[];
+};
+type TrialBalanceSummaryRow = {
+  kind: "total" | "difference";
+  openingDebit: string;
+  openingCredit: string;
+  periodDebit: string;
+  periodCredit: string;
+  closingDebit: string;
+  closingCredit: string;
+};
 type AuthUser = { userId: string; email?: string; role?: string };
 type RawRow = Record<string, unknown>;
 type ExportSection = { headers: string[]; rows: Array<Array<string | number | null | undefined>> };
@@ -100,68 +126,71 @@ export class ReportingService {
 
   async getTrialBalance(query: ReportingQueryDto, user?: AuthUser, shouldLog = true) {
     const includeZeroBalance = this.shouldIncludeZeroBalance(query.includeZeroBalance);
-    const accounts = await this.getPostingAccounts(query);
-    const accountIds = accounts.map((account) => account.id);
-    const [openingMap, periodMap] = await Promise.all([
-      this.aggregateLedger(accountIds, query, undefined, query.dateFrom, true),
-      this.aggregateLedger(accountIds, query, query.dateFrom, query.dateTo, false),
+    const accounts = await this.getTrialBalanceAccounts();
+    const scopedAccountIds = accounts.filter((account) => this.matchesTrialBalanceAccountFilters(account, query)).map((account) => account.id);
+    const scopedAccountIdSet = new Set(scopedAccountIds);
+    const [openingBalances, periodBalances] = await Promise.all([
+      this.getOpeningBalances(scopedAccountIds, query.dateFrom, query),
+      this.getPeriodBalances(scopedAccountIds, query.dateFrom, query.dateTo, query),
     ]);
 
-    const rows = accounts
-      .map((account) => {
-        const opening = this.net(openingMap.get(account.id));
-        const period = periodMap.get(account.id) ?? { debit: 0, credit: 0 };
-        const closing = opening + period.debit - period.credit;
+    const visibleRows = this.buildAccountTreeBalances(accounts, {
+      opening: openingBalances,
+      period: periodBalances,
+    }).filter((row) => {
+      if (includeZeroBalance) return true;
+      return !this.isZeroDecimal(row.openingDebit, row.openingCredit, row.periodDebit, row.periodCredit, row.closingDebit, row.closingCredit);
+    });
 
-        return {
-          accountId: account.id,
-          accountCode: account.code,
-          accountName: account.name,
-          accountNameAr: account.nameAr,
-          accountType: account.type,
-          currencyCode: account.currencyCode,
-          openingBalance: this.toAmount(opening),
-          debitTotal: this.toAmount(period.debit),
-          creditTotal: this.toAmount(period.credit),
-          closingBalance: this.toAmount(Math.abs(closing)),
-          closingSide: closing > 0 ? "DEBIT" : closing < 0 ? "CREDIT" : "ZERO",
-          drillDownPath: this.buildGeneralLedgerPath(account.id, query),
-        };
-      })
-      .filter((row) => {
-        if (includeZeroBalance) return true;
-        return !(
-          Number(row.openingBalance) === 0 &&
-          Number(row.debitTotal) === 0 &&
-          Number(row.creditTotal) === 0 &&
-          Number(row.closingBalance) === 0
-        );
-      });
-
-    const totals = rows.reduce(
-      (acc, row) => {
-        acc.opening += Number(row.openingBalance);
-        acc.debit += Number(row.debitTotal);
-        acc.credit += Number(row.creditTotal);
-        if (row.closingSide === "DEBIT") acc.closingDebit += Number(row.closingBalance);
-        if (row.closingSide === "CREDIT") acc.closingCredit += Number(row.closingBalance);
-        return acc;
-      },
-      { opening: 0, debit: 0, credit: 0, closingDebit: 0, closingCredit: 0 },
+    const summarized = this.summarizeTrialBalanceRows(
+      visibleRows.filter((row) => row.account.isPosting && scopedAccountIdSet.has(row.account.id)),
     );
+
+    const rows = visibleRows.map((row) => ({
+      accountId: row.account.id,
+      accountCode: row.account.code,
+      accountName: row.account.name,
+      accountNameAr: row.account.nameAr,
+      accountType: row.account.type,
+      currencyCode: row.account.currencyCode,
+      openingDebit: this.toReportAmount(row.openingDebit),
+      openingCredit: this.toReportAmount(row.openingCredit),
+      periodDebit: this.toReportAmount(row.periodDebit),
+      periodCredit: this.toReportAmount(row.periodCredit),
+      closingDebit: this.toReportAmount(row.closingDebit),
+      closingCredit: this.toReportAmount(row.closingCredit),
+      side: row.side,
+      sideLabel: row.sideLabel,
+      drillDownPath: this.buildGeneralLedgerPath(row.account.id, query),
+    }));
+
+    const difference = summarized.closingDifference;
+    const isBalanced = summarized.totals.periodDebit.equals(summarized.totals.periodCredit) && summarized.totals.closingDebit.equals(summarized.totals.closingCredit);
 
     const payload = {
       generatedAt: new Date().toISOString(),
       basis: this.getBasis(query),
       period: this.buildPeriodLabel(query.dateFrom, query.dateTo),
       totals: {
-        opening: this.toAmount(totals.opening),
-        debit: this.toAmount(totals.debit),
-        credit: this.toAmount(totals.credit),
-        closingDebit: this.toAmount(totals.closingDebit),
-        closingCredit: this.toAmount(totals.closingCredit),
-        difference: this.toAmount(totals.closingDebit - totals.closingCredit),
+        totalOpeningDebit: this.toReportAmount(summarized.totals.openingDebit),
+        totalOpeningCredit: this.toReportAmount(summarized.totals.openingCredit),
+        totalPeriodDebit: this.toReportAmount(summarized.totals.periodDebit),
+        totalPeriodCredit: this.toReportAmount(summarized.totals.periodCredit),
+        totalClosingDebit: this.toReportAmount(summarized.totals.closingDebit),
+        totalClosingCredit: this.toReportAmount(summarized.totals.closingCredit),
+        openingDebit: this.toReportAmount(summarized.totals.openingDebit),
+        openingCredit: this.toReportAmount(summarized.totals.openingCredit),
+        periodDebit: this.toReportAmount(summarized.totals.periodDebit),
+        periodCredit: this.toReportAmount(summarized.totals.periodCredit),
+        closingDebit: this.toReportAmount(summarized.totals.closingDebit),
+        closingCredit: this.toReportAmount(summarized.totals.closingCredit),
+        openingDifference: this.toReportAmount(summarized.openingDifference),
+        periodDifference: this.toReportAmount(summarized.periodDifference),
+        closingDifference: this.toReportAmount(summarized.closingDifference),
+        difference: this.toReportAmount(difference),
+        isBalanced,
       },
+      summaryRows: summarized.summaryRows,
       rows,
     };
 
@@ -950,6 +979,27 @@ export class ReportingService {
     };
   }
 
+  private async getTrialBalanceAccounts() {
+    return this.prisma.account.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        nameAr: true,
+        type: true,
+        currencyCode: true,
+        segment3: true,
+        segment4: true,
+        segment5: true,
+        isActive: true,
+        isPosting: true,
+        parentAccountId: true,
+      },
+      orderBy: { code: "asc" },
+    }) as Promise<AccountRow[]>;
+  }
+
   private async getPostingAccounts(query: ReportingQueryDto, types?: AccountRow["type"][]) {
     return this.prisma.account.findMany({
       where: this.buildAccountWhere(query, types),
@@ -965,9 +1015,154 @@ export class ReportingService {
         segment5: true,
         isActive: true,
         isPosting: true,
+        parentAccountId: true,
       },
       orderBy: { code: "asc" },
     }) as Promise<AccountRow[]>;
+  }
+
+  private async getOpeningBalances(accountIds: string[], fromDate?: string, query?: ReportingQueryDto) {
+    if (!accountIds.length || !fromDate) {
+      return new Map() as DecimalBalanceMap;
+    }
+
+    const rows = await this.prisma.journalEntryLine.groupBy({
+      by: ["accountId"],
+      where: {
+        accountId: { in: accountIds },
+        journalEntry: {
+          ...this.buildPostedJournalEntryWhere(query),
+          entryDate: this.dateRange(undefined, fromDate, true),
+        },
+      },
+      _sum: {
+        debitAmount: true,
+        creditAmount: true,
+      },
+    });
+
+    return this.toDecimalBalanceMap(rows);
+  }
+
+  private async getPeriodBalances(accountIds: string[], fromDate?: string, toDate?: string, query?: ReportingQueryDto) {
+    if (!accountIds.length) {
+      return new Map() as DecimalBalanceMap;
+    }
+
+    const rows = await this.prisma.journalEntryLine.groupBy({
+      by: ["accountId"],
+      where: {
+        accountId: { in: accountIds },
+        journalEntry: {
+          ...this.buildPostedJournalEntryWhere(query),
+          entryDate: this.dateRange(fromDate, toDate),
+        },
+      },
+      _sum: {
+        debitAmount: true,
+        creditAmount: true,
+      },
+    });
+
+    return this.toDecimalBalanceMap(rows);
+  }
+
+  private calculateClosingBalance(
+    openingDebit: Prisma.Decimal,
+    openingCredit: Prisma.Decimal,
+    periodDebit: Prisma.Decimal,
+    periodCredit: Prisma.Decimal,
+  ) {
+    const openingNet = openingDebit.sub(openingCredit);
+    const periodNet = periodDebit.sub(periodCredit);
+    const closingNet = openingNet.add(periodNet);
+
+    if (closingNet.gt(0)) {
+      return {
+        closingDebit: closingNet,
+        closingCredit: this.decimal(0),
+        side: "DEBIT" as const,
+        sideLabel: "مدين" as const,
+      };
+    }
+
+    if (closingNet.lt(0)) {
+      return {
+        closingDebit: this.decimal(0),
+        closingCredit: closingNet.abs(),
+        side: "CREDIT" as const,
+        sideLabel: "دائن" as const,
+      };
+    }
+
+    return {
+      closingDebit: this.decimal(0),
+      closingCredit: this.decimal(0),
+      side: "ZERO" as const,
+      sideLabel: "-" as const,
+    };
+  }
+
+  private buildAccountTreeBalances(
+    accounts: AccountRow[],
+    balances: { opening: DecimalBalanceMap; period: DecimalBalanceMap },
+  ) {
+    const accountsByParent = new Map<string | null, AccountRow[]>();
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
+
+    for (const account of accounts) {
+      const parentId = account.parentAccountId && accountsById.has(account.parentAccountId) ? account.parentAccountId : null;
+      const siblings = accountsByParent.get(parentId) ?? [];
+      siblings.push(account);
+      accountsByParent.set(parentId, siblings);
+    }
+
+    const rollupAccount = (account: AccountRow): TrialBalanceRollup => {
+      const ownOpening = balances.opening.get(account.id) ?? this.zeroDecimalBalance();
+      const ownPeriod = balances.period.get(account.id) ?? this.zeroDecimalBalance();
+      const children = (accountsByParent.get(account.id) ?? []).map(rollupAccount);
+
+      let openingDebitRaw = this.decimal(ownOpening.debit);
+      let openingCreditRaw = this.decimal(ownOpening.credit);
+      let periodDebit = this.decimal(ownPeriod.debit);
+      let periodCredit = this.decimal(ownPeriod.credit);
+
+      for (const child of children) {
+        openingDebitRaw = openingDebitRaw.add(child.openingDebitRaw);
+        openingCreditRaw = openingCreditRaw.add(child.openingCreditRaw);
+        periodDebit = periodDebit.add(child.periodDebit);
+        periodCredit = periodCredit.add(child.periodCredit);
+      }
+
+      const openingSplit = this.splitNetBalance(openingDebitRaw.sub(openingCreditRaw));
+      const closing = this.calculateClosingBalance(openingSplit.debit, openingSplit.credit, periodDebit, periodCredit);
+
+      return {
+        account,
+        openingDebitRaw,
+        openingCreditRaw,
+        periodDebit,
+        periodCredit,
+        openingDebit: openingSplit.debit,
+        openingCredit: openingSplit.credit,
+        closingDebit: closing.closingDebit,
+        closingCredit: closing.closingCredit,
+        side: closing.side,
+        sideLabel: closing.sideLabel,
+        children,
+      };
+    };
+
+    const flattenRows = (nodes: TrialBalanceRollup[], bucket: TrialBalanceRollup[] = []) => {
+      for (const node of nodes) {
+        bucket.push(node);
+        flattenRows(node.children, bucket);
+      }
+      return bucket;
+    };
+
+    const rootNodes = (accountsByParent.get(null) ?? []).map(rollupAccount);
+    return flattenRows(rootNodes);
   }
 
   private async aggregateLedger(accountIds: string[], query: ReportingQueryDto, dateFrom?: string, dateTo?: string, exclusiveDateTo?: boolean) {
@@ -998,23 +1193,38 @@ export class ReportingService {
   }
 
   private buildAccountWhere(query: ReportingQueryDto, types?: AccountRow["type"][]) {
+    const branchValue = query.branchId?.trim();
     return {
       isPosting: true,
       isActive: true,
       type: query.accountType ? query.accountType : types ? { in: types } : undefined,
       currencyCode: query.currencyCode?.trim() || undefined,
       segment3: query.segment3?.trim() || undefined,
-      segment4: query.segment4?.trim() || undefined,
+      segment4: query.segment4?.trim() || branchValue || undefined,
       segment5: query.segment5?.trim() || undefined,
     };
   }
 
   private matchesAccountFilters(account: Pick<AccountRow, "type" | "currencyCode" | "segment3" | "segment4" | "segment5">, query: ReportingQueryDto) {
+    const branchValue = query.branchId?.trim();
     return (
       (!query.accountType || account.type === query.accountType) &&
       (!query.currencyCode || account.currencyCode === query.currencyCode) &&
       (!query.segment3 || account.segment3 === query.segment3) &&
       (!query.segment4 || account.segment4 === query.segment4) &&
+      (!branchValue || account.segment4 === branchValue) &&
+      (!query.segment5 || account.segment5 === query.segment5)
+    );
+  }
+
+  private matchesTrialBalanceAccountFilters(account: Pick<AccountRow, "type" | "currencyCode" | "segment3" | "segment4" | "segment5">, query: ReportingQueryDto & { branchId?: string }) {
+    const branchValue = query.branchId?.trim();
+    return (
+      (!query.accountType || account.type === query.accountType) &&
+      (!query.currencyCode || account.currencyCode === query.currencyCode) &&
+      (!query.segment3 || account.segment3 === query.segment3) &&
+      (!query.segment4 || account.segment4 === query.segment4) &&
+      (!branchValue || account.segment4 === branchValue) &&
       (!query.segment5 || account.segment5 === query.segment5)
     );
   }
@@ -1025,6 +1235,13 @@ export class ReportingService {
           journalEntryTypeId: query.journalEntryTypeId,
         }
       : undefined;
+  }
+
+  private buildPostedJournalEntryWhere(query?: ReportingQueryDto) {
+    return {
+      status: "POSTED" as const,
+      ...(query?.journalEntryTypeId ? { journalEntryTypeId: query.journalEntryTypeId } : {}),
+    };
   }
 
   private buildGeneralLedgerPath(accountId: string, query: ReportingQueryDto) {
@@ -1041,6 +1258,7 @@ export class ReportingService {
     if (query.currencyCode) searchParams.set("currencyCode", query.currencyCode);
     if (query.segment3) searchParams.set("segment3", query.segment3);
     if (query.segment4) searchParams.set("segment4", query.segment4);
+    if (query.branchId) searchParams.set("branchId", query.branchId);
     if (query.segment5) searchParams.set("segment5", query.segment5);
     if (query.journalEntryTypeId) searchParams.set("journalEntryTypeId", query.journalEntryTypeId);
     return `/reporting?${searchParams.toString()}`;
@@ -1109,6 +1327,128 @@ export class ReportingService {
 
   private net(values?: { debit: number; credit: number }) {
     return (values?.debit ?? 0) - (values?.credit ?? 0);
+  }
+
+  private decimal(value: Prisma.Decimal | string | number) {
+    return value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
+  }
+
+  private zeroDecimalBalance(): DecimalBalance {
+    return { debit: this.decimal(0), credit: this.decimal(0) };
+  }
+
+  private toDecimalBalanceMap(
+    rows: Array<{ accountId: string; _sum: { debitAmount: Prisma.Decimal | null; creditAmount: Prisma.Decimal | null } }>,
+  ) {
+    return new Map(
+      rows.map((row) => [
+        row.accountId,
+        {
+          debit: this.decimal(row._sum.debitAmount ?? 0),
+          credit: this.decimal(row._sum.creditAmount ?? 0),
+        },
+      ]),
+    ) as DecimalBalanceMap;
+  }
+
+  private splitNetBalance(net: Prisma.Decimal) {
+    if (net.gt(0)) {
+      return { debit: net, credit: this.decimal(0) };
+    }
+
+    if (net.lt(0)) {
+      return { debit: this.decimal(0), credit: net.abs() };
+    }
+
+    return { debit: this.decimal(0), credit: this.decimal(0) };
+  }
+
+  private summarizeTrialBalanceRows(rows: TrialBalanceRollup[]) {
+    const totals = rows.reduce(
+      (acc, row) => ({
+        openingDebit: acc.openingDebit.add(row.openingDebit),
+        openingCredit: acc.openingCredit.add(row.openingCredit),
+        periodDebit: acc.periodDebit.add(row.periodDebit),
+        periodCredit: acc.periodCredit.add(row.periodCredit),
+        closingDebit: acc.closingDebit.add(row.closingDebit),
+        closingCredit: acc.closingCredit.add(row.closingCredit),
+      }),
+      {
+        openingDebit: this.decimal(0),
+        openingCredit: this.decimal(0),
+        periodDebit: this.decimal(0),
+        periodCredit: this.decimal(0),
+        closingDebit: this.decimal(0),
+        closingCredit: this.decimal(0),
+      },
+    );
+
+    const openingDifference = totals.openingDebit.sub(totals.openingCredit);
+    const periodDifference = totals.periodDebit.sub(totals.periodCredit);
+    const closingDifference = totals.closingDebit.sub(totals.closingCredit);
+
+    return {
+      totals,
+      openingDifference,
+      periodDifference,
+      closingDifference,
+      summaryRows: this.buildTrialBalanceSummaryRows(totals, openingDifference, periodDifference, closingDifference),
+    };
+  }
+
+  private buildTrialBalanceSummaryRows(
+    totals: {
+      openingDebit: Prisma.Decimal;
+      openingCredit: Prisma.Decimal;
+      periodDebit: Prisma.Decimal;
+      periodCredit: Prisma.Decimal;
+      closingDebit: Prisma.Decimal;
+      closingCredit: Prisma.Decimal;
+    },
+    openingDifference: Prisma.Decimal,
+    periodDifference: Prisma.Decimal,
+    closingDifference: Prisma.Decimal,
+  ): TrialBalanceSummaryRow[] {
+    const openingBalanceRow = this.buildOppositeSideDifferenceRow(openingDifference);
+    const periodBalanceRow = this.buildOppositeSideDifferenceRow(periodDifference);
+    const closingBalanceRow = this.buildOppositeSideDifferenceRow(closingDifference);
+
+    return [
+      {
+        kind: "total",
+        openingDebit: this.toReportAmount(totals.openingDebit),
+        openingCredit: this.toReportAmount(totals.openingCredit),
+        periodDebit: this.toReportAmount(totals.periodDebit),
+        periodCredit: this.toReportAmount(totals.periodCredit),
+        closingDebit: this.toReportAmount(totals.closingDebit),
+        closingCredit: this.toReportAmount(totals.closingCredit),
+      },
+      {
+        kind: "difference",
+        openingDebit: this.toReportAmount(openingBalanceRow.debit),
+        openingCredit: this.toReportAmount(openingBalanceRow.credit),
+        periodDebit: this.toReportAmount(periodBalanceRow.debit),
+        periodCredit: this.toReportAmount(periodBalanceRow.credit),
+        closingDebit: this.toReportAmount(closingBalanceRow.debit),
+        closingCredit: this.toReportAmount(closingBalanceRow.credit),
+      },
+    ];
+  }
+
+  private buildOppositeSideDifferenceRow(difference: Prisma.Decimal) {
+    if (difference.gt(0)) {
+      return { debit: this.decimal(0), credit: difference.abs() };
+    }
+
+    if (difference.lt(0)) {
+      return { debit: difference.abs(), credit: this.decimal(0) };
+    }
+
+    return { debit: this.decimal(0), credit: this.decimal(0) };
+  }
+
+  private isZeroDecimal(...values: Prisma.Decimal[]) {
+    return values.every((value) => value.equals(0));
   }
 
   private normalizeByType(type: AccountRow["type"], amount: number) {
@@ -1256,6 +1596,10 @@ export class ReportingService {
 
   private toAmount(value: number) {
     return value.toFixed(2);
+  }
+
+  private toReportAmount(value: Prisma.Decimal | string | number, scale = 3) {
+    return this.decimal(value).toFixed(scale);
   }
 
   private ensureUser(user?: AuthUser) {
@@ -1519,6 +1863,7 @@ export class ReportingService {
       currencyCode: this.pickString(parameters.currencyCode),
       segment3: this.pickString(parameters.segment3),
       segment4: this.pickString(parameters.segment4),
+      branchId: this.pickString(parameters.branchId),
       segment5: this.pickString(parameters.segment5),
       journalEntryTypeId: this.pickString(parameters.journalEntryTypeId),
     };
@@ -1573,8 +1918,29 @@ export class ReportingService {
     if (reportType === "trialBalance") {
       return [
         {
-          headers: ["Code", "Name", "OpeningBalance", "Debit", "Credit", "ClosingBalance", "Side"],
-          rows: reportData.rows.map((row: any) => [row.accountCode, row.accountName, row.openingBalance, row.debitTotal, row.creditTotal, row.closingBalance, row.closingSide]),
+          headers: ["Code", "Name", "Opening Debit", "Opening Credit", "Period Debit", "Period Credit", "Closing Debit", "Closing Credit"],
+          rows: [
+            ...reportData.rows.map((row: any) => [
+              row.accountCode,
+              row.accountName,
+              row.openingDebit,
+              row.openingCredit,
+              row.periodDebit,
+              row.periodCredit,
+              row.closingDebit,
+              row.closingCredit,
+            ]),
+            ...(reportData.summaryRows ?? []).map((row: any) => [
+              "",
+              row.kind === "total" ? "Total" : "Difference",
+              row.openingDebit,
+              row.openingCredit,
+              row.periodDebit,
+              row.periodCredit,
+              row.closingDebit,
+              row.closingCredit,
+            ]),
+          ],
         },
       ];
     }
@@ -1646,6 +2012,10 @@ export class ReportingService {
   }
 
   private renderHtmlExport(title: string, reportType: string, reportData: any, generatedAt: string) {
+    if (reportType === "trialBalance") {
+      return this.renderTrialBalanceHtmlExport(title, reportData, generatedAt);
+    }
+
     const sections = this.flattenExportRows(reportType, reportData);
     const summaryRows = this.buildExportSummaryRows(reportType, reportData);
     const tables = sections
@@ -1699,6 +2069,84 @@ export class ReportingService {
           <p>Report type: ${this.escapeHtml(reportType)}<br/>Generated at: ${this.escapeHtml(generatedAt)}</p>
           ${tables}
           ${summaryTable}
+        </body>
+      </html>
+    `;
+  }
+
+  private renderTrialBalanceHtmlExport(title: string, reportData: any, generatedAt: string) {
+    const headers = [
+      "رمز الحساب",
+      "اسم الحساب",
+      "بداية الفترة مدين",
+      "بداية الفترة دائن",
+      "رصيد الفترة مدين",
+      "رصيد الفترة دائن",
+      "الرصيد مدين",
+      "الرصيد دائن",
+    ];
+    const detailRows = (reportData.rows ?? []).map((row: any) => [
+      row.accountCode,
+      row.accountNameAr ?? row.accountName,
+      row.openingDebit,
+      row.openingCredit,
+      row.periodDebit,
+      row.periodCredit,
+      row.closingDebit,
+      row.closingCredit,
+    ]);
+    const summaryRows = (reportData.summaryRows ?? []).map((row: any) => [
+      "",
+      row.kind === "total" ? "المجموع" : "الرصيد",
+      row.openingDebit,
+      row.openingCredit,
+      row.periodDebit,
+      row.periodCredit,
+      row.closingDebit,
+      row.closingCredit,
+    ]);
+    const bodyRows = [...detailRows, ...summaryRows];
+
+    return `
+      <!doctype html>
+      <html lang="ar" dir="rtl">
+        <head>
+          <meta charset="utf-8" />
+          <title>${this.escapeHtml(title)}</title>
+          <style>
+            body { font-family: Arial, Tahoma, sans-serif; margin: 24px; color: #111827; direction: rtl; }
+            h1 { margin-bottom: 8px; }
+            p { color: #4b5563; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; font-size: 12px; }
+            th { background: #f3f4f6; font-weight: 700; text-align: center; }
+            td { text-align: right; }
+            td.amount { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; }
+            td.code { direction: ltr; text-align: left; }
+            tr.summary-row td { background: #f9fafb; font-weight: 700; }
+          </style>
+        </head>
+        <body>
+          <h1>${this.escapeHtml(title)}</h1>
+          <p>نوع التقرير: ميزان المراجعة<br/>تاريخ الإنشاء: ${this.escapeHtml(generatedAt)}</p>
+          <table>
+            <thead>
+              <tr>${headers.map((header) => `<th>${this.escapeHtml(header)}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${bodyRows
+                .map((row: Array<string | number | null | undefined>, index) => {
+                  const isSummary = index >= detailRows.length;
+                  return `<tr class="${isSummary ? "summary-row" : ""}">${row
+                    .map((cell, cellIndex) => {
+                      const className = cellIndex === 0 ? "code" : cellIndex >= 2 ? "amount" : "";
+                      return `<td class="${className}">${this.escapeHtml(String(cell ?? ""))}</td>`;
+                    })
+                    .join("")}</tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>
         </body>
       </html>
     `;

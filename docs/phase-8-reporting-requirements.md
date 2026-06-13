@@ -62,6 +62,15 @@ This document captures the Phase 8 Reporting & Control requirements baseline in 
 | REQ-RPT-013 | The system shall allow the user to include or exclude zero-balance accounts in the trial balance. | يجب أن يسمح النظام للمستخدم بتضمين أو استبعاد الحسابات ذات الرصيد الصفري في ميزان المراجعة. |
 | REQ-RPT-014 | The system shall allow the user to drill through from a trial balance account row into general ledger details for the selected account. | يجب أن يسمح النظام للمستخدم بالانتقال التفصيلي من صف حساب في ميزان المراجعة إلى تفاصيل دفتر الأستاذ العام للحساب المحدد. |
 
+Current implementation detail:
+
+- Trial balance opening columns are calculated from posted `JournalEntryLine` rows before the report start date only.
+- Trial balance period debit/credit columns are calculated from posted `JournalEntryLine` rows inside the selected period only.
+- Trial balance closing balance is derived as a net balance per account (`opening net + period net`) and is shown on one side only (`Debit`, `Credit`, or zero).
+- Parent/header accounts are rolled up recursively from descendant accounts without double counting child balances.
+- Trial balance total and balancing-summary rows are calculated from posting/detail accounts only, even when parent/header rollup rows are shown in the report output.
+- Trial balance printable output uses the eight-column Arabic accounting layout with `المجموع` and `الرصيد` summary rows at the bottom.
+
 ## 3. Balance Sheet | الميزانية العمومية
 
 | Req ID | English Requirement | الترجمة العربية |

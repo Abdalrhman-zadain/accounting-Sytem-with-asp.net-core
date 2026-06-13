@@ -9,11 +9,13 @@ export function ReportingTable({
   rows,
   emptyLabel,
   columnTypes = [],
+  rowClassNames = [],
 }: {
   headers: string[];
   rows: Array<Array<ReactNode>>;
   emptyLabel: string;
   columnTypes?: TableColumnType[];
+  rowClassNames?: string[];
 }) {
   return (
     <div className="overflow-x-auto">
@@ -36,7 +38,7 @@ export function ReportingTable({
             </tr>
           ) : (
             rows.map((row, index) => (
-              <tr key={index}>
+              <tr key={index} className={rowClassNames[index] ?? undefined}>
                 {row.map((cell, cellIndex) => (
                   <td key={cellIndex} className={getTableCellClassName(columnTypes[cellIndex])}>
                     {cell}

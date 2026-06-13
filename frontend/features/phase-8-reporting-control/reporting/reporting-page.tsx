@@ -165,6 +165,7 @@ export function ReportingPage() {
       currencyCode: currencyCode || undefined,
       segment3: segment3 || undefined,
       segment4: segment4 || undefined,
+      branchId: segment4 || undefined,
       segment5: segment5 || undefined,
       journalEntryTypeId: journalEntryTypeId || undefined,
     }),
@@ -192,6 +193,7 @@ export function ReportingPage() {
       currencyCode: baseFilters.currencyCode,
       segment3: baseFilters.segment3,
       segment4: baseFilters.segment4,
+      branchId: baseFilters.branchId,
       segment5: baseFilters.segment5,
       journalEntryTypeId: baseFilters.journalEntryTypeId,
     }),
@@ -742,41 +744,64 @@ function TrialBalanceSection({
   return (
     <>
       {!compact ? (
-        <Card className="mb-4 grid gap-3 p-5 md:grid-cols-5">
+        <Card className="mb-4 grid gap-3 p-5 md:grid-cols-7">
           <MiniStat label={t("reporting.summary.period")} value={data.period} />
-          <MiniStat label={t("reporting.trialBalance.total.debit")} value={formatCurrency(data.totals.debit)} />
-          <MiniStat label={t("reporting.trialBalance.total.credit")} value={formatCurrency(data.totals.credit)} />
-          <MiniStat label={t("reporting.trialBalance.total.closingDebit")} value={formatCurrency(data.totals.closingDebit)} />
-          <MiniStat label={t("reporting.trialBalance.total.closingCredit")} value={formatCurrency(data.totals.closingCredit)} />
+          <MiniStat label={t("reporting.trialBalance.total.openingDebit")} value={formatCurrency(data.totals.totalOpeningDebit)} />
+          <MiniStat label={t("reporting.trialBalance.total.openingCredit")} value={formatCurrency(data.totals.totalOpeningCredit)} />
+          <MiniStat label={t("reporting.trialBalance.total.periodDebit")} value={formatCurrency(data.totals.totalPeriodDebit)} />
+          <MiniStat label={t("reporting.trialBalance.total.periodCredit")} value={formatCurrency(data.totals.totalPeriodCredit)} />
+          <MiniStat label={t("reporting.trialBalance.total.closingDebit")} value={formatCurrency(data.totals.totalClosingDebit)} />
+          <MiniStat label={t("reporting.trialBalance.total.closingCredit")} value={formatCurrency(data.totals.totalClosingCredit)} />
         </Card>
       ) : null}
       <div className={compact ? "overflow-hidden" : undefined}>
-        <ReportingTable
-          headers={[
-            t("reporting.column.code"),
-            t("reporting.column.name"),
-            t("reporting.column.openingBalance"),
-            t("reporting.column.debit"),
-            t("reporting.column.credit"),
-            t("reporting.column.closingBalance"),
-            t("reporting.column.side"),
-            t("reporting.column.action"),
-          ]}
-          columnTypes={["code", "name", "amount", "amount", "amount", "amount", "side", "action"]}
-          rows={data.rows.map((row) => [
+        {(() => {
+          const detailRows = data.rows.map((row) => [
             row.accountCode,
-            row.accountName,
-            formatCurrency(row.openingBalance),
-            formatCurrency(row.debitTotal),
-            formatCurrency(row.creditTotal),
-            formatCurrency(row.closingBalance),
-            t(`reporting.side.${row.closingSide}`),
-            <button key={`${row.accountId}-action`} className="text-sm font-semibold text-primary hover:underline" onClick={() => onSelectAccount(row.accountId)}>
-              {t("reporting.action.openLedger")}
+            <button
+              key={`${row.accountId}-name`}
+              className="text-start font-medium text-primary hover:underline"
+              onClick={() => onSelectAccount(row.accountId)}
+            >
+              {row.accountName}
             </button>,
-          ])}
-          emptyLabel={t("reporting.value.noRows")}
-        />
+            formatCurrency(row.openingDebit),
+            formatCurrency(row.openingCredit),
+            formatCurrency(row.periodDebit),
+            formatCurrency(row.periodCredit),
+            formatCurrency(row.closingDebit),
+            formatCurrency(row.closingCredit),
+          ]);
+          const summaryRows = data.summaryRows.map((row) => [
+            "",
+            row.kind === "total" ? t("reporting.trialBalance.row.total") : t("reporting.trialBalance.row.difference"),
+            formatCurrency(row.openingDebit),
+            formatCurrency(row.openingCredit),
+            formatCurrency(row.periodDebit),
+            formatCurrency(row.periodCredit),
+            formatCurrency(row.closingDebit),
+            formatCurrency(row.closingCredit),
+          ]);
+
+          return (
+            <ReportingTable
+              headers={[
+                t("reporting.column.code"),
+                t("reporting.column.name"),
+                t("reporting.column.openingDebit"),
+                t("reporting.column.openingCredit"),
+                t("reporting.column.periodDebit"),
+                t("reporting.column.periodCredit"),
+                t("reporting.column.closingDebit"),
+                t("reporting.column.closingCredit"),
+              ]}
+              columnTypes={["code", "name", "amount", "amount", "amount", "amount", "amount", "amount"]}
+              rows={[...detailRows, ...summaryRows]}
+              rowClassNames={[...detailRows.map(() => ""), ...summaryRows.map(() => "bg-gray-50 font-semibold")]}
+              emptyLabel={t("reporting.value.noRows")}
+            />
+          );
+        })()}
       </div>
     </>
   );
@@ -1369,4 +1394,3 @@ function applyStoredParameters(
 function readString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
-

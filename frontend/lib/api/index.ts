@@ -3689,6 +3689,7 @@ function buildReportingSearchParams(params: ReportingQuery = {}) {
   if (params.currencyCode) searchParams.set("currencyCode", params.currencyCode);
   if (params.segment3) searchParams.set("segment3", params.segment3);
   if (params.segment4) searchParams.set("segment4", params.segment4);
+  if (params.branchId) searchParams.set("branchId", params.branchId);
   if (params.segment5) searchParams.set("segment5", params.segment5);
   if (params.journalEntryTypeId) searchParams.set("journalEntryTypeId", params.journalEntryTypeId);
   if (params.entity) searchParams.set("entity", params.entity);

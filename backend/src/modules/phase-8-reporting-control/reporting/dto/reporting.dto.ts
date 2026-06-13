@@ -48,6 +48,10 @@ export class ReportingQueryDto {
 
   @IsOptional()
   @IsString()
+  branchId?: string;
+
+  @IsOptional()
+  @IsString()
   segment5?: string;
 
   @IsOptional()
