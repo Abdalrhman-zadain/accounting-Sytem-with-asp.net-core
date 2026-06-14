@@ -82,18 +82,10 @@ public sealed class PrintService : IDisposable
             settings.ShouldPrintBackgrounds = true;
             settings.ShouldPrintHeaderAndFooter = false;
 
-            var printCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _webView.CoreWebView2.PrintCompleted += (_, args) =>
+            var printStatus = await _webView.CoreWebView2.PrintAsync(settings);
+            if (printStatus != CoreWebView2PrintStatus.Succeeded)
             {
-                printCompleted.TrySetResult(args.Succeeded);
-            };
-
-            _webView.CoreWebView2.Print(settings);
-
-            var printed = await printCompleted.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
-            if (!printed)
-            {
-                throw new InvalidOperationException("Print job did not complete successfully.");
+                throw new InvalidOperationException($"Print job failed with status: {printStatus}");
             }
         }
         finally

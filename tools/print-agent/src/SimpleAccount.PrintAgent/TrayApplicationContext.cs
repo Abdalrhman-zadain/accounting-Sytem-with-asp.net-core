@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace SimpleAccount.PrintAgent;
 
 public sealed class TrayApplicationContext : ApplicationContext
