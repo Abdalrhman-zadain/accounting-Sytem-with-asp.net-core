@@ -466,7 +466,7 @@ export function PurchasesPage() {
 
   const inventoryItemsQuery = useQuery({
     queryKey: queryKeys.inventoryItems(token, { isActive: "true" }),
-    queryFn: () => getInventoryItems({ isActive: "true" }, token),
+    queryFn: () => getAllActiveInventoryItems(token),
     enabled: needsInventoryItems,
     staleTime: 5 * 60 * 1000,
   });
@@ -1230,7 +1230,7 @@ export function PurchasesPage() {
   };
 
   const activeSuppliers = suppliers.filter((row) => row.isActive);
-  const inventoryItems = inventoryItemsQuery.data?.data ?? [];
+  const inventoryItems = inventoryItemsQuery.data ?? [];
   const activeInventoryWarehouses = inventoryWarehousesQuery.data ?? [];
   const purchaseInvoiceDebitAccounts = (invoiceAccountsQuery.data ?? []).filter(isPurchaseInvoiceDebitAccount);
   const debitNoteDiscountAccountsQuery = useQuery({
@@ -6841,6 +6841,35 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
       <div className="mt-1 text-xs text-gray-500">{hint}</div>
     </Card>
   );
+}
+
+async function getAllActiveInventoryItems(
+  token?: string | null,
+): Promise<InventoryItem[]> {
+  const firstPage = await getInventoryItems(
+    {
+      isActive: "true",
+      page: 1,
+      limit: 100,
+    },
+    token,
+  );
+
+  const allItems = [...firstPage.data];
+
+  for (let page = 2; page <= firstPage.totalPages; page += 1) {
+    const response = await getInventoryItems(
+      {
+        isActive: "true",
+        page,
+        limit: 100,
+      },
+      token,
+    );
+    allItems.push(...response.data);
+  }
+
+  return allItems;
 }
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
