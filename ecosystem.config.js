@@ -19,7 +19,9 @@ module.exports = {
       env: {
         PORT: 3007,
         DATABASE_URL: 'postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public',
-        INVENTORY_ACCOUNTING_ENABLED: 'true'
+        INVENTORY_ACCOUNTING_ENABLED: 'true',
+        QZ_CERT_PATH: './certs/qz/digital-certificate.txt',
+        QZ_PRIVATE_KEY_PATH: './certs/qz/private-key.pem'
       }
     }
   ]
