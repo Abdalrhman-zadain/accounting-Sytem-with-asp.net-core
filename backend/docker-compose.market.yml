@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: market-postgres
+    container_name: simple-account-pos-m-ch-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: simple-account-pos-m-ch
@@ -10,12 +10,16 @@ services:
     ports:
       - "15433:5432"
     volumes:
-      - market_postgres_data:/var/lib/postgresql/data
+      - postgres_pos_market_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U simple_account_user -d 'simple-account-pos-m-ch'"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U simple_account_user -d 'simple-account-pos-m-ch'",
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
 
 volumes:
-  market_postgres_data:
+  postgres_pos_market_data:
