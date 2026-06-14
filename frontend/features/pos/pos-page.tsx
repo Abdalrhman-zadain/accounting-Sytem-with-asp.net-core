@@ -3581,6 +3581,75 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     return true;
   };
 
+  const handleTableSelect = async (tableId: string, waiterId: string | null) => {
+    const table = restaurantTables.find((entry) => entry.id === tableId);
+    if (!table) return;
+
+    // 1. If switching tables, release the old one if it has no items
+    if (selectedTableId && selectedTableId !== tableId) {
+      if (cartLines.length === 0 && !editingInvoiceId) {
+        try {
+          await updatePosTableStatus(selectedTableId, "AVAILABLE", token);
+        } catch (e) {
+          console.error("Failed to release old table:", e);
+        }
+      }
+    }
+
+    // 2. Determine if we have an active cart/order
+    const hasActiveOrder = cartLines.length > 0 || editingInvoiceId !== null;
+
+    if (hasActiveOrder) {
+      // Preserve current order state and items, just update table assignment
+      setOrderType("DINE_IN");
+      setSelectedTableId(tableId);
+      setSelectedTableNumber(table.tableNumber);
+      setSelectedWaiterId(waiterId || table.assignedWaiter?.id || null);
+
+      // Persist table change to database if session is active
+      if (activeSession?.id) {
+        try {
+          const payload = {
+            sessionId: activeSession.id,
+            invoiceId: editingInvoiceId ?? undefined,
+            customerId: selectedCustomerId || undefined,
+            description: orderNotes.trim() || undefined,
+            orderType: "DINE_IN" as const,
+            tableId: tableId,
+            waiterId: waiterId || table.assignedWaiter?.id || undefined,
+            serviceChargeAmount: serviceChargeAmount,
+            deliveryFeeAmount: 0,
+            lines: buildSaleLinesPayload(),
+            payments: buildPaymentPayload(),
+            reservationId: activeReservationId ?? undefined,
+          };
+          const updatedSale = await holdPosSale(payload, token);
+          if (updatedSale?.id) {
+            setEditingInvoiceId(updatedSale.id);
+          }
+          await refreshPosData();
+        } catch (err) {
+          console.error("Failed to save table assignment:", err);
+          pushError(getLocalizedText("Failed to save table assignment / فشل حفظ تعيين الطاولة", language));
+        }
+      }
+    } else {
+      // Empty cart: load existing order from table if any, else assign table to a new empty order
+      const loaded = loadOpenTableOrder(tableId);
+      if (!loaded) {
+        setEditingInvoiceId(null);
+        resetSale();
+        setOrderType("DINE_IN");
+        setSelectedTableId(tableId);
+        setSelectedTableNumber(table.tableNumber);
+        setSelectedWaiterId(waiterId || table.assignedWaiter?.id || null);
+        resumedTableIdRef.current = `new:${tableId}`;
+      } else if (waiterId) {
+        setSelectedWaiterId(waiterId);
+      }
+    }
+  };
+
   const printReceipt = (receipt: CompletedReceipt) => {
     printCustomerReceipt(receipt).then((result) => {
       if (result.fallback) {
@@ -4296,32 +4365,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                     onOpenTransferTable={() => setIsTransferTableOpen(true)}
                     onOrderTypeChange={setOrderType}
                     onSelectTable={async (tableId, waiterId) => {
-                      if (selectedTableId && selectedTableId !== tableId) {
-                        // If switching tables, release the old one if it has no items
-                        if (cartLines.length === 0 && !editingInvoiceId) {
-                          try {
-                            await updatePosTableStatus(selectedTableId, "AVAILABLE", token);
-                          } catch (e) {
-                            console.error("Failed to release old table:", e);
-                          }
-                        } else {
-                          await autoSaveCurrentTableOrderIfAny(tableId);
-                        }
-                      }
-                      const loaded = loadOpenTableOrder(tableId);
-                      if (!loaded) {
-                        const table = restaurantTables.find((entry) => entry.id === tableId);
-                        
-                        setEditingInvoiceId(null);
-                        resetSale();
-                        setOrderType("DINE_IN");
-                        setSelectedTableId(tableId);
-                        setSelectedTableNumber(table?.tableNumber ?? null);
-                        setSelectedWaiterId(waiterId || table?.assignedWaiterId || null);
-                        resumedTableIdRef.current = `new:${tableId}`;
-                      } else if (waiterId) {
-                        setSelectedWaiterId(waiterId);
-                      }
+                      await handleTableSelect(tableId, waiterId);
                     }}
                     onBackToTables={async () => {
                       if (orderType === "DINE_IN" && selectedTableId && cartLines.length === 0 && !editingInvoiceId) {
@@ -5187,22 +5231,13 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                   key={table.id}
                   type="button"
                   disabled={isBusy}
-                  onClick={() => {
+                  onClick={async () => {
                     setIsTableSelectorOpen(false);
                     if (isBusy && table.activeInvoice?.id) {
                       router.push(buildPosRegisterTablePath(table, waiterMode ? "/pos/waiter/order" : "/pos/register"));
                       return;
                     }
-                    const loaded = loadOpenTableOrder(table.id);
-                    if (!loaded) {
-                      setEditingInvoiceId(null);
-                      resetSale();
-                      setOrderType("DINE_IN");
-                      setSelectedTableId(table.id);
-                      setSelectedTableNumber(table.tableNumber);
-                      setSelectedWaiterId(table.assignedWaiter?.id ?? null);
-                      resumedTableIdRef.current = `new:${table.id}`;
-                    }
+                    await handleTableSelect(table.id, table.assignedWaiter?.id ?? null);
                   }}
                   className={cn(
                     "rounded-[18px] border p-4 text-left transition",
