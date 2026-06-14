@@ -1,4 +1,4 @@
-export type PosPrintBridgeMode = "qz" | "browser";
+export type PosPrintBridgeMode = "agent" | "qz" | "browser";
 
 export type PosPrinterConfig = {
   kitchenPrinterName: string | null;
@@ -15,7 +15,7 @@ export const DEFAULT_POS_PRINTER_CONFIG: PosPrinterConfig = {
   receiptPrinterName: null,
   autoPrintKotOnSend: true,
   autoPrintReceiptOnPay: true,
-  printBridge: "qz",
+  printBridge: "agent",
 };
 
 function normalizeConfig(raw: Partial<PosPrinterConfig> | null | undefined): PosPrinterConfig {
@@ -24,7 +24,14 @@ function normalizeConfig(raw: Partial<PosPrinterConfig> | null | undefined): Pos
     ...raw,
     kitchenPrinterName: raw?.kitchenPrinterName?.trim() || null,
     receiptPrinterName: raw?.receiptPrinterName?.trim() || null,
-    printBridge: raw?.printBridge === "browser" ? "browser" : "qz",
+    printBridge:
+      raw?.printBridge === "browser"
+        ? "browser"
+        : raw?.printBridge === "qz"
+          ? "qz"
+          : raw?.printBridge === "agent"
+            ? "agent"
+            : DEFAULT_POS_PRINTER_CONFIG.printBridge,
   };
 }
 

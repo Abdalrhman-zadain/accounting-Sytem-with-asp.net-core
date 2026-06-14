@@ -93,15 +93,16 @@ What this means for future edits:
 Current behavior:
 
 - POS kitchen KOT, customer receipt, and session roll prints route through a client-side print service.
-- Silent named-printer routing requires QZ Tray to be installed and running on each cashier computer.
-- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray or use browser-print fallback.
+- **Simple Account Print Agent** (recommended on Windows) provides silent named-printer routing via `127.0.0.1:9188` without QZ Tray or browser dialogs when selected in POS → Printers.
+- Silent named-printer routing via QZ Tray remains available as a fallback when the agent is not running or when **Print bridge** is set to QZ Tray.
+- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray or use browser-print fallback. QZ is optional when the Print Agent is used.
 - Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
-- If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
+- If the Print Agent, QZ Tray, or a configured printer is unavailable, the POS falls back through agent → QZ → browser (depending on settings); browser printing cannot automatically choose between kitchen and receipt printers.
 
 What this means for future edits:
 
 - do not move local OS printer names into global POS settings unless printing is changed to a network/IP or local-agent model with stable printer identifiers.
-- keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, or fallback changes.
+- keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, agent build, or fallback changes.
 
 ## Local Docker Port Reservation On Windows
 

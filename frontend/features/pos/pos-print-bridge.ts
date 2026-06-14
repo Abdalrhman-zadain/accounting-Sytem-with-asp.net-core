@@ -47,7 +47,7 @@ type QzApi = {
 };
 
 export type PosPrintBridgeStatus = {
-  mode: "qz" | "browser";
+  mode: "agent" | "qz" | "browser";
   available: boolean;
   printers: string[];
   error?: string;
@@ -207,7 +207,7 @@ export async function getPosPrintBridgeStatus(): Promise<PosPrintBridgeStatus> {
     return { mode: "qz", available: true, printers };
   } catch (error) {
     return {
-      mode: "browser",
+      mode: "qz",
       available: false,
       printers: [],
       error: error instanceof Error ? error.message : String(error),

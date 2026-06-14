@@ -6,18 +6,52 @@ The POS supports separate thermal print outputs for restaurant operations:
 - customer receipt: printed from the sales receipt template when payment completes or a receipt is reprinted
 - session roll reports: printed through the receipt-printer route
 
-Silent printer routing in a browser requires a local print bridge. The current client integration targets QZ Tray and falls back to the browser print window if the bridge is not available.
+Silent printer routing in a browser requires a local print bridge. **Simple Account Print Agent** (recommended) listens on `127.0.0.1:9188`, accepts HTML print jobs from the POS, and prints to the configured kitchen/receipt printers without dialogs. QZ Tray and browser print remain available as fallbacks.
 
-## Cashier PC Setup
+## Simple Account Print Agent (recommended)
+
+Use this on Windows cashier PCs instead of QZ Tray when possible.
+
+### Cashier PC setup
 
 1. Install both XPrinter 80mm printers on the cashier computer.
 2. Give each OS printer a clear local name, for example:
    - `XPrinter-Cashier`
    - `XPrinter-Kitchen`
-3. Install and start QZ Tray on the cashier computer.
-4. Open **POS → Printers** (`/pos/printers`), or POS Settings for accountant users, then use the Printer setup panel.
-5. Refresh printers, select the local kitchen and receipt printer names, then run both test prints.
-6. Save the printer settings.
+3. Open **POS → Printers** (`/pos/printers`) and click **Download Print Agent**.
+4. Extract the zip and run `SimpleAccount.PrintAgent.exe` (tray icon appears in the taskbar).
+5. Right-click the tray icon → **Open settings** → pick kitchen and receipt printers → **Save**.
+6. In POS → Printers, set **Print bridge** to **Local agent (recommended)**, refresh printers, select the same printer names, and run both test prints.
+7. Save the printer settings.
+
+The agent binds to `127.0.0.1:9188` only (localhost). It accepts HTML from the production site and from `http://localhost:3000` during development.
+
+### Build and host the installer zip
+
+On a Windows machine with .NET 8 SDK:
+
+```powershell
+cd tools\print-agent
+.\build-release.ps1
+```
+
+This writes `frontend/public/downloads/simple-account-print-agent.zip`. Deploy that file with the frontend so cashiers can download it from POS → Printers.
+
+See `tools/print-agent/README.md` for WebView2 requirements (preinstalled on Windows 11; Evergreen bootstrapper for Windows 10).
+
+### When the agent is not running
+
+If the agent is stopped, POS shows **Print Agent is not running** and falls back to QZ Tray (if configured) or browser print.
+
+## QZ Tray (fallback)
+
+QZ Tray remains supported when **Print bridge** is set to **QZ Tray** in POS → Printers.
+
+### Cashier PC setup (QZ mode)
+
+1. Install and start QZ Tray on the cashier computer.
+2. Open **POS → Printers**, set **Print bridge** to **QZ Tray**, refresh printers, select kitchen and receipt names, and test print.
+3. Save the printer settings.
 
 Printer names are saved in browser `localStorage`, not in the global database, because every cashier machine can expose the same physical model under a different OS printer name.
 
@@ -54,7 +88,7 @@ The POS can sign QZ Tray connection requests from the backend so cashier PCs sto
 
 The private key stays on the server only. The frontend loads the public certificate from `GET /api/qz/certificate` and asks the backend to sign each QZ request via `POST /api/qz/sign` while the cashier is logged in.
 
-### Cashier PC setup (once per machine)
+### Cashier PC setup (once per machine, QZ mode)
 
 After generating the certificate on the server, trust it locally in QZ Tray on **each** cashier PC:
 
@@ -78,19 +112,27 @@ Then restart QZ Tray and open the POS using **one fixed URL** on every PC (same 
 
 If `QZ_CERT_PATH` / `QZ_PRIVATE_KEY_PATH` are missing, or `QZ_SIGNING_ENABLED=false`, printing still works the old way: QZ Tray may show the Allow/Block dialog, or the POS falls back to browser print when QZ is unavailable.
 
-### Alternative: browser print only (no QZ Tray)
+QZ Tray is optional when the Print Agent is installed and selected.
 
-If QZ Tray, Java, or certificate setup is not possible on a cashier PC:
+## Browser print only
+
+If neither the Print Agent nor QZ Tray is available:
 
 1. Open **POS → Printers**.
-2. Enable **Use browser print only (no QZ Tray) / طباعة المتصفح فقط**.
+2. Set **Print bridge** to **Browser only**.
 3. Save settings.
 4. Before **Send to kitchen**, set the **kitchen printer** as the Windows default printer.
 5. Before **Payment / receipt**, set the **receipt printer** as the Windows default printer.
 
-Windows will show the normal print dialog; the cashier picks the printer (or uses whichever is default). No QZ Tray, Java, or certificate is required.
+Windows will show the normal print dialog; the cashier picks the printer (or uses whichever is default). No agent, QZ Tray, Java, or certificate is required.
 
-On the server, set `QZ_SIGNING_ENABLED=false` in the backend environment if signed QZ connections cause problems and you rely on browser print or unsigned QZ Allow dialogs.
+## Print bridge fallback chain
+
+| Print bridge setting | Try order on failure |
+|----------------------|----------------------|
+| Local agent | Agent → QZ Tray → browser |
+| QZ Tray | QZ Tray → browser |
+| Browser only | Browser only |
 
 ## Runtime Behavior
 
@@ -119,11 +161,11 @@ On the server, set `QZ_SIGNING_ENABLED=false` in the backend environment if sign
 - Receipt HTML includes bottom padding and a trailing spacer so thermal auto-cutters do not clip the payment/thank-you lines; QZ Tray jobs also append blank feed lines after the HTML payload.
 - Browser and QZ print paths wait for receipt images to finish loading before sending the job, reducing clipped or mis-sized prints.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.
-- If QZ Tray is not connected, the POS opens the browser print window as a fallback and leaves the sale/order action successful.
+- If the selected print bridge is unavailable, the POS falls back to the next bridge in the chain and leaves the sale/order action successful.
 
 ## Operational Notes
 
-- QZ Tray must be running on each cashier computer that needs silent named-printer routing.
-- If the POS cannot list printers, verify that QZ Tray is running and that the browser can load the QZ client script.
+- Print Agent or QZ Tray must be running on each cashier computer that needs silent named-printer routing.
+- If the POS cannot list printers, verify the agent tray icon is green or QZ Tray is running.
 - If browser storage is cleared, the cashier computer must reselect its kitchen and receipt printers.
-- For offline deployments, host the QZ client JavaScript locally instead of relying on the CDN fallback in the browser bridge.
+- Rebuild and redeploy `frontend/public/downloads/simple-account-print-agent.zip` when the agent version changes.

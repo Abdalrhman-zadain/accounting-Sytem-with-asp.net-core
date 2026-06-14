@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
+import { LuDownload, LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
 
 import {
   loadPosPrinterConfig,
   savePosPrinterConfig,
+  type PosPrintBridgeMode,
   type PosPrinterConfig,
 } from "@/features/pos/pos-printer-config";
 import {
@@ -18,6 +19,38 @@ import { useTranslation } from "@/lib/i18n";
 import { loadStoredToken } from "@/lib/storage";
 import { getLocalizedText } from "@/lib/utils";
 
+const PRINT_AGENT_DOWNLOAD = "/downloads/simple-account-print-agent.zip";
+
+const BRIDGE_OPTIONS: Array<{
+  value: PosPrintBridgeMode;
+  labelEn: string;
+  labelAr: string;
+}> = [
+  {
+    value: "agent",
+    labelEn: "Local agent (recommended)",
+    labelAr: "الوكيل المحلي (موصى به)",
+  },
+  {
+    value: "qz",
+    labelEn: "QZ Tray",
+    labelAr: "QZ Tray",
+  },
+  {
+    value: "browser",
+    labelEn: "Browser only",
+    labelAr: "المتصفح فقط",
+  },
+];
+
+function bridgeModeLabel(mode: PosPrintBridgeMode, language: string): string {
+  const option = BRIDGE_OPTIONS.find((entry) => entry.value === mode);
+  if (!option) {
+    return mode;
+  }
+  return language === "ar" ? option.labelAr : option.labelEn;
+}
+
 export function PosPrinterSettingsPanel() {
   const { language } = useTranslation();
   const [config, setConfig] = useState<PosPrinterConfig>(() => loadPosPrinterConfig());
@@ -26,6 +59,7 @@ export function PosPrinterSettingsPanel() {
   const [isTesting, setIsTesting] = useState<PosPrintTarget | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeConnected, setBridgeConnected] = useState(false);
 
   const isAr = language === "ar";
 
@@ -36,8 +70,9 @@ export function PosPrinterSettingsPanel() {
     try {
       const status = await getPrinterBridgeStatus();
       setPrinters(status.printers);
-      if (!status.available) {
-        setBridgeError(status.error ?? "QZ Tray is not available.");
+      setBridgeConnected(status.available);
+      if (!status.available && config.printBridge !== "browser") {
+        setBridgeError(status.error ?? "Print bridge is not available.");
       }
     } finally {
       setIsLoadingPrinters(false);
@@ -46,7 +81,7 @@ export function PosPrinterSettingsPanel() {
 
   useEffect(() => {
     void refreshPrinters();
-  }, []);
+  }, [config.printBridge]);
 
   const saveConfig = () => {
     setConfig(savePosPrinterConfig(config));
@@ -58,14 +93,22 @@ export function PosPrinterSettingsPanel() {
     setMessage(null);
     try {
       const result = await testPosPrinter(target);
-      setMessage(
-        result.fallback
-          ? getLocalizedText(
-              `Browser print fallback: ${result.error ?? "QZ Tray unavailable"} / طباعة المتصفح: ${result.error ?? "QZ غير متصل"}`,
-              language,
-            )
-          : getLocalizedText("Test print sent / تم إرسال طباعة اختبار", language),
-      );
+      const modeLabel = bridgeModeLabel(result.mode, language);
+      if (result.fallback) {
+        setMessage(
+          getLocalizedText(
+            `Fallback to ${modeLabel}: ${result.error ?? "primary bridge unavailable"} / تم التبديل إلى ${modeLabel}: ${result.error ?? "الجسر غير متصل"}`,
+            language,
+          ),
+        );
+      } else {
+        setMessage(
+          getLocalizedText(
+            `Test print sent via ${modeLabel} / تم إرسال طباعة اختبار عبر ${modeLabel}`,
+            language,
+          ),
+        );
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -118,12 +161,33 @@ export function PosPrinterSettingsPanel() {
               ? " اختر أسماء الطابعات المحلية لهذا الجهاز. يتم الحفظ على هذا المتصفح فقط."
               : ""}
           </p>
-          {bridgeError ? (
+          {config.printBridge === "agent" ? (
+            <p
+              className={`mt-2 rounded-[14px] border px-3 py-2 text-xs font-semibold ${
+                bridgeConnected
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900"
+              }`}
+            >
+              {bridgeConnected
+                ? getLocalizedText(
+                    "Print Agent connected on this PC. / الوكيل المحلي متصل على هذا الجهاز.",
+                    language,
+                  )
+                : getLocalizedText(
+                    "Print Agent is not running. Download, install, and start it, then refresh printers. / الوكيل المحلي غير متصل. نزّله وشغّله ثم حدّث الطابعات.",
+                    language,
+                  )}
+              {bridgeError ? ` ${bridgeError}` : null}
+            </p>
+          ) : bridgeError ? (
             <p className="mt-2 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-              {getLocalizedText(
-                "QZ Tray is not connected; browser print fallback will be used.",
-                language,
-              )}
+              {config.printBridge === "qz"
+                ? getLocalizedText(
+                    "QZ Tray is not connected; fallback printing may be used.",
+                    language,
+                  )
+                : null}
               {" "}
               {bridgeError}
             </p>
@@ -146,6 +210,52 @@ export function PosPrinterSettingsPanel() {
             : getLocalizedText("Refresh printers / تحديث الطابعات", language)}
         </button>
       </div>
+
+      <div className="mt-6">
+        <label className="block">
+          <span className="text-sm font-bold text-[#233329]">
+            {getLocalizedText("Print bridge / جسر الطباعة", language)}
+          </span>
+          <select
+            value={config.printBridge}
+            onChange={(event) =>
+              setConfig((prev) => ({
+                ...prev,
+                printBridge: event.target.value as PosPrintBridgeMode,
+              }))
+            }
+            className="mt-2 w-full rounded-[16px] border border-[#d7ddd8] bg-[#fbfcfb] px-3 py-3 text-sm font-semibold text-[#233329] md:max-w-md"
+          >
+            {BRIDGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {language === "ar" ? option.labelAr : option.labelEn}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {config.printBridge === "agent" ? (
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href={PRINT_AGENT_DOWNLOAD}
+            download
+            className="inline-flex items-center gap-2 rounded-full bg-[#233329] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#1a2620]"
+          >
+            <LuDownload className="h-4 w-4" />
+            {getLocalizedText("Download Print Agent / تنزيل وكيل الطباعة", language)}
+          </a>
+          <p className="text-xs leading-6 text-[#64736b]">
+            {getLocalizedText(
+              "Install on this Windows PC, pick kitchen and receipt printers in the agent tray menu, then refresh printers here.",
+              language,
+            )}
+            {isAr
+              ? " ثبّت على جهاز Windows، اختر الطابعات من قائمة الوكيل، ثم حدّث الطابعات هنا."
+              : ""}
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <PrinterSelect
@@ -175,19 +285,6 @@ export function PosPrinterSettingsPanel() {
           checked={config.autoPrintReceiptOnPay}
           onChange={(checked) => setConfig((prev) => ({ ...prev, autoPrintReceiptOnPay: checked }))}
         />
-        <ToggleRow
-          label={getLocalizedText(
-            "Use browser print only (no QZ Tray) / طباعة المتصفح فقط (بدون QZ)",
-            language,
-          )}
-          checked={config.printBridge === "browser"}
-          onChange={(checked) =>
-            setConfig((prev) => ({
-              ...prev,
-              printBridge: checked ? "browser" : "qz",
-            }))
-          }
-        />
       </div>
 
       {config.printBridge === "browser" ? (
@@ -211,13 +308,15 @@ export function PosPrinterSettingsPanel() {
           <LuSave className="h-4 w-4" />
           {getLocalizedText("Save printer settings / حفظ إعدادات الطابعات", language)}
         </button>
-        <button
-          type="button"
-          onClick={() => void downloadCertificate()}
-          className="rounded-full border border-[#d7ddd8] px-4 py-2 text-sm font-bold text-[#42564a] transition hover:bg-[#f6f8f7]"
-        >
-          {getLocalizedText("Download QZ certificate / تنزيل شهادة QZ", language)}
-        </button>
+        {config.printBridge === "qz" ? (
+          <button
+            type="button"
+            onClick={() => void downloadCertificate()}
+            className="rounded-full border border-[#d7ddd8] px-4 py-2 text-sm font-bold text-[#42564a] transition hover:bg-[#f6f8f7]"
+          >
+            {getLocalizedText("Download QZ certificate / تنزيل شهادة QZ", language)}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => void testPrinter("kitchen")}

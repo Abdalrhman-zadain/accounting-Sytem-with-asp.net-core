@@ -27,14 +27,18 @@ import {
   type PosPrintBridgeStatus,
   getPosPrintBridgeStatus,
 } from "@/features/pos/pos-print-bridge";
-import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
+import {
+  getPosLocalAgentBridgeStatus,
+  printHtmlWithLocalAgentBridge,
+} from "@/features/pos/pos-local-agent-bridge";
+import { loadPosPrinterConfig, type PosPrintBridgeMode } from "@/features/pos/pos-printer-config";
 import type { PosSale } from "@/types/api";
 
 export type PosPrintTarget = "kitchen" | "receipt";
 
 export type PosPrintResult = {
   ok: boolean;
-  mode: "qz" | "browser";
+  mode: PosPrintBridgeMode;
   fallback: boolean;
   error?: string;
 };
@@ -44,30 +48,66 @@ function getPrinterName(target: PosPrintTarget): string | null {
   return target === "kitchen" ? config.kitchenPrinterName : config.receiptPrinterName;
 }
 
+async function tryAgentPrint(
+  printerName: string | null,
+  html: string,
+): Promise<void> {
+  await printHtmlWithLocalAgentBridge(printerName, html);
+}
+
+async function tryQzPrint(printerName: string | null, html: string): Promise<void> {
+  await printHtmlWithQz(printerName, html);
+}
+
 async function printConfiguredHtml(
   html: string,
   target: PosPrintTarget,
   browserWindowName: string,
 ): Promise<PosPrintResult> {
   const config = loadPosPrinterConfig();
+  const printerName = getPrinterName(target);
 
   if (config.printBridge === "browser") {
     printHtmlWithBrowser(html, browserWindowName);
     return { ok: true, mode: "browser", fallback: false };
   }
 
-  try {
-    await printHtmlWithQz(getPrinterName(target), html);
-    return { ok: true, mode: "qz", fallback: false };
-  } catch (error) {
-    printHtmlWithBrowser(html, browserWindowName);
-    return {
-      ok: true,
-      mode: "browser",
-      fallback: true,
-      error: error instanceof Error ? error.message : String(error),
-    };
+  const attempts: PosPrintBridgeMode[] =
+    config.printBridge === "agent" ? ["agent", "qz", "browser"] : ["qz", "browser"];
+
+  let lastError: string | undefined;
+
+  for (let i = 0; i < attempts.length; i += 1) {
+    const mode = attempts[i];
+    const isLast = i === attempts.length - 1;
+
+    try {
+      if (mode === "agent") {
+        await tryAgentPrint(printerName, html);
+        return { ok: true, mode: "agent", fallback: i > 0 };
+      }
+      if (mode === "qz") {
+        await tryQzPrint(printerName, html);
+        return { ok: true, mode: "qz", fallback: i > 0 };
+      }
+      printHtmlWithBrowser(html, browserWindowName);
+      return {
+        ok: true,
+        mode: "browser",
+        fallback: i > 0,
+        error: lastError,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (isLast && mode !== "browser") {
+        printHtmlWithBrowser(html, browserWindowName);
+        return { ok: true, mode: "browser", fallback: true, error: lastError };
+      }
+    }
   }
+
+  printHtmlWithBrowser(html, browserWindowName);
+  return { ok: true, mode: "browser", fallback: true, error: lastError };
 }
 
 export async function printKitchenTicket(
@@ -266,6 +306,13 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
 }
 
 export async function getPrinterBridgeStatus(): Promise<PosPrintBridgeStatus> {
+  const config = loadPosPrinterConfig();
+  if (config.printBridge === "browser") {
+    return { mode: "browser", available: true, printers: [] };
+  }
+  if (config.printBridge === "agent") {
+    return getPosLocalAgentBridgeStatus();
+  }
   return getPosPrintBridgeStatus();
 }
 

@@ -305,15 +305,19 @@ Checks to run:
 
 Where to edit:
 
+- `tools/print-agent/` — Windows Simple Account Print Agent (localhost HTTP server, WebView2 silent print)
+- frontend `features/pos-shared/local-print-agent.ts` — HTTP client for the local print agent (`127.0.0.1:9188`)
+- frontend `features/pos/pos-local-agent-bridge.ts` — restaurant POS agent bridge (status + print)
 - frontend `features/pos/pos-print-service.ts` for print routing decisions
 - frontend `features/pos/pos-kitchen-print-delta.ts` for kitchen snapshot diffing and delta/void print orchestration
 - frontend `features/pos/pos-print-bridge.ts` for QZ Tray/browser bridge behavior
 - frontend `features/pos-shared/qz-tray-security.ts` for shared QZ certificate/signature wiring used by restaurant and market POS
 - frontend `lib/api/qz-tray.ts` for `/api/qz/certificate` and `/api/qz/sign` fetchers
 - backend `common/qz-tray/` for server-side QZ signing (`QZ_CERT_PATH`, `QZ_PRIVATE_KEY_PATH`)
-- frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences
+- frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences (`printBridge`: `agent` | `qz` | `browser`)
 - frontend `features/pos/pos-printer-settings-panel.tsx` for cashier-side printer setup
 - frontend `features/pos/pos-kot-print.ts`, `pos-receipt-print.ts`, and `pos-session-roll-print.ts` for the actual 80mm receipt HTML templates
+- `frontend/public/downloads/simple-account-print-agent.zip` — agent installer hosted for POS download (build via `tools/print-agent/build-release.ps1` on Windows)
 - `docs/pos/printer-setup.md` when setup requirements change
 
 What else to check:
@@ -321,14 +325,17 @@ What else to check:
 - kitchen print routing uses delta ADD tickets on send/update and VOID tickets on cashier cancel; pay-without-send prints kitchen + Arabic receipt together when unsent lines exist
 - kitchen KOT and customer receipt templates are intentionally separate; do not merge kitchen notes/table routing into the customer receipt template unless the business explicitly asks for it
 - OS printer names are machine-local, so kitchen/receipt printer names should stay in browser-local configuration unless a network/IP print service is introduced
+- default print bridge for new installs is **Local agent**; fallback chain is agent → QZ → browser when agent mode is selected
 - QZ Tray named-printer routing should fall back to browser `window.print()` when QZ is unavailable so sale completion and kitchen send are not blocked by printer setup
 - for silent QZ printing without the untrusted-site dialog, configure backend QZ signing (`npm run qz:generate-cert` in `backend/`) and trust the generated certificate on each cashier PC; see `docs/pos/printer-setup.md`
+- rebuild and deploy the print-agent zip when the C# agent changes
 
 Checks to run:
 
 - frontend typecheck
 - manual browser fallback print for KOT and customer receipt
-- QZ Tray printer list/test print on a cashier PC with the configured XPrinter devices
+- Print Agent test print on a Windows cashier PC with configured XPrinter devices
+- QZ Tray printer list/test print when QZ bridge mode is used
 
 ## POS Tax-Free Sales Mode
 
