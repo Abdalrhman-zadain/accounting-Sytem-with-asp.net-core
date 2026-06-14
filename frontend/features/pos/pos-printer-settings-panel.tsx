@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
 
 import {
+  hasDuplicatePosPrinterTargets,
   loadPosPrinterConfig,
   savePosPrinterConfig,
   type PosPrinterConfig,
@@ -26,6 +27,7 @@ export function PosPrinterSettingsPanel() {
   const [bridgeError, setBridgeError] = useState<string | null>(null);
 
   const isAr = language === "ar";
+  const hasDuplicateTargets = hasDuplicatePosPrinterTargets(config);
 
   const refreshPrinters = async () => {
     setIsLoadingPrinters(true);
@@ -47,6 +49,15 @@ export function PosPrinterSettingsPanel() {
   }, []);
 
   const saveConfig = () => {
+    if (hasDuplicateTargets) {
+      setMessage(
+        getLocalizedText(
+          "Kitchen and receipt printers must be different. / يجب أن تكون طابعة المطبخ وطابعة الإيصال مختلفتين.",
+          language,
+        ),
+      );
+      return;
+    }
     setConfig(savePosPrinterConfig(config));
     setMessage(getLocalizedText("Printer settings saved / تم حفظ إعدادات الطابعات", language));
   };
@@ -104,8 +115,22 @@ export function PosPrinterSettingsPanel() {
             </p>
           ) : null}
           {message ? (
-            <p className="mt-2 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+            <p
+              className={`mt-2 rounded-[14px] px-3 py-2 text-xs font-semibold ${
+                hasDuplicateTargets
+                  ? "border border-rose-200 bg-rose-50 text-rose-900"
+                  : "border border-emerald-200 bg-emerald-50 text-emerald-900"
+              }`}
+            >
               {message}
+            </p>
+          ) : null}
+          {hasDuplicateTargets ? (
+            <p className="mt-2 rounded-[14px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">
+              {getLocalizedText(
+                "Kitchen and receipt printers are pointing to the same OS printer. Choose different printers to avoid duplicate kitchen output. / تم اختيار نفس طابعة النظام للمطبخ والإيصال. اختر طابعتين مختلفتين لتجنب تكرار طباعة المطبخ.",
+                language,
+              )}
             </p>
           ) : null}
         </div>
@@ -156,6 +181,7 @@ export function PosPrinterSettingsPanel() {
         <button
           type="button"
           onClick={saveConfig}
+          disabled={hasDuplicateTargets}
           className="inline-flex items-center gap-2 rounded-full bg-[#0f8f67] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0c7a57]"
         >
           <LuSave className="h-4 w-4" />

@@ -1819,6 +1819,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       // Capture reservation context before reset
       const wasPreOrder = Boolean(activeReservationId);
       const tableIdForHandoff = wasPreOrder ? selectedTableId : null;
+      const hadKitchenTicketBeforeReset = hadKitchenTicketRef.current;
       const receipt = mapReceiptResponse(response.receipt);
       setLastReceipt(receipt);
       setPayFlowStep("success");
@@ -1832,13 +1833,24 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       if (loadPosPrinterConfig().autoPrintReceiptOnPay) {
         printReceipt(receipt);
       }
-      if (loadPosPrinterConfig().autoPrintKotOnSend && response.sale && !hadKitchenTicketRef.current) {
-        const hasKitchenItems = response.sale.lines?.some((line) => line.kitchenSentAt);
-        if (hasKitchenItems) {
-          printKitchenTicket(response.sale as any, language).catch((err) => {
-            console.error("Failed to print kitchen ticket at completion:", err);
-          });
-        }
+      if (
+        loadPosPrinterConfig().autoPrintKotOnSend &&
+        response.sale?.orderType === "TAKEAWAY" &&
+        !hadKitchenTicketBeforeReset
+      ) {
+        printKitchenTicket(response.sale, language).then((result) => {
+          if (result.fallback) {
+            pushMessage(
+              getLocalizedText(
+                "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
+                language,
+              ),
+            );
+          }
+        }).catch((err) => {
+          console.error("Failed to print kitchen ticket at completion:", err);
+          pushMessage(t("pos.sales.alert.printBlocked"));
+        });
       }
     },
     onError: (error) => {

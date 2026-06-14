@@ -1,9 +1,46 @@
 import type { PosLineAddonSelection, PosLineModifiersPayload } from "@/features/pos/pos-addon-types";
 
 export function getAddonsFromModifiers(modifiers: unknown): PosLineAddonSelection[] {
-  if (!modifiers || typeof modifiers !== "object") return [];
-  const payload = modifiers as PosLineModifiersPayload;
-  return Array.isArray(payload.addons) ? payload.addons : [];
+  if (!modifiers) return [];
+
+  let parsed = modifiers;
+  if (typeof modifiers === "string") {
+    try {
+      parsed = JSON.parse(modifiers);
+    } catch {
+      return [];
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    return parsed.map((item: any) => {
+      if (typeof item === "string") {
+        return {
+          groupId: "",
+          groupName: "",
+          optionId: "",
+          name: item,
+          priceAdjustment: 0,
+        };
+      }
+      return {
+        groupId: item?.groupId || "",
+        groupName: item?.groupName || "",
+        optionId: item?.optionId || "",
+        name: item?.name || "",
+        priceAdjustment: Number(item?.priceAdjustment ?? 0),
+      };
+    });
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const payload = parsed as any;
+    if (Array.isArray(payload.addons)) {
+      return payload.addons;
+    }
+  }
+
+  return [];
 }
 
 export function buildModifiersPayload(

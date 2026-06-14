@@ -60,3 +60,11 @@ export function updatePosPrinterConfig(
     ...patch,
   });
 }
+
+export function hasDuplicatePosPrinterTargets(config: PosPrinterConfig): boolean {
+  return Boolean(
+    config.kitchenPrinterName &&
+    config.receiptPrinterName &&
+    config.kitchenPrinterName === config.receiptPrinterName,
+  );
+}

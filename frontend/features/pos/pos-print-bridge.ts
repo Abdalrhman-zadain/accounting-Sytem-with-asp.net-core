@@ -134,20 +134,68 @@ export async function printHtmlWithQz(printerName: string | null, html: string):
 export function printHtmlWithBrowser(html: string, windowName = "_blank"): void {
   if (typeof window === "undefined") return;
 
-  const win = window.open("", windowName, "width=400,height=700");
-  if (!win) {
-    throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
-  }
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.id = `pos-print-iframe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
 
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-
-  setTimeout(() => {
-    try {
-      win.print();
-    } catch {
-      throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      throw new Error("Cannot access iframe document");
     }
-  }, 400);
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe?.contentWindow?.focus();
+        iframe?.contentWindow?.print();
+        setTimeout(() => {
+          iframe.remove();
+        }, 1000);
+      } catch (e) {
+        console.error("Iframe print execution failed, trying window.open fallback:", e);
+        iframe.remove();
+        // Fallback
+        const win = window.open("", windowName, "width=400,height=700");
+        if (!win) {
+          throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
+        }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+          try {
+            win.print();
+          } catch {
+            throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
+          }
+        }, 400);
+      }
+    }, 250);
+  } catch (err) {
+    console.error("Iframe setup failed, trying window.open fallback:", err);
+    const win = window.open("", windowName, "width=400,height=700");
+    if (!win) {
+      throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
+      }
+    }, 400);
+  }
 }

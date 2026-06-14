@@ -19,12 +19,18 @@ Silent printer routing in a browser requires a local print bridge. The current c
 5. Refresh printers, select the local kitchen and receipt printer names, then run both test prints.
 6. Save the printer settings.
 
+Important:
+
+- Do not assign the same OS printer name to both Kitchen printer and Receipt printer. Keep them as separate local printer targets so kitchen KOT and customer receipt do not get mixed up on the same device.
+
 Printer names are saved in browser `localStorage`, not in the global database, because every cashier machine can expose the same physical model under a different OS printer name.
 
 ## Runtime Behavior
 
 - `Send to kitchen` saves/sends the order, then prints the KOT template to the configured kitchen printer when `autoPrintKotOnSend` is enabled. Both Cashier and Waiter roles print identical KOT templates, where the logged-in user who initiates the send is printed as the "Waiter" (operator) on the ticket.
-- Completing payment prints the customer receipt template to the configured receipt printer when `autoPrintReceiptOnPay` is enabled. If `autoPrintKotOnSend` is enabled and the KOT has not been previously printed during the draft/send-to-kitchen phase, completing the payment will also automatically trigger the identical KOT print for the kitchen.
+- Completing payment prints the customer receipt template to the configured receipt printer when `autoPrintReceiptOnPay` is enabled.
+- For `TAKEAWAY / سفري` orders, if `autoPrintKotOnSend` is enabled and the order was not already sent to the kitchen earlier, payment completion also prints one kitchen KOT so takeaway completion produces both the customer receipt and the kitchen ticket.
+- Kitchen tickets are not reprinted during payment completion for dine-in orders that were already sent from the explicit `Send to kitchen` step.
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.
 - If QZ Tray is not connected, the POS opens the browser print window as a fallback and leaves the sale/order action successful.
