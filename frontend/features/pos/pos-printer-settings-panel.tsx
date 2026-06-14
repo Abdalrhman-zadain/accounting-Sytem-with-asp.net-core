@@ -13,7 +13,9 @@ import {
   testPosPrinter,
   type PosPrintTarget,
 } from "@/features/pos/pos-print-service";
+import { downloadQzCertificate } from "@/lib/api/qz-tray";
 import { useTranslation } from "@/lib/i18n";
+import { loadStoredToken } from "@/lib/storage";
 import { getLocalizedText } from "@/lib/utils";
 
 export function PosPrinterSettingsPanel() {
@@ -58,13 +60,36 @@ export function PosPrinterSettingsPanel() {
       const result = await testPosPrinter(target);
       setMessage(
         result.fallback
-          ? getLocalizedText("Opened browser print fallback / تم فتح طباعة المتصفح كبديل", language)
+          ? getLocalizedText(
+              `Browser print fallback: ${result.error ?? "QZ Tray unavailable"} / طباعة المتصفح: ${result.error ?? "QZ غير متصل"}`,
+              language,
+            )
           : getLocalizedText("Test print sent / تم إرسال طباعة اختبار", language),
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsTesting(null);
+    }
+  };
+
+  const downloadCertificate = async () => {
+    const token = loadStoredToken();
+    if (!token) {
+      setMessage(getLocalizedText("Please log in first / سجّل الدخول أولاً", language));
+      return;
+    }
+
+    try {
+      await downloadQzCertificate(token);
+      setMessage(
+        getLocalizedText(
+          "Certificate downloaded. On this PC run: cd \"C:\\Program Files\\QZ Tray\" then java -jar qz-tray.jar --allow \"path\\to\\digital-certificate.txt\" / تم تنزيل الشهادة. على هذا الجهاز نفّذ أمر QZ Tray --allow",
+          language,
+        ),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -160,6 +185,13 @@ export function PosPrinterSettingsPanel() {
         >
           <LuSave className="h-4 w-4" />
           {getLocalizedText("Save printer settings / حفظ إعدادات الطابعات", language)}
+        </button>
+        <button
+          type="button"
+          onClick={() => void downloadCertificate()}
+          className="rounded-full border border-[#d7ddd8] px-4 py-2 text-sm font-bold text-[#42564a] transition hover:bg-[#f6f8f7]"
+        >
+          {getLocalizedText("Download QZ certificate / تنزيل شهادة QZ", language)}
         </button>
         <button
           type="button"

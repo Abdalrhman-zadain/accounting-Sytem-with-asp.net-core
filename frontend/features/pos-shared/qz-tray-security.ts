@@ -18,6 +18,8 @@ type QzSecurityApi = {
   };
 };
 
+export const QZ_SKIP_SIGNING_STORAGE_KEY = "pos.qz.skip-signing.v1";
+
 let qzSigningConfigured = false;
 let qzSigningEnabled = false;
 
@@ -25,13 +27,41 @@ export function isQzSigningEnabled(): boolean {
   return qzSigningEnabled;
 }
 
+export function shouldSkipQzSigning(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.sessionStorage.getItem(QZ_SKIP_SIGNING_STORAGE_KEY) === "1";
+}
+
+export function markSkipQzSigning(): void {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(QZ_SKIP_SIGNING_STORAGE_KEY, "1");
+  }
+}
+
+export function clearSkipQzSigning(): void {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(QZ_SKIP_SIGNING_STORAGE_KEY);
+  }
+}
+
 /** Configures QZ message signing when the backend exposes a certificate. */
 export async function ensureQzSigningConfigured(qz: QzSecurityApi): Promise<boolean> {
+  if (shouldSkipQzSigning()) {
+    qzSigningConfigured = true;
+    return false;
+  }
+
   if (qzSigningConfigured) {
     return qzSigningEnabled;
   }
 
   qzSigningConfigured = true;
+
+  if (!qz.security) {
+    return false;
+  }
 
   const token = loadStoredToken();
   if (!token) {

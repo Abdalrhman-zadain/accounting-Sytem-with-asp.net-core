@@ -55,6 +55,17 @@ export async function signQzMessage(token: string, request: string): Promise<str
   return response.text();
 }
 
+export async function downloadQzCertificate(token: string): Promise<void> {
+  const certificate = await fetchQzCertificate(token);
+  const blob = new Blob([certificate], { type: "application/x-pem-file" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "digital-certificate.txt";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function isQzSigningAvailable(token: string | null): Promise<boolean> {
   if (!token) {
     return false;

@@ -1,5 +1,8 @@
 import {
   ensureQzSigningConfigured,
+  isQzSigningEnabled,
+  markSkipQzSigning,
+  shouldSkipQzSigning,
 } from "@/features/pos-shared/qz-tray-security";
 
 type QzPrintJob =
@@ -106,7 +109,24 @@ function getWindowQz(): QzApi | null {
   return ((window as Window & { qz?: QzApi }).qz ?? null);
 }
 
+const QZ_CLIENT_SCRIPT_URLS = [
+  "/vendor/qz-tray/qz-tray.js",
+  "https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js",
+  "https://unpkg.com/qz-tray/qz-tray.js",
+];
+
 let qzClientLoadPromise: Promise<QzApi | null> | null = null;
+
+function loadScript(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => resolve(Boolean(getWindowQz()));
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
 
 async function loadQzClientScript(): Promise<QzApi | null> {
   if (typeof document === "undefined") return null;
@@ -114,16 +134,28 @@ async function loadQzClientScript(): Promise<QzApi | null> {
   if (existing) return existing;
   if (qzClientLoadPromise) return qzClientLoadPromise;
 
-  qzClientLoadPromise = new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js";
-    script.async = true;
-    script.onload = () => resolve(getWindowQz());
-    script.onerror = () => resolve(null);
-    document.head.appendChild(script);
-  });
+  qzClientLoadPromise = (async () => {
+    for (const url of QZ_CLIENT_SCRIPT_URLS) {
+      const loaded = await loadScript(url);
+      if (loaded) {
+        return getWindowQz();
+      }
+    }
+    return null;
+  })();
 
   return qzClientLoadPromise;
+}
+
+function formatQzConnectError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/trusted|certificate|signature|untrusted|anonymous/i.test(message)) {
+    return `${message}. Download the QZ certificate from POS → Printers, then run: java -jar qz-tray.jar --allow digital-certificate.txt on this PC.`;
+  }
+  if (/connection|websocket|refused|offline|active/i.test(message)) {
+    return `${message}. Make sure QZ Tray is installed and running (green icon in the Windows tray).`;
+  }
+  return message;
 }
 
 async function getQz(): Promise<QzApi | null> {
@@ -139,8 +171,27 @@ async function ensureQzConnected(): Promise<QzApi> {
     );
   }
   if (!qz.websocket.isActive()) {
-    await ensureQzSigningConfigured(qz);
-    await qz.websocket.connect();
+    const skipSigning = shouldSkipQzSigning();
+    if (!skipSigning) {
+      await ensureQzSigningConfigured(qz);
+    }
+
+    try {
+      await qz.websocket.connect();
+    } catch (error) {
+      if (!skipSigning && isQzSigningEnabled()) {
+        markSkipQzSigning();
+        if (typeof window !== "undefined") {
+          window.location.reload();
+          await new Promise<void>(() => {});
+        }
+      }
+
+      throw new PosPrintBridgeError(
+        "PRINT_BRIDGE_OFFLINE",
+        formatQzConnectError(error),
+      );
+    }
   }
   return qz;
 }
