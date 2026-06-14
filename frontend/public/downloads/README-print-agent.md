@@ -4,16 +4,40 @@ Cashiers download **Simple Account Print Agent** from POS → Printers (`/downlo
 
 ## Build the zip (Windows)
 
-On a Windows PC with [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):
+The zip is **not in git** — you must build it first. `scp` will fail with "No such file" until then.
+
+### Option A — Windows PC with .NET 8 SDK (fastest if you have one)
 
 ```powershell
 cd tools\print-agent
 .\build-release.ps1
 ```
 
-Or run `build-release.cmd` from File Explorer.
+Then upload (from repo root):
 
-This publishes a self-contained `win-x64` folder and writes `frontend/public/downloads/simple-account-print-agent.zip`.
+```powershell
+scp frontend/public/downloads/simple-account-print-agent.zip server@100.89.174.122:/home/server/Desktop/production/simple-account/frontend/public/downloads/
+```
+
+If your shell is already in `frontend/`, use:
+
+```bash
+scp public/downloads/simple-account-print-agent.zip server@100.89.174.122:/home/server/Desktop/production/simple-account/frontend/public/downloads/
+```
+
+### Option B — GitHub Actions (no Windows PC needed)
+
+1. Push changes under `tools/print-agent/` (or run **Actions → Build Print Agent → Run workflow** on GitHub).
+2. Open the completed workflow run → **Artifacts** → download `simple-account-print-agent.zip`.
+3. Upload to the server:
+
+```bash
+scp ~/Downloads/simple-account-print-agent.zip server@100.89.174.122:/home/server/Desktop/production/simple-account/frontend/public/downloads/
+```
+
+No PM2 restart needed — it is a static file. Verify:
+
+`https://sabina.trusttechlimited.com/downloads/simple-account-print-agent.zip`
 
 ## Production deploy
 

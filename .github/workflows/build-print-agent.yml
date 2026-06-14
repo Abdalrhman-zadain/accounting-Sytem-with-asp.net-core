@@ -1,0 +1,48 @@
+name: Build Print Agent
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pos-market, main]
+    paths:
+      - "tools/print-agent/**"
+      - ".github/workflows/build-print-agent.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish Print Agent
+        shell: pwsh
+        run: |
+          $project = "tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj"
+          $out = "tools/print-agent/publish/win-x64"
+          dotnet publish $project `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -o $out
+
+      - name: Create zip
+        shell: pwsh
+        run: |
+          $zip = "frontend/public/downloads/simple-account-print-agent.zip"
+          New-Item -ItemType Directory -Force -Path (Split-Path $zip) | Out-Null
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "tools/print-agent/publish/win-x64/*" -DestinationPath $zip -Force
+          Get-Item $zip | Format-List FullName, Length
+
+      - name: Upload installer zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: simple-account-print-agent
+          path: frontend/public/downloads/simple-account-print-agent.zip
+          retention-days: 90
