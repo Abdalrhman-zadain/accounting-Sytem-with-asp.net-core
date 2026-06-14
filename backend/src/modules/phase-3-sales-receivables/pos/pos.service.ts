@@ -5713,6 +5713,7 @@ export class PosService {
           taxId: line.taxId,
           kitchenSentAt: line.kitchenSentAt?.toISOString() ?? null,
           kitchenItemStatus: kitchenItem?.status ?? null,
+          modifiers: line.modifiers === null ? undefined : line.modifiers,
           item: line.item ?? null,
           warehouse: line.warehouse ?? null,
         };

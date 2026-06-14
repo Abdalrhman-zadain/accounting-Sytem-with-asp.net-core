@@ -1693,7 +1693,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       await refreshPosData();
       pushMessage(
         getLocalizedText(
-          "Sent to kitchen / تم الإرسال للمطبخ",
+          waiterMode
+            ? "Order sent to kitchen successfully. / تم إرسال الطلب إلى المطبخ بنجاح."
+            : "Sent to kitchen / تم الإرسال للمطبخ",
           language,
         ),
       );
@@ -1714,6 +1716,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       }
       // Auto-start a new order so the cashier is ready for the next customer
       resetSaleRef.current();
+      if (waiterMode) {
+        router.push("/pos/waiter/tables");
+      }
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));

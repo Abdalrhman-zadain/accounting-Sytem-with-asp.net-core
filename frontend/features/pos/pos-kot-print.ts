@@ -1,4 +1,4 @@
-import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
+import { getAddonsFromModifiers } from "@/features/pos/pos-addon-utils";
 import type { PosSale } from "@/types/api";
 
 function fmtDate(val?: string | Date | null): string {
@@ -9,6 +9,24 @@ function fmtDate(val?: string | Date | null): string {
 }
 
 const SEP = "─".repeat(32);
+
+function formatAddonsForKot(modifiers: unknown, language: string): string[] {
+  const addons = getAddonsFromModifiers(modifiers);
+  if (!addons.length) return [];
+
+  const groups: Record<string, string[]> = {};
+  for (const addon of addons) {
+    const groupName = addon.groupName || (language === "ar" ? "إضافات" : "Addons");
+    if (!groups[groupName]) {
+      groups[groupName] = [];
+    }
+    groups[groupName].push(addon.name);
+  }
+
+  return Object.entries(groups).map(([groupName, names]) => {
+    return `${groupName}: ${names.join(" · ")}`;
+  });
+}
 
 export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): string {
   const isAr = language === "ar";
@@ -23,16 +41,22 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
     .map((line) => {
       const qty = Number(line.quantity);
       const name = (line.itemName || line.description || "—").slice(0, 22);
-      const addons = formatAddonsForDisplay(line.modifiers, language);
+      const addonLines = formatAddonsForKot(line.modifiers, language);
+      const noteLabel = isAr ? "ملاحظة: " : "Note: ";
       const note =
         line.description && line.description !== (line.itemName ?? "")
-          ? line.description
+          ? `${noteLabel}${line.description}`
           : "";
+
+      const addonsHtml = addonLines
+        .map((addonLine) => `<div class="sub bold-addon">+ ${addonLine}</div>`)
+        .join("");
+
       return `
         <div class="item">
           <div class="row bold"><span>${qty}× ${name}</span></div>
-          ${addons ? `<div class="sub">${addons}</div>` : ""}
-          ${note ? `<div class="sub note">${note}</div>` : ""}
+          ${addonsHtml}
+          ${note ? `<div class="sub note">* ${note}</div>` : ""}
         </div>`;
     })
     .join("");
@@ -60,19 +84,23 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 10pt;
+      font-size: 12pt;
+      font-weight: 700;
       width: 76mm;
       padding: 4mm 2mm;
       color: #000;
+      background: #fff;
     }
     .center { text-align: center; }
-    .bold { font-weight: bold; }
-    .title { font-size: 12pt; margin-bottom: 4px; }
+    .bold { font-weight: 900; }
+    .title { font-size: 15pt; font-weight: 900; margin-bottom: 4px; }
     .sep { text-align: center; margin: 6px 0; overflow: hidden; }
     .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
-    .item { margin: 6px 0; }
-    .sub { font-size: 9pt; opacity: 0.85; margin-top: 2px; }
-    .note { font-size: 9pt; font-style: italic; margin-top: 4px; }
+    .item { margin: 8px 0; border-bottom: 1px dashed #000; padding-bottom: 8px; }
+    .item:last-child { border-bottom: none; }
+    .sub { font-size: 11pt; font-weight: 700; margin-top: 3px; }
+    .bold-addon { font-weight: 900; }
+    .note { font-size: 11pt; font-weight: 900; margin-top: 4px; color: #000; }
   </style>
 </head>
 <body>${bodyHtml}</body>
