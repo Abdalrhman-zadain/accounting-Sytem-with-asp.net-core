@@ -708,7 +708,7 @@ async function assertReceiptCanBeRefreshed(
 
   if (downstreamMovement) {
     throw new Error(
-      `Opening receipt refresh is blocked because warehouse activity already exists for one of its items (reference ${downstreamMovement.transactionReference}, type ${downstreamMovement.transactionType}). Clear or reverse later stock activity before rerunning the opening inventory seed.`,
+      `Opening receipt refresh is blocked because warehouse activity already exists for one of its items (reference ${downstreamMovement.transactionReference}, type ${downstreamMovement.transactionType}). Clear or reverse later stock activity before rerunning the opening inventory seed, or rerun in add-only mode to keep the existing opening receipts: npm run seed:opening-inventory:add-only.`,
     );
   }
 }

@@ -949,6 +949,7 @@ Where to edit:
 - Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`): `backend/prisma/setup-pos-market-cashier.ts`, invoked from full `npm run seed` or standalone `npm run seed:market-cashier`
 - Opening inventory workbook import (non-destructive to unrelated tables): `backend/prisma/seed-opening-inventory.ts`, invoked with `npm run seed:opening-inventory`; reads `backend/data/opening-inventory-2026-05-31.json` (snapshot generated from the checked-in workbook), upserts items, creates/reuses the two warehouses, and posts deterministic opening goods receipts dated `2026-05-31`
   Rerunning the import now refreshes those two deterministic opening receipts by reference instead of silently reusing an older posted result, but only when no later stock movement exists for the affected warehouse items.
+  If later stock movement already exists and you only need to keep the current opening receipts while still upserting item metadata, run `npm run seed:opening-inventory:add-only` instead. That mode skips refreshing existing opening receipts.
 
 ### Volume seed (enterprise demo dataset)
 
