@@ -1,4 +1,4 @@
-import { getAddonsFromModifiers } from "@/features/pos/pos-addon-utils";
+import { getAddonsFromModifiers } from "./pos-addon-utils";
 import type { PosSale } from "@/types/api";
 
 function fmtDate(val?: string | Date | null): string {

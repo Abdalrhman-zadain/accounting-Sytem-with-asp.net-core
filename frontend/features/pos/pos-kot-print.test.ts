@@ -2,7 +2,7 @@ import assert from "assert";
 import { buildKitchenOrderTicketHtml } from "./pos-kot-print";
 import type { PosSale } from "@/types/api";
 
-const mockSale: PosSale = {
+const mockSale = {
   id: "sale-123",
   reference: "1001",
   invoiceDate: new Date().toISOString(),
@@ -95,7 +95,7 @@ const mockSale: PosSale = {
 console.log("Running KOT printing tests...");
 
 // Test 1: Arabic locale KOT
-const htmlAr = buildKitchenOrderTicketHtml(mockSale, "ar");
+const htmlAr = buildKitchenOrderTicketHtml(mockSale as unknown as PosSale, "ar");
 
 // Verify Arabic details
 assert.ok(htmlAr.includes("تذكرة مطبخ"), "KOT Title should be in Arabic");
@@ -112,7 +112,7 @@ assert.ok(htmlAr.includes("ملاحظة: بدون ثوم"), "Line note should be
 assert.ok(htmlAr.includes("الرجاء تسليم الطلب بسرعة"), "Order description/note should be displayed");
 
 // Test 2: English locale KOT
-const htmlEn = buildKitchenOrderTicketHtml(mockSale, "en");
+const htmlEn = buildKitchenOrderTicketHtml(mockSale as unknown as PosSale, "en");
 
 assert.ok(htmlEn.includes("Kitchen Ticket"), "KOT Title should be in English");
 assert.ok(htmlEn.includes("Table 5"), "Table number should be formatted correctly in English");
