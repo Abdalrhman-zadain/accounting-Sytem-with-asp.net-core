@@ -830,9 +830,10 @@ Where to edit:
 - POS routes auto-collapse the ERP sidebar below `1024px` via `frontend/components/app-shell.tsx` so catalog/table views get more horizontal space on tablets and smaller laptops
 
 - category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
+- the POS register applies a fixed business display order for category chips in `frontend/features/pos/pos-page.tsx`: `الاصناق`, `روس و المقادم`, `الاطباق`, `وجبات 1`, `وجبات 2`, `الفتات`, `المقبلات`, `المشروبات`, `الاضافات`, then `المفضلة` and `الكل`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
-- POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+- POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites, and the standalone `اضافات اللبن` service item under `الاضافات`): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
 - POS add-on demo groups and menu-item option seeds live in `backend/prisma/seed-pos-addons.ts` (runs with register seed); this now includes per-item options such as `بدون وجبة` pricing overrides for selected meal items, conditional head-yogurt choices (`لبن 0.5` for `نص رأس`, `لبن 1.0` for `رأس كامل`), weight-dependent yogurt pricing for `آبوات` / `فوارغ` / `كرشات` (`0.25/0.5/0.75/1.0` by selected weight), and zero-price menu extras like `إضافة فتة` on selected dishes. Refresh only add-ons on an existing DB with `npm run seed:pos-addons`
 
 ### Volume seed (enterprise demo dataset)

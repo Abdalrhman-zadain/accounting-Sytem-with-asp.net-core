@@ -207,6 +207,22 @@ type WorkspaceTab = {
 
 type DiscountType = "FIXED" | "PERCENT";
 
+const POS_CATEGORY_DISPLAY_ORDER = [
+  "الاصناق",
+  "روس و المقادم",
+  "الاطباق",
+  "وجبات 1",
+  "وجبات 2",
+  "الفتات",
+  "المقبلات",
+  "المشروبات",
+  "الاضافات",
+] as const;
+
+const POS_CATEGORY_DISPLAY_ORDER_MAP = new Map<string, number>(
+  POS_CATEGORY_DISPLAY_ORDER.map((name, index) => [name, index]),
+);
+
 function getCartLineKey(
   line: Pick<
     CartLine,
@@ -1258,7 +1274,17 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     enabled: Boolean(token && activeSessionQuery.data?.id && workspace === "sales"),
   });
 
-  const itemGroups = itemGroupsQuery.data ?? [];
+  const itemGroups = useMemo(() => {
+    const groups = itemGroupsQuery.data ?? [];
+    return [...groups].sort((left, right) => {
+      const leftOrder = POS_CATEGORY_DISPLAY_ORDER_MAP.get(left.name) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = POS_CATEGORY_DISPLAY_ORDER_MAP.get(right.name) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.name.localeCompare(right.name, "ar");
+    });
+  }, [itemGroupsQuery.data]);
   const hasInitializedCategoryRef = useRef(false);
   useEffect(() => {
     if (!hasInitializedCategoryRef.current && itemGroups.length > 0) {

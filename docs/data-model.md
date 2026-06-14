@@ -10,7 +10,7 @@ This document describes the current schema and its accounting meaning. It does n
 
 Local demo data is synthetic only — not production imports.
 
-- **Basic seed** (`npm run seed` / `npx prisma db seed`): full chart of accounts and masters, empty accounting history so journal entry workflows start from scratch, and POS demo catalog. The restaurant menu demo now seeds inventory groups/categories for `الاصناق`, `روس و المقادم`, `الاطباق`, `وجبات 1`, `وجبات 2`, `الفتات`, `المقبلات`, `المشروبات`, plus `السناكات`.
+- **Basic seed** (`npm run seed` / `npx prisma db seed`): full chart of accounts and masters, empty accounting history so journal entry workflows start from scratch, and POS demo catalog. The restaurant menu demo now seeds inventory groups/categories for `الاصناق`, `روس و المقادم`, `الاطباق`, `وجبات 1`, `وجبات 2`, `الفتات`, `المقبلات`, `المشروبات`, `الاضافات`, plus `السناكات`.
 - **Volume seed** (`npm run seed:volume`, opt-in): same foundation, then three fiscal years (2024–2026) of batched posted journals, per-customer receivable sub-accounts, suppliers, inventory items, reporting `AuditLog` samples, and quarterly operational documents for module UI walkthroughs.
 
 Both seed commands truncate public tables before insert. See `README.md` and `docs/change-guide.md` (Volume seed subsection).
