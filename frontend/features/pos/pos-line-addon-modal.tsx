@@ -123,30 +123,57 @@ function getSingleSelectedOptionName(
   return selected[0]?.name ?? null;
 }
 
+function getWeightBasedYogurtPrice(selectedWeight?: number | null) {
+  if (selectedWeight == null) {
+    return null;
+  }
+
+  const roundedWeight = Number(selectedWeight.toFixed(3));
+  if (roundedWeight === 0.125) {
+    return 0.25;
+  }
+
+  return Number(selectedWeight.toFixed(2));
+}
+
 function isOptionDisabledByDependencies(
   groups: PosAddonGroup[],
   selectedByGroup: Record<string, PosLineAddonSelection[]>,
   group: PosAddonGroup,
   option: { priceAdjustment: number },
+  selectedWeight?: number | null,
 ) {
-  if (group.code !== "HEAD_YOGURT_ADDON") {
+  if (group.code === "HEAD_YOGURT_ADDON") {
+    const headSelection = getSingleSelectedOptionName(groups, selectedByGroup, "HALF_HEAD");
+    if (!headSelection) {
+      return false;
+    }
+
+    if (headSelection.includes("نص") || headSelection.toLowerCase().includes("half")) {
+      return option.priceAdjustment !== 0.5;
+    }
+
+    if (headSelection.includes("كامل") || headSelection.toLowerCase().includes("full")) {
+      return option.priceAdjustment !== 1;
+    }
+
     return false;
   }
 
-  const headSelection = getSingleSelectedOptionName(groups, selectedByGroup, "HALF_HEAD");
-  if (!headSelection) {
-    return false;
-  }
+  if (group.code === "WEIGHT_YOGURT_ADDON") {
+    const yogurtPrice = getWeightBasedYogurtPrice(selectedWeight);
+    if (yogurtPrice == null) {
+      return false;
+    }
 
-  if (headSelection.includes("نص") || headSelection.toLowerCase().includes("half")) {
-    return option.priceAdjustment !== 0.5;
-  }
-
-  if (headSelection.includes("كامل") || headSelection.toLowerCase().includes("full")) {
-    return option.priceAdjustment !== 1;
+    return Number(option.priceAdjustment.toFixed(2)) !== yogurtPrice;
   }
 
   return false;
+}
+
+function shouldHidePriceAdjustment(group: PosAddonGroup) {
+  return group.code === "S_W_K" || group.code === "S_W_K_F";
 }
 
 export function PosLineAddonModal({
@@ -167,6 +194,8 @@ export function PosLineAddonModal({
     Record<string, PosLineAddonSelection[]>
   >({});
   const [error, setError] = React.useState<string | null>(null);
+  const groups = config?.groups ?? [];
+  const hasSelectableContent = groups.length > 0 || Boolean(weightSelection?.enabled);
 
   const weightPresets = React.useMemo(() => {
     if (!weightSelection?.enabled) {
@@ -221,13 +250,42 @@ export function PosLineAddonModal({
     setSelectedByGroup(next);
   }, [isOpen, initialAddons, initialLineNote, weightSelection]);
 
-  const groups = config?.groups ?? [];
-  const hasSelectableContent = groups.length > 0 || Boolean(weightSelection?.enabled);
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (selectedWeight == null) return;
+
+    setSelectedByGroup((current) => {
+      const weightYogurtGroup = groups.find((group) => group.code === "WEIGHT_YOGURT_ADDON");
+      if (!weightYogurtGroup) {
+        return current;
+      }
+
+      const yogurtPrice = getWeightBasedYogurtPrice(selectedWeight);
+      if (yogurtPrice == null) {
+        return current;
+      }
+
+      const existing = current[weightYogurtGroup.id] ?? [];
+      const filtered = existing.filter(
+        (selection) =>
+          Number(selection.priceAdjustment.toFixed(2)) === yogurtPrice,
+      );
+
+      if (filtered.length === existing.length) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [weightYogurtGroup.id]: filtered,
+      };
+    });
+  }, [groups, isOpen, selectedWeight]);
 
   const toggleOption = (group: PosAddonGroup, optionId: string) => {
     const option = group.options.find((row) => row.id === optionId);
     if (!option) return;
-    if (isOptionDisabledByDependencies(groups, selectedByGroup, group, option)) return;
+    if (isOptionDisabledByDependencies(groups, selectedByGroup, group, option, selectedWeight)) return;
 
     setSelectedByGroup((current) => {
       const existing = current[group.id] ?? [];
@@ -400,6 +458,7 @@ export function PosLineAddonModal({
                       selectedByGroup,
                       group,
                       option,
+                      selectedWeight,
                     );
                     return (
                       <button
@@ -416,7 +475,7 @@ export function PosLineAddonModal({
                         )}
                       >
                         {localizeAddonLabel(option.name, option.nameAr, language)}
-                        {option.priceAdjustment > 0 ? (
+                        {option.priceAdjustment > 0 && !shouldHidePriceAdjustment(group) ? (
                           <span className="ms-1 opacity-80">
                             +{option.priceAdjustment.toFixed(2)}
                           </span>

@@ -487,8 +487,8 @@ const POS_PRODUCTS: PosProductSeed[] = [
   {
     id: 'MENU-APP-006',
     code: 'MENU-APP-006',
-    name: 'شوربة فريكة 500 غم',
-    description: 'شوربة فريكة 500 غم',
+    name: 'شوربة فريكة',
+    description: 'شوربة فريكة',
     category: 'المقبلات',
     salesPrice: 1,
     purchasePrice: 0,
@@ -501,8 +501,8 @@ const POS_PRODUCTS: PosProductSeed[] = [
   {
     id: 'MENU-APP-007',
     code: 'MENU-APP-007',
-    name: 'شوربة لبن 500 غم',
-    description: 'شوربة لبن 500 غم',
+    name: 'شوربة لبن',
+    description: 'شوربة لبن',
     category: 'المقبلات',
     salesPrice: 1,
     purchasePrice: 0,
@@ -515,8 +515,8 @@ const POS_PRODUCTS: PosProductSeed[] = [
   {
     id: 'MENU-APP-008',
     code: 'MENU-APP-008',
-    name: 'شوربة روس 500 غم',
-    description: 'شوربة روس 500 غم',
+    name: 'شوربة روس',
+    description: 'شوربة روس',
     category: 'المقبلات',
     salesPrice: 1,
     purchasePrice: 0,
