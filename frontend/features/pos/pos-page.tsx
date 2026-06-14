@@ -1850,7 +1850,7 @@ export function PosPage() {
         if (printResults.receipt?.fallback) {
           pushMessage(
             getLocalizedText(
-              "Receipt printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
+              `Receipt printed via ${printResults.receipt.mode}${printResults.receipt.error ? `: ${printResults.receipt.error}` : ""} / تمت الطباعة عبر ${printResults.receipt.mode}`,
               language,
             ),
           );
@@ -3574,7 +3574,7 @@ export function PosPage() {
       if (result.fallback) {
         pushMessage(
           getLocalizedText(
-            "Receipt printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
+            `Receipt fallback (${result.mode})${result.error ? `: ${result.error}` : ""} / طباعة احتياطية (${result.mode})`,
             language,
           ),
         );

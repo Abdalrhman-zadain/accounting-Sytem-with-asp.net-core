@@ -42,7 +42,10 @@ export async function printHtmlWithLocalAgentBridge(
   }
 
   const printers = await listLocalAgentPrinters();
-  if (!printers.includes(printerName)) {
+  const matchedPrinter = printers.find(
+    (name) => name.localeCompare(printerName, undefined, { sensitivity: "accent" }) === 0,
+  );
+  if (!matchedPrinter) {
     throw new PosPrintBridgeError(
       "PRINTER_NOT_FOUND",
       `Printer "${printerName}" was not found on this machine.`,
@@ -50,7 +53,7 @@ export async function printHtmlWithLocalAgentBridge(
   }
 
   try {
-    await printHtmlWithLocalAgent(printerName, html);
+    await printHtmlWithLocalAgent(matchedPrinter, html);
   } catch (error) {
     throw new PosPrintBridgeError(
       "PRINT_FAILED",

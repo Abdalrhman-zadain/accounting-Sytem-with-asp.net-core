@@ -130,7 +130,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 
 | Print bridge setting | Try order on failure |
 |----------------------|----------------------|
-| Local agent | Agent → QZ Tray → browser |
+| Local agent | Agent → browser (QZ is skipped) |
 | QZ Tray | QZ Tray → browser |
 | Browser only | Browser only |
 

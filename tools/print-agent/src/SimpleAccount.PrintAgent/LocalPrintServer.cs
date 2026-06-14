@@ -123,7 +123,7 @@ public sealed class LocalPrintServer : IDisposable
         switch (path)
         {
             case "/health":
-                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.1" });
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.2" });
                 return;
             case "/printers":
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { printers = PrintService.ListInstalledPrinters() });

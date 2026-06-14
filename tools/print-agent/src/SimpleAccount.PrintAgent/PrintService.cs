@@ -69,13 +69,14 @@ public sealed class PrintService : IDisposable
             _webView.CoreWebView2!.NavigationCompleted += Handler;
             _webView.CoreWebView2.NavigateToString(htmlWithFeed);
 
-            var navigated = await navigationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
+            var navigated = await navigationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
             if (!navigated)
             {
                 throw new InvalidOperationException("Failed to render print HTML.");
             }
 
-            await Task.Delay(300, cancellationToken);
+            await WaitForDocumentImagesAsync(cancellationToken);
+            await Task.Delay(800, cancellationToken);
 
             var settings = _webView.CoreWebView2.Environment.CreatePrintSettings();
             settings.PrinterName = printerName;
@@ -106,6 +107,31 @@ public sealed class PrintService : IDisposable
 
         await _webView.EnsureCoreWebView2Async();
         _initialized = true;
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private async Task WaitForDocumentImagesAsync(CancellationToken cancellationToken)
+    {
+        const string script = """
+            (async () => {
+              const pending = Array.from(document.images).filter((img) => !img.complete);
+              if (pending.length === 0) {
+                return true;
+              }
+              await Promise.all(
+                pending.map(
+                  (img) =>
+                    new Promise((resolve) => {
+                      img.onload = () => resolve(true);
+                      img.onerror = () => resolve(true);
+                    }),
+                ),
+              );
+              return true;
+            })()
+            """;
+
+        await _webView.CoreWebView2!.ExecuteScriptAsync(script);
         cancellationToken.ThrowIfCancellationRequested();
     }
 

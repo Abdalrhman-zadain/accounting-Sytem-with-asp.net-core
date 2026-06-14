@@ -52,7 +52,25 @@ async function tryAgentPrint(
   printerName: string | null,
   html: string,
 ): Promise<void> {
-  await printHtmlWithLocalAgentBridge(printerName, html);
+  await printHtmlWithLocalAgentBridge(printerName, prepareHtmlForAgentPrint(html));
+}
+
+/** Ensure relative asset URLs resolve when the agent renders HTML via NavigateToString. */
+function prepareHtmlForAgentPrint(html: string): string {
+  if (typeof window === "undefined") {
+    return html;
+  }
+  if (html.includes("<base ") || html.includes("<base>")) {
+    return html;
+  }
+  const baseTag = `<base href="${window.location.origin}/">`;
+  if (html.includes("<head>")) {
+    return html.replace("<head>", `<head>${baseTag}`);
+  }
+  if (html.includes("<HEAD>")) {
+    return html.replace("<HEAD>", `<HEAD>${baseTag}`);
+  }
+  return html;
 }
 
 async function tryQzPrint(printerName: string | null, html: string): Promise<void> {
@@ -73,7 +91,7 @@ async function printConfiguredHtml(
   }
 
   const attempts: PosPrintBridgeMode[] =
-    config.printBridge === "agent" ? ["agent", "qz", "browser"] : ["qz", "browser"];
+    config.printBridge === "agent" ? ["agent", "browser"] : ["qz", "browser"];
 
   let lastError: string | undefined;
 
