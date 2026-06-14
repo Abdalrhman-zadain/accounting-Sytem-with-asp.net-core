@@ -17,3 +17,14 @@ export {
   type PosRegisterMobileCartBarProps,
 } from "./pos-register-mobile-cart";
 export { PosRegisterMainGrid, type PosRegisterMainGridProps } from "./pos-register-main-grid";
+export {
+  THERMAL_RECEIPT_ITEM_NAME_MAX,
+  THERMAL_RECEIPT_WIDTH_PX,
+  buildThermalReceiptDocumentHtml,
+  fmtThermalReceiptAmt,
+  thermalReceiptFooterSpacerHtml,
+  thermalReceiptItemLine,
+  thermalReceiptRowLine,
+  thermalReceiptTableClose,
+  thermalReceiptTableOpen,
+} from "./thermal-receipt-layout";

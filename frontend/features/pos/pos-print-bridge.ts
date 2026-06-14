@@ -1,3 +1,16 @@
+type QzPrintJob =
+  | {
+      type: "pixel";
+      format: "html";
+      flavor: "plain";
+      data: string;
+    }
+  | {
+      type: "raw";
+      format: "plain";
+      data: string;
+    };
+
 type QzApi = {
   websocket: {
     isActive: () => boolean;
@@ -9,15 +22,7 @@ type QzApi = {
   configs: {
     create: (printerName: string) => unknown;
   };
-  print: (
-    config: unknown,
-    data: Array<{
-      type: "pixel";
-      format: "html";
-      flavor: "plain";
-      data: string;
-    }>,
-  ) => Promise<void>;
+  print: (config: unknown, data: QzPrintJob[]) => Promise<void>;
 };
 
 export type PosPrintBridgeStatus = {
@@ -40,6 +45,42 @@ export class PosPrintBridgeError extends Error {
     super(message);
     this.name = "PosPrintBridgeError";
   }
+}
+
+/** Delay after layout/images are ready before triggering browser print. */
+export const THERMAL_PRINT_READY_DELAY_MS = 800;
+
+/** Blank feed lines sent after HTML jobs so thermal cutters do not clip the footer. */
+const THERMAL_QZ_TRAILING_FEED = "\n\n\n\n";
+
+export async function waitForDocumentImages(doc: Document): Promise<void> {
+  const images = Array.from(doc.images);
+  const pending = images.filter((image) => !image.complete);
+  if (pending.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    pending.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+        }),
+    ),
+  );
+}
+
+function scheduleBrowserPrint(win: Window): void {
+  void waitForDocumentImages(win.document).then(() => {
+    window.setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
+      }
+    }, THERMAL_PRINT_READY_DELAY_MS);
+  });
 }
 
 function getWindowQz(): QzApi | null {
@@ -128,6 +169,11 @@ export async function printHtmlWithQz(printerName: string | null, html: string):
       flavor: "plain",
       data: html,
     },
+    {
+      type: "raw",
+      format: "plain",
+      data: THERMAL_QZ_TRAILING_FEED,
+    },
   ]);
 }
 
@@ -142,12 +188,5 @@ export function printHtmlWithBrowser(html: string, windowName = "_blank"): void 
   win.document.write(html);
   win.document.close();
   win.focus();
-
-  setTimeout(() => {
-    try {
-      win.print();
-    } catch {
-      throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
-    }
-  }, 400);
+  scheduleBrowserPrint(win);
 }

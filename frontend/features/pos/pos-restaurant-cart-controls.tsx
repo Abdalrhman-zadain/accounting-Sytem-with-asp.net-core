@@ -55,7 +55,6 @@ type PosRestaurantCartControlsProps = {
 };
 
 const ORDER_TYPE_OPTIONS: Array<{ value: PosOrderType; en: string; ar: string }> = [
-  { value: "DINE_IN", en: "Dine-In", ar: "محلي" },
   { value: "TAKEAWAY", en: "Takeaway", ar: "سفري" },
   { value: "DELIVERY", en: "Delivery", ar: "توصيل" },
 ];
@@ -113,7 +112,6 @@ export function PosRestaurantCartControls({
         ? `طاولة ${selectedTableLabel}`
         : `Table ${selectedTableLabel}`
       : null;
-  const isTableLocked = Boolean(lockedTableId && lockedTableId === selectedTableId && editingInvoiceId);
   const controlsDisabled = orderLocked;
   const selectedDeliveryDriver = deliveryDrivers.find((driver) => driver.id === deliveryDriverId) ?? null;
   const visibleDeliveryDriverLabel = selectedDeliveryDriver?.name ?? selectedDeliveryDriverLabel ?? null;
@@ -131,25 +129,27 @@ export function PosRestaurantCartControls({
         </button>
       )}
 
-      {/* ── ORDER TYPE SELECTOR (2×2 segmented) ── */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {ORDER_TYPE_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            disabled={controlsDisabled || (isTableLocked && opt.value !== orderType)}
-            onClick={() => onOrderTypeChange(opt.value)}
-            className={cn(
-              "flex h-9 items-center justify-center rounded-[10px] border text-xs font-bold transition-colors disabled:opacity-40",
-              orderType === opt.value
-                ? "border-[#ea580c] bg-[#fff7ed] text-[#c2410c]"
-                : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#d1d5db] hover:bg-[#fafafa]",
-            )}
-          >
-            {isAr ? opt.ar : opt.en}
-          </button>
-        ))}
-      </div>
+      {/* ── ORDER TYPE SELECTOR (takeaway / delivery only; dine-in via table) ── */}
+      {orderType !== "DINE_IN" ? (
+        <div className="grid grid-cols-2 gap-1.5">
+          {ORDER_TYPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => onOrderTypeChange(opt.value)}
+              className={cn(
+                "flex h-9 items-center justify-center rounded-[10px] border text-xs font-bold transition-colors disabled:opacity-40",
+                orderType === opt.value
+                  ? "border-[#ea580c] bg-[#fff7ed] text-[#c2410c]"
+                  : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#d1d5db] hover:bg-[#fafafa]",
+              )}
+            >
+              {isAr ? opt.ar : opt.en}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/* ── DINE-IN: table badge + ops + service charge ── */}
       {orderType === "DINE_IN" ? (

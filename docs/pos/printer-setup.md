@@ -26,6 +26,10 @@ Printer names are saved in browser `localStorage`, not in the global database, b
 - `Send to kitchen` saves/sends the order, then prints the KOT template to the configured kitchen printer when `autoPrintKotOnSend` is enabled.
 - Completing payment prints the customer receipt template to the configured receipt printer when `autoPrintReceiptOnPay` is enabled.
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
+- The customer receipt uses a compact 80mm layout (single-line items, joined meta rows, smaller fonts) similar to Market POS, with a small horizontal logo beside the company name when a logo is available.
+- Item and total rows use a fixed-width HTML table (302px / ~80mm) so labels and amounts sit on one line without large empty gaps; item names allow up to 28 characters before truncation.
+- Receipt HTML includes bottom padding and a trailing spacer so thermal auto-cutters do not clip the payment/thank-you lines; QZ Tray jobs also append blank feed lines after the HTML payload.
+- Browser and QZ print paths wait for receipt images to finish loading before sending the job, reducing clipped or mis-sized prints.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.
 - If QZ Tray is not connected, the POS opens the browser print window as a fallback and leaves the sale/order action successful.
 

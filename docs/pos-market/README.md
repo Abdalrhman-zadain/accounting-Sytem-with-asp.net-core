@@ -178,7 +178,7 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE`.
 - Register checkout allows **partial payment** or **pay later** (zero tender) when `allowCreditSale` is true in POS settings (permission or `POS_ALLOW_CREDIT_SALE`).
 - Outstanding balance is stored on the POS `SalesInvoice` (`outstandingAmount`, `PARTIALLY_PAID`) and debited to the customer's receivable account on accounting posting.
-- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip. Thermal layout is **compact** (one line per product, smaller font, tighter spacing) to reduce paper use.
+- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip. Thermal layout is **compact** (table-based rows at 302px / 80mm, one line per product, up to 28 characters per item name) to reduce paper use and avoid empty gaps between text and amounts.
 - Each invoice shows **مدفوع** / **متبقي** when relevant; **الذمم** (account balance) prints as a single line when outstanding. Full delivered/collected lifetime totals are on the receivables screens, not repeated on every slip.
 - **المندوب** (customer-linked sales rep) prints on the invoice when configured on the market customer.
 
