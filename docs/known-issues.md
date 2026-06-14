@@ -94,6 +94,7 @@ Current behavior:
 
 - POS kitchen KOT, customer receipt, and session roll prints route through a client-side print service.
 - Silent named-printer routing requires QZ Tray to be installed and running on each cashier computer.
+- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray or use browser-print fallback.
 - Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
 - If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
 

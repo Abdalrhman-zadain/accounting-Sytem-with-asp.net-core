@@ -8,6 +8,7 @@ Use this folder when **both** restaurant POS and market POS need the same React 
 - Formatting helpers used by both terminals (money, barcode display)
 - **Thermal receipt layout** — shared 80mm table-based HTML/CSS for customer receipts (`thermal-receipt-layout.ts`)
 - Shared POS types that are not UI-specific
+- **QZ Tray signing** — shared certificate/signature setup for restaurant and market print bridges (`qz-tray-security.ts`; API in `lib/api/qz-tray.ts`)
 - **Register mobile layout** — sticky cart bar, slide-up order sheet, wide-layout hook, responsive grid classes
 
 ## What does not belong here

@@ -51,6 +51,45 @@ export type PosReceiptData = {
   }>;
 };
 
+const ARABIC_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: "نقد",
+  CARD: "بطاقة",
+  CLIQ: "كليك",
+  BANK_TRANSFER: "تحويل بنكي",
+  WALLET: "محفظة",
+  MIXED: "مختلط",
+  DELIVERY: "توصيل",
+};
+
+export function buildArabicPaymentSummary(
+  methods: string[],
+  amounts?: number[],
+): string {
+  const uniqueMethods = [...new Set(methods.filter(Boolean))];
+  if (uniqueMethods.length === 0) {
+    return "";
+  }
+  if (uniqueMethods.length === 1) {
+    const label = ARABIC_PAYMENT_METHOD_LABELS[uniqueMethods[0]] ?? uniqueMethods[0];
+    if (amounts?.length === 1) {
+      return `${label} ${amounts[0].toFixed(2)}`;
+    }
+    return label;
+  }
+  return "مختلط";
+}
+
+export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosReceiptData {
+  return {
+    ...receipt,
+    cashierName:
+      receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
+        ? "كاشير"
+        : receipt.cashierName,
+    paymentSummary: receipt.paymentSummary.trim() || receipt.paymentSummary,
+  };
+}
+
 const SEP = "─".repeat(32);
 
 const RESTAURANT_RECEIPT_EXTRA_CSS = `

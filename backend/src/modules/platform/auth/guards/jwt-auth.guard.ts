@@ -5,6 +5,7 @@ import { AuthGuard } from '@nestjs/passport';
 export class JwtAuthGuard extends AuthGuard('jwt') {
     private readonly restaurantCashierAllowedPrefixes = [
         '/api/pos',
+        '/api/qz',
         '/api/inventory/items',
         '/api/inventory/item-groups',
         '/api/inventory/warehouses',
@@ -13,6 +14,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     private readonly marketCashierAllowedPrefixes = [
         '/api/pos-market',
+        '/api/qz',
         '/api/inventory/items',
         '/api/inventory/item-groups',
         '/api/inventory/warehouses',

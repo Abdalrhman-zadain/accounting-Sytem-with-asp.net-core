@@ -148,10 +148,15 @@ import {
   isWeightSaleItem,
 } from "@/features/pos/pos-weight-utils";
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
+import { buildArabicPaymentSummary } from "@/features/pos/pos-receipt-print";
+import { captureKitchenLineSnapshotFromCart } from "@/features/pos/pos-kitchen-print-delta";
 import {
+  applyPosKitchenUpdatePrints,
+  applyPosPayCompletePrints,
   printCustomerReceipt,
-  printKitchenTicket,
   printSessionRoll,
+  type KitchenLineSnapshot,
+  type PosPrintResult,
 } from "@/features/pos/pos-print-service";
 import { loadPosPrinterConfig, updatePosPrinterConfig } from "@/features/pos/pos-printer-config";
 import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-panel";
@@ -946,7 +951,8 @@ function HeldSaleOrderTypeInfo({
   );
 }
 
-function mapReceiptResponse(receipt: {
+function mapReceiptResponse(
+  receipt: {
   receiptNumber: string;
   soldAt: string;
   companyName: string;
@@ -972,17 +978,30 @@ function mapReceiptResponse(receipt: {
     lineTotal: string;
     unitCode?: string | null;
   }>;
-}): CompletedReceipt {
+},
+  options?: {
+    paymentMethods?: string[];
+    paymentAmounts?: number[];
+  },
+): CompletedReceipt {
+  const paymentSummary =
+    options?.paymentMethods && options.paymentMethods.length > 0
+      ? buildArabicPaymentSummary(options.paymentMethods, options.paymentAmounts)
+      : receipt.paymentSummary;
+
   return {
     receiptNumber: receipt.receiptNumber,
     soldAt: receipt.soldAt,
     companyName: receipt.companyName,
     branchName: receipt.branchName,
     taxNumber: receipt.taxNumber,
-    cashierName: receipt.cashierName,
+    cashierName:
+      receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
+        ? "كاشير"
+        : receipt.cashierName,
     terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,
-    paymentSummary: receipt.paymentSummary,
+    paymentSummary,
     total: parseAmount(receipt.total),
     paid: parseAmount(receipt.paid),
     tendered: parseAmount(receipt.tendered),
@@ -1055,6 +1074,12 @@ export function PosPage() {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
+  const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
+  const pendingPayPrintContextRef = useRef<{
+    kitchenSnapshot: KitchenLineSnapshot[];
+    paymentMethods: string[];
+    paymentAmounts: number[];
+  } | null>(null);
   // Stable ref so mutations defined before resetSale() can still invoke it
   const resetSaleRef = useRef<() => void>(() => {});
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
@@ -1612,8 +1637,56 @@ export function PosPage() {
     },
   });
 
+  const captureCurrentKitchenSnapshot = () =>
+    captureKitchenLineSnapshotFromCart(
+      cartLines.map((line) => ({
+        salesInvoiceLineId: line.salesInvoiceLineId,
+        clientLineId: line.clientLineId,
+        itemId: line.itemId,
+        name: line.name,
+        quantity: line.quantity,
+        kitchenSentAt: line.kitchenSentAt,
+        modifiers: line.modifiers,
+        lineNote: line.lineNote,
+      })),
+    );
+
+  const notifyKitchenPrintResults = (results: PosPrintResult[]) => {
+    if (results.some((result) => result.fallback)) {
+      pushMessage(
+        getLocalizedText(
+          "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
+          language,
+        ),
+      );
+    }
+  };
+
+  const runKitchenUpdatePrints = async (
+    sale: PosSale,
+    snapshotBefore: KitchenLineSnapshot[],
+  ) => {
+    const config = loadPosPrinterConfig();
+    if (!config.autoPrintKotOnSend) {
+      return;
+    }
+    try {
+      const results = await applyPosKitchenUpdatePrints({
+        snapshotBefore,
+        sale,
+        autoPrintKot: true,
+        language,
+      });
+      notifyKitchenPrintResults(results);
+    } catch (err) {
+      console.error("Failed to print kitchen ticket:", err);
+      pushMessage(t("pos.sales.alert.printBlocked"));
+    }
+  };
+
   const sendKitchenMutation = useMutation({
     mutationFn: async () => {
+      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1645,21 +1718,7 @@ export function PosPage() {
           language,
         ),
       );
-      if (loadPosPrinterConfig().autoPrintKotOnSend) {
-        printKitchenTicket(sale, language).then((result) => {
-          if (result.fallback) {
-            pushMessage(
-              getLocalizedText(
-                "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
-                language,
-              ),
-            );
-          }
-        }).catch((err) => {
-          console.error("Failed to print kitchen ticket:", err);
-          pushMessage(t("pos.sales.alert.printBlocked"));
-        });
-      }
+      await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
       // Auto-start a new order so the cashier is ready for the next customer
       resetSaleRef.current();
     },
@@ -1670,6 +1729,7 @@ export function PosPage() {
 
   const updateKitchenMutation = useMutation({
     mutationFn: async (_options?: { silent?: boolean }) => {
+      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1725,6 +1785,7 @@ export function PosPage() {
           ),
         );
       }
+      await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -1762,7 +1823,11 @@ export function PosPage() {
       // Capture reservation context before reset
       const wasPreOrder = Boolean(activeReservationId);
       const tableIdForHandoff = wasPreOrder ? selectedTableId : null;
-      const receipt = mapReceiptResponse(response.receipt);
+      const payContext = pendingPayPrintContextRef.current;
+      const receipt = mapReceiptResponse(response.receipt, {
+        paymentMethods: payContext?.paymentMethods,
+        paymentAmounts: payContext?.paymentAmounts,
+      });
       setLastReceipt(receipt);
       setPayFlowStep("success");
       if (wasPreOrder && tableIdForHandoff) {
@@ -1772,9 +1837,30 @@ export function PosPage() {
       resetSaleRef.current();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.saleCompleted"));
-      if (loadPosPrinterConfig().autoPrintReceiptOnPay) {
-        printReceipt(receipt);
+      const config = loadPosPrinterConfig();
+      try {
+        const printResults = await applyPosPayCompletePrints({
+          snapshotBefore: payContext?.kitchenSnapshot ?? [],
+          sale: response.sale,
+          receipt,
+          autoPrintKot: config.autoPrintKotOnSend,
+          autoPrintReceipt: config.autoPrintReceiptOnPay,
+          language,
+        });
+        if (printResults.receipt?.fallback) {
+          pushMessage(
+            getLocalizedText(
+              "Receipt printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح",
+              language,
+            ),
+          );
+        }
+        notifyKitchenPrintResults(printResults.kitchen);
+      } catch (err) {
+        console.error("Failed to print sale documents:", err);
+        pushMessage(t("pos.sales.alert.printBlocked"));
       }
+      pendingPayPrintContextRef.current = null;
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -3596,6 +3682,16 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.insufficientPayment"));
       return;
     }
+
+    pendingPayPrintContextRef.current = {
+      kitchenSnapshot: captureCurrentKitchenSnapshot(),
+      paymentMethods: paymentEntriesResolved
+        .filter((entry) => entry.amountValue > 0)
+        .map((entry) => entry.paymentMethod),
+      paymentAmounts: paymentEntriesResolved
+        .filter((entry) => entry.amountValue > 0)
+        .map((entry) => entry.amountValue),
+    };
 
     completeSaleMutation.mutate({
       sessionId: activeSession?.id ?? "",

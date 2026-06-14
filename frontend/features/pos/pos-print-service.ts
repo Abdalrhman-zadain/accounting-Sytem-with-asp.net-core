@@ -1,5 +1,22 @@
-import { buildKitchenOrderTicketHtml } from "@/features/pos/pos-kot-print";
-import { buildPosReceiptHtml, type PosReceiptData } from "@/features/pos/pos-receipt-print";
+import {
+  buildKitchenDeltaTicketHtml,
+  buildKitchenOrderTicketHtml,
+  buildKitchenTicketHtmlForLines,
+  buildKitchenVoidTicketHtml,
+} from "@/features/pos/pos-kot-print";
+import {
+  captureKitchenLineSnapshotFromSale,
+  diffKitchenSnapshots,
+  hasKitchenPrintDiff,
+  type KitchenLineSnapshot,
+  type KitchenPrintDiff,
+  unsentKitchenLines,
+} from "@/features/pos/pos-kitchen-print-delta";
+import {
+  buildPosReceiptHtml,
+  normalizeReceiptForArabicPrint,
+  type PosReceiptData,
+} from "@/features/pos/pos-receipt-print";
 import {
   buildSessionRollReportDocumentHtml,
   type RollPrintContext,
@@ -64,11 +81,143 @@ export async function printKitchenTicket(
   );
 }
 
+export async function printKitchenTicketForLineIds(
+  sale: PosSale,
+  lineIds: string[],
+  language: string,
+): Promise<PosPrintResult> {
+  if (lineIds.length === 0) {
+    return { ok: true, mode: "qz", fallback: false };
+  }
+  return printConfiguredHtml(
+    buildKitchenTicketHtmlForLines(sale, lineIds, language),
+    "kitchen",
+    "pos-kitchen-ticket",
+  );
+}
+
+export async function printKitchenDelta(
+  sale: PosSale,
+  deltaLines: KitchenPrintDiff["additions"],
+  language: string,
+): Promise<PosPrintResult> {
+  if (deltaLines.length === 0) {
+    return { ok: true, mode: "qz", fallback: false };
+  }
+  return printConfiguredHtml(
+    buildKitchenDeltaTicketHtml(sale, deltaLines, language),
+    "kitchen",
+    "pos-kitchen-delta",
+  );
+}
+
+export async function printKitchenVoid(
+  sale: PosSale,
+  voidLines: KitchenPrintDiff["voids"],
+  language: string,
+): Promise<PosPrintResult> {
+  if (voidLines.length === 0) {
+    return { ok: true, mode: "qz", fallback: false };
+  }
+  return printConfiguredHtml(
+    buildKitchenVoidTicketHtml(sale, voidLines, language),
+    "kitchen",
+    "pos-kitchen-void",
+  );
+}
+
+export async function printKitchenDiff(
+  sale: PosSale,
+  diff: KitchenPrintDiff,
+  language: string,
+): Promise<PosPrintResult[]> {
+  const results: PosPrintResult[] = [];
+  const voidLines = [...diff.voids, ...diff.qtyDecreases];
+  if (voidLines.length > 0) {
+    results.push(await printKitchenVoid(sale, voidLines, language));
+  }
+  if (diff.additions.length > 0) {
+    results.push(await printKitchenDelta(sale, diff.additions, language));
+  }
+  return results;
+}
+
+export async function applyPosKitchenUpdatePrints(options: {
+  snapshotBefore: KitchenLineSnapshot[];
+  sale: PosSale;
+  autoPrintKot: boolean;
+  language: string;
+}): Promise<PosPrintResult[]> {
+  if (!options.autoPrintKot) {
+    return [];
+  }
+
+  const after = captureKitchenLineSnapshotFromSale(options.sale);
+  const diff = diffKitchenSnapshots(options.snapshotBefore, after);
+  if (!hasKitchenPrintDiff(diff)) {
+    return [];
+  }
+
+  return printKitchenDiff(options.sale, diff, options.language);
+}
+
+export async function applyPosPayCompletePrints(options: {
+  snapshotBefore: KitchenLineSnapshot[];
+  sale: PosSale;
+  receipt: PosReceiptData;
+  autoPrintKot: boolean;
+  autoPrintReceipt: boolean;
+  language: string;
+}): Promise<{ receipt?: PosPrintResult; kitchen: PosPrintResult[] }> {
+  const results: { receipt?: PosPrintResult; kitchen: PosPrintResult[] } = {
+    kitchen: [],
+  };
+
+  const unsentBefore = unsentKitchenLines(options.snapshotBefore);
+  if (options.autoPrintKot && unsentBefore.length > 0) {
+    const newlySentLineIds = options.sale.lines
+      .filter((line) => line.kitchenSentAt)
+      .filter((line) =>
+        unsentBefore.some(
+          (beforeLine) =>
+            beforeLine.lineId === line.id ||
+            (beforeLine.itemId === (line.itemId ?? "") &&
+              !beforeLine.kitchenSentAt),
+        ),
+      )
+      .map((line) => line.id);
+
+    if (newlySentLineIds.length > 0) {
+      results.kitchen.push(
+        await printKitchenTicketForLineIds(
+          options.sale,
+          newlySentLineIds,
+          options.language,
+        ),
+      );
+    } else {
+      const after = captureKitchenLineSnapshotFromSale(options.sale);
+      const diff = diffKitchenSnapshots(options.snapshotBefore, after);
+      if (diff.additions.length > 0) {
+        results.kitchen.push(
+          await printKitchenDelta(options.sale, diff.additions, options.language),
+        );
+      }
+    }
+  }
+
+  if (options.autoPrintReceipt) {
+    results.receipt = await printCustomerReceipt(options.receipt);
+  }
+
+  return results;
+}
+
 export async function printCustomerReceipt(
   receipt: PosReceiptData,
 ): Promise<PosPrintResult> {
   return printConfiguredHtml(
-    buildPosReceiptHtml(receipt),
+    buildPosReceiptHtml(normalizeReceiptForArabicPrint(receipt)),
     "receipt",
     "pos-customer-receipt",
   );
@@ -86,7 +235,7 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
   const isKitchen = target === "kitchen";
   const title = isKitchen ? "Kitchen Printer Test" : "Receipt Printer Test";
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8"/>
   <title>${title}</title>
@@ -119,3 +268,5 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
 export async function getPrinterBridgeStatus(): Promise<PosPrintBridgeStatus> {
   return getPosPrintBridgeStatus();
 }
+
+export type { KitchenLineSnapshot, KitchenPrintDiff };

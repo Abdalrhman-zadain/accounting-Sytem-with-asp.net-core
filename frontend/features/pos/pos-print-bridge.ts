@@ -1,3 +1,7 @@
+import {
+  ensureQzSigningConfigured,
+} from "@/features/pos-shared/qz-tray-security";
+
 type QzPrintJob =
   | {
       type: "pixel";
@@ -23,6 +27,20 @@ type QzApi = {
     create: (printerName: string) => unknown;
   };
   print: (config: unknown, data: QzPrintJob[]) => Promise<void>;
+  security: {
+    setSignatureAlgorithm: (algorithm: string) => void;
+    setCertificatePromise: (
+      handler: (resolve: (certificate: string) => void, reject: (error: unknown) => void) => void,
+    ) => void;
+    setSignaturePromise: (
+      handler: (
+        toSign: string,
+      ) => (
+        resolve: (signature: string) => void,
+        reject: (error: unknown) => void,
+      ) => void,
+    ) => void;
+  };
 };
 
 export type PosPrintBridgeStatus = {
@@ -121,6 +139,7 @@ async function ensureQzConnected(): Promise<QzApi> {
     );
   }
   if (!qz.websocket.isActive()) {
+    await ensureQzSigningConfigured(qz);
     await qz.websocket.connect();
   }
   return qz;

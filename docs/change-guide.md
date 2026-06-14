@@ -306,7 +306,11 @@ Checks to run:
 Where to edit:
 
 - frontend `features/pos/pos-print-service.ts` for print routing decisions
+- frontend `features/pos/pos-kitchen-print-delta.ts` for kitchen snapshot diffing and delta/void print orchestration
 - frontend `features/pos/pos-print-bridge.ts` for QZ Tray/browser bridge behavior
+- frontend `features/pos-shared/qz-tray-security.ts` for shared QZ certificate/signature wiring used by restaurant and market POS
+- frontend `lib/api/qz-tray.ts` for `/api/qz/certificate` and `/api/qz/sign` fetchers
+- backend `common/qz-tray/` for server-side QZ signing (`QZ_CERT_PATH`, `QZ_PRIVATE_KEY_PATH`)
 - frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences
 - frontend `features/pos/pos-printer-settings-panel.tsx` for cashier-side printer setup
 - frontend `features/pos/pos-kot-print.ts`, `pos-receipt-print.ts`, and `pos-session-roll-print.ts` for the actual 80mm receipt HTML templates
@@ -314,9 +318,11 @@ Where to edit:
 
 What else to check:
 
+- kitchen print routing uses delta ADD tickets on send/update and VOID tickets on cashier cancel; pay-without-send prints kitchen + Arabic receipt together when unsent lines exist
 - kitchen KOT and customer receipt templates are intentionally separate; do not merge kitchen notes/table routing into the customer receipt template unless the business explicitly asks for it
 - OS printer names are machine-local, so kitchen/receipt printer names should stay in browser-local configuration unless a network/IP print service is introduced
 - QZ Tray named-printer routing should fall back to browser `window.print()` when QZ is unavailable so sale completion and kitchen send are not blocked by printer setup
+- for silent QZ printing without the untrusted-site dialog, configure backend QZ signing (`npm run qz:generate-cert` in `backend/`) and trust the generated certificate on each cashier PC; see `docs/pos/printer-setup.md`
 
 Checks to run:
 

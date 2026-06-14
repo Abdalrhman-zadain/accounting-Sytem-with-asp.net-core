@@ -12,6 +12,9 @@ backend/node_modules
 backend/dist
 backend/coverage
 backend/.env
+backend/certs/qz/private-key.pem
+backend/certs/qz/*.pem
+backend/certs/qz/digital-certificate.txt
 backend/prisma/dev.db
 backend/src/generated/prisma
 frontend/node_modules

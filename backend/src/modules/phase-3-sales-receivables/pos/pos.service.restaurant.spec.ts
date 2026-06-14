@@ -1137,7 +1137,114 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           } as any,
           cashierUser,
         ),
-      ).rejects.toThrow("confirmed by the waiter");
+      ).rejects.toThrow("Cannot add items after the waiter confirmed");
+    });
+
+    it("allows cashier to remove a sent kitchen line after waiter confirmation", async () => {
+      const salesReceivablesMock = {
+        resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
+          { salesInvoiceLineId: "line1", itemId: "item1", quantity: 2 },
+        ]),
+        computeSalesDocumentTotals: jest.fn().mockReturnValue({
+          subtotalAmount: 10,
+          discountAmount: 0,
+          taxAmount: 0,
+          totalAmount: 10,
+        }),
+        buildSalesInvoiceLineInput: jest.fn(),
+      };
+      const lockedService = new PosService(
+        prismaMock as never,
+        { log: jest.fn() } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        salesReceivablesMock as never,
+        {} as never,
+      );
+
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: new Date(),
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" } as any,
+            kitchenSentAt: new Date(),
+          },
+          {
+            id: "line2",
+            itemId: "item2",
+            quantity: { toString: () => "1" } as any,
+            kitchenSentAt: new Date(),
+          },
+        ],
+      };
+      const dtoLines = [{ salesInvoiceLineId: "line1", itemId: "item1", quantity: 2 }];
+      const resolvedLines = [
+        {
+          salesInvoiceLineId: "line1",
+          itemId: "item1",
+          quantity: 2,
+          unitPrice: 5,
+          discountAmount: 0,
+          taxId: null,
+          taxAmount: 0,
+          lineSubtotalAmount: 10,
+          lineTotalAmount: 10,
+          revenueAccountId: "rev1",
+          description: null,
+          modifiers: null,
+        },
+      ] as any;
+      const kitchenStatusByLineId = new Map<string, KitchenStatus>([
+        ["line1", KitchenStatus.NEW],
+        ["line2", KitchenStatus.NEW],
+      ]);
+
+      expect(() =>
+        (lockedService as any).assertPosSaleDraftModification(
+          cashierUser,
+          existing,
+          dtoLines,
+          resolvedLines,
+          kitchenStatusByLineId,
+        ),
+      ).not.toThrow();
+    });
+
+    it("rejects waiter removing a sent kitchen line", async () => {
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: new Date(),
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" } as any,
+            kitchenSentAt: new Date(),
+          },
+        ],
+      };
+      const dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }> = [];
+      const resolvedLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }> = [];
+      const kitchenStatusByLineId = new Map<string, KitchenStatus>([
+        ["line1", KitchenStatus.NEW],
+      ]);
+
+      expect(() =>
+        (service as any).assertPosSaleDraftModification(
+          waiterUser,
+          existing,
+          dtoLines,
+          resolvedLines,
+          kitchenStatusByLineId,
+        ),
+      ).toThrow("confirmed and can no longer be changed by the waiter");
     });
 
     it("rejects any cart change when waiter already confirmed the dine-in order", async () => {
@@ -1214,7 +1321,38 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           } as any,
           cashierUser,
         ),
-      ).rejects.toThrow("confirmed by the waiter");
+      ).rejects.toThrow("Cannot increase quantity after the waiter confirmed");
+    });
+
+    it("rejects cashier removing a sent kitchen line that is already ready", async () => {
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: new Date(),
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" } as any,
+            kitchenSentAt: new Date(),
+          },
+        ],
+      };
+      const dtoLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }> = [];
+      const resolvedLines: Array<{ salesInvoiceLineId?: string; itemId?: string; quantity?: number }> = [];
+      const kitchenStatusByLineId = new Map<string, KitchenStatus>([
+        ["line1", KitchenStatus.READY],
+      ]);
+
+      expect(() =>
+        (service as any).assertPosSaleDraftModification(
+          cashierUser,
+          existing,
+          dtoLines,
+          resolvedLines,
+          kitchenStatusByLineId,
+        ),
+      ).toThrow("cannot be removed");
     });
 
     it("updates kept lines to tax-free when taxFreeEnabled is true", async () => {
