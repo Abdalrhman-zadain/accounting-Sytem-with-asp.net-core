@@ -89,6 +89,7 @@ Optional header: `Authorization: Bearer simple-account-print-agent`
 
 - **POS says agent not running:** start `SimpleAccount.PrintAgent.exe` and confirm tray icon is visible.
 - **Browser says "Request blocked" / connection failed from HTTPS site:** Chrome blocks public HTTPS pages from calling `http://127.0.0.1` unless the agent returns `Access-Control-Allow-Private-Network: true` (v1.0.1+). Download the latest agent zip from POS → Printers, replace the old exe, restart the tray app, then refresh printers in POS.
-- **QZ "Untrusted website" popup while using Local agent:** agent print failed and an old build fell back to QZ Tray. Update to agent v1.0.2+, exit QZ Tray from the Windows tray, then retry. Local agent mode no longer uses QZ.
+- **POST /print returns "UI thread" error:** download the latest agent zip from POS → Printers (v1.0.3+). Older builds called WebView2 from the HTTP worker thread.
+- **QZ "Untrusted website" popup while using Local agent:** agent print failed and an old build fell back to QZ Tray. Update to agent v1.0.3+, exit QZ Tray from the Windows tray, then retry. Local agent mode no longer uses QZ.
 - **WebView2 missing:** install WebView2 Evergreen bootstrapper from Microsoft.
 - **Printer not found:** open agent settings and reselect exact Windows printer names.

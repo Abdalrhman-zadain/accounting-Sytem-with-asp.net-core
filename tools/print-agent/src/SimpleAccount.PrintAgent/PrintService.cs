@@ -13,6 +13,11 @@ public sealed class PrintService : IDisposable
 
     public PrintService()
     {
+        if (SynchronizationContext.Current is null)
+        {
+            throw new InvalidOperationException("PrintService must be created on the UI thread.");
+        }
+
         _hostForm = new Form
         {
             ShowInTaskbar = false,
@@ -52,9 +57,16 @@ public sealed class PrintService : IDisposable
             throw new InvalidOperationException($"Printer \"{printerName}\" was not found on this machine.");
         }
 
+        await RunOnUiThreadAsync(() => PrintHtmlCoreAsync(printerName, html, cancellationToken));
+    }
+
+    private async Task PrintHtmlCoreAsync(string printerName, string html, CancellationToken cancellationToken)
+    {
         await _printLock.WaitAsync(cancellationToken);
         try
         {
+            EnsureFormHandle();
+
             await EnsureInitializedAsync(cancellationToken);
 
             var htmlWithFeed = AppendTrailingFeed(html);
@@ -92,6 +104,38 @@ public sealed class PrintService : IDisposable
         finally
         {
             _printLock.Release();
+        }
+    }
+
+    private Task RunOnUiThreadAsync(Func<Task> action)
+    {
+        if (!_hostForm.InvokeRequired)
+        {
+            return action();
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _hostForm.BeginInvoke(new Action(async () =>
+        {
+            try
+            {
+                await action().ConfigureAwait(true);
+                tcs.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }));
+
+        return tcs.Task;
+    }
+
+    private void EnsureFormHandle()
+    {
+        if (!_hostForm.IsHandleCreated)
+        {
+            _hostForm.CreateControl();
         }
     }
 
