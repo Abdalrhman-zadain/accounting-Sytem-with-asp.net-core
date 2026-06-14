@@ -203,11 +203,11 @@ export class PosService {
       const headerPatch: Prisma.SalesInvoiceUpdateInput = {
         posOperationalStatus: PosOperationalStatus.HELD,
       };
+      if (!invoice.waiterId && user?.userId) {
+        headerPatch.waiter = { connect: { id: user.userId } };
+      }
       if (waiterOnly && !invoice.waiterConfirmedAt) {
         headerPatch.waiterConfirmedAt = sentAt;
-        if (user?.userId) {
-          headerPatch.waiter = { connect: { id: user.userId } };
-        }
       }
       await tx.salesInvoice.update({
         where: { id: invoice.id },
@@ -1041,7 +1041,7 @@ export class PosService {
       const restaurantFields = {
         orderType: resolvedOrderType,
         tableId: dto.tableId?.trim() || null,
-        waiterId: dto.waiterId?.trim() || null,
+        waiterId: dto.waiterId?.trim() || existing?.waiterId || user?.userId || null,
         serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
         deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
         driverId: dto.driverId?.trim() || null,
@@ -1347,7 +1347,7 @@ export class PosService {
       const restaurantFields = {
         orderType: resolvedOrderType,
         tableId: dto.tableId?.trim() || null,
-        waiterId: dto.waiterId?.trim() || null,
+        waiterId: dto.waiterId?.trim() || existing?.waiterId || user?.userId || null,
         serviceChargeAmount: dto.serviceChargeAmount ? this.toAmount(dto.serviceChargeAmount) : this.toAmount(0),
         deliveryFeeAmount: dto.deliveryFeeAmount ? this.toAmount(dto.deliveryFeeAmount) : this.toAmount(0),
         driverId: dto.driverId?.trim() || null,

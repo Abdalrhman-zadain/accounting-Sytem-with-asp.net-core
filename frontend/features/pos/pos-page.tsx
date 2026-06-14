@@ -1832,6 +1832,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       if (loadPosPrinterConfig().autoPrintReceiptOnPay) {
         printReceipt(receipt);
       }
+      if (loadPosPrinterConfig().autoPrintKotOnSend && response.sale && !hadKitchenTicketRef.current) {
+        const hasKitchenItems = response.sale.lines?.some((line) => line.kitchenSentAt);
+        if (hasKitchenItems) {
+          printKitchenTicket(response.sale as any, language).catch((err) => {
+            console.error("Failed to print kitchen ticket at completion:", err);
+          });
+        }
+      }
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
