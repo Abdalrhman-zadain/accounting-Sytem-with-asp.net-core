@@ -175,7 +175,32 @@ export function PosPrinterSettingsPanel() {
           checked={config.autoPrintReceiptOnPay}
           onChange={(checked) => setConfig((prev) => ({ ...prev, autoPrintReceiptOnPay: checked }))}
         />
+        <ToggleRow
+          label={getLocalizedText(
+            "Use browser print only (no QZ Tray) / طباعة المتصفح فقط (بدون QZ)",
+            language,
+          )}
+          checked={config.printBridge === "browser"}
+          onChange={(checked) =>
+            setConfig((prev) => ({
+              ...prev,
+              printBridge: checked ? "browser" : "qz",
+            }))
+          }
+        />
       </div>
+
+      {config.printBridge === "browser" ? (
+        <p className="mt-3 rounded-[14px] border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-6 text-sky-950">
+          {getLocalizedText(
+            "Browser mode: Windows will ask you to pick a printer each time. Set the kitchen printer as default before sending KOT, and the receipt printer before payment.",
+            language,
+          )}
+          {isAr
+            ? " في هذا الوضع يختار Windows الطابعة يدوياً في كل مرة. اجعل طابعة المطبخ افتراضية قبل الإرسال، وطابعة الإيصال قبل الدفع."
+            : ""}
+        </p>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
         <button

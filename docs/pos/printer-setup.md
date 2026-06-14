@@ -76,7 +76,21 @@ Then restart QZ Tray and open the POS using **one fixed URL** on every PC (same 
 
 ### When signing is not configured
 
-If `QZ_CERT_PATH` / `QZ_PRIVATE_KEY_PATH` are missing, printing still works the old way: QZ Tray may show the Allow/Block dialog, or the POS falls back to browser print when QZ is unavailable.
+If `QZ_CERT_PATH` / `QZ_PRIVATE_KEY_PATH` are missing, or `QZ_SIGNING_ENABLED=false`, printing still works the old way: QZ Tray may show the Allow/Block dialog, or the POS falls back to browser print when QZ is unavailable.
+
+### Alternative: browser print only (no QZ Tray)
+
+If QZ Tray, Java, or certificate setup is not possible on a cashier PC:
+
+1. Open **POS → Printers**.
+2. Enable **Use browser print only (no QZ Tray) / طباعة المتصفح فقط**.
+3. Save settings.
+4. Before **Send to kitchen**, set the **kitchen printer** as the Windows default printer.
+5. Before **Payment / receipt**, set the **receipt printer** as the Windows default printer.
+
+Windows will show the normal print dialog; the cashier picks the printer (or uses whichever is default). No QZ Tray, Java, or certificate is required.
+
+On the server, set `QZ_SIGNING_ENABLED=false` in the backend environment if signed QZ connections cause problems and you rely on browser print or unsigned QZ Allow dialogs.
 
 ## Runtime Behavior
 

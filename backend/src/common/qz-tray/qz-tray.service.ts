@@ -38,6 +38,10 @@ export class QzTrayService {
   }
 
   private loadCredentials(): void {
+    if (process.env.QZ_SIGNING_ENABLED === "false") {
+      return;
+    }
+
     const certificate = this.readCredential(
       process.env.QZ_DIGITAL_CERTIFICATE,
       process.env.QZ_CERT_PATH,
