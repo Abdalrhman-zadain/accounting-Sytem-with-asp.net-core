@@ -54,14 +54,21 @@ async function main() {
   console.log("OK  GET /config", config.json);
 
   const cors = await fetch(`${base}/health`, {
-    headers: { Origin: "https://sabina.trusttechlimited.com" },
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://sabina.trusttechlimited.com",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Private-Network": "true",
+    },
   });
   const allowOrigin = cors.headers.get("access-control-allow-origin");
+  const allowPrivate = cors.headers.get("access-control-allow-private-network");
   assert(
     allowOrigin === "https://sabina.trusttechlimited.com",
-    `CORS header missing/wrong: ${allowOrigin}`,
+    `CORS origin header missing/wrong: ${allowOrigin}`,
   );
-  console.log("OK  CORS for production origin");
+  assert(allowPrivate === "true", `Private Network Access header missing: ${allowPrivate}`);
+  console.log("OK  CORS + Private Network Access preflight for production origin");
 
   const firstPrinter = printers.json.printers[0];
   if (firstPrinter) {

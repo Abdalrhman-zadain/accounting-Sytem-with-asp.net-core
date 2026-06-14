@@ -96,10 +96,11 @@ public sealed class LocalPrintServer : IDisposable
         var config = _getConfig();
         var origin = context.Request.Headers["Origin"];
         var allowedOrigin = ResolveAllowedOrigin(origin, config);
+        var isPreflight = string.Equals(context.Request.HttpMethod, "OPTIONS", StringComparison.OrdinalIgnoreCase);
 
-        if (context.Request.HttpMethod == "OPTIONS")
+        if (isPreflight)
         {
-            WriteCors(context.Response, allowedOrigin);
+            WriteCors(context.Response, allowedOrigin, isPreflight: true);
             context.Response.StatusCode = (int)HttpStatusCode.NoContent;
             context.Response.Close();
             return;
@@ -122,7 +123,7 @@ public sealed class LocalPrintServer : IDisposable
         switch (path)
         {
             case "/health":
-                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.0" });
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.1" });
                 return;
             case "/printers":
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { printers = PrintService.ListInstalledPrinters() });
@@ -205,15 +206,23 @@ public sealed class LocalPrintServer : IDisposable
             : null;
     }
 
-    private static void WriteCors(HttpListenerResponse response, string? allowedOrigin)
+    private static void WriteCors(HttpListenerResponse response, string? allowedOrigin, bool isPreflight = false)
     {
         if (!string.IsNullOrWhiteSpace(allowedOrigin))
         {
             response.Headers["Access-Control-Allow-Origin"] = allowedOrigin;
+            response.Headers["Vary"] = "Origin";
         }
 
         response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
-        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept";
+        // Required when https://public-site calls http://127.0.0.1 (Chrome Private Network Access).
+        response.Headers["Access-Control-Allow-Private-Network"] = "true";
+
+        if (isPreflight)
+        {
+            response.Headers["Access-Control-Max-Age"] = "86400";
+        }
     }
 
     private static async Task WriteJsonAsync(HttpListenerResponse response, HttpStatusCode statusCode, object payload)

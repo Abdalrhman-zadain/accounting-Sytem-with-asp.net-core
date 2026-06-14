@@ -26,9 +26,16 @@ async function agentFetch<T>(path: string, init?: RequestInit): Promise<T> {
         ...init?.headers,
       },
     });
-  } catch {
+  } catch (error) {
+    const blockedByBrowser =
+      error instanceof TypeError &&
+      typeof error.message === "string" &&
+      /failed to fetch|networkerror|blocked/i.test(error.message);
+
     throw new LocalPrintAgentError(
-      "Simple Account Print Agent is not running on this PC. Download and start it from POS → Printers.",
+      blockedByBrowser
+        ? "Browser blocked the Print Agent connection. Download the latest Print Agent from POS → Printers, restart it, then refresh. If it still fails, use Print bridge → Browser only."
+        : "Simple Account Print Agent is not running on this PC. Download and start it from POS → Printers.",
       "AGENT_OFFLINE",
     );
   }
