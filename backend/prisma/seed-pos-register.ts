@@ -372,8 +372,8 @@ const POS_PRODUCTS: PosProductSeed[] = [
   {
     id: 'MENU-FATTAH-004',
     code: 'MENU-FATTAH-004',
-    name: 'فتة مخاصي لشخص واحد',
-    description: 'فتة مخاصي لشخص واحد',
+    name: 'فتة مكس',
+    description: 'فتة مكس',
     category: 'الفتات',
     salesPrice: 2.5,
     purchasePrice: 0,

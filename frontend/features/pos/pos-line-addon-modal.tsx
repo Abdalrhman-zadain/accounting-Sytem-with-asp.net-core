@@ -112,6 +112,43 @@ function validateSelection(
   return null;
 }
 
+function getSingleSelectedOptionName(
+  groups: PosAddonGroup[],
+  selectedByGroup: Record<string, PosLineAddonSelection[]>,
+  groupCode: string,
+) {
+  const group = groups.find((entry) => entry.code === groupCode);
+  if (!group) return null;
+  const selected = selectedByGroup[group.id] ?? [];
+  return selected[0]?.name ?? null;
+}
+
+function isOptionDisabledByDependencies(
+  groups: PosAddonGroup[],
+  selectedByGroup: Record<string, PosLineAddonSelection[]>,
+  group: PosAddonGroup,
+  option: { priceAdjustment: number },
+) {
+  if (group.code !== "HEAD_YOGURT_ADDON") {
+    return false;
+  }
+
+  const headSelection = getSingleSelectedOptionName(groups, selectedByGroup, "HALF_HEAD");
+  if (!headSelection) {
+    return false;
+  }
+
+  if (headSelection.includes("نص") || headSelection.toLowerCase().includes("half")) {
+    return option.priceAdjustment !== 0.5;
+  }
+
+  if (headSelection.includes("كامل") || headSelection.toLowerCase().includes("full")) {
+    return option.priceAdjustment !== 1;
+  }
+
+  return false;
+}
+
 export function PosLineAddonModal({
   isOpen,
   itemName,
@@ -190,6 +227,7 @@ export function PosLineAddonModal({
   const toggleOption = (group: PosAddonGroup, optionId: string) => {
     const option = group.options.find((row) => row.id === optionId);
     if (!option) return;
+    if (isOptionDisabledByDependencies(groups, selectedByGroup, group, option)) return;
 
     setSelectedByGroup((current) => {
       const existing = current[group.id] ?? [];
@@ -203,7 +241,25 @@ export function PosLineAddonModal({
 
       if (group.selectionType === "SINGLE") {
         const isSelected = existing.some((row) => row.optionId === optionId);
-        return { ...current, [group.id]: isSelected ? [] : [entry] };
+        const next = { ...current, [group.id]: isSelected ? [] : [entry] };
+
+        if (group.code === "HALF_HEAD") {
+          const yogurtGroup = groups.find((row) => row.code === "HEAD_YOGURT_ADDON");
+          if (yogurtGroup) {
+            const yogurtSelections = next[yogurtGroup.id] ?? [];
+            next[yogurtGroup.id] = yogurtSelections.filter((selection) => {
+              if (!next[group.id]?.length) {
+                return true;
+              }
+              if (option.priceAdjustment === -3.5) {
+                return selection.priceAdjustment === 0.5;
+              }
+              return selection.priceAdjustment === 1;
+            });
+          }
+        }
+
+        return next;
       }
 
       const has = existing.some((row) => row.optionId === optionId);
@@ -339,16 +395,24 @@ export function PosLineAddonModal({
                     const selected = (selectedByGroup[group.id] ?? []).some(
                       (row) => row.optionId === option.id,
                     );
+                    const disabled = isOptionDisabledByDependencies(
+                      groups,
+                      selectedByGroup,
+                      group,
+                      option,
+                    );
                     return (
                       <button
                         key={option.id}
                         type="button"
+                        disabled={disabled}
                         onClick={() => toggleOption(group, option.id)}
                         className={cn(
                           "min-h-[44px] rounded-xl border px-4 py-2.5 text-sm font-bold transition",
                           selected
                             ? "border-slate-900 bg-slate-900 text-white"
                             : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                          disabled && "cursor-not-allowed opacity-40 hover:border-slate-200",
                         )}
                       >
                         {localizeAddonLabel(option.name, option.nameAr, language)}
