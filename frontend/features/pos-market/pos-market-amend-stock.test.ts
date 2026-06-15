@@ -32,10 +32,22 @@ function catalogItem(id: string, onHand: number): InventoryItem {
     id,
     code: "MKT-DEMO-01",
     name: "Demo",
+    unitOfMeasure: "PCS",
     type: "FINISHED_GOOD",
-    onHandQuantity: onHand,
+    defaultSalesPrice: "1.00",
+    defaultPurchasePrice: "0.50",
+    taxable: false,
     trackInventory: true,
-  } as InventoryItem;
+    reorderLevel: "0.00",
+    reorderQuantity: "0.00",
+    onHandQuantity: onHand.toFixed(4),
+    valuationAmount: "0.00",
+    isActive: true,
+    status: "ACTIVE",
+    unitConversions: [],
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
 }
 
 describe("market amend effective stock", () => {
@@ -49,7 +61,7 @@ describe("market amend effective stock", () => {
     const released = buildAmendReleasedQtyByItemIdRecord([cartLine("item-1", 5)]);
     const rawCatalog = [catalogItem("item-1", 5)];
     const catalog = applyAmendEffectiveStockToCatalogItems(rawCatalog, released);
-    expect(catalog[0]?.onHandQuantity).toBe(10);
+    expect(catalog[0]?.onHandQuantity).toBe("10.0000");
 
     const lines = applyAmendEffectiveStockToCartLines([cartLine("item-1", 5)], rawCatalog, released);
     expect(lines[0]?.onHandQuantity).toBe(10);

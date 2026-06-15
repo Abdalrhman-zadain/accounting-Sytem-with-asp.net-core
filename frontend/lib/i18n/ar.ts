@@ -1793,9 +1793,17 @@ Object.assign(arTranslations, {
 
 Object.assign(arTranslations, {
   "purchases.action.postInvoice": "ترحيل الفاتورة",
+  "purchases.action.repostInvoice": "إعادة الترحيل",
+  "purchases.action.unpostInvoice": "فك الترحيل والتعديل",
   "purchases.invoices.empty.notPosted": "لم يتم ترحيلها بعد",
   "purchases.invoices.field.postedAt": "تاريخ الترحيل",
   "purchases.invoices.confirm.post": "هل تريد ترحيل فاتورة الشراء الآن؟",
+  "purchases.invoices.confirm.unpost":
+    'إرجاع فاتورة الشراء "{reference}" إلى مسودة للتعديل؟ سيتم عكس أثر القيد، ورصيد المورد، وحركة الاستلام المخزنية.',
+  "purchases.invoices.confirm.unpostPaid":
+    'فاتورة الشراء "{reference}" مرحلة ومرتبطة بتخصيصات دفعات مورد. عند فك الترحيل سيتم عكس الأثر المحاسبي والمخزني مؤقتاً، وفك تخصيصات الدفعات المرتبطة بها، ثم إعادة فتح الفاتورة كمسودة للتصحيح. هل تريد المتابعة؟',
+  "purchases.invoices.warning.editAfterUnpost":
+    "فاتورة الشراء في وضع التعديل بعد فك الترحيل ويجب إعادة ترحيلها بعد المراجعة.",
 });
 
 Object.assign(arTranslations, {

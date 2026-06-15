@@ -2,9 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { Card } from "@/components/ui";
-import { formatCurrency, getErrorMessage, parseAmount } from "@/features/pos-market/pos-market-cart-utils";
+import {
+  formatCurrency,
+  getErrorMessage,
+  mapPosSaleToAmendSale,
+  parseAmount,
+  stashAmendSaleForEdit,
+} from "@/features/pos-market/pos-market-cart-utils";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import {
   approvePosMarketAccounting,
@@ -33,6 +40,7 @@ type ReviewSessionGroup = {
 export function PosMarketReviewWorkspace() {
   const { token, user } = useAuth();
   const { t, language } = useTranslation();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -139,6 +147,11 @@ export function PosMarketReviewWorkspace() {
     },
     onError: (error) => setMessage(getErrorMessage(error, t("posMarket.review.sessionRejectError"))),
   });
+
+  const handleAmendSale = (sale: PosSale) => {
+    stashAmendSaleForEdit(mapPosSaleToAmendSale(sale));
+    router.push(`/pos-market/register?amend=${sale.id}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -262,6 +275,16 @@ export function PosMarketReviewWorkspace() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {sale.canAmend ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAmendSale(sale)}
+                          className="rounded-full border px-3 py-1.5 text-xs font-bold"
+                          style={{ borderColor: POS_MARKET_THEME.colors.primary, color: POS_MARKET_THEME.colors.primary }}
+                        >
+                          {t("salesReceivables.action.unpostInvoice")}
+                        </button>
+                      ) : null}
                       {!isSessionPosting && hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
                         <button
                           type="button"

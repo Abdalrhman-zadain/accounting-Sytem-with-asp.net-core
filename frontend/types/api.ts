@@ -2579,6 +2579,7 @@ export type PurchaseInvoice = {
   allocationStatus: AllocationStatus;
   canEdit: boolean;
   canPost?: boolean;
+  canUnpost?: boolean;
   canReverse: boolean;
   journalEntryId?: string | null;
   journalReference?: string | null;

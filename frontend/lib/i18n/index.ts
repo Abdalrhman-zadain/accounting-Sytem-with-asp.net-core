@@ -2488,6 +2488,8 @@ Object.assign(enTranslations, {
   "pos.delivery.settlementStatus.REVERSED": "Reversed",
   "purchases.action.newInvoice": "New Purchase Invoice",
   "purchases.action.postInvoice": "Post Invoice",
+  "purchases.action.repostInvoice": "Repost Invoice",
+  "purchases.action.unpostInvoice": "Unpost and Edit",
   "purchases.action.postAndCreateSupplierPayment":
     "Post and Create Supplier Payment",
   "purchases.tooltip.postAndCreateSupplierPayment":
@@ -2563,6 +2565,12 @@ Object.assign(enTranslations, {
   "purchases.invoices.line.label": "Line {index}",
   "purchases.invoices.line.qtyPrice": "Qty {quantity} × {price}",
   "purchases.invoices.confirm.post": "Post this purchase invoice now?",
+  "purchases.invoices.confirm.unpost":
+    'Return purchase invoice "{reference}" to draft for editing? Ledger, supplier balance, and inventory receipt effects will be reversed.',
+  "purchases.invoices.confirm.unpostPaid":
+    'Purchase invoice "{reference}" is posted and has supplier payment allocations. Unposting will temporarily reverse accounting and inventory effects, remove linked payment allocations, and reopen the invoice as a draft for correction. Continue?',
+  "purchases.invoices.warning.editAfterUnpost":
+    "This purchase invoice is in edit mode after unposting and should be reposted after review.",
   "purchases.validation.supplierRequired": "Select a supplier.",
   "purchases.validation.dateRequired": "A date is required.",
   "purchases.validation.currencyRequired": "A currency is required.",

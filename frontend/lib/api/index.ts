@@ -1877,6 +1877,16 @@ export async function postPurchaseInvoice(id: string, token?: string | null) {
   );
 }
 
+export async function unpostPurchaseInvoice(id: string, token?: string | null) {
+  return apiRequest<PurchaseInvoice>(
+    `/purchases/purchase-invoices/${id}/unpost`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
 export async function reversePurchaseInvoice(
   id: string,
   token?: string | null,

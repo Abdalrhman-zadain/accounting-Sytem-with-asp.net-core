@@ -511,7 +511,7 @@ export function applyAmendEffectiveStockToCatalogItems(
     if (effective === parseAmount(item.onHandQuantity)) {
       return item;
     }
-    return { ...item, onHandQuantity: effective };
+    return { ...item, onHandQuantity: effective.toFixed(4) };
   });
 }
 

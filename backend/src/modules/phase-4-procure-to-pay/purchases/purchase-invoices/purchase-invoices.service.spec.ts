@@ -5,11 +5,25 @@ import { PurchaseInvoicesService } from './purchase-invoices.service';
 
 describe('PurchaseInvoicesService', () => {
   const prisma = {
+    $transaction: jest.fn(),
     purchaseInvoice: {
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      update: jest.fn(),
     },
     debitNote: {
       count: jest.fn(),
+    },
+    supplier: {
+      update: jest.fn(),
+    },
+    supplierPayment: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    supplierPaymentAllocation: {
+      deleteMany: jest.fn(),
+      aggregate: jest.fn(),
     },
     account: {
       findMany: jest.fn(),
@@ -23,6 +37,9 @@ describe('PurchaseInvoicesService', () => {
     inventoryWarehouse: {
       findMany: jest.fn(),
     },
+  };
+  const postingService = {
+    unpost: jest.fn(),
   };
   const reversalService = {
     reverse: jest.fn(),
@@ -38,12 +55,21 @@ describe('PurchaseInvoicesService', () => {
     jest.clearAllMocks();
     prisma.tax.findMany.mockResolvedValue([]);
     prisma.purchaseInvoice.findUnique.mockReset();
+    prisma.purchaseInvoice.findUniqueOrThrow.mockReset();
+    prisma.purchaseInvoice.update.mockReset();
     prisma.debitNote.count.mockReset();
+    prisma.$transaction.mockReset();
+    prisma.supplier.update.mockReset();
+    prisma.supplierPayment.findUnique.mockReset();
+    prisma.supplierPayment.update.mockReset();
+    prisma.supplierPaymentAllocation.deleteMany.mockReset();
+    prisma.supplierPaymentAllocation.aggregate.mockReset();
+    postingService.unpost.mockReset();
     service = new PurchaseInvoicesService(
       prisma as never,
       {} as never,
       {} as never,
-      {} as never,
+      postingService as never,
       reversalService as never,
       inventoryPostingService as never,
       { log: jest.fn() } as never,
@@ -191,6 +217,118 @@ describe('PurchaseInvoicesService', () => {
       valueIn: new Prisma.Decimal(0),
       valueOut: new Prisma.Decimal(500),
     }));
+  });
+
+  it('unposts a fully paid purchase invoice for editing and detaches supplier payment allocations', async () => {
+    const invoice = {
+      id: 'pi-1',
+      reference: 'PI-001',
+      status: 'FULLY_PAID',
+      journalEntryId: 'je-1',
+      totalAmount: decimal(25),
+      invoiceDate: new Date('2026-06-15T00:00:00.000Z'),
+      supplierId: 'sup-1',
+      supplier: { id: 'sup-1', isActive: true },
+      _count: { debitNotes: 0, supplierAllocations: 1 },
+    };
+    const lockedInvoice = {
+      ...invoice,
+      journalEntry: { id: 'je-1', reference: 'JE-1' },
+      supplierAllocations: [{ id: 'alloc-1', amount: decimal(25), supplierPaymentId: 'pay-1' }],
+    };
+    const updatedInvoice = {
+      id: 'pi-1',
+      reference: 'PI-001',
+      status: 'DRAFT',
+      journalEntryId: null,
+      totalAmount: decimal(25),
+      allocatedAmount: decimal(0),
+      outstandingAmount: decimal(25),
+      allocationStatus: 'UNALLOCATED',
+      supplier: { id: 'sup-1', code: 'SUP-1', name: 'Supplier 1', defaultCurrency: 'JOD', isActive: true },
+      lines: [],
+      sourcePurchaseOrder: null,
+      sourcePurchaseRequest: null,
+      journalEntry: null,
+      postedAt: null,
+      _count: { debitNotes: 0, supplierAllocations: 0 },
+    };
+    const tx = {
+      purchaseInvoice: {
+        findUnique: jest.fn().mockResolvedValue(lockedInvoice),
+        update: jest.fn().mockResolvedValue(undefined),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(updatedInvoice),
+      },
+      supplierPaymentAllocation: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: decimal(0) } }),
+      },
+      supplierPayment: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'pay-1', amount: decimal(25) }),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      supplier: {
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    prisma.purchaseInvoice.findUnique.mockResolvedValue(invoice);
+    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    );
+    jest
+      .spyOn(service as any, 'reverseInventoryReceiptPosting')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, 'enrichAndMapPurchaseInvoices')
+      .mockResolvedValue([{ id: 'pi-1', reference: 'PI-001', canUnpost: false }]);
+
+    const result = await service.unpost('pi-1');
+
+    expect(tx.supplierPaymentAllocation.deleteMany).toHaveBeenCalledWith({
+      where: { purchaseInvoiceId: 'pi-1' },
+    });
+    expect(postingService.unpost).toHaveBeenCalledWith('je-1', tx);
+    expect(tx.supplier.update).toHaveBeenCalledWith({
+      where: { id: 'sup-1' },
+      data: {
+        currentBalance: {
+          decrement: expect.anything(),
+        },
+      },
+    });
+    expect(tx.purchaseInvoice.update).toHaveBeenCalledWith({
+      where: { id: 'pi-1' },
+      data: expect.objectContaining({
+        status: 'DRAFT',
+        journalEntryId: null,
+        allocatedAmount: expect.anything(),
+        outstandingAmount: expect.anything(),
+        allocationStatus: 'UNALLOCATED',
+      }),
+    });
+    expect(tx.supplierPayment.update).toHaveBeenCalledWith({
+      where: { id: 'pay-1' },
+      data: {
+        allocatedAmount: expect.anything(),
+        unappliedAmount: expect.anything(),
+      },
+    });
+    expect(result).toEqual({ id: 'pi-1', reference: 'PI-001', canUnpost: false });
+  });
+
+  it('blocks unposting a purchase invoice that already has linked debit notes', async () => {
+    prisma.purchaseInvoice.findUnique.mockResolvedValue({
+      id: 'pi-1',
+      status: 'POSTED',
+      journalEntryId: 'je-1',
+      supplier: { id: 'sup-1', isActive: true },
+      _count: { debitNotes: 1, supplierAllocations: 0 },
+    });
+
+    await expect(service.unpost('pi-1')).rejects.toThrow(
+      new BadRequestException('Purchase invoices with posted debit notes cannot be unposted.'),
+    );
   });
 });
 

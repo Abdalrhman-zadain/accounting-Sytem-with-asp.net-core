@@ -66,6 +66,7 @@ import {
   reverseDebitNote,
   reversePurchaseInvoice,
   reverseSupplierPayment,
+  unpostPurchaseInvoice,
   rejectPurchaseRequest,
   getSupplierBalance,
   getSupplierPaymentById,
@@ -386,6 +387,7 @@ export function PurchasesPage() {
   const [inlineJournalReference, setInlineJournalReference] = useState<string | null>(null);
   const [isInvoiceEditorOpen, setIsInvoiceEditorOpen] = useState(false);
   const [invoiceEditor, setInvoiceEditor] = useState<PurchaseInvoiceEditorState>(EMPTY_INVOICE_EDITOR);
+  const [invoiceEditorIsUnpostEditMode, setInvoiceEditorIsUnpostEditMode] = useState(false);
   const [invoiceActiveTab, setInvoiceActiveTab] = useState<"lines" | "journal" | "other">("lines");
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [paymentSearch, setPaymentSearch] = useState("");
@@ -985,6 +987,41 @@ export function PurchasesPage() {
     },
   });
 
+  const unpostPurchaseInvoiceMutation = useMutation({
+    mutationFn: (id: string) => unpostPurchaseInvoice(id, token),
+    onSuccess: async (updated) => {
+      await invalidatePurchases(queryClient);
+      setSelectedPurchaseInvoiceId(updated.id);
+      setInvoiceEditor({
+        id: updated.id,
+        reference: updated.reference,
+        invoiceDate: updated.invoiceDate.slice(0, 10),
+        supplierId: updated.supplier.id,
+        currencyCode: updated.currencyCode,
+        description: updated.description ?? "",
+        sourcePurchaseOrderId: updated.sourcePurchaseOrder?.id ?? "",
+        sourcePurchaseRequestId: updated.sourcePurchaseRequest?.id ?? "",
+        lines: updated.lines.map((line) => ({
+          key: line.id,
+          itemId: line.itemId ?? "",
+          warehouseId: line.warehouseId ?? "",
+          itemName: line.itemName ?? line.item?.name ?? "",
+          description: line.description,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discountAmount: line.discountAmount,
+          taxId: line.taxId ?? "",
+          taxRate: "",
+          taxAmount: line.taxAmount,
+          accountId: line.account.id,
+        })),
+      });
+      setInvoiceEditorIsUnpostEditMode(true);
+      setInvoiceActiveTab("lines");
+      setIsInvoiceEditorOpen(true);
+    },
+  });
+
   const reversePurchaseInvoiceMutation = useMutation({
     mutationFn: (id: string) => reversePurchaseInvoice(id, token),
     onSuccess: async (updated) => {
@@ -1346,7 +1383,11 @@ export function PurchasesPage() {
   const receiptFormError = getPurchaseReceiptFormError(receiptEditor, t);
   const invoiceSaveError = getMutationErrorMessage(createPurchaseInvoiceMutation.error ?? updatePurchaseInvoiceMutation.error);
   const invoiceFormError = getPurchaseInvoiceFormError(invoiceEditor, inventoryItems, t);
-  const invoiceActionError = getMutationErrorMessage(postPurchaseInvoiceMutation.error ?? reversePurchaseInvoiceMutation.error);
+  const invoiceActionError = getMutationErrorMessage(
+    postPurchaseInvoiceMutation.error ??
+      unpostPurchaseInvoiceMutation.error ??
+      reversePurchaseInvoiceMutation.error,
+  );
   const paymentSaveError = getMutationErrorMessage(createSupplierPaymentMutation.error ?? updateSupplierPaymentMutation.error);
   const paymentFormError = getSupplierPaymentFormError(paymentEditor, t);
   const paymentActionError = getMutationErrorMessage(
@@ -1372,7 +1413,10 @@ export function PurchasesPage() {
     postDebitNoteMutation.error ?? cancelDebitNoteMutation.error ?? reverseDebitNoteMutation.error,
   );
 
-  const activeInvoiceActionMutationPending = postPurchaseInvoiceMutation.isPending || reversePurchaseInvoiceMutation.isPending;
+  const activeInvoiceActionMutationPending =
+    postPurchaseInvoiceMutation.isPending ||
+    unpostPurchaseInvoiceMutation.isPending ||
+    reversePurchaseInvoiceMutation.isPending;
   const isInvoiceEditorBusy =
     isInvoiceSaving ||
     createPurchaseInvoiceMutation.isPending ||
@@ -2831,18 +2875,22 @@ export function PurchasesPage() {
                     className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                   >
                     <FileText className="h-4 w-4 mr-1.5" />
-                    {t("purchases.action.postInvoice")}
+                    {invoiceEditorIsUnpostEditMode
+                      ? t("purchases.action.repostInvoice")
+                      : t("purchases.action.postInvoice")}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => saveAndCreateSupplierPaymentFromInvoiceEditor()}
-                    disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
-                    title={t("purchases.tooltip.postAndCreateSupplierPayment")}
-                    className="border-sky-200 text-sky-700 hover:bg-sky-50"
-                  >
-                    <ReceiptText className="h-4 w-4 mr-1.5" />
-                    {t("purchases.action.postAndCreateSupplierPayment")}
-                  </Button>
+                  {invoiceEditorIsUnpostEditMode ? null : (
+                    <Button
+                      variant="secondary"
+                      onClick={() => saveAndCreateSupplierPaymentFromInvoiceEditor()}
+                      disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
+                      title={t("purchases.tooltip.postAndCreateSupplierPayment")}
+                      className="border-sky-200 text-sky-700 hover:bg-sky-50"
+                    >
+                      <ReceiptText className="h-4 w-4 mr-1.5" />
+                      {t("purchases.action.postAndCreateSupplierPayment")}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -3344,6 +3392,27 @@ export function PurchasesPage() {
                         openEditPurchaseInvoiceEditor(selectedPurchaseInvoice);
                       }}>
                         {t("purchases.action.edit")}
+                      </Button>
+                    ) : null}
+                    {selectedPurchaseInvoice.canUnpost ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={activeInvoiceActionMutationPending}
+                        onClick={() =>
+                          confirmAndRun(
+                            Number(selectedPurchaseInvoice.allocatedAmount) > 0
+                              ? t("purchases.invoices.confirm.unpostPaid", {
+                                  reference: selectedPurchaseInvoice.reference,
+                                })
+                              : t("purchases.invoices.confirm.unpost", {
+                                  reference: selectedPurchaseInvoice.reference,
+                                }),
+                            () => unpostPurchaseInvoiceMutation.mutate(selectedPurchaseInvoice.id),
+                          )
+                        }
+                      >
+                        {t("purchases.action.unpostInvoice")}
                       </Button>
                     ) : null}
                     {selectedPurchaseInvoice.canPost ? (
@@ -5228,6 +5297,12 @@ export function PurchasesPage() {
                     </div>
                   ) : null}
 
+                  {invoiceEditorIsUnpostEditMode ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+                      {t("purchases.invoices.warning.editAfterUnpost")}
+                    </div>
+                  ) : null}
+
                   {invoiceSaveError ? (
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                       {invoiceSaveError}
@@ -5267,20 +5342,24 @@ export function PurchasesPage() {
                       className="rounded-2xl border-emerald-200 px-6 text-emerald-700 hover:bg-emerald-50"
                     >
                       <FileText className="h-4 w-4" />
-                      {t("purchases.action.postInvoice")}
+                      {invoiceEditorIsUnpostEditMode
+                        ? t("purchases.action.repostInvoice")
+                        : t("purchases.action.postInvoice")}
                     </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        void saveAndCreateSupplierPaymentFromInvoiceEditor();
-                      }}
-                      disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
-                      title={t("purchases.tooltip.postAndCreateSupplierPayment")}
-                      className="rounded-2xl border-sky-200 px-6 text-sky-700 hover:bg-sky-50"
-                    >
-                      <ReceiptText className="h-4 w-4" />
-                      {t("purchases.action.postAndCreateSupplierPayment")}
-                    </Button>
+                    {invoiceEditorIsUnpostEditMode ? null : (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          void saveAndCreateSupplierPaymentFromInvoiceEditor();
+                        }}
+                        disabled={Boolean(invoiceFormError) || isInvoiceEditorBusy}
+                        title={t("purchases.tooltip.postAndCreateSupplierPayment")}
+                        className="rounded-2xl border-sky-200 px-6 text-sky-700 hover:bg-sky-50"
+                      >
+                        <ReceiptText className="h-4 w-4" />
+                        {t("purchases.action.postAndCreateSupplierPayment")}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -6458,6 +6537,7 @@ export function PurchasesPage() {
       supplierId: defaultSupplier?.id ?? "",
       currencyCode: defaultSupplier?.defaultCurrency ?? "JOD",
     });
+    setInvoiceEditorIsUnpostEditMode(false);
     setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(true);
   }
@@ -6491,6 +6571,7 @@ export function PurchasesPage() {
         accountId: line.account.id,
       })),
     });
+    setInvoiceEditorIsUnpostEditMode(false);
     setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(true);
   }
@@ -6501,6 +6582,7 @@ export function PurchasesPage() {
     postPurchaseInvoiceMutation.reset();
     setIsInvoiceSaving(false);
     setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+    setInvoiceEditorIsUnpostEditMode(false);
     setInvoiceActiveTab("lines");
     setIsInvoiceEditorOpen(false);
   }

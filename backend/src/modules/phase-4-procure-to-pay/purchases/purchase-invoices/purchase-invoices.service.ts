@@ -99,6 +99,12 @@ type PurchaseInvoiceWithRelations = Prisma.PurchaseInvoiceGetPayload<{
         };
       };
     };
+    _count: {
+      select: {
+        debitNotes: true;
+        supplierAllocations: true;
+      };
+    };
   };
 }>;
 
@@ -439,6 +445,140 @@ export class PurchaseInvoicesService {
       entityId: updated.id,
       action: AuditAction.POST,
       details: { status: updated.status, reference: updated.reference, journalEntryId: updated.journalEntryId },
+    });
+
+    const [mapped] = await this.enrichAndMapPurchaseInvoices([updated]);
+    return mapped;
+  }
+
+  async unpost(id: string) {
+    const invoice = await this.prisma.purchaseInvoice.findUnique({
+      where: { id },
+      include: {
+        supplier: {
+          select: {
+            id: true,
+            isActive: true,
+          },
+        },
+        _count: {
+          select: {
+            debitNotes: true,
+            supplierAllocations: true,
+          },
+        },
+      },
+    });
+    if (!invoice) {
+      throw new BadRequestException(`Purchase invoice ${id} was not found.`);
+    }
+
+    const blockReason = this.describePurchaseInvoiceUnpostBlock(invoice);
+    if (blockReason) {
+      throw new BadRequestException(blockReason);
+    }
+
+    const journalEntryId = invoice.journalEntryId!;
+    const totalAmount = Number(invoice.totalAmount);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.purchaseInvoice.findUnique({
+        where: { id },
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              isActive: true,
+            },
+          },
+          journalEntry: {
+            select: {
+              id: true,
+              reference: true,
+            },
+          },
+          supplierAllocations: {
+            select: {
+              id: true,
+              amount: true,
+              supplierPaymentId: true,
+            },
+            orderBy: { allocatedAt: 'asc' },
+          },
+          _count: {
+            select: {
+              debitNotes: true,
+              supplierAllocations: true,
+            },
+          },
+        },
+      });
+      if (!locked) {
+        throw new BadRequestException(`Purchase invoice ${id} was not found.`);
+      }
+
+      const lockedBlockReason = this.describePurchaseInvoiceUnpostBlock(locked);
+      if (lockedBlockReason) {
+        throw new BadRequestException(lockedBlockReason);
+      }
+
+      const affectedSupplierPaymentIds = Array.from(
+        new Set((locked.supplierAllocations ?? []).map((allocation) => allocation.supplierPaymentId)),
+      );
+
+      if (affectedSupplierPaymentIds.length > 0) {
+        await tx.supplierPaymentAllocation.deleteMany({
+          where: { purchaseInvoiceId: locked.id },
+        });
+      }
+
+      await this.reverseInventoryReceiptPosting(tx, {
+        id: locked.id,
+        reference: locked.reference,
+        invoiceDate: locked.invoiceDate,
+      });
+
+      await this.postingService.unpost(journalEntryId, tx as never);
+
+      await tx.supplier.update({
+        where: { id: locked.supplierId },
+        data: {
+          currentBalance: {
+            decrement: this.toAmount(totalAmount),
+          },
+        },
+      });
+
+      await tx.purchaseInvoice.update({
+        where: { id: locked.id },
+        data: {
+          status: PurchaseInvoiceStatus.DRAFT,
+          journalEntryId: null,
+          postedAt: null,
+          allocatedAmount: this.toAmount(0),
+          outstandingAmount: locked.totalAmount,
+          allocationStatus: 'UNALLOCATED',
+        },
+      });
+
+      await this.recomputeSupplierPayments(tx, affectedSupplierPaymentIds);
+
+      return tx.purchaseInvoice.findUniqueOrThrow({
+        where: { id: locked.id },
+        include: this.purchaseInvoiceInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      entity: 'PurchaseInvoice',
+      entityId: updated.id,
+      action: AuditAction.UPDATE,
+      details: {
+        status: updated.status,
+        reference: updated.reference,
+        journalEntryId,
+        action: 'UNPOST_FOR_EDIT',
+      },
     });
 
     const [mapped] = await this.enrichAndMapPurchaseInvoices([updated]);
@@ -845,6 +985,72 @@ export class PurchaseInvoicesService {
     };
   }
 
+  private canUnpostPurchaseInvoice(row: {
+    status: PurchaseInvoiceStatus;
+    journalEntryId: string | null;
+    _count?: { debitNotes: number; supplierAllocations: number };
+  }) {
+    return !this.describePurchaseInvoiceUnpostBlock(row);
+  }
+
+  private describePurchaseInvoiceUnpostBlock(invoice: {
+    status: PurchaseInvoiceStatus;
+    journalEntryId: string | null;
+    _count?: { debitNotes: number; supplierAllocations: number };
+  }) {
+    if (
+      invoice.status !== PurchaseInvoiceStatus.POSTED &&
+      invoice.status !== PurchaseInvoiceStatus.PARTIALLY_PAID &&
+      invoice.status !== PurchaseInvoiceStatus.FULLY_PAID
+    ) {
+      return 'Only posted purchase invoices can be unposted.';
+    }
+    if (!invoice.journalEntryId) {
+      return 'Purchase invoice does not have a posted journal entry to unpost.';
+    }
+    if ((invoice._count?.debitNotes ?? 0) > 0) {
+      return 'Purchase invoices with posted debit notes cannot be unposted.';
+    }
+    return null;
+  }
+
+  private async recomputeSupplierPayments(
+    tx: Prisma.TransactionClient | PrismaService,
+    supplierPaymentIds: string[],
+  ) {
+    const uniqueIds = Array.from(new Set(supplierPaymentIds.filter(Boolean)));
+    await Promise.all(uniqueIds.map((paymentId) => this.recomputeSupplierPaymentAmounts(tx, paymentId)));
+  }
+
+  private async recomputeSupplierPaymentAmounts(
+    tx: Prisma.TransactionClient | PrismaService,
+    supplierPaymentId: string,
+  ) {
+    const payment = await tx.supplierPayment.findUnique({
+      where: { id: supplierPaymentId },
+      select: { id: true, amount: true },
+    });
+    if (!payment) {
+      return;
+    }
+
+    const allocations = await tx.supplierPaymentAllocation.aggregate({
+      where: { supplierPaymentId },
+      _sum: { amount: true },
+    });
+
+    const allocatedAmount = Number(allocations._sum.amount ?? 0);
+    const unappliedAmount = Math.max(0, Number((Number(payment.amount) - allocatedAmount).toFixed(2)));
+
+    await tx.supplierPayment.update({
+      where: { id: supplierPaymentId },
+      data: {
+        allocatedAmount: this.toAmount(allocatedAmount),
+        unappliedAmount: this.toAmount(unappliedAmount),
+      },
+    });
+  }
+
   private purchaseInvoiceInclude() {
     return {
       supplier: {
@@ -902,6 +1108,12 @@ export class PurchaseInvoicesService {
               isPosting: true,
             },
           },
+        },
+      },
+      _count: {
+        select: {
+          debitNotes: true,
+          supplierAllocations: true,
         },
       },
     } satisfies Prisma.PurchaseInvoiceInclude;
@@ -1057,6 +1269,7 @@ export class PurchaseInvoicesService {
       allocationStatus: row.allocationStatus,
       canEdit: row.status === PurchaseInvoiceStatus.DRAFT,
       canPost: row.status === PurchaseInvoiceStatus.DRAFT,
+      canUnpost: this.canUnpostPurchaseInvoice(row),
       canReverse:
         row.status === PurchaseInvoiceStatus.POSTED ||
         row.status === PurchaseInvoiceStatus.PARTIALLY_PAID ||

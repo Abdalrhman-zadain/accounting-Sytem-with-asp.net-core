@@ -41,6 +41,11 @@ export class PurchaseInvoicesController {
     return this.service.post(id);
   }
 
+  @Post(':id/unpost')
+  unpost(@Param('id') id: string) {
+    return this.service.unpost(id);
+  }
+
   @Post(':id/reverse')
   reverse(@Param('id') id: string, @Body() dto: ReverseJournalEntryDto) {
     return this.service.reverse(id, dto);
