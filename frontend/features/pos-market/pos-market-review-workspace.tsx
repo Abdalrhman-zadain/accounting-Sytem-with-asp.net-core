@@ -21,7 +21,7 @@ import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import type { PosSale } from "@/types/api";
+import type { PosAccountingStatus, PosSale } from "@/types/api";
 
 type ReviewSessionGroup = {
   sessionId: string | null;
@@ -81,8 +81,17 @@ export function PosMarketReviewWorkspace() {
     reviewSessionGroups[0] ??
     null;
 
+  const actionableAccountingStatuses: PosAccountingStatus[] = ["PENDING_REVIEW", "UNPOSTED"];
+  const selectedGroupHasActionableSales = (selectedGroup?.sales ?? []).some((sale) => {
+    if (!sale.posAccountingStatus) {
+      return false;
+    }
+    return actionableAccountingStatuses.includes(sale.posAccountingStatus);
+  });
+
   const invalidateReview = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketReview(token ?? null) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketSessions(token ?? null) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketReportsOverview(token ?? null) });
   };
 
@@ -214,24 +223,28 @@ export function PosMarketReviewWorkspace() {
                       })}
                     </div>
                   </div>
-                  {selectedGroup.sessionId && hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
+                  {selectedGroup.sessionId && selectedGroupHasActionableSales ? (
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => approveSessionMutation.mutate(selectedGroup.sessionId!)}
-                        className="rounded-full px-4 py-2 text-xs font-bold text-white"
-                        style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
-                      >
-                        {t("pos.review.approveSession")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => rejectSessionMutation.mutate(selectedGroup.sessionId!)}
-                        className="rounded-full border px-4 py-2 text-xs font-bold text-red-600"
-                        style={{ borderColor: "#f0d9d6" }}
-                      >
-                        {t("pos.review.reject")}
-                      </button>
+                      {hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
+                        <button
+                          type="button"
+                          onClick={() => approveSessionMutation.mutate(selectedGroup.sessionId!)}
+                          className="rounded-full px-4 py-2 text-xs font-bold text-white"
+                          style={{ backgroundColor: POS_MARKET_THEME.colors.primary }}
+                        >
+                          {t("pos.review.approveSession")}
+                        </button>
+                      ) : null}
+                      {hasPermission(user, "POS_REJECT_ACCOUNTING") ? (
+                        <button
+                          type="button"
+                          onClick={() => rejectSessionMutation.mutate(selectedGroup.sessionId!)}
+                          className="rounded-full border px-4 py-2 text-xs font-bold text-red-600"
+                          style={{ borderColor: "#f0d9d6" }}
+                        >
+                          {t("pos.review.reject")}
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

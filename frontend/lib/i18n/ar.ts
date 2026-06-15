@@ -3470,6 +3470,7 @@ Object.assign(arTranslations, {
   "pos.review.sessionReview": "مراجعة الوردية",
   "pos.review.pendingSalesCount": "{count} مبيعات بانتظار المراجعة المحاسبية",
   "pos.review.approveSession": "اعتماد الوردية",
+  "pos.review.sessionPostingOnly": "تتم المراجعة والترحيل المحاسبي لنقاط البيع على مستوى الوردية فقط.",
   "pos.review.backToSessions": "العودة إلى قائمة الورديات",
   "pos.review.subtitle": "مراجعة الورديات المسلمة، المدفوعات، فرق الصندوق، وأثر المخزون قبل الترحيل",
   "pos.review.reviewCashDifference": "مراجعة فرق الكاش",

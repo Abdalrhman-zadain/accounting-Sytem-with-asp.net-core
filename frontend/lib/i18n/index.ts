@@ -2137,6 +2137,7 @@ Object.assign(enTranslations, {
   "pos.review.sessionReview": "Session review",
   "pos.review.pendingSalesCount": "{count} sale(s) pending accounting review",
   "pos.review.approveSession": "Approve session",
+  "pos.review.sessionPostingOnly": "POS accounting posting is handled at the session level only.",
   "pos.review.backToSessions": "Back to sessions list",
   "pos.review.subtitle": "Review submitted sessions, payments, cash differences, and inventory impact before posting.",
   "pos.review.reviewCashDifference": "Review cash difference",
