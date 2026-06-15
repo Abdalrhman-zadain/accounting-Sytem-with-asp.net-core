@@ -3102,6 +3102,7 @@ export type SalesInvoice = {
   lines: SalesLine[];
   canUnpost?: boolean;
   canCreateReturn?: boolean;
+  isInUnpostEditMode?: boolean;
   createdAt: string;
   updatedAt: string;
 };

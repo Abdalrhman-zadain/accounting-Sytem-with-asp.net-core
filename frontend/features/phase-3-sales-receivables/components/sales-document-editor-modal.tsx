@@ -62,6 +62,8 @@ type SalesDocumentEditorModalProps = {
   validationError?: string | null;
   defaultLineTax?: Tax | null;
   allowTaxOverride?: boolean;
+  warningBannerText?: string;
+  cancelLabel?: string;
   onClose: () => void;
   onReferenceChange: (value: string) => void;
   onDateChange: (value: string) => void;
@@ -184,6 +186,8 @@ export function SalesDocumentEditorModal({
   validationError,
   defaultLineTax,
   allowTaxOverride = true,
+  warningBannerText,
+  cancelLabel,
   onClose,
   onReferenceChange,
   onDateChange,
@@ -589,6 +593,12 @@ export function SalesDocumentEditorModal({
             {visibleValidationError ? (
               <div className={cn("rounded-md border border-red-200 bg-red-50 px-5 py-4 text-base font-semibold text-red-700 shadow-sm", isArabic ? "text-right" : "text-left")}>
                 {visibleValidationError}
+              </div>
+            ) : null}
+
+            {warningBannerText ? (
+              <div className={cn("rounded-md border border-amber-200 bg-amber-50 px-5 py-4 text-base font-semibold text-amber-800 shadow-sm", isArabic ? "text-right" : "text-left")}>
+                {warningBannerText}
               </div>
             ) : null}
 
@@ -1053,7 +1063,7 @@ export function SalesDocumentEditorModal({
         {/* Footer Actions */}
         <div className={cn("flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8", isInline && "rounded-b-lg shadow-md")}>
           <Button variant="secondary" onClick={onClose} className="rounded-xl px-6 py-3 font-bold text-base">
-            {t("salesReceivables.action.cancel")}
+            {cancelLabel ?? t("salesReceivables.action.cancel")}
           </Button>
 
           <div className="flex flex-wrap items-center gap-3.5">

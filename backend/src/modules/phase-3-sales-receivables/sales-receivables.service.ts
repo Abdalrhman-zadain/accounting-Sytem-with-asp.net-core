@@ -66,7 +66,14 @@ type ReceiptQuery = {
 };
 
 type SalesReceivablesDb = Prisma.TransactionClient | PrismaService;
-type AuthUser = { userId?: string; email?: string; role?: string };
+type AuthUser =
+  | AuthorizedUser
+  | {
+      userId?: string;
+      email?: string;
+      role?: string;
+      permissions?: string[];
+    };
 
 const CUSTOMER_RECEIVABLES_PARENT_CODE = "1121000";
 const RECEIVABLES_HEADER_CODE = "1120000";
@@ -103,6 +110,20 @@ type ResolvedCreditNoteType = {
   defaultAccountId: string;
   helperText: string | null;
   isActive: boolean;
+};
+
+type DetachedReceiptAllocationSnapshot = {
+  receiptTransactionId: string;
+  receiptReference: string | null;
+  amount: number;
+  customerId: string | null;
+};
+
+type PendingInvoiceUnpostEditSnapshot = {
+  action: "UNPOST_FOR_EDIT";
+  editSessionState: "PENDING_REPOST";
+  detachedAllocations: DetachedReceiptAllocationSnapshot[];
+  originalCustomerId: string;
 };
 
 type ResolvedCreditNoteLine = ResolvedLine & {
@@ -1103,6 +1124,14 @@ export class SalesReceivablesService {
       orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
     });
 
+    const editStateByInvoiceId = await this.getInvoiceUnpostEditStateByIds(
+      rows.map((row) => row.id),
+    );
+    for (const row of rows) {
+      (row as any).__isInUnpostEditMode =
+        editStateByInvoiceId.get(row.id)?.isInEditMode ?? false;
+    }
+
     return rows.map((row) => this.mapInvoice(row));
   }
 
@@ -1395,6 +1424,8 @@ export class SalesReceivablesService {
       throw new BadRequestException("Only draft invoices can be posted.");
     }
 
+    const pendingEditSnapshot = await this.findPendingInvoiceUnpostEditSnapshot(id);
+
     const result = await this.prisma.$transaction(async (tx) => {
       const invoice = await tx.salesInvoice.findUnique({
         where: { id },
@@ -1539,14 +1570,27 @@ export class SalesReceivablesService {
         where: { id: invoice.customerId },
         data: { currentBalance: { increment: this.toAmount(totalAmount) } },
       });
-      await this.recomputeInvoiceAmounts(tx, invoice.id);
+      let invoiceSummary = await this.recomputeInvoiceAmounts(tx, invoice.id);
+      const reappliedReceiptAllocations = pendingEditSnapshot
+        ? await this.reapplyDetachedReceiptAllocations(
+            tx,
+            invoice.id,
+            invoice.customerId,
+            pendingEditSnapshot,
+          )
+        : [];
+      if (reappliedReceiptAllocations.length > 0) {
+        invoiceSummary = await this.recomputeInvoiceAmounts(tx, invoice.id);
+      }
 
       return {
         invoiceId: invoice.id,
         invoiceReference: invoice.reference,
         sourceSalesOrderId: invoice.sourceSalesOrderId,
         journalEntryId: posted.id,
-        status: nextStatus,
+        status: invoiceSummary.status,
+        isRepostAfterUnpost: Boolean(pendingEditSnapshot),
+        reappliedReceiptAllocations,
       };
     });
 
@@ -1559,7 +1603,10 @@ export class SalesReceivablesService {
         reference: result.invoiceReference,
         status: result.status,
         journalEntryId: result.journalEntryId,
-        sourceAction: dto.sourceAction ?? "STANDARD_POST",
+        sourceAction: result.isRepostAfterUnpost
+          ? "REPOST_AFTER_UNPOST"
+          : (dto.sourceAction ?? "STANDARD_POST"),
+        reappliedReceiptAllocations: result.reappliedReceiptAllocations,
       },
     });
 
@@ -1585,9 +1632,26 @@ export class SalesReceivablesService {
       throw new BadRequestException(`Sales invoice ${id} was not found.`);
     }
 
+    if (
+      invoice.status === SalesInvoiceStatus.DRAFT &&
+      !invoice.journalEntryId &&
+      (await this.isInvoiceInUnpostEditMode(id))
+    ) {
+      throw new BadRequestException(
+        "Sales invoice is already unposted and in edit mode.",
+      );
+    }
+
     const blockReason = this.describeInvoiceUnpostBlock(invoice);
     if (blockReason) {
       throw new BadRequestException(blockReason);
+    }
+
+    const isPaidUnpostEdit = this.isFullyPaidAllocatedInvoice(invoice);
+    if (isPaidUnpostEdit && !this.hasInvoiceUnpostEditPermission(user)) {
+      throw new ForbiddenException(
+        "You do not have permission to unpost a fully paid sales invoice for edit.",
+      );
     }
 
     const journalEntryId = invoice.journalEntryId!;
@@ -1597,6 +1661,26 @@ export class SalesReceivablesService {
       const locked = await tx.salesInvoice.findUnique({
         where: { id },
         include: {
+          journalEntry: { select: { id: true, reference: true } },
+          lines: {
+            include: {
+              revenueAccount: { select: this.accountSummarySelect() },
+            },
+            orderBy: { lineNumber: "asc" },
+          },
+          receiptAllocations: {
+            include: {
+              bankCashTransaction: {
+                select: {
+                  id: true,
+                  reference: true,
+                  amount: true,
+                  customerId: true,
+                },
+              },
+            },
+            orderBy: { allocatedAt: "asc" },
+          },
           _count: {
             select: {
               creditNotes: true,
@@ -1612,6 +1696,27 @@ export class SalesReceivablesService {
       const lockedBlockReason = this.describeInvoiceUnpostBlock(locked);
       if (lockedBlockReason) {
         throw new BadRequestException(lockedBlockReason);
+      }
+
+      const detachedAllocations = (locked.receiptAllocations ?? []).map((allocation) => ({
+        receiptTransactionId: allocation.bankCashTransactionId,
+        receiptReference: allocation.bankCashTransaction.reference,
+        amount: Number(allocation.amount),
+        customerId: allocation.bankCashTransaction.customerId,
+      }));
+      const inventoryMovements = await tx.inventoryStockMovement.findMany({
+        where: {
+          transactionType: "SalesInvoice",
+          transactionId: locked.id,
+          movementType: InventoryStockMovementType.SALES_ISSUE,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (detachedAllocations.length > 0) {
+        await tx.receiptAllocation.deleteMany({
+          where: { salesInvoiceId: locked.id },
+        });
       }
 
       await this.reverseSalesInvoiceInventoryPosting(tx, {
@@ -1647,6 +1752,38 @@ export class SalesReceivablesService {
         invoiceId: locked.id,
         invoiceReference: locked.reference,
         journalEntryId,
+        originalCustomerId: locked.customerId,
+        originalStatus: locked.status,
+        originalTotalAmount: Number(locked.totalAmount).toFixed(2),
+        oldJournalReference: locked.journalEntry?.reference ?? null,
+        detachedAllocations,
+        oldLines: (locked.lines ?? []).map((line) => ({
+          id: line.id,
+          lineNumber: line.lineNumber,
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          itemName: line.itemName,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountAmount: line.discountAmount.toString(),
+          taxId: line.taxId,
+          taxAmount: line.taxAmount.toString(),
+          lineSubtotalAmount: line.lineSubtotalAmount.toString(),
+          lineAmount: line.lineAmount.toString(),
+          revenueAccountId: line.revenueAccountId,
+          revenueAccountCode: line.revenueAccount?.code ?? null,
+          revenueAccountName: line.revenueAccount?.name ?? null,
+        })),
+        oldInventoryMovements: inventoryMovements.map((movement) => ({
+          id: movement.id,
+          transactionLineId: movement.transactionLineId,
+          itemId: movement.itemId,
+          warehouseId: movement.warehouseId,
+          quantityOut: movement.quantityOut.toString(),
+          valueOut: movement.valueOut.toString(),
+          unitCost: movement.unitCost.toString(),
+        })),
       };
     });
 
@@ -1656,9 +1793,17 @@ export class SalesReceivablesService {
       entityId: result.invoiceId,
       action: AuditAction.UPDATE,
       details: {
-        action: "UNPOST",
+        action: "UNPOST_FOR_EDIT",
         reference: result.invoiceReference,
         journalEntryId: result.journalEntryId,
+        editSessionState: "PENDING_REPOST",
+        originalCustomerId: result.originalCustomerId,
+        originalStatus: result.originalStatus,
+        originalTotalAmount: result.originalTotalAmount,
+        detachedAllocations: result.detachedAllocations,
+        oldJournalReference: result.oldJournalReference,
+        oldLines: result.oldLines,
+        oldInventoryMovements: result.oldInventoryMovements,
       },
     });
 
@@ -2616,6 +2761,7 @@ export class SalesReceivablesService {
     if (!invoice) {
       throw new BadRequestException(`Sales invoice ${id} was not found.`);
     }
+    (invoice as any).__isInUnpostEditMode = await this.isInvoiceInUnpostEditMode(id);
     return invoice;
   }
 
@@ -4107,6 +4253,283 @@ export class SalesReceivablesService {
     };
   }
 
+  private async reapplyDetachedReceiptAllocations(
+    tx: Prisma.TransactionClient,
+    invoiceId: string,
+    customerId: string,
+    snapshot: PendingInvoiceUnpostEditSnapshot,
+  ) {
+    if (!snapshot.detachedAllocations.length) {
+      return [];
+    }
+    if (snapshot.originalCustomerId !== customerId) {
+      return [];
+    }
+
+    const receiptIds = snapshot.detachedAllocations.map(
+      (allocation) => allocation.receiptTransactionId,
+    );
+    const [receiptRows, existingAllocations, invoice] = await Promise.all([
+      tx.bankCashTransaction.findMany({
+        where: { id: { in: receiptIds } },
+        select: {
+          id: true,
+          reference: true,
+          amount: true,
+          customerId: true,
+          kind: true,
+          status: true,
+        },
+      }),
+      tx.receiptAllocation.findMany({
+        where: { bankCashTransactionId: { in: receiptIds } },
+        select: {
+          bankCashTransactionId: true,
+          amount: true,
+        },
+      }),
+      tx.salesInvoice.findUnique({
+        where: { id: invoiceId },
+        select: {
+          id: true,
+          outstandingAmount: true,
+        },
+      }),
+    ]);
+
+    if (!invoice) {
+      throw new BadRequestException(`Sales invoice ${invoiceId} was not found.`);
+    }
+
+    const allocatedByReceiptId = new Map<string, number>();
+    for (const allocation of existingAllocations) {
+      allocatedByReceiptId.set(
+        allocation.bankCashTransactionId,
+        (allocatedByReceiptId.get(allocation.bankCashTransactionId) ?? 0) +
+          Number(allocation.amount),
+      );
+    }
+
+    const receiptById = new Map(receiptRows.map((receipt) => [receipt.id, receipt]));
+    let remainingInvoiceAmount = Number(invoice.outstandingAmount);
+    const appliedAllocations: Array<{
+      receiptTransactionId: string;
+      receiptReference: string | null;
+      requestedAmount: string;
+      appliedAmount: string;
+    }> = [];
+
+    for (const detachedAllocation of snapshot.detachedAllocations) {
+      if (remainingInvoiceAmount <= 0) {
+        break;
+      }
+
+      const receipt = receiptById.get(detachedAllocation.receiptTransactionId);
+      if (
+        !receipt ||
+        receipt.kind !== BankCashTransactionKind.RECEIPT ||
+        receipt.status !== BankCashTransactionStatus.POSTED ||
+        (receipt.customerId && receipt.customerId !== customerId)
+      ) {
+        continue;
+      }
+
+      const receiptAvailable = Math.max(
+        0,
+        Number(receipt.amount) -
+          (allocatedByReceiptId.get(detachedAllocation.receiptTransactionId) ?? 0),
+      );
+      const requestedAmount = Number(detachedAllocation.amount.toFixed(2));
+      const appliedAmount = Number(
+        Math.min(requestedAmount, receiptAvailable, remainingInvoiceAmount).toFixed(2),
+      );
+
+      if (appliedAmount <= 0) {
+        continue;
+      }
+
+      await tx.receiptAllocation.create({
+        data: {
+          salesInvoiceId: invoiceId,
+          bankCashTransactionId: detachedAllocation.receiptTransactionId,
+          amount: this.toAmount(appliedAmount),
+        },
+      });
+
+      allocatedByReceiptId.set(
+        detachedAllocation.receiptTransactionId,
+        (allocatedByReceiptId.get(detachedAllocation.receiptTransactionId) ?? 0) +
+          appliedAmount,
+      );
+      remainingInvoiceAmount = Number(
+        Math.max(0, remainingInvoiceAmount - appliedAmount).toFixed(2),
+      );
+      appliedAllocations.push({
+        receiptTransactionId: detachedAllocation.receiptTransactionId,
+        receiptReference: receipt.reference,
+        requestedAmount: requestedAmount.toFixed(2),
+        appliedAmount: appliedAmount.toFixed(2),
+      });
+    }
+
+    return appliedAllocations;
+  }
+
+  private async isInvoiceInUnpostEditMode(invoiceId: string) {
+    const snapshot = await this.findPendingInvoiceUnpostEditSnapshot(invoiceId);
+    return Boolean(snapshot);
+  }
+
+  private async findPendingInvoiceUnpostEditSnapshot(
+    invoiceId: string,
+  ): Promise<PendingInvoiceUnpostEditSnapshot | null> {
+    const stateById = await this.getInvoiceUnpostEditStateByIds([invoiceId]);
+    return stateById.get(invoiceId)?.snapshot ?? null;
+  }
+
+  private async getInvoiceUnpostEditStateByIds(
+    invoiceIds: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        isInEditMode: boolean;
+        snapshot: PendingInvoiceUnpostEditSnapshot | null;
+      }
+    >
+  > {
+    const uniqueInvoiceIds = [...new Set(invoiceIds.filter(Boolean))];
+    const state = new Map<
+      string,
+      {
+        isInEditMode: boolean;
+        snapshot: PendingInvoiceUnpostEditSnapshot | null;
+        resolved: boolean;
+      }
+    >();
+
+    if (!uniqueInvoiceIds.length) {
+      return state;
+    }
+
+    for (const invoiceId of uniqueInvoiceIds) {
+      state.set(invoiceId, { isInEditMode: false, snapshot: null, resolved: false });
+    }
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        entity: "SalesInvoice",
+        entityId: { in: uniqueInvoiceIds },
+        action: { in: [AuditAction.UPDATE, AuditAction.POST] },
+      },
+      select: {
+        entityId: true,
+        details: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    for (const log of logs) {
+      const invoiceId = log.entityId ?? "";
+      if (!invoiceId) {
+        continue;
+      }
+      const current = state.get(invoiceId);
+      if (!current || current.resolved) {
+        continue;
+      }
+
+      const details =
+        log.details && typeof log.details === "object"
+          ? (log.details as Record<string, unknown>)
+          : null;
+      if (!details) {
+        continue;
+      }
+
+      const action = typeof details.action === "string" ? details.action : null;
+      if (action === "REPOST_AFTER_UNPOST") {
+        state.set(invoiceId, { isInEditMode: false, snapshot: null, resolved: true });
+        continue;
+      }
+
+      if (
+        action === "UNPOST_FOR_EDIT" &&
+        details.editSessionState === "PENDING_REPOST"
+      ) {
+        const detachedAllocations = Array.isArray(details.detachedAllocations)
+          ? details.detachedAllocations
+              .map((allocation) => this.mapDetachedReceiptAllocationSnapshot(allocation))
+              .filter(
+                (allocation): allocation is DetachedReceiptAllocationSnapshot =>
+                  allocation !== null,
+              )
+          : [];
+        const originalCustomerId =
+          typeof details.originalCustomerId === "string"
+            ? details.originalCustomerId
+            : "";
+
+        state.set(invoiceId, {
+          isInEditMode: true,
+          snapshot: originalCustomerId
+            ? {
+                action: "UNPOST_FOR_EDIT",
+                editSessionState: "PENDING_REPOST",
+                detachedAllocations,
+                originalCustomerId,
+              }
+            : null,
+          resolved: true,
+        });
+      }
+    }
+
+    return new Map(
+      Array.from(state.entries()).map(([invoiceId, value]) => [
+        invoiceId,
+        {
+          isInEditMode: value.isInEditMode,
+          snapshot: value.snapshot,
+        },
+      ]),
+    );
+  }
+
+  private mapDetachedReceiptAllocationSnapshot(
+    value: unknown,
+  ): DetachedReceiptAllocationSnapshot | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const entry = value as Record<string, unknown>;
+    const receiptTransactionId =
+      typeof entry.receiptTransactionId === "string"
+        ? entry.receiptTransactionId
+        : null;
+    const amount =
+      typeof entry.amount === "number"
+        ? entry.amount
+        : typeof entry.amount === "string"
+          ? Number(entry.amount)
+          : NaN;
+
+    if (!receiptTransactionId || !Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    return {
+      receiptTransactionId,
+      receiptReference:
+        typeof entry.receiptReference === "string" ? entry.receiptReference : null,
+      amount,
+      customerId:
+        typeof entry.customerId === "string" ? entry.customerId : null,
+    };
+  }
+
   private async refreshSalesOrderStatus(orderId: string | null | undefined) {
     if (!orderId) {
       return;
@@ -4286,14 +4709,11 @@ export class SalesReceivablesService {
     if (!row.journalEntryId) {
       return false;
     }
-    if (Number(row.allocatedAmount) > 0) {
-      return false;
-    }
     if ((row._count?.creditNotes ?? 0) > 0) {
       return false;
     }
-    if ((row._count?.receiptAllocations ?? 0) > 0) {
-      return false;
+    if (Number(row.allocatedAmount) > 0 || (row._count?.receiptAllocations ?? 0) > 0) {
+      return this.isFullyPaidAllocatedInvoice(row);
     }
     return true;
   }
@@ -4328,13 +4748,44 @@ export class SalesReceivablesService {
     if (!invoice.journalEntryId) {
       return "Sales invoice does not have a posted journal entry to unpost.";
     }
-    if (Number(invoice.allocatedAmount) > 0 || (invoice._count?.receiptAllocations ?? 0) > 0) {
+    if (
+      (Number(invoice.allocatedAmount) > 0 || (invoice._count?.receiptAllocations ?? 0) > 0) &&
+      !this.isFullyPaidAllocatedInvoice(invoice)
+    ) {
       return "Sales invoices with receipt allocations cannot be unposted. Use a credit note instead.";
     }
     if ((invoice._count?.creditNotes ?? 0) > 0) {
       return "Sales invoices with linked credit notes cannot be unposted.";
     }
     return null;
+  }
+
+  private isFullyPaidAllocatedInvoice(invoice: {
+    status: SalesInvoiceStatus;
+    allocatedAmount: Prisma.Decimal | number;
+    _count?: { receiptAllocations: number };
+  }) {
+    return (
+      invoice.status === SalesInvoiceStatus.FULLY_PAID &&
+      Number(invoice.allocatedAmount) > 0 &&
+      (invoice._count?.receiptAllocations ?? 0) > 0
+    );
+  }
+
+  private hasInvoiceUnpostEditPermission(user?: AuthUser) {
+    if (!user) {
+      return true;
+    }
+    if (user.role === "ADMIN" || user.role === "MANAGER") {
+      return true;
+    }
+    const permissions = Array.isArray((user as { permissions?: string[] }).permissions)
+      ? ((user as { permissions?: string[] }).permissions ?? [])
+      : [];
+    return (
+      permissions.includes("SALES_INVOICE_UNPOST_EDIT") ||
+      permissions.includes("ACCOUNTING_UNPOST_POSTED_DOCUMENT")
+    );
   }
 
   private async reverseSalesInvoiceInventoryPosting(
@@ -5090,6 +5541,7 @@ export class SalesReceivablesService {
       lines: row.lines.map((line: any) => this.mapDocumentLine(line)),
       canUnpost: this.canUnpostInvoice(row),
       canCreateReturn: this.canCreateReturnForInvoice(row),
+      isInUnpostEditMode: Boolean(row.__isInUnpostEditMode),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

@@ -306,6 +306,21 @@ export function SalesReceivablesPage() {
   } | null>(null);
 
   const canManageMarketLogins = user?.role === "ADMIN" || user?.role === "MANAGER";
+  const canUsePaidInvoiceUnpostEdit = useMemo(() => {
+    if (!user) {
+      return false;
+    }
+    if (user.role === "ADMIN" || user.role === "MANAGER") {
+      return true;
+    }
+    const permissions = Array.isArray(user.permissions)
+      ? (user.permissions as unknown as string[])
+      : [];
+    return (
+      permissions.includes("SALES_INVOICE_UNPOST_EDIT") ||
+      permissions.includes("ACCOUNTING_UNPOST_POSTED_DOCUMENT")
+    );
+  }, [user]);
 
   const [quotationSearch, setQuotationSearch] = useState("");
   const [quotationStatusFilter, setQuotationStatusFilter] = useState("");
@@ -328,6 +343,7 @@ export function SalesReceivablesPage() {
   const [isInvoiceSaving, setIsInvoiceSaving] = useState(false);
   const [invoiceEditorClientError, setInvoiceEditorClientError] = useState<string | null>(null);
   const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState>(EMPTY_INVOICE_EDITOR);
+  const [invoiceEditorIsUnpostEditMode, setInvoiceEditorIsUnpostEditMode] = useState(false);
 
 
   const [creditNoteSearch, setCreditNoteSearch] = useState("");
@@ -810,6 +826,7 @@ export function SalesReceivablesPage() {
       sourceQuotationId: quotation.id,
       sourceSalesOrderId: "",
     });
+    setInvoiceEditorIsUnpostEditMode(false);
     setInvoiceEditorClientError(null);
     setIsInvoiceEditorOpen(true);
     selectTab("invoices");
@@ -833,6 +850,7 @@ export function SalesReceivablesPage() {
       sourceQuotationId: order.sourceQuotation?.id ?? "",
       sourceSalesOrderId: order.id,
     });
+    setInvoiceEditorIsUnpostEditMode(false);
     setInvoiceEditorClientError(null);
     setIsInvoiceEditorOpen(true);
     selectTab("invoices");
@@ -1080,6 +1098,7 @@ export function SalesReceivablesPage() {
       setSelectedInvoiceId(savedInvoice.id);
       setIsInvoiceEditorOpen(false);
       setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+      setInvoiceEditorIsUnpostEditMode(false);
     } catch {
       // Keep the editor open so the user can fix line revenue accounts or other validation issues.
     } finally {
@@ -1107,6 +1126,7 @@ export function SalesReceivablesPage() {
       setSelectedCustomerId(postedInvoice.customer.id);
       setIsInvoiceEditorOpen(false);
       setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+      setInvoiceEditorIsUnpostEditMode(false);
     } catch {
       // Keep the editor open so the user can fix validation or posting issues.
     } finally {
@@ -1133,6 +1153,7 @@ export function SalesReceivablesPage() {
       setSelectedCustomerId(postedInvoice.customer.id);
       setIsInvoiceEditorOpen(false);
       setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+      setInvoiceEditorIsUnpostEditMode(false);
       openReceiptEditorForInvoice(postedInvoice, "POST_AND_CREATE_RECEIPT");
     } catch {
       // Keep the editor open so the user can fix validation or posting issues.
@@ -1269,6 +1290,7 @@ export function SalesReceivablesPage() {
       setSelectedInvoiceId(created.id);
       setIsInvoiceEditorOpen(false);
       setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+      setInvoiceEditorIsUnpostEditMode(false);
     },
   });
 
@@ -1291,6 +1313,7 @@ export function SalesReceivablesPage() {
       await invalidateSalesReceivables(queryClient);
       setSelectedInvoiceId(updated.id);
       setIsInvoiceEditorOpen(false);
+      setInvoiceEditorIsUnpostEditMode(false);
     },
   });
 
@@ -1323,6 +1346,7 @@ export function SalesReceivablesPage() {
         sourceQuotationId: updated.sourceQuotation?.id ?? "",
         sourceSalesOrderId: updated.sourceSalesOrder?.id ?? "",
       });
+      setInvoiceEditorIsUnpostEditMode(Boolean(updated.isInUnpostEditMode));
       setInvoiceEditorClientError(null);
       setIsInvoiceEditorOpen(true);
     },
@@ -2572,6 +2596,7 @@ export function SalesReceivablesPage() {
               onClose={() => {
                 setInvoiceEditorClientError(null);
                 setIsInvoiceEditorOpen(false);
+                setInvoiceEditorIsUnpostEditMode(false);
               }}
               title={
                 invoiceEditor.id
@@ -2613,16 +2638,41 @@ export function SalesReceivablesPage() {
               onDraftSubmit={() => {
                 void saveInvoiceFromEditor();
               }}
-              draftSubmitLabel={t("salesReceivables.action.saveDraft")}
+              draftSubmitLabel={
+                invoiceEditorIsUnpostEditMode
+                  ? t("salesReceivables.action.saveEdit")
+                  : t("salesReceivables.action.saveDraft")
+              }
               onPostSubmit={() => {
                 void saveAndPostInvoiceFromEditor();
               }}
-              postSubmitLabel={t("salesReceivables.action.postInvoice")}
-              onPostAndCreateReceiptSubmit={() => {
-                void saveAndCreateReceiptFromInvoiceEditor();
-              }}
-              postAndCreateReceiptLabel={t("salesReceivables.action.postAndCreateReceipt")}
-              postAndCreateReceiptTooltip={t("salesReceivables.tooltip.postAndCreateReceipt")}
+              postSubmitLabel={
+                invoiceEditorIsUnpostEditMode
+                  ? t("salesReceivables.action.repostInvoice")
+                  : t("salesReceivables.action.postInvoice")
+              }
+              onPostAndCreateReceiptSubmit={
+                invoiceEditorIsUnpostEditMode
+                  ? undefined
+                  : () => {
+                      void saveAndCreateReceiptFromInvoiceEditor();
+                    }
+              }
+              postAndCreateReceiptLabel={
+                invoiceEditorIsUnpostEditMode
+                  ? undefined
+                  : t("salesReceivables.action.postAndCreateReceipt")
+              }
+              postAndCreateReceiptTooltip={
+                invoiceEditorIsUnpostEditMode
+                  ? undefined
+                  : t("salesReceivables.tooltip.postAndCreateReceipt")
+              }
+              warningBannerText={
+                invoiceEditorIsUnpostEditMode
+                  ? t("salesReceivables.warning.invoiceInEditMode")
+                  : undefined
+              }
               isPostSubmitting={postInvoiceMutation.isPending}
               isPostAndCreateReceiptSubmitting={postInvoiceMutation.isPending}
             />
@@ -2661,6 +2711,7 @@ export function SalesReceivablesPage() {
                   <Button className="gap-2" onClick={() => {
                     setInvoiceEditorClientError(null);
                     setInvoiceEditor(EMPTY_INVOICE_EDITOR());
+                    setInvoiceEditorIsUnpostEditMode(false);
                     setIsInvoiceEditorOpen(true);
                     }}
                   >
@@ -2722,7 +2773,14 @@ export function SalesReceivablesPage() {
                                 <div className="text-xs text-gray-500">{row.allocationStatus.replaceAll("_", " ")}</div>
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <StatusPill label={row.status} tone={row.status === "POSTED" ? "positive" : "warning"} />
+                                <div className="space-y-1">
+                                  <StatusPill label={row.status} tone={row.status === "POSTED" ? "positive" : "warning"} />
+                                  {row.isInUnpostEditMode ? (
+                                    <div className="text-[11px] font-bold text-amber-700">
+                                      {t("salesReceivables.warning.invoiceInEditMode")}
+                                    </div>
+                                  ) : null}
+                                </div>
                               </td>
                               <td className="px-6 py-4">
                                 <div className="flex justify-end gap-2">
@@ -2744,6 +2802,7 @@ export function SalesReceivablesPage() {
                                             sourceQuotationId: row.sourceQuotation?.id ?? "",
                                             sourceSalesOrderId: row.sourceSalesOrder?.id ?? "",
                                           });
+                                          setInvoiceEditorIsUnpostEditMode(Boolean(row.isInUnpostEditMode));
                                           setInvoiceEditorClientError(null);
                                           setIsInvoiceEditorOpen(true);
                                         }}
@@ -2812,7 +2871,8 @@ export function SalesReceivablesPage() {
                                           {t("salesReceivables.action.createReturn")}
                                         </button>
                                       ) : null}
-                                      {row.canUnpost ? (
+                                      {row.canUnpost &&
+                                      (Number(row.allocatedAmount) <= 0 || canUsePaidInvoiceUnpostEdit) ? (
                                         <button
                                           type="button"
                                           className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
@@ -2820,9 +2880,14 @@ export function SalesReceivablesPage() {
                                           onClick={() => {
                                             setConfirmConfig({
                                               title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
-                                              message: t("salesReceivables.confirm.unpostInvoice", {
-                                                reference: row.reference,
-                                              }),
+                                              message:
+                                                Number(row.allocatedAmount) > 0
+                                                  ? t("salesReceivables.confirm.unpostPaidInvoice", {
+                                                      reference: row.reference,
+                                                    })
+                                                  : t("salesReceivables.confirm.unpostInvoice", {
+                                                      reference: row.reference,
+                                                    }),
                                               tone: "warning",
                                               onConfirm: () => {
                                                 unpostInvoiceMutation.mutate(row.id);
@@ -2886,6 +2951,11 @@ export function SalesReceivablesPage() {
                     <MiniMetric label={t("salesReceivables.metric.allocated")} value={formatCurrency(selectedInvoice.allocatedAmount)} />
                     <MiniMetric label={t("salesReceivables.metric.status")} value={selectedInvoice.status} />
                   </div>
+                  {selectedInvoice.isInUnpostEditMode ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                      {t("salesReceivables.warning.invoiceInEditMode")}
+                    </div>
+                  ) : null}
 
                   <div className="space-y-3">
                     <div className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">{t("salesReceivables.section.documentLines")}</div>
@@ -2919,16 +2989,22 @@ export function SalesReceivablesPage() {
                         {t("salesReceivables.action.createReturn")}
                       </Button>
                     ) : null}
-                    {selectedInvoice.canUnpost ? (
+                    {selectedInvoice.canUnpost &&
+                    (Number(selectedInvoice.allocatedAmount) <= 0 || canUsePaidInvoiceUnpostEdit) ? (
                       <Button
                         variant="secondary"
                         disabled={unpostInvoiceMutation.isPending}
                         onClick={() => {
                           setConfirmConfig({
                             title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
-                            message: t("salesReceivables.confirm.unpostInvoice", {
-                              reference: selectedInvoice.reference,
-                            }),
+                            message:
+                              Number(selectedInvoice.allocatedAmount) > 0
+                                ? t("salesReceivables.confirm.unpostPaidInvoice", {
+                                    reference: selectedInvoice.reference,
+                                  })
+                                : t("salesReceivables.confirm.unpostInvoice", {
+                                    reference: selectedInvoice.reference,
+                                  }),
                             tone: "warning",
                             onConfirm: () => {
                               unpostInvoiceMutation.mutate(selectedInvoice.id);

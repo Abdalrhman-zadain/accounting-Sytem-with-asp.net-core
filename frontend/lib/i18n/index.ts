@@ -945,8 +945,10 @@ Object.assign(enTranslations, {
   "salesReceivables.action.createCustomer": "Create Customer",
   "salesReceivables.action.saveChanges": "Save Changes",
   "salesReceivables.action.saveDraft": "Save Draft",
+  "salesReceivables.action.saveEdit": "Save Edit",
   "salesReceivables.action.postInvoice": "Post Invoice",
-  "salesReceivables.action.unpostInvoice": "Unpost for Edit",
+  "salesReceivables.action.repostInvoice": "Repost Invoice",
+  "salesReceivables.action.unpostInvoice": "Unpost and Edit",
   "salesReceivables.action.createReturn": "Create Return",
   "salesReceivables.action.createReceipt": "Create Receipt",
   "salesReceivables.action.postAndCreateReceipt": "Post & Create Receipt",
@@ -954,6 +956,7 @@ Object.assign(enTranslations, {
   "salesReceivables.action.toOrder": "Convert to Order",
   "salesReceivables.action.toInvoice": "Convert to Invoice",
   "salesReceivables.action.cancel": "Cancel",
+  "salesReceivables.action.cancelEdit": "Cancel Edit",
   "salesReceivables.action.approveQuotation": "Approve Quotation",
   "salesReceivables.status.active": "Active",
   "salesReceivables.status.inactive": "Inactive",
@@ -1209,8 +1212,12 @@ Object.assign(enTranslations, {
   "salesReceivables.confirm.postInvoice": 'Post invoice "{reference}" now?',
   "salesReceivables.confirm.unpostInvoice":
     'Return invoice "{reference}" to draft for editing? Ledger and inventory effects will be reversed.',
+  "salesReceivables.confirm.unpostPaidInvoice":
+    'Invoice "{reference}" is posted and fully paid. Unposting will temporarily reverse accounting and stock effects and detach linked receipt allocations until repost. Continue?',
   "salesReceivables.confirm.postInvoiceAndCreateReceipt":
     'Post invoice "{reference}" and open a linked customer receipt?',
+  "salesReceivables.warning.invoiceInEditMode":
+    "This invoice is in edit mode after unposting and should be reposted after review.",
   "salesReceivables.confirm.postCreditNote":
     'Post credit note "{reference}" now?',
   "salesReceivables.empty.selectTaxTreatment": "Select a tax treatment",

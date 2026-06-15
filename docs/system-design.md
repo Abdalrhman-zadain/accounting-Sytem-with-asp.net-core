@@ -340,6 +340,7 @@ Resulting accounting meaning:
 - sales invoices and credit notes can be drafted, then posted with generated journal entries
 - quotation, sales-order, and sales-invoice editors can resolve lines from active inventory items while still storing invoice-line snapshot text and revenue-account context for auditability
 - inventory-tracked sales-invoice lines also carry a warehouse selection, default it from the item preferred warehouse when available, validate warehouse stock at posting time, and write `InventoryStockMovement` issue rows plus COGS/inventory-relief journal lines inside the same posting transaction
+- fully paid standard sales invoices can be unposted for correction by authorized users: the workflow returns the invoice to draft, removes the old receipt allocation link while preserving the posted receipt transaction, reverses stock and ledger impact in one transaction, and attempts to reapply the detached receipt on repost when the edited invoice remains allocatable
 - invoices carry currency, due date, source quotation/order references, subtotal, discount, tax, and allocation-derived settlement status
 - customer receipts can be initiated from Sales while still using the Phase 2 bank/cash transaction posting flow underneath
 - posting updates customer running balance and links operational documents to journal references

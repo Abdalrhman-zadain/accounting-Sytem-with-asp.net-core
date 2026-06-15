@@ -884,13 +884,16 @@ Object.assign(arTranslations, {
   "salesReceivables.action.createCustomer": "إنشاء عميل",
   "salesReceivables.action.saveChanges": "حفظ التغييرات",
   "salesReceivables.action.saveDraft": "حفظ كمسودة",
+  "salesReceivables.action.saveEdit": "حفظ التعديل",
   "salesReceivables.action.postInvoice": "ترحيل الفاتورة",
-  "salesReceivables.action.unpostInvoice": "فك الترحيل للتعديل",
+  "salesReceivables.action.repostInvoice": "إعادة الترحيل",
+  "salesReceivables.action.unpostInvoice": "فك الترحيل والتعديل",
   "salesReceivables.action.createReturn": "إنشاء إرجاع",
   "salesReceivables.action.createReceipt": "إنشاء المقبوض",
   "salesReceivables.action.postAndCreateReceipt": "ترحيل وإنشاء مقبوض",
   "salesReceivables.action.viewJournal": "عرض القيد المحاسبي",
   "salesReceivables.action.cancel": "إلغاء",
+  "salesReceivables.action.cancelEdit": "إلغاء التعديل",
   "salesReceivables.status.active": "نشط",
   "salesReceivables.status.inactive": "غير نشط",
   "salesReceivables.status.draft": "مسودة",
@@ -1125,8 +1128,12 @@ Object.assign(arTranslations, {
   "salesReceivables.confirm.postInvoice": 'ترحيل الفاتورة "{reference}" الآن؟',
   "salesReceivables.confirm.unpostInvoice":
     'إرجاع الفاتورة "{reference}" إلى مسودة للتعديل؟ سيتم عكس أثر القيد والمخزون.',
+  "salesReceivables.confirm.unpostPaidInvoice":
+    'هذه الفاتورة "{reference}" مرحلة ومدفوعة بالكامل. عند فك الترحيل سيتم إلغاء أثرها المحاسبي والمخزني مؤقتاً، وسيتم فك تخصيص الدفعات المرتبطة بها حتى إعادة الترحيل. هل تريد المتابعة؟',
   "salesReceivables.confirm.postInvoiceAndCreateReceipt":
     'ترحيل الفاتورة "{reference}" وفتح مقبوض عميل مرتبط بها؟',
+  "salesReceivables.warning.invoiceInEditMode":
+    "الفاتورة في وضع التعديل بعد فك الترحيل",
   "salesReceivables.confirm.postCreditNote":
     'ترحيل إشعار الدائن "{reference}" الآن؟',
   "salesReceivables.empty.selectTaxTreatment": "اختر معاملة ضريبية",

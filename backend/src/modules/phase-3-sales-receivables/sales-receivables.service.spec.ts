@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 
 import { BankCashTransactionKind, BankCashTransactionStatus, Prisma, SalesInvoiceStatus } from "../../generated/prisma";
 import { SalesReceivablesService } from "./sales-receivables.service";
@@ -33,6 +33,10 @@ describe("SalesReceivablesService", () => {
     receiptAllocation: {
       aggregate: jest.fn(),
       create: jest.fn(),
+      deleteMany: jest.fn(),
+      findMany: jest.fn(),
+    },
+    auditLog: {
       findMany: jest.fn(),
     },
     account: {
@@ -78,7 +82,7 @@ describe("SalesReceivablesService", () => {
   let recomputeInvoiceAmountsSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     prisma.account.findUnique.mockResolvedValue({
       id: "some-id",
       name: "Mock Account",
@@ -87,6 +91,7 @@ describe("SalesReceivablesService", () => {
     });
     prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma as never));
     prisma.bankCashTransaction.findMany.mockResolvedValue([]);
+    prisma.auditLog.findMany.mockResolvedValue([]);
     prisma.restaurantRecipe.findUnique.mockResolvedValue(null);
     service = new SalesReceivablesService(
       prisma as never,
@@ -332,10 +337,93 @@ describe("SalesReceivablesService", () => {
     );
   });
 
-  it("prevents unposting sales invoices with receipt allocations", async () => {
+  it("unposts fully paid sales invoices for edit, detaches allocations, and keeps the invoice editable", async () => {
+    const fullyPaidInvoice = {
+      ...salesInvoiceRow({
+        status: SalesInvoiceStatus.FULLY_PAID,
+        journalEntryId: "je-1",
+        invoiceType: "STANDARD",
+        allocatedAmount: decimal("116.00"),
+        outstandingAmount: decimal("0.00"),
+        allocationStatus: "FULLY_ALLOCATED",
+        postedAt: new Date("2026-05-12T09:00:00.000Z"),
+      }),
+      _count: { creditNotes: 0, receiptAllocations: 1 },
+      customer: { id: "cust-1", isActive: true },
+    };
+
+    prisma.salesInvoice.findUnique
+      .mockResolvedValueOnce(fullyPaidInvoice)
+      .mockResolvedValueOnce({
+        ...fullyPaidInvoice,
+        journalEntry: { id: "je-1", reference: "JE-001" },
+        receiptAllocations: [
+          {
+            id: "alloc-1",
+            bankCashTransactionId: "rcpt-1",
+            amount: decimal("116.00"),
+            allocatedAt: new Date("2026-05-12T09:01:00.000Z"),
+            bankCashTransaction: {
+              id: "rcpt-1",
+              reference: "RCPT-001",
+              amount: decimal("116.00"),
+              customerId: "cust-1",
+            },
+          },
+        ],
+        lines: [salesInvoiceLine({})],
+      })
+      .mockResolvedValueOnce({
+        ...salesInvoiceRow({
+          status: SalesInvoiceStatus.DRAFT,
+          journalEntryId: null,
+          postedAt: null,
+          allocatedAmount: decimal("0.00"),
+          outstandingAmount: decimal("116.00"),
+          allocationStatus: "UNALLOCATED",
+        }),
+        _count: { creditNotes: 0, receiptAllocations: 0 },
+      });
+    prisma.inventoryStockMovement.findMany.mockResolvedValue([]);
+    prisma.salesInvoice.update.mockResolvedValue({});
+    prisma.receiptAllocation.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.auditLog.findMany.mockResolvedValue([
+      {
+        entityId: "inv-1",
+        details: {
+          action: "UNPOST_FOR_EDIT",
+          editSessionState: "PENDING_REPOST",
+          originalCustomerId: "cust-1",
+          detachedAllocations: [
+            {
+              receiptTransactionId: "rcpt-1",
+              receiptReference: "RCPT-001",
+              amount: 116,
+              customerId: "cust-1",
+            },
+          ],
+        },
+        createdAt: new Date("2026-05-12T09:05:00.000Z"),
+      },
+    ]);
+    postingService.unpost.mockResolvedValue({ id: "je-1", status: "DRAFT" });
+
+    const result = await service.unpostInvoice("inv-1", {
+      userId: "user-1",
+      role: "ADMIN",
+      permissions: [],
+    });
+
+    expect(prisma.receiptAllocation.deleteMany).toHaveBeenCalledWith({
+      where: { salesInvoiceId: "inv-1" },
+    });
+    expect(result.isInUnpostEditMode).toBe(true);
+  });
+
+  it("prevents unposting posted allocated invoices unless they are fully paid", async () => {
     prisma.salesInvoice.findUnique.mockResolvedValue({
       ...salesInvoiceRow({
-        status: SalesInvoiceStatus.POSTED,
+        status: SalesInvoiceStatus.PARTIALLY_PAID,
         journalEntryId: "je-1",
         allocatedAmount: decimal("50.00"),
         invoiceType: "STANDARD",
@@ -345,6 +433,129 @@ describe("SalesReceivablesService", () => {
     });
 
     await expect(service.unpostInvoice("inv-1")).rejects.toThrow(/receipt allocations/);
+  });
+
+  it("blocks fully paid unpost-for-edit when the user lacks permission", async () => {
+    prisma.salesInvoice.findUnique.mockResolvedValue({
+      ...salesInvoiceRow({
+        status: SalesInvoiceStatus.FULLY_PAID,
+        journalEntryId: "je-1",
+        allocatedAmount: decimal("116.00"),
+        outstandingAmount: decimal("0.00"),
+        invoiceType: "STANDARD",
+      }),
+      _count: { creditNotes: 0, receiptAllocations: 1 },
+      customer: { id: "cust-1", isActive: true },
+    });
+
+    await expect(
+      service.unpostInvoice("inv-1", {
+        userId: "user-1",
+        role: "USER",
+        permissions: [],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("reapplies detached receipt allocations when an edited invoice is reposted", async () => {
+    const draftInvoice = salesInvoiceRow({
+      status: SalesInvoiceStatus.DRAFT,
+      journalEntryId: null,
+      subtotalAmount: decimal("120.00"),
+      totalAmount: decimal("120.00"),
+      taxAmount: decimal("0.00"),
+      allocatedAmount: decimal("0.00"),
+      outstandingAmount: decimal("120.00"),
+      allocationStatus: "UNALLOCATED",
+      lines: [
+        salesInvoiceLine({
+          unitPrice: decimal("120.00"),
+          taxId: null,
+          taxAmount: decimal("0.00"),
+          lineSubtotalAmount: decimal("120.00"),
+          lineAmount: decimal("120.00"),
+        }),
+      ],
+    });
+
+    prisma.salesInvoice.findUnique.mockResolvedValue(draftInvoice);
+    prisma.tax.findMany.mockResolvedValue([]);
+    prisma.auditLog.findMany
+      .mockResolvedValueOnce([
+        {
+          entityId: "inv-1",
+          details: {
+            action: "UNPOST_FOR_EDIT",
+            editSessionState: "PENDING_REPOST",
+            originalCustomerId: "cust-1",
+            detachedAllocations: [
+              {
+                receiptTransactionId: "rcpt-1",
+                receiptReference: "RCPT-001",
+                amount: 116,
+                customerId: "cust-1",
+              },
+            ],
+          },
+          createdAt: new Date("2026-05-12T09:05:00.000Z"),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          entityId: "inv-1",
+          details: {
+            action: "REPOST_AFTER_UNPOST",
+          },
+          createdAt: new Date("2026-05-12T09:10:00.000Z"),
+        },
+      ]);
+    journalEntriesService.create.mockResolvedValue({ id: "je-9", postedAt: null });
+    postingService.post.mockResolvedValue({ id: "je-9", postedAt: "2026-05-12T09:10:00.000Z" });
+    prisma.receiptAllocation.findMany.mockResolvedValue([]);
+    prisma.bankCashTransaction.findMany.mockResolvedValue([
+      bankCashTransactionRow({
+        id: "rcpt-1",
+        amount: decimal("116.00"),
+      }),
+    ]);
+    prisma.salesInvoice.update.mockResolvedValue({});
+
+    recomputeInvoiceAmountsSpy
+      .mockResolvedValueOnce({
+        id: "inv-1",
+        reference: "INV-001",
+        totalAmount: "120.00",
+        allocatedAmount: "0.00",
+        outstandingAmount: "120.00",
+        allocationStatus: "UNALLOCATED",
+        status: SalesInvoiceStatus.POSTED,
+      })
+      .mockResolvedValueOnce({
+        id: "inv-1",
+        reference: "INV-001",
+        totalAmount: "120.00",
+        allocatedAmount: "116.00",
+        outstandingAmount: "4.00",
+        allocationStatus: "PARTIAL",
+        status: SalesInvoiceStatus.PARTIALLY_PAID,
+      });
+
+    await service.postInvoice("inv-1", { sourceAction: "STANDARD_POST" }, { userId: "user-1" });
+
+    expect(prisma.receiptAllocation.create).toHaveBeenCalledWith({
+      data: {
+        salesInvoiceId: "inv-1",
+        bankCashTransactionId: "rcpt-1",
+        amount: "116.00",
+      },
+    });
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          sourceAction: "REPOST_AFTER_UNPOST",
+        }),
+      }),
+    );
   });
 
   it("prevents posting invoices without a revenue account on each line", async () => {
