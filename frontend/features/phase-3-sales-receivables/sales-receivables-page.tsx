@@ -1655,6 +1655,47 @@ export function SalesReceivablesPage() {
     [activeCreditNoteTypes, creditNoteEditor.creditNoteTypeId],
   );
 
+  const canShowInvoiceUnpostAction = useCallback(
+    (invoice: {
+      canUnpost?: boolean;
+      allocatedAmount: string | number;
+    }) =>
+      Boolean(invoice.canUnpost) &&
+      (Number(invoice.allocatedAmount) <= 0 || canUsePaidInvoiceUnpostEdit),
+    [canUsePaidInvoiceUnpostEdit],
+  );
+
+  const openInvoiceUnpostConfirm = useCallback(
+    (
+      invoice: {
+        id: string;
+        reference: string;
+        allocatedAmount: string | number;
+      },
+      options?: { closeDetails?: boolean },
+    ) => {
+      setConfirmConfig({
+        title: isArabic ? "فك الترحيل والتعديل" : "Unpost and Edit",
+        message:
+          Number(invoice.allocatedAmount) > 0
+            ? t("salesReceivables.confirm.unpostPaidInvoice", {
+                reference: invoice.reference,
+              })
+            : t("salesReceivables.confirm.unpostInvoice", {
+                reference: invoice.reference,
+              }),
+        tone: "warning",
+        onConfirm: () => {
+          unpostInvoiceMutation.mutate(invoice.id);
+          if (options?.closeDetails) {
+            setSelectedInvoiceId(null);
+          }
+        },
+      });
+    },
+    [isArabic, t, unpostInvoiceMutation],
+  );
+
   const salesReturnCreditNoteType = useMemo(
     () => activeCreditNoteTypes.find((type) => type.code === "CN-SALES-RETURN") ?? null,
     [activeCreditNoteTypes],
@@ -2871,29 +2912,12 @@ export function SalesReceivablesPage() {
                                           {t("salesReceivables.action.createReturn")}
                                         </button>
                                       ) : null}
-                                      {row.canUnpost &&
-                                      (Number(row.allocatedAmount) <= 0 || canUsePaidInvoiceUnpostEdit) ? (
+                                      {canShowInvoiceUnpostAction(row) ? (
                                         <button
                                           type="button"
                                           className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
                                           disabled={unpostInvoiceMutation.isPending}
-                                          onClick={() => {
-                                            setConfirmConfig({
-                                              title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
-                                              message:
-                                                Number(row.allocatedAmount) > 0
-                                                  ? t("salesReceivables.confirm.unpostPaidInvoice", {
-                                                      reference: row.reference,
-                                                    })
-                                                  : t("salesReceivables.confirm.unpostInvoice", {
-                                                      reference: row.reference,
-                                                    }),
-                                              tone: "warning",
-                                              onConfirm: () => {
-                                                unpostInvoiceMutation.mutate(row.id);
-                                              },
-                                            });
-                                          }}
+                                          onClick={() => openInvoiceUnpostConfirm(row)}
                                         >
                                           {t("salesReceivables.action.unpostInvoice")}
                                         </button>
@@ -2923,15 +2947,27 @@ export function SalesReceivablesPage() {
             {selectedInvoice ? (
               <div className="space-y-5">
                 <div className="text-sm text-gray-500">{selectedInvoice.customer.code} · {selectedInvoice.customer.name}</div>
-                {selectedInvoice.journalReference ? (
-                        <div className="flex justify-end">
+                {selectedInvoice.journalReference || canShowInvoiceUnpostAction(selectedInvoice) ? (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {canShowInvoiceUnpostAction(selectedInvoice) ? (
+                            <button
+                              type="button"
+                              className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+                              disabled={unpostInvoiceMutation.isPending}
+                              onClick={() => openInvoiceUnpostConfirm(selectedInvoice, { closeDetails: true })}
+                            >
+                              {t("salesReceivables.action.unpostInvoice")}
+                            </button>
+                          ) : null}
+                          {selectedInvoice.journalReference ? (
                           <button
                             type="button"
                             className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                        onClick={() => toggleInlineJournalEntry(selectedInvoice.journalReference)}
-                      >
-                        {t("salesReceivables.action.viewJournal")}
-                      </button>
+                            onClick={() => toggleInlineJournalEntry(selectedInvoice.journalReference)}
+                          >
+                            {t("salesReceivables.action.viewJournal")}
+                          </button>
+                          ) : null}
                     </div>
                   ) : null}
                   {selectedInvoice.journalReference && selectedInvoice.journalReference === inlineJournalReference ? (
@@ -2989,29 +3025,11 @@ export function SalesReceivablesPage() {
                         {t("salesReceivables.action.createReturn")}
                       </Button>
                     ) : null}
-                    {selectedInvoice.canUnpost &&
-                    (Number(selectedInvoice.allocatedAmount) <= 0 || canUsePaidInvoiceUnpostEdit) ? (
+                    {canShowInvoiceUnpostAction(selectedInvoice) ? (
                       <Button
                         variant="secondary"
                         disabled={unpostInvoiceMutation.isPending}
-                        onClick={() => {
-                          setConfirmConfig({
-                            title: isArabic ? "فك ترحيل الفاتورة" : "Unpost Invoice",
-                            message:
-                              Number(selectedInvoice.allocatedAmount) > 0
-                                ? t("salesReceivables.confirm.unpostPaidInvoice", {
-                                    reference: selectedInvoice.reference,
-                                  })
-                                : t("salesReceivables.confirm.unpostInvoice", {
-                                    reference: selectedInvoice.reference,
-                                  }),
-                            tone: "warning",
-                            onConfirm: () => {
-                              unpostInvoiceMutation.mutate(selectedInvoice.id);
-                              setSelectedInvoiceId(null);
-                            },
-                          });
-                        }}
+                        onClick={() => openInvoiceUnpostConfirm(selectedInvoice, { closeDetails: true })}
                       >
                         {t("salesReceivables.action.unpostInvoice")}
                       </Button>
