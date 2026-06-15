@@ -577,6 +577,9 @@ export class PurchaseInvoicesService {
     if (!invoice) {
       throw new BadRequestException(`Purchase invoice ${id} was not found.`);
     }
+    if (invoice.status === PurchaseInvoiceStatus.REVERSED) {
+      throw new BadRequestException('هذه الفاتورة معكوسة مسبقاً');
+    }
     if (
       invoice.status !== PurchaseInvoiceStatus.POSTED &&
       invoice.status !== PurchaseInvoiceStatus.PARTIALLY_PAID &&
@@ -601,9 +604,57 @@ export class PurchaseInvoicesService {
       throw new BadRequestException('Purchase invoices with posted debit notes cannot be reversed.');
     }
 
-    await this.reversalService.reverse(invoice.journalEntryId, dto);
-
     const updated = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.purchaseInvoice.findUnique({
+        where: { id },
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              isActive: true,
+            },
+          },
+          lines: {
+            orderBy: { lineNumber: 'asc' },
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  type: true,
+                  trackInventory: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!locked) {
+        throw new BadRequestException(`Purchase invoice ${id} was not found.`);
+      }
+      if (locked.status === PurchaseInvoiceStatus.REVERSED) {
+        throw new BadRequestException('هذه الفاتورة معكوسة مسبقاً');
+      }
+      if (
+        locked.status !== PurchaseInvoiceStatus.POSTED &&
+        locked.status !== PurchaseInvoiceStatus.PARTIALLY_PAID &&
+        locked.status !== PurchaseInvoiceStatus.FULLY_PAID
+      ) {
+        throw new BadRequestException('Only posted purchase invoices can be reversed.');
+      }
+      if (!locked.journalEntryId) {
+        throw new BadRequestException('Purchase invoice does not have a posted journal entry to reverse.');
+      }
+
+      await this.reverseInventoryReceiptPosting(tx, {
+        id: locked.id,
+        reference: locked.reference,
+        invoiceDate: locked.invoiceDate,
+      });
+
+      await this.reversalService.reverse(locked.journalEntryId, dto, tx as never);
+
       const next = await tx.purchaseInvoice.update({
         where: { id },
         data: {
@@ -616,10 +667,10 @@ export class PurchaseInvoicesService {
       });
 
       await tx.supplier.update({
-        where: { id: invoice.supplierId },
+        where: { id: locked.supplierId },
         data: {
           currentBalance: {
-            decrement: this.toAmount(Number(invoice.totalAmount)),
+            decrement: this.toAmount(Number(locked.totalAmount)),
           },
         },
       });
@@ -1230,6 +1281,107 @@ export class PurchaseInvoicesService {
         sourceLineId: line.id,
         sourceReference: invoice.reference,
         sourceDate: invoice.invoiceDate,
+      });
+    }
+  }
+
+  private async reverseInventoryReceiptPosting(
+    tx: Prisma.TransactionClient,
+    invoice: { id: string; reference: string; invoiceDate: Date },
+  ) {
+    const movements = await tx.inventoryStockMovement.findMany({
+      where: {
+        transactionType: 'PurchaseInvoice',
+        transactionId: invoice.id,
+        movementType: InventoryStockMovementType.PURCHASE_RECEIPT,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const movement of movements) {
+      const existingReversal = await tx.inventoryStockMovement.findFirst({
+        where: {
+          transactionType: 'PurchaseInvoice',
+          transactionId: invoice.id,
+          transactionLineId: movement.transactionLineId,
+          itemId: movement.itemId,
+          warehouseId: movement.warehouseId,
+          movementType: InventoryStockMovementType.PURCHASE_RETURN,
+        },
+        select: { id: true },
+      });
+      if (existingReversal) {
+        throw new BadRequestException('هذه الفاتورة معكوسة مسبقاً');
+      }
+
+      const quantity = new Prisma.Decimal(movement.quantityIn);
+      if (quantity.lte(0)) {
+        continue;
+      }
+
+      const value = new Prisma.Decimal(movement.valueIn);
+      const unitCost = new Prisma.Decimal(movement.unitCost);
+
+      const costLayer = await tx.inventoryCostLayer.findFirst({
+        where: {
+          itemId: movement.itemId,
+          warehouseId: movement.warehouseId,
+          sourceTransactionType: 'PurchaseInvoice',
+          sourceTransactionId: invoice.id,
+          sourceLineId: movement.transactionLineId ?? null,
+          sourceMovementType: InventoryStockMovementType.PURCHASE_RECEIPT,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (!costLayer || costLayer.remainingQuantity.lt(quantity)) {
+        throw new BadRequestException(
+          `Cannot reverse purchase invoice ${invoice.reference} because the received stock has already been consumed or moved from warehouse ${movement.warehouseId}.`,
+        );
+      }
+
+      await tx.inventoryCostLayer.update({
+        where: { id: costLayer.id },
+        data: {
+          remainingQuantity: {
+            decrement: quantity,
+          },
+        },
+      });
+
+      await tx.inventoryItem.update({
+        where: { id: movement.itemId },
+        data: {
+          onHandQuantity: { decrement: quantity },
+          valuationAmount: { decrement: value },
+        },
+      });
+
+      const warehouseBalance = await this.inventoryPostingService.applyWarehouseBalance(tx, {
+        itemId: movement.itemId,
+        warehouseId: movement.warehouseId,
+        quantityDelta: quantity.neg(),
+        valueDelta: value.neg(),
+      });
+
+      await this.inventoryPostingService.createMovement(tx, {
+        movementType: InventoryStockMovementType.PURCHASE_RETURN,
+        transactionType: 'PurchaseInvoice',
+        transactionId: invoice.id,
+        transactionLineId: movement.transactionLineId,
+        transactionReference: invoice.reference,
+        transactionDate: invoice.invoiceDate,
+        itemId: movement.itemId,
+        warehouseId: movement.warehouseId,
+        quantityIn: new Prisma.Decimal(0),
+        quantityOut: quantity,
+        unitCost,
+        valueIn: new Prisma.Decimal(0),
+        valueOut: value,
+        balanceId: warehouseBalance.id,
+        runningQuantity: warehouseBalance.onHandQuantity,
+        runningValuation: warehouseBalance.valuationAmount,
+        description: `Reversal of ${invoice.reference}`,
       });
     }
   }

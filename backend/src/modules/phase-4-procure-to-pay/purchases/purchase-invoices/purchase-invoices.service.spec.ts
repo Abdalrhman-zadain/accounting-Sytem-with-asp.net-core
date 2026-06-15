@@ -1,9 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '../../../../generated/prisma';
 
 import { PurchaseInvoicesService } from './purchase-invoices.service';
 
 describe('PurchaseInvoicesService', () => {
   const prisma = {
+    purchaseInvoice: {
+      findUnique: jest.fn(),
+    },
+    debitNote: {
+      count: jest.fn(),
+    },
     account: {
       findMany: jest.fn(),
     },
@@ -17,19 +24,28 @@ describe('PurchaseInvoicesService', () => {
       findMany: jest.fn(),
     },
   };
+  const reversalService = {
+    reverse: jest.fn(),
+  };
+  const inventoryPostingService = {
+    applyWarehouseBalance: jest.fn(),
+    createMovement: jest.fn(),
+  };
 
   let service: PurchaseInvoicesService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.tax.findMany.mockResolvedValue([]);
+    prisma.purchaseInvoice.findUnique.mockReset();
+    prisma.debitNote.count.mockReset();
     service = new PurchaseInvoicesService(
       prisma as never,
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
-      {} as never,
+      reversalService as never,
+      inventoryPostingService as never,
       { log: jest.fn() } as never,
     );
   });
@@ -102,7 +118,85 @@ describe('PurchaseInvoicesService', () => {
       new BadRequestException('Service or non-stock item lines must post to an active expense account.'),
     );
   });
+
+  it('rejects reversing a purchase invoice that is already reversed', async () => {
+    prisma.purchaseInvoice.findUnique.mockResolvedValue({
+      id: 'pi-1',
+      status: 'REVERSED',
+      journalEntryId: 'je-1',
+      allocatedAmount: 0,
+      supplierId: 'sup-1',
+      totalAmount: 10,
+      supplier: { id: 'sup-1', isActive: true },
+    });
+
+    await expect(
+      service.reverse('pi-1', { reversalDate: '2026-06-15' }),
+    ).rejects.toThrow(new BadRequestException('هذه الفاتورة معكوسة مسبقاً'));
+  });
+
+  it('creates an OUT movement when reversing a purchase receipt movement', async () => {
+    const tx = {
+      inventoryStockMovement: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'move-1',
+            transactionLineId: 'line-1',
+            itemId: 'item-1',
+            warehouseId: 'wh-1',
+            quantityIn: decimal(100),
+            valueIn: decimal(500),
+            unitCost: decimal(5),
+          },
+        ]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      inventoryCostLayer: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'layer-1',
+          remainingQuantity: decimal(100),
+        }),
+        update: jest.fn(),
+      },
+      inventoryItem: {
+        update: jest.fn(),
+      },
+    };
+    inventoryPostingService.applyWarehouseBalance.mockResolvedValue({
+      id: 'bal-1',
+      onHandQuantity: decimal(0),
+      valuationAmount: decimal(0),
+    });
+
+    await (service as any).reverseInventoryReceiptPosting(tx, {
+      id: 'pi-1',
+      reference: 'PI-001',
+      invoiceDate: new Date('2026-06-15T00:00:00.000Z'),
+    });
+
+    expect(tx.inventoryItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'item-1' },
+      }),
+    );
+    expect(inventoryPostingService.createMovement).toHaveBeenCalledWith(tx, expect.objectContaining({
+      movementType: 'PURCHASE_RETURN',
+      transactionType: 'PurchaseInvoice',
+      transactionId: 'pi-1',
+      transactionLineId: 'line-1',
+      itemId: 'item-1',
+      warehouseId: 'wh-1',
+      quantityIn: new Prisma.Decimal(0),
+      quantityOut: new Prisma.Decimal(100),
+      valueIn: new Prisma.Decimal(0),
+      valueOut: new Prisma.Decimal(500),
+    }));
+  });
 });
+
+function decimal(value: number) {
+  return new Prisma.Decimal(value);
+}
 
 function invoiceLine(overrides: Record<string, unknown> = {}) {
   return {

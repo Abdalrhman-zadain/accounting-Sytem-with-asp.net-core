@@ -3355,6 +3355,7 @@ Object.assign(enTranslations, {
   "inventory.stockLedger.detail.transactionId": "Transaction Id",
   "inventory.stockLedger.movementType.GOODS_RECEIPT": "Goods Receipt",
   "inventory.stockLedger.movementType.PURCHASE_RECEIPT": "Purchase Receipt",
+  "inventory.stockLedger.movementType.PURCHASE_RETURN": "Purchase Return",
   "inventory.stockLedger.movementType.GOODS_ISSUE": "Goods Issue",
   "inventory.stockLedger.movementType.SALES_ISSUE": "Sales Issue",
   "inventory.stockLedger.movementType.SALES_RETURN": "Sales Return",
@@ -3364,6 +3365,9 @@ Object.assign(enTranslations, {
   "inventory.stockLedger.movementType.ADJUSTMENT_OUT": "Adjustment Out",
   "inventory.stockLedger.movementType.REP_CAR_LOAD": "Rep Car Load",
   "inventory.stockLedger.movementType.REP_CAR_LOAD_REVERSAL": "Rep Car Load Reversal",
+  "inventory.stockLedger.movementType.REP_CAR_UNLOAD": "Rep Car Unload",
+  "inventory.stockLedger.displayType.PURCHASE_INVOICE_REVERSAL": "Purchase Invoice Reversal",
+  "inventory.stockLedger.displayType.SALES_INVOICE_REVERSAL": "Sales Invoice Reversal",
 });
 
 Object.assign(enTranslations, {

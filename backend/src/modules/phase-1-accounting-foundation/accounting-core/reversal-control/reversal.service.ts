@@ -20,77 +20,87 @@ export class ReversalService {
     private readonly referenceService: ReferenceService,
   ) { }
 
-  async reverse(entryId: string, dto: ReverseJournalEntryDto) {
-    const reversedEntryId = await this.prisma.$transaction(async (tx) => {
-      const entry = await tx.journalEntry.findUnique({
-        where: { id: entryId },
-        include: {
-          lines: { orderBy: { lineNumber: 'asc' } },
-        },
-      });
-
-      if (!entry) {
-        throw new JournalEntryNotFoundException(entryId);
-      }
-
-      await this.journalEntriesService.ensurePosted(entry);
-      await this.validatePostingAccounts(tx, entry.lines.map((line) => line.accountId));
-
-      const reversalDate = dto.reversalDate ? new Date(dto.reversalDate) : new Date();
-      const postedAt = new Date();
-      const batch = await tx.postingBatch.create({
-        data: { postedAt },
-      });
-
-      const reversedEntry = await tx.journalEntry.create({
-        data: {
-          reference: this.referenceService.generateJournalEntryReference(reversalDate),
-          entryDate: reversalDate,
-          description:
-            dto.description ??
-            `Reversal of ${entry.reference}${entry.description ? `: ${entry.description}` : ''}`,
-          status: 'POSTED',
-          postedAt,
-          postingBatchId: batch.id,
-          reversalOfId: entry.id,
-          lines: {
-            create: entry.lines.map((line, index) => ({
-              accountId: line.accountId,
-              lineNumber: index + 1,
-              description: `Reversal of line ${line.lineNumber}`,
-              debitAmount: line.creditAmount,
-              creditAmount: line.debitAmount,
-            })),
-          },
-        },
-      });
-
-      const reversalLines = await tx.journalEntryLine.findMany({
-        where: { journalEntryId: reversedEntry.id },
-        orderBy: { lineNumber: 'asc' },
-      });
-
-      await tx.ledgerTransaction.createMany({
-        data: reversalLines.map((line) => ({
-          postingBatchId: batch.id,
-          journalEntryId: reversedEntry.id,
-          journalEntryLineId: line.id,
-          accountId: line.accountId,
-          reference: reversedEntry.reference,
-          entryDate: reversedEntry.entryDate,
-          postedAt,
-          description: line.description ?? reversedEntry.description,
-          debitAmount: line.debitAmount,
-          creditAmount: line.creditAmount,
-        })),
-      });
-
-      await this.updateAccountBalances(tx, reversalLines);
-
-      return reversedEntry.id;
-    });
+  async reverse(entryId: string, dto: ReverseJournalEntryDto, tx?: TransactionClient) {
+    const reversedEntryId = tx
+      ? await this.performReverse(tx, entryId, dto)
+      : await this.prisma.$transaction((transaction) =>
+          this.performReverse(transaction, entryId, dto),
+        );
 
     return this.journalEntriesService.getById(reversedEntryId);
+  }
+
+  private async performReverse(
+    tx: TransactionClient,
+    entryId: string,
+    dto: ReverseJournalEntryDto,
+  ) {
+    const entry = await tx.journalEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        lines: { orderBy: { lineNumber: 'asc' } },
+      },
+    });
+
+    if (!entry) {
+      throw new JournalEntryNotFoundException(entryId);
+    }
+
+    await this.journalEntriesService.ensurePosted(entry);
+    await this.validatePostingAccounts(tx, entry.lines.map((line) => line.accountId));
+
+    const reversalDate = dto.reversalDate ? new Date(dto.reversalDate) : new Date();
+    const postedAt = new Date();
+    const batch = await tx.postingBatch.create({
+      data: { postedAt },
+    });
+
+    const reversedEntry = await tx.journalEntry.create({
+      data: {
+        reference: this.referenceService.generateJournalEntryReference(reversalDate),
+        entryDate: reversalDate,
+        description:
+          dto.description ??
+          `Reversal of ${entry.reference}${entry.description ? `: ${entry.description}` : ''}`,
+        status: 'POSTED',
+        postedAt,
+        postingBatchId: batch.id,
+        reversalOfId: entry.id,
+        lines: {
+          create: entry.lines.map((line, index) => ({
+            accountId: line.accountId,
+            lineNumber: index + 1,
+            description: `Reversal of line ${line.lineNumber}`,
+            debitAmount: line.creditAmount,
+            creditAmount: line.debitAmount,
+          })),
+        },
+      },
+    });
+
+    const reversalLines = await tx.journalEntryLine.findMany({
+      where: { journalEntryId: reversedEntry.id },
+      orderBy: { lineNumber: 'asc' },
+    });
+
+    await tx.ledgerTransaction.createMany({
+      data: reversalLines.map((line) => ({
+        postingBatchId: batch.id,
+        journalEntryId: reversedEntry.id,
+        journalEntryLineId: line.id,
+        accountId: line.accountId,
+        reference: reversedEntry.reference,
+        entryDate: reversedEntry.entryDate,
+        postedAt,
+        description: line.description ?? reversedEntry.description,
+        debitAmount: line.debitAmount,
+        creditAmount: line.creditAmount,
+      })),
+    });
+
+    await this.updateAccountBalances(tx, reversalLines);
+
+    return reversedEntry.id;
   }
 
   private async validatePostingAccounts(tx: TransactionClient, accountIds: string[]) {

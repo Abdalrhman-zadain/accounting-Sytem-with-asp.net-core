@@ -2261,6 +2261,7 @@ Object.assign(arTranslations, {
   "inventory.stockLedger.detail.transactionId": "معرّف العملية",
   "inventory.stockLedger.movementType.GOODS_RECEIPT": "استلام مخزون",
   "inventory.stockLedger.movementType.PURCHASE_RECEIPT": "استلام مشتريات",
+  "inventory.stockLedger.movementType.PURCHASE_RETURN": "مرتجع مشتريات",
   "inventory.stockLedger.movementType.GOODS_ISSUE": "صرف مخزون",
   "inventory.stockLedger.movementType.SALES_ISSUE": "صرف مبيعات",
   "inventory.stockLedger.movementType.SALES_RETURN": "مرتجع مبيعات",
@@ -2270,6 +2271,9 @@ Object.assign(arTranslations, {
   "inventory.stockLedger.movementType.ADJUSTMENT_OUT": "تسوية نقصان",
   "inventory.stockLedger.movementType.REP_CAR_LOAD": "تحميل سيارة مندوب",
   "inventory.stockLedger.movementType.REP_CAR_LOAD_REVERSAL": "عكس تحميل سيارة مندوب",
+  "inventory.stockLedger.movementType.REP_CAR_UNLOAD": "تنزيل سيارة مندوب",
+  "inventory.stockLedger.displayType.PURCHASE_INVOICE_REVERSAL": "عكس فاتورة شراء",
+  "inventory.stockLedger.displayType.SALES_INVOICE_REVERSAL": "عكس فاتورة مبيعات",
 });
 Object.assign(arTranslations, {
   "inventory.policy.title": "سياسة المخزون",

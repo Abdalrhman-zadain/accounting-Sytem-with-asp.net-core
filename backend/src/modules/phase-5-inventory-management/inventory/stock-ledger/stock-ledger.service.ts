@@ -37,6 +37,42 @@ type StockMovementWithRelations = Prisma.InventoryStockMovementGetPayload<{
   };
 }>;
 
+type StockMovementDisplayType =
+  | "PURCHASE_INVOICE_REVERSAL"
+  | "SALES_INVOICE_REVERSAL";
+
+type StockMovementRowView = {
+  id: string;
+  movementType: InventoryStockMovementType;
+  transactionType: string;
+  transactionId: string;
+  transactionLineId: string | null;
+  transactionReference: string;
+  transactionDate: string;
+  quantityIn: string;
+  quantityOut: string;
+  unitCost: string;
+  valueIn: string;
+  valueOut: string;
+  runningQuantity: string;
+  runningValuation: string;
+  description: string | null;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    unitOfMeasure: string | null;
+  };
+  warehouse: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  createdAt: string;
+  displayType?: StockMovementDisplayType;
+  sortCreatedAt: string;
+};
+
 @Injectable()
 export class StockLedgerService {
   constructor(private readonly prisma: PrismaService) {}
@@ -55,55 +91,66 @@ export class StockLedgerService {
       label: "Limit",
     });
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
     const where: Prisma.InventoryStockMovementWhereInput = {
       itemId: query.itemId,
       warehouseId: query.warehouseId,
-      movementType: this.parseMovementType(query.movementType),
-      transactionDate: this.dateRangeFilter(query.dateFrom, query.dateTo),
-      OR: search
-        ? [
-            { transactionReference: { contains: search, mode: "insensitive" } },
-            { transactionType: { contains: search, mode: "insensitive" } },
-            { item: { code: { contains: search, mode: "insensitive" } } },
-            { item: { name: { contains: search, mode: "insensitive" } } },
-            { warehouse: { code: { contains: search, mode: "insensitive" } } },
-            { warehouse: { name: { contains: search, mode: "insensitive" } } },
-          ]
-        : undefined,
     };
+    const movementType = this.parseMovementType(query.movementType);
+    const search = query.search?.trim().toLocaleLowerCase();
 
-    const [total, rows] = await Promise.all([
-      this.prisma.inventoryStockMovement.count({ where }),
-      this.prisma.inventoryStockMovement.findMany({
-        where,
-        include: {
-          item: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              unitOfMeasure: true,
-            },
-          },
-          warehouse: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
+    const rows = await this.prisma.inventoryStockMovement.findMany({
+      where,
+      include: {
+        item: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            unitOfMeasure: true,
           },
         },
-        orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }],
-        skip,
-        take: limit,
-      }),
-    ]);
+        warehouse: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }],
+    });
+
+    const invoiceContext = await this.loadInvoiceContext(rows);
+    const expandedRows = this.expandRows(rows, invoiceContext);
+    const withRunningBalances = this.recomputeRunningBalances(expandedRows);
+    const filteredRows = withRunningBalances.filter((row) => {
+      if (movementType && row.movementType !== movementType) {
+        return false;
+      }
+      if (!this.matchesDateRange(row.transactionDate, query.dateFrom, query.dateTo)) {
+        return false;
+      }
+      if (!search) {
+        return true;
+      }
+
+      return [
+        row.transactionReference,
+        row.transactionType,
+        row.item.code,
+        row.item.name,
+        row.warehouse.code,
+        row.warehouse.name,
+      ].some((value) => value.toLocaleLowerCase().includes(search));
+    });
+
+    const total = filteredRows.length;
+    const pagedRows = filteredRows.slice(skip, skip + limit);
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return {
-      data: rows.map((row) => this.mapMovement(row)),
+      data: pagedRows.map(({ sortCreatedAt: _sortCreatedAt, ...row }) => row),
       page,
       limit,
       total,
@@ -143,6 +190,176 @@ export class StockLedgerService {
     };
   }
 
+  private async loadInvoiceContext(rows: StockMovementWithRelations[]) {
+    const purchaseInvoiceIds = Array.from(
+      new Set(
+        rows
+          .filter((row) => row.transactionType === "PurchaseInvoice")
+          .map((row) => row.transactionId),
+      ),
+    );
+    const salesInvoiceIds = Array.from(
+      new Set(
+        rows
+          .filter((row) => row.transactionType === "SalesInvoice")
+          .map((row) => row.transactionId),
+      ),
+    );
+
+    const [purchaseInvoices, salesInvoices] = await Promise.all([
+      purchaseInvoiceIds.length
+        ? this.prisma.purchaseInvoice.findMany({
+            where: { id: { in: purchaseInvoiceIds } },
+            select: { id: true, status: true, updatedAt: true },
+          })
+        : Promise.resolve([]),
+      salesInvoiceIds.length
+        ? this.prisma.salesInvoice.findMany({
+            where: { id: { in: salesInvoiceIds } },
+            select: { id: true, status: true, updatedAt: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      purchaseInvoices: new Map(
+        purchaseInvoices.map((invoice) => [invoice.id, invoice]),
+      ),
+      salesInvoices: new Map(salesInvoices.map((invoice) => [invoice.id, invoice])),
+    };
+  }
+
+  private expandRows(
+    rows: StockMovementWithRelations[],
+    invoiceContext: {
+      purchaseInvoices: Map<
+        string,
+        { id: string; status: string; updatedAt: Date }
+      >;
+      salesInvoices: Map<string, { id: string; status: string; updatedAt: Date }>;
+    },
+  ) {
+    const purchaseReturnKeys = new Set(
+      rows
+        .filter(
+          (row) =>
+            row.transactionType === "PurchaseInvoice" &&
+            row.movementType === InventoryStockMovementType.PURCHASE_RETURN,
+        )
+        .map((row) => this.buildMovementKey(row)),
+    );
+
+    const expanded: StockMovementRowView[] = [];
+    for (const row of rows) {
+      const baseRow: StockMovementRowView = {
+        ...this.mapMovement(row),
+        sortCreatedAt: row.createdAt.toISOString(),
+      };
+
+      if (
+        row.transactionType === "SalesInvoice" &&
+        row.movementType === InventoryStockMovementType.SALES_RETURN
+      ) {
+        baseRow.displayType = "SALES_INVOICE_REVERSAL";
+      }
+
+      expanded.push(baseRow);
+
+      const purchaseInvoice = invoiceContext.purchaseInvoices.get(row.transactionId);
+      const needsPurchaseReversalRow =
+        row.transactionType === "PurchaseInvoice" &&
+        row.movementType === InventoryStockMovementType.PURCHASE_RECEIPT &&
+        purchaseInvoice?.status === "REVERSED" &&
+        !purchaseReturnKeys.has(this.buildMovementKey(row));
+
+      if (!needsPurchaseReversalRow) {
+        continue;
+      }
+
+      const originalCreatedAt = row.createdAt.getTime();
+      const reversalCreatedAt = Math.max(
+        originalCreatedAt + 1,
+        purchaseInvoice.updatedAt.getTime(),
+      );
+
+      expanded.push({
+        ...baseRow,
+        id: `${row.id}:purchase-reversal`,
+        movementType: InventoryStockMovementType.PURCHASE_RETURN,
+        quantityIn: "0",
+        quantityOut: row.quantityIn.toString(),
+        valueIn: "0",
+        valueOut: row.valueIn.toString(),
+        runningQuantity: "0",
+        runningValuation: "0",
+        displayType: "PURCHASE_INVOICE_REVERSAL",
+        description: `Reversal of ${row.transactionReference}`,
+        sortCreatedAt: new Date(reversalCreatedAt).toISOString(),
+      });
+    }
+
+    return expanded.sort((left, right) => {
+      const dateCompare =
+        new Date(left.transactionDate).getTime() -
+        new Date(right.transactionDate).getTime();
+      if (dateCompare !== 0) {
+        return dateCompare;
+      }
+      return (
+        new Date(left.sortCreatedAt).getTime() -
+        new Date(right.sortCreatedAt).getTime()
+      );
+    });
+  }
+
+  private recomputeRunningBalances(rows: StockMovementRowView[]) {
+    const runningByBucket = new Map<
+      string,
+      { quantity: Prisma.Decimal; valuation: Prisma.Decimal }
+    >();
+
+    return rows.map((row) => {
+      const bucketKey = `${row.item.id}:${row.warehouse.id}`;
+      const previous =
+        runningByBucket.get(bucketKey) ?? {
+          quantity: new Prisma.Decimal(0),
+          valuation: new Prisma.Decimal(0),
+        };
+
+      const nextQuantity = previous.quantity
+        .add(new Prisma.Decimal(row.quantityIn))
+        .sub(new Prisma.Decimal(row.quantityOut));
+      const nextValuation = previous.valuation
+        .add(new Prisma.Decimal(row.valueIn))
+        .sub(new Prisma.Decimal(row.valueOut));
+
+      runningByBucket.set(bucketKey, {
+        quantity: nextQuantity,
+        valuation: nextValuation,
+      });
+
+      return {
+        ...row,
+        runningQuantity: nextQuantity.toString(),
+        runningValuation: nextValuation.toString(),
+      };
+    });
+  }
+
+  private buildMovementKey(row: {
+    transactionId: string;
+    transactionLineId: string | null;
+    itemId: string;
+    warehouseId: string;
+  }) {
+    return [
+      row.transactionId,
+      row.transactionLineId ?? "",
+      row.itemId,
+      row.warehouseId,
+    ].join(":");
+  }
+
   private parseMovementType(value?: string) {
     if (!value) {
       return undefined;
@@ -153,13 +370,31 @@ export class StockLedgerService {
     throw new BadRequestException("Invalid stock movement type.");
   }
 
-  private dateRangeFilter(dateFrom?: string, dateTo?: string) {
-    return dateFrom || dateTo
-      ? {
-          gte: dateFrom ? new Date(dateFrom) : undefined,
-          lte: dateTo ? new Date(dateTo) : undefined,
-        }
-      : undefined;
+  private matchesDateRange(
+    value: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) {
+      return false;
+    }
+
+    if (dateFrom) {
+      const fromTime = new Date(dateFrom).getTime();
+      if (!Number.isNaN(fromTime) && timestamp < fromTime) {
+        return false;
+      }
+    }
+
+    if (dateTo) {
+      const toTime = new Date(dateTo).getTime();
+      if (!Number.isNaN(toTime) && timestamp > toTime) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private parsePaginationNumber(

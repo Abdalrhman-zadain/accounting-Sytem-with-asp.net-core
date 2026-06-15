@@ -130,6 +130,7 @@ const ADJUSTMENT_STATUS_OPTIONS: InventoryAdjustmentStatus[] = ["DRAFT", "POSTED
 const STOCK_MOVEMENT_TYPE_OPTIONS: InventoryStockMovementType[] = [
   "GOODS_RECEIPT",
   "PURCHASE_RECEIPT",
+  "PURCHASE_RETURN",
   "GOODS_ISSUE",
   "SALES_ISSUE",
   "SALES_RETURN",
@@ -139,6 +140,7 @@ const STOCK_MOVEMENT_TYPE_OPTIONS: InventoryStockMovementType[] = [
   "ADJUSTMENT_OUT",
   "REP_CAR_LOAD",
   "REP_CAR_LOAD_REVERSAL",
+  "REP_CAR_UNLOAD",
 ];
 const INVENTORY_ITEMS_PAGE_SIZE = 9;
 const INVENTORY_RECEIPTS_PAGE_SIZE = 20;
@@ -3818,7 +3820,7 @@ export function InventoryPage() {
                         <td className="px-4 py-3 font-bold text-gray-900">{formatItemServiceLabel(movement.item.code, movement.item.name)}</td>
                         <td className="px-4 py-3 text-gray-600">{movement.warehouse.code} · {movement.warehouse.name}</td>
                         <td className="px-4 py-3">
-                          <StatusPill label={t(`inventory.stockLedger.movementType.${movement.movementType}`)} tone="neutral" />
+                          <StatusPill label={getStockMovementLabel(movement)} tone="neutral" />
                         </td>
                         <td className="px-4 py-3 text-end font-medium text-emerald-700">{movement.quantityIn}</td>
                         <td className="px-4 py-3 text-end font-medium text-rose-700">{movement.quantityOut}</td>
@@ -4634,6 +4636,16 @@ export function InventoryPage() {
       movement.transactionType === "InventoryTransfer" ||
       movement.transactionType === "InventoryAdjustment"
     );
+  }
+
+  function getStockMovementLabel(movement: InventoryStockMovement) {
+    if (movement.displayType === "PURCHASE_INVOICE_REVERSAL") {
+      return t("inventory.stockLedger.displayType.PURCHASE_INVOICE_REVERSAL");
+    }
+    if (movement.displayType === "SALES_INVOICE_REVERSAL") {
+      return t("inventory.stockLedger.displayType.SALES_INVOICE_REVERSAL");
+    }
+    return t(`inventory.stockLedger.movementType.${movement.movementType}`);
   }
 
   function openStockMovementSource(movement: InventoryStockMovement) {

@@ -348,7 +348,7 @@ Key fields:
 - inventory adjustment `reference`, `status`, `adjustmentDate`, `warehouseId`, `reason`, summary variance/amount, and `postedAt`
 - inventory adjustment line `lineNumber`, `itemId`, `systemQuantity`, `countedQuantity`, `varianceQuantity`, `unitCost`, `unitOfMeasure`, `description`, and `lineTotalAmount`
 - warehouse balance `itemId`, `warehouseId`, `onHandQuantity`, and `valuationAmount`
-- stock movement history `movementType` (including purchase-invoice receipts and sales-invoice issues), transaction references, quantity in/out, value in/out, and running warehouse balances
+- stock movement history `movementType` (including purchase-invoice receipts, stored purchase-invoice reversal rows, sales-invoice issues, and sales-invoice rollback rows), transaction references, quantity in/out, value in/out, and running warehouse balances
 - cost layer `remainingQuantity`, `unitCost`, source movement metadata, and source references
 - informational item-level balances `onHandQuantity` and `valuationAmount`
 - inventory policy `id` and `costingMethod`
@@ -374,6 +374,8 @@ Accounting meaning:
 - goods receipt lines preserve warehouse-linked intake history with item, quantity, unit-cost, and source-reference context
 - goods issues can be saved as drafts, updated while still in draft, cancelled before posting, and posted to decrease both warehouse-level and item-level quantity/value balances
 - posted sales invoices reuse the same warehouse-balance and costing foundations for inventory-tracked lines, while service lines remain accounting-only
+- reversing a posted purchase invoice now creates a stored `PURCHASE_RETURN` stock movement on the same item and warehouse as the original receipt, decreases both item-level and warehouse-level balances inside the same database transaction as the accounting reversal, and rejects duplicate reversal attempts with `هذه الفاتورة معكوسة مسبقاً`
+- the stock-ledger inquiry read model still keeps a backward-compatible fallback that expands older reversed purchase invoices into an opposite stock-out display row (`عكس فاتورة شراء`) when no stored purchase-return movement exists for that invoice line, and it labels the compensating stock-in row created during sales-invoice rollback as a sales-invoice reversal (`عكس فاتورة مبيعات`) so the displayed IN/OUT directions remain explicit while the underlying stock posting rows and final balances stay unchanged
 - goods issue posting validates source-warehouse availability, applies configurable costing (`WEIGHTED_AVERAGE` or `FIFO`), and writes stock movement history rows with running balances
 - inventory policy stores the organization-selected valuation method used by goods issue, transfer, and adjustment-out costing flows
 - inventory transfers can be saved as drafts, updated while still in draft, cancelled before posting, and posted as warehouse-to-warehouse operational documents with both transfer-out and transfer-in stock movement rows
@@ -383,7 +385,7 @@ Accounting meaning:
 - adjustment posting supports positive/negative variance lines, updates warehouse and item balances, and records adjustment-in/adjustment-out movement history with costing-aware values
 - posted inventory receipts/issues/transfers/adjustments can be marked `REVERSED` for audit history, with reverse action entries logged in `InventoryTransactionAuditLog`
 - optional inventory accounting integration creates and posts Journal Entries for goods receipts, goods issues, and inventory adjustments when `INVENTORY_ACCOUNTING_ENABLED` is enabled
-- stock movement history is stored in `InventoryStockMovement` for inquiry filters and source-document drill-down behavior
+- stock movement history is stored in `InventoryStockMovement` for inquiry filters and source-document drill-down behavior; the stock-ledger API may enrich those stored rows with display-only reversal metadata for sales-invoice rollback rows and for older reversed purchase invoices that predate the stored purchase-return reversal path
 - items can now point to a dedicated preferred warehouse record, while `preferredWarehouseCode` remains as a compatibility/reference mirror
 - warehouse master item counts should be interpreted from positive `InventoryWarehouseBalance` rows, not from how many item cards happen to mark that warehouse as their preferred default
 

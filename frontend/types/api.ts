@@ -335,6 +335,7 @@ export type InventoryAdjustmentStatus =
 export type InventoryStockMovementType =
   | "GOODS_RECEIPT"
   | "PURCHASE_RECEIPT"
+  | "PURCHASE_RETURN"
   | "GOODS_ISSUE"
   | "SALES_ISSUE"
   | "SALES_RETURN"
@@ -343,7 +344,12 @@ export type InventoryStockMovementType =
   | "ADJUSTMENT_IN"
   | "ADJUSTMENT_OUT"
   | "REP_CAR_LOAD"
-  | "REP_CAR_LOAD_REVERSAL";
+  | "REP_CAR_LOAD_REVERSAL"
+  | "REP_CAR_UNLOAD";
+
+export type InventoryStockMovementDisplayType =
+  | "PURCHASE_INVOICE_REVERSAL"
+  | "SALES_INVOICE_REVERSAL";
 
 export type InventoryCostingMethod = "WEIGHTED_AVERAGE" | "FIFO";
 
@@ -996,6 +1002,7 @@ export type InventoryAdjustmentsResponse = {
 export type InventoryStockMovement = {
   id: string;
   movementType: InventoryStockMovementType;
+  displayType?: InventoryStockMovementDisplayType;
   transactionType: string;
   transactionId: string;
   transactionLineId?: string | null;
