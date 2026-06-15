@@ -25,6 +25,7 @@ export const MARKET_REP_PERMISSION_CODES: PosPermissionCode[] = [
   ...MARKET_CASHIER_PERMISSION_CODES,
   "POS_MARKET_VIEW_RECEIVABLES",
   "POS_MARKET_COLLECT_RECEIVABLE",
+  "POS_MARKET_AMEND_SALE",
 ];
 
 export const CASHIER_PERMISSION_CODES: PosPermissionCode[] = [
@@ -125,6 +126,7 @@ export const POS_ROLE_ROUTE_ACCESS: Record<PosAccessRoleCode, string[]> = {
   ],
   MARKET_REP: [
     "/pos-market/register",
+    "/pos-market/amend-sales",
     "/pos-market/receivables",
     "/pos-market/my-stock",
     "/pos-market/printers",

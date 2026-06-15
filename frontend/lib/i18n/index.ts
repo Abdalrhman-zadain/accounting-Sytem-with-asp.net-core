@@ -31,6 +31,18 @@ const enTranslations: Record<string, string> = {
   "nav.item.auditTrail": "Audit Trail",
   "nav.item.settings": "Settings",
 
+  "nav.quickAccess.title": "Jump to page",
+  "nav.quickAccess.placeholder": "Search pages… invoices, customers, reports",
+  "nav.quickAccess.button": "Jump to page…",
+  "nav.quickAccess.shortcut": "Ctrl+K",
+  "nav.quickAccess.hint": "↑↓ navigate · Enter open · Esc close",
+  "nav.quickAccess.recent": "Recent",
+  "nav.quickAccess.favorites": "Favorites",
+  "nav.quickAccess.allPages": "All pages",
+  "nav.quickAccess.empty": "No pages match your search.",
+  "nav.quickAccess.addFavorite": "Add to favorites",
+  "nav.quickAccess.removeFavorite": "Remove from favorites",
+
   "settings.title": "System Settings",
   "settings.globalPreferences": "Global Preferences",
   "settings.displayLanguage": "Display Language",
@@ -1628,6 +1640,41 @@ Object.assign(enTranslations, {
   "posMarket.checkout.complete": "Complete sale",
   "posMarket.checkout.processing": "Processing…",
   "posMarket.checkout.success": "Sale completed successfully.",
+  "posMarket.amend.action": "Edit",
+  "posMarket.amend.banner": "Editing invoice {{invoice}} — re-enter collection at checkout",
+  "posMarket.amend.cancel": "Cancel edit",
+  "posMarket.amend.success": "Invoice amended and replaced successfully.",
+  "posMarket.amend.pageTitle": "Amend invoices",
+  "posMarket.amend.pageDescription":
+    "Choose a completed invoice from the current shift, then continue on the register screen to change items, prices, or discounts. Collection is entered again at checkout.",
+  "posMarket.amend.accountingNote":
+    "Accounting: the old invoice is voided, rep-car stock is reversed, the draft journal is removed, and a new invoice with a new receipt number and draft journal is created. Prior receivable collections on the old invoice are moved to the new invoice (capped at the new total).",
+  "posMarket.amend.selectAndEdit": "Select and edit",
+  "posMarket.amend.empty": "No completed sales in this shift yet.",
+  "posMarket.amend.requiresOpenSession": "Open a shift first, then return here to choose an invoice to amend.",
+  "posMarket.amend.noPermission": "You do not have permission to amend market POS invoices.",
+  "posMarket.amend.amendableCount": "{{count}} invoice(s) can be amended now.",
+  "posMarket.amend.hasPriorCollections":
+    "Collections were recorded on this invoice — they will transfer to the amended invoice.",
+  "posMarket.amend.block.noPermission": "Amend is not allowed for your user.",
+  "posMarket.amend.block.repOnly": "Only the assigned market rep can amend this invoice.",
+  "posMarket.amend.block.notMarket": "This sale is not a market POS invoice.",
+  "posMarket.amend.block.notCompleted": "Only completed sales can be amended.",
+  "posMarket.amend.block.accountingPosted": "Accounting has already posted this invoice.",
+  "posMarket.amend.block.postingMode": "Amend requires BY_INVOICE posting mode.",
+  "posMarket.amend.block.sessionClosed": "The shift is closed — amend is no longer available.",
+  "posMarket.amend.block.journalPosted": "The invoice journal entry is already posted.",
+  "posMarket.amend.block.hasReturns": "This invoice has returns and cannot be amended.",
+  "posMarket.amend.block.hasCollections": "Collections were recorded on this invoice.",
+  "posMarket.amend.block.wrongRep": "This invoice belongs to another sales rep.",
+  "posMarket.amend.block.unknown": "This invoice cannot be amended.",
+  "posMarket.workspace.amend": "Amend invoices",
+  "posMarket.reprint.action": "Reprint",
+  "posMarket.reprint.success": "Receipt sent to the printer.",
+  "posMarket.reprint.error": "Could not reprint the receipt.",
+  "posMarket.sessionSales.title": "Session sales",
+  "posMarket.sessionSales.reprintHint": "Reprint receipts from the current shift.",
+  "posMarket.sessionSales.empty": "No completed sales in this session yet.",
   "posMarket.checkout.error": "Could not complete the sale.",
   "posMarket.checkout.noPaymentAccount": "No payment account is configured.",
   "posMarket.checkout.amountDue": "Amount due on credit",
@@ -1858,6 +1905,8 @@ Object.assign(enTranslations, {
   "posMarket.receivables.detail.outstanding": "Amount due",
   "posMarket.receivables.detail.deliveriesTab": "Deliveries",
   "posMarket.receivables.detail.paymentsTab": "Collections",
+  "posMarket.receivables.detail.amendedInvoice": "Amended",
+  "posMarket.receivables.detail.amendedFrom": "Replaces invoice {{reference}}",
   "posMarket.receivables.detail.noDeliveries": "No deliveries yet.",
   "posMarket.receivables.detail.noPayments": "No collections yet.",
   "posMarket.receivables.detail.deliveryOutstanding": "Open on this delivery",
@@ -3760,6 +3809,12 @@ Object.assign(enTranslations, {
 });
 
 export type TranslationKey = string;
+export type AppLanguage = "en" | "ar";
+
+export function translateKey(key: TranslationKey, language: AppLanguage): string {
+  const translations = language === "ar" ? arTranslations : enTranslations;
+  return translations[key] || enTranslations[key] || key;
+}
 
 export function useTranslation() {
   const { language } = useSettings();

@@ -5,58 +5,26 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  LuBookOpen as BookOpen,
-  LuFileText as FileText,
-  LuChartColumn as BarChart2,
-  LuSettings2 as Settings2,
-  LuCalendar as Calendar,
-  LuShieldCheck as ShieldCheck,
   LuLogOut as LogOut,
   LuUser as User,
   LuChevronRight as ChevronRight,
   LuPanelLeftClose as PanelLeftClose,
   LuPanelLeftOpen as PanelLeftOpen,
-  LuWalletMinimal as WalletMinimal,
-  LuBadgeCheck as BadgeCheck,
-  LuShoppingCart as ShoppingCart,
-  LuPackage as Package,
-  LuMonitor as Monitor,
-  // LuBadgeDollarSign as BadgeDollarSign,
-  // LuBuilding2 as Building2,
-  LuChartPie as ChartPie,
-  LuUsers as Users,
-  LuStore as Store,
-  LuShoppingBasket as ShoppingBasket,
-  LuPrinter as Printer,
-  LuClock3 as Clock3,
-  LuFileClock as FileClock,
-  LuClipboardCheck as ClipboardCheck,
-  LuArrowLeftRight as ArrowLeftRight,
-  LuLayoutGrid as LayoutGrid,
-  LuUndo2 as Undo2,
-  LuChartNoAxesColumn as ChartNoAxesColumn,
-  LuUtensils as Utensils,
-  LuChefHat as ChefHat,
-  LuTruck as Truck,
   LuMaximize2 as Maximize2,
   LuMinimize2 as Minimize2,
   LuX as X,
 } from "react-icons/lu";
 
 import { AppLogo } from "@/components/app-logo";
+import { NavFavoriteToggle, NavSidebarQuickAccess } from "@/components/nav-sidebar-quick-access";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
-import { useTranslation, TranslationKey } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
 import { useSettings } from "@/providers/settings-provider";
 import { useKdsMode } from "@/providers/kds-mode-provider";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  canAccessRoute,
-  isKitchenOnlyUser,
-  isMarketRepUser,
-  isWaiterOnlyUser,
-  userHasPosProduct,
-} from "@/lib/auth-access";
+import { canAccessRoute } from "@/lib/auth-access";
+import { getVisibleNavGroups } from "@/lib/nav/erp-nav-utils";
 import {
   getAgingReport,
   getAccountOptions,
@@ -80,136 +48,6 @@ import {
   getSuppliers,
   getSegmentDefinitions,
 } from "@/lib/api";
-
-type NavGroup = {
-  labelKey: TranslationKey;
-  items: Array<{
-    href: string;
-    labelKey: TranslationKey;
-    icon: any;
-    children?: Array<{
-      href: string;
-      labelKey: TranslationKey;
-      icon?: any;
-    }>;
-  }>;
-};
-
-const HIDDEN_NAV_HREFS = new Set(["/bank-reconciliations"]);
-
-const navGroups: NavGroup[] = [
-  {
-    labelKey: "nav.group.ledger",
-    items: [
-      { href: "/accounts", labelKey: "nav.item.chartOfAccounts", icon: BookOpen },
-      { href: "/bank-cash-accounts", labelKey: "nav.item.bankCashAccounts", icon: WalletMinimal },
-      { href: "/bank-reconciliations", labelKey: "nav.item.bankReconciliations", icon: BadgeCheck },
-      {
-        href: "/sales-receivables",
-        labelKey: "nav.item.salesReceivables",
-        icon: Users,
-        children: [
-          { href: "/sales-receivables?tab=customers", labelKey: "salesReceivables.tab.customers" },
-          { href: "/sales-receivables?tab=sales-reps", labelKey: "salesReceivables.tab.salesReps" },
-          { href: "/sales-receivables?tab=quotations", labelKey: "salesReceivables.tab.quotations" },
-          { href: "/sales-receivables?tab=orders", labelKey: "salesReceivables.tab.orders" },
-          { href: "/sales-receivables?tab=invoices", labelKey: "salesReceivables.tab.invoices" },
-          { href: "/sales-receivables?tab=receipts", labelKey: "salesReceivables.tab.receipts" },
-          { href: "/sales-receivables?tab=credit-notes", labelKey: "salesReceivables.tab.creditNotes" },
-          { href: "/sales-receivables?tab=rep-statement", labelKey: "salesReceivables.tab.repStatement" },
-          { href: "/sales-receivables?tab=market-statement", labelKey: "salesReceivables.tab.marketStatement" },
-          { href: "/sales-receivables?tab=aging", labelKey: "salesReceivables.tab.aging" },
-        ],
-      },
-      {
-        href: "/pos",
-        labelKey: "nav.item.pos",
-        icon: Store,
-        children: [
-          { href: "/pos/register", labelKey: "pos.workspace.sales", icon: Monitor },
-          { href: "/pos/tables", labelKey: "pos.workspace.tables", icon: Utensils },
-          { href: "/pos/delivery", labelKey: "pos.workspace.delivery", icon: Truck },
-          { href: "/pos/sessions", labelKey: "pos.workspace.sessions", icon: Clock3 },
-          { href: "/pos/held-sales", labelKey: "pos.workspace.held", icon: FileClock },
-          { href: "/pos/accounting-review", labelKey: "pos.workspace.review", icon: ClipboardCheck },
-          { href: "/pos/returns", labelKey: "pos.workspace.returns", icon: Undo2 },
-          { href: "/pos/printers", labelKey: "pos.workspace.printers", icon: Printer },
-          { href: "/pos/reports", labelKey: "pos.workspace.reports", icon: ChartNoAxesColumn },
-          { href: "/pos/settings", labelKey: "pos.workspace.settings", icon: Settings2 },
-        ],
-      },
-      {
-        href: "/pos-market",
-        labelKey: "nav.item.posMarket",
-        icon: ShoppingBasket,
-        children: [
-          { href: "/pos-market/register", labelKey: "posMarket.workspace.register", icon: Monitor },
-          { href: "/pos-market/sessions", labelKey: "posMarket.workspace.sessions", icon: Clock3 },
-          { href: "/pos-market/held-sales", labelKey: "posMarket.workspace.held", icon: FileClock },
-          { href: "/pos-market/receivables", labelKey: "posMarket.workspace.receivables", icon: WalletMinimal },
-          { href: "/pos-market/rep-statement", labelKey: "posMarket.workspace.repStatement", icon: FileText },
-          { href: "/pos-market/my-stock", labelKey: "posMarket.workspace.myStock", icon: Package },
-          { href: "/pos-market/stock-hub", labelKey: "posMarket.workspace.stockHub", icon: LayoutGrid },
-          { href: "/pos-market/rep-loads", labelKey: "posMarket.workspace.repLoads", icon: Package },
-          { href: "/pos-market/rep-transfers", labelKey: "posMarket.workspace.repTransfers", icon: ArrowLeftRight },
-          { href: "/pos-market/rep-stocktakes", labelKey: "posMarket.workspace.repStocktakes", icon: ClipboardCheck },
-          { href: "/pos-market/accounting-review", labelKey: "posMarket.workspace.review", icon: ClipboardCheck },
-          { href: "/pos-market/returns", labelKey: "posMarket.workspace.returns", icon: Undo2 },
-          { href: "/pos-market/printers", labelKey: "posMarket.workspace.printers", icon: Printer },
-          { href: "/pos-market/reports", labelKey: "posMarket.workspace.reports", icon: ChartNoAxesColumn },
-          { href: "/pos-market/settings", labelKey: "posMarket.workspace.settings", icon: Settings2 },
-        ],
-      },
-      {
-        href: "/purchases",
-        labelKey: "nav.item.purchases",
-        icon: ShoppingCart,
-        children: [
-          { href: "/purchases?tab=suppliers", labelKey: "purchases.workspace.suppliers" },
-          { href: "/purchases?tab=requests", labelKey: "purchases.workspace.requests" },
-          { href: "/purchases?tab=orders", labelKey: "purchases.workspace.orders" },
-          { href: "/purchases?tab=invoices", labelKey: "purchases.workspace.invoices" },
-          { href: "/purchases?tab=payments", labelKey: "purchases.workspace.payments" },
-          { href: "/purchases?tab=notes", labelKey: "purchases.workspace.debitNotes" },
-        ],
-      },
-      { href: "/inventory", labelKey: "nav.item.inventory", icon: Package },
-      // { href: "/payroll", labelKey: "nav.item.payroll", icon: BadgeDollarSign },
-      // { href: "/fixed-assets", labelKey: "nav.item.fixedAssets", icon: Building2 },
-      {
-        href: "/reporting?tab=generalLedger",
-        labelKey: "nav.item.reporting",
-        icon: ChartPie,
-        children: [
-          { href: "/reporting?tab=generalLedger", labelKey: "reporting.tab.generalLedger" },
-          { href: "/reporting?tab=activity", labelKey: "reporting.tab.activity" },
-          { href: "/reporting?tab=trialBalance", labelKey: "reporting.tab.trialBalance" },
-          { href: "/reporting?tab=balanceSheet", labelKey: "reporting.tab.balanceSheet" },
-          { href: "/reporting?tab=profitLoss", labelKey: "reporting.tab.profitLoss" },
-          { href: "/reporting?tab=cashMovement", labelKey: "reporting.tab.cashMovement" },
-          { href: "/reporting?tab=audit", labelKey: "reporting.tab.audit" },
-        ],
-      },
-      { href: "/journal-entries", labelKey: "nav.item.journalEntries", icon: FileText },
-      { href: "/general-ledger", labelKey: "nav.item.generalLedger", icon: BarChart2 },
-    ],
-  },
-  {
-    labelKey: "nav.group.setup",
-    items: [
-      { href: "/master-data", labelKey: "nav.item.masterData", icon: Settings2 },
-      { href: "/fiscal", labelKey: "nav.item.fiscalPeriods", icon: Calendar },
-    ],
-  },
-  {
-    labelKey: "nav.group.control",
-    items: [{ href: "/audit", labelKey: "nav.item.auditTrail", icon: ShieldCheck }],
-  },
-  {
-    labelKey: "nav.group.system",
-    items: [{ href: "/settings", labelKey: "nav.item.settings", icon: Settings2 }],
-  },
-];
 
 export function SiteHeader({
   isCollapsed = false,
@@ -289,11 +127,11 @@ export function SiteHeader({
     return (
       <aside
         className={cn(
-          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white",
-          effectiveCollapsed ? "w-20" : isMobileNav ? "w-72 max-w-[85vw]" : "w-60",
+          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-screen min-h-full flex-col ltr:border-r rtl:border-l border-slate-200 bg-white",
+          effectiveCollapsed ? "w-20 min-w-[5rem]" : isMobileNav ? "w-72 max-w-[85vw]" : "w-[340px] min-w-[340px]",
         )}
       >
-        <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", effectiveCollapsed ? "justify-center" : "gap-3")}>
+        <div className={cn("flex items-center border-b border-slate-200 px-5 py-3", effectiveCollapsed ? "justify-center" : "gap-3")}>
           <AppLogo height={effectiveCollapsed ? 36 : 40} priority className="shrink-0" />
           <div className={cn(effectiveCollapsed && "sr-only")}>
             <div className="text-base font-black tracking-tight text-gray-900">{t("app.title")}</div>
@@ -526,70 +364,7 @@ export function SiteHeader({
     }
   };
 
-  const kitchenOnly = isKitchenOnlyUser(user);
-  const waiterOnly = isWaiterOnlyUser(user);
-
-  const visibleNavGroups = (waiterOnly
-    ? [
-        {
-          labelKey: "nav.item.pos",
-          items: [
-            {
-              href: "/pos/waiter/tables",
-              labelKey: "pos.workspace.tables",
-              icon: Utensils,
-            },
-            {
-              href: "/pos/waiter/orders",
-              labelKey: "pos.workspace.waiterOrders",
-              icon: ChefHat,
-            },
-          ],
-        },
-      ]
-    : kitchenOnly
-      ? []
-      : navGroups
-  )
-    .map((group) => ({
-      ...group,
-      items: group.items
-        .map((item) => {
-          if (HIDDEN_NAV_HREFS.has(item.href)) {
-            return null;
-          }
-
-          if (item.href === "/pos" && !userHasPosProduct(user, "restaurant")) {
-            return null;
-          }
-
-          const visibleChildren = item.children?.filter((child) => canAccessRoute(user, child.href)) ?? [];
-          const isVisible = canAccessRoute(user, item.href) || visibleChildren.length > 0;
-
-          if (!isVisible) {
-            return null;
-          }
-
-          const effectiveHref =
-            item.href === "/pos" && visibleChildren.length > 0
-              ? visibleChildren[0].href
-              : item.href;
-
-          return {
-            ...item,
-            href: effectiveHref,
-            children: visibleChildren.map((child) => ({
-              ...child,
-              labelKey:
-                child.href === "/pos-market/receivables" && isMarketRepUser(user)
-                  ? "posMarket.workspace.accountStatements"
-                  : child.labelKey,
-            })),
-          };
-        })
-        .filter(Boolean) as NavGroup["items"],
-    }))
-    .filter((group) => group.items.length > 0);
+  const visibleNavGroups = getVisibleNavGroups(user);
 
   const matchesHref = (targetHref: string) => {
     const target = new URL(targetHref, "http://localhost");
@@ -621,13 +396,13 @@ export function SiteHeader({
 
       <aside
         className={cn(
-          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-full flex-col ltr:border-r rtl:border-l border-gray-200 bg-white transition-transform duration-300 motion-reduce:transition-none",
-          effectiveCollapsed ? "w-20" : isMobileNav ? "w-72 max-w-[85vw]" : "w-60",
+          "fixed ltr:left-0 rtl:right-0 top-0 z-40 flex h-screen min-h-full flex-col ltr:border-r rtl:border-l border-slate-200 bg-white shadow-sm transition-[width,transform] duration-300 motion-reduce:transition-none",
+          effectiveCollapsed ? "w-20 min-w-[5rem]" : isMobileNav ? "w-72 max-w-[85vw]" : "w-[340px] min-w-[340px]",
           isMobileNav && !isDrawerOpen && "ltr:-translate-x-full rtl:translate-x-full",
           isMobileNav && isDrawerOpen && "translate-x-0",
         )}
       >
-      <div className={cn("flex items-center border-b border-gray-200 px-6 py-2.5", effectiveCollapsed ? "justify-center" : "justify-between gap-3")}>
+      <div className={cn("flex items-center border-b border-slate-200 px-5 py-3", effectiveCollapsed ? "justify-center" : "justify-between gap-3")}>
         <div className={cn("flex min-w-0 items-center", effectiveCollapsed ? "justify-center" : "gap-3")}>
           <AppLogo height={effectiveCollapsed ? 36 : 40} priority className="shrink-0" />
           <div className={cn(effectiveCollapsed && "sr-only")}>
@@ -647,12 +422,18 @@ export function SiteHeader({
         ) : null}
       </div>
 
-      <div className="space-y-2 px-3 pt-3">
+      <NavSidebarQuickAccess
+        effectiveCollapsed={effectiveCollapsed}
+        isActiveHref={(href) => matchesHref(href)}
+        onNavigate={handleNavClick}
+      />
+
+      <div className="space-y-2 px-3">
         <button
           type="button"
           onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
           className={cn(
-            "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
+            "flex h-10 w-full items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-500 transition-colors duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700",
             effectiveCollapsed ? "justify-center" : "justify-between",
           )}
           aria-label={t("language.toggle.aria")}
@@ -679,12 +460,12 @@ export function SiteHeader({
           type="button"
           onClick={onToggleCollapsed}
           className={cn(
-            "flex w-full items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700",
+            "flex h-10 w-full items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-500 transition-colors duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700",
             effectiveCollapsed ? "justify-center" : "justify-between",
           )}
           aria-label={effectiveCollapsed ? "Open sidebar" : "Close sidebar"}
         >
-          {effectiveCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          {effectiveCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           <span className={cn(effectiveCollapsed && "sr-only")}>{effectiveCollapsed ? "Open" : "Close"}</span>
         </button>
         ) : null}
@@ -710,13 +491,19 @@ export function SiteHeader({
         ) : null}
       </div>
 
-      <nav className="flex-1 overflow-y-auto space-y-10 px-4 py-8">
-        {visibleNavGroups.map((group) => (
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {visibleNavGroups.map((group, groupIndex) => (
           <div key={group.labelKey}>
-            <span className={cn("mb-4 block px-3 text-[10px] font-black uppercase tracking-[0.25em] text-gray-400", effectiveCollapsed && "sr-only")}>
+            <span
+              className={cn(
+                "mb-2 block px-4 text-xs font-bold text-slate-500",
+                groupIndex > 0 ? "mt-6" : "mt-0",
+                effectiveCollapsed && "sr-only",
+              )}
+            >
               {t(group.labelKey)}
             </span>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive =
@@ -731,19 +518,20 @@ export function SiteHeader({
                         onClick={(e) => toggleExpand(item.href, isActive, e)}
                         title={!effectiveCollapsed ? undefined : (t(item.labelKey) as string)}
                         className={cn(
-                          "w-full group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
-                          effectiveCollapsed && "justify-center",
+                          "group flex h-11 w-full items-center gap-3 rounded-xl px-4 text-[14px] font-medium transition-colors duration-200",
+                          effectiveCollapsed && "justify-center px-0",
                           isActive
-                            ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
-                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                            ? "border border-emerald-100 bg-emerald-50 text-emerald-700 ltr:border-l-[3px] ltr:border-l-emerald-500 rtl:border-r-[3px] rtl:border-r-emerald-500"
+                            : "border border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                         )}
                       >
-                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
-                        <span className={cn("flex-1 truncate text-left rtl:text-right", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors duration-200", isActive ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600")} />
+                        <span className={cn("flex-1 truncate text-start", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
                         {!effectiveCollapsed && (
                           <ChevronRight 
                             className={cn(
-                              "h-4 w-4 text-gray-400 transition-transform", 
+                              "h-4 w-4 shrink-0 transition-transform duration-200",
+                              isActive ? "text-emerald-500" : "text-slate-400",
                               isItemExpanded(item.href, isActive) ? "rotate-90" : "ltr:rotate-0 rtl:rotate-180"
                             )} 
                           />
@@ -755,20 +543,21 @@ export function SiteHeader({
                         onClick={handleNavClick}
                         title={!effectiveCollapsed ? undefined : (t(item.labelKey) as string)}
                         className={cn(
-                          "group flex items-center gap-4 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
-                          effectiveCollapsed && "justify-center",
+                          "group flex h-11 items-center gap-3 rounded-xl px-4 text-[14px] font-medium transition-colors duration-200",
+                          effectiveCollapsed && "justify-center px-0",
                           isActive
-                            ? "border border-gray-200 bg-gray-100 text-gray-900 shadow-sm"
-                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                            ? "border border-emerald-100 bg-emerald-50 text-emerald-700 ltr:border-l-[3px] ltr:border-l-emerald-500 rtl:border-r-[3px] rtl:border-r-emerald-500"
+                            : "border border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                         )}
                       >
-                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
-                        <span className={cn("flex-1 truncate text-left rtl:text-right", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        <Icon className={cn("h-5 w-5 shrink-0 transition-colors duration-200", isActive ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600")} />
+                        <span className={cn("flex-1 truncate text-start", effectiveCollapsed && "sr-only")}>{t(item.labelKey)}</span>
+                        <NavFavoriteToggle href={item.href} effectiveCollapsed={effectiveCollapsed} />
                       </Link>
                     )}
 
                     {item.children && item.children.length > 0 && isItemExpanded(item.href, isActive) && !effectiveCollapsed && (
-                      <div className="mt-2 space-y-1 pe-3 ps-9">
+                      <div className="mt-1 space-y-0.5 pe-2 ps-8">
                         {item.children.map((child) => {
                           const childPath = child.href.split("?")[0];
                           const isChildActive = child.href.includes("?")
@@ -783,14 +572,15 @@ export function SiteHeader({
                               onClick={handleNavClick}
                               onMouseEnter={() => prefetchForHref(child.href)}
                               className={cn(
-                                "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all",
+                                "group flex h-10 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors duration-200",
                                 isChildActive
-                                  ? "bg-gray-900 text-white shadow-sm"
-                                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                                  ? "border border-emerald-100 bg-emerald-50 text-emerald-700 ltr:border-l-[3px] ltr:border-l-emerald-500 rtl:border-r-[3px] rtl:border-r-emerald-500"
+                                  : "border border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900",
                               )}
                             >
-                              {ChildIcon ? <ChildIcon className="h-3.5 w-3.5 shrink-0" /> : null}
-                              {t(child.labelKey)}
+                              {ChildIcon ? <ChildIcon className={cn("h-4 w-4 shrink-0", isChildActive ? "text-emerald-600" : "text-slate-400")} /> : null}
+                              <span className="flex-1 truncate">{t(child.labelKey)}</span>
+                              <NavFavoriteToggle href={child.href} effectiveCollapsed={effectiveCollapsed} />
                             </Link>
                           );
                         })}
@@ -805,14 +595,14 @@ export function SiteHeader({
       </nav>
 
       {isHydrated && isAuthenticated && (
-        <div className="border-t border-gray-200 p-3">
-          <div className={cn("group flex items-center gap-3 rounded-xl p-3 transition-all hover:bg-gray-50", effectiveCollapsed && "justify-center")}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-500">
-              <User size={16} />
+        <div className="border-t border-slate-200 p-3">
+          <div className={cn("group flex items-center gap-3 rounded-xl p-2.5 transition-colors duration-200 hover:bg-slate-50", effectiveCollapsed && "justify-center")}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
+              <User size={18} />
             </div>
             <div className={cn("min-w-0 flex-1", effectiveCollapsed && "sr-only")}>
-              <div className="truncate text-xs font-bold text-gray-900">{user?.name || user?.username || "User"}</div>
-              <div className="truncate text-[10px] text-gray-500">{user?.email}</div>
+              <div className="truncate text-sm font-semibold text-slate-900">{user?.name || user?.username || "User"}</div>
+              <div className="truncate text-xs text-slate-500">{user?.email}</div>
             </div>
             <button
               onClick={() => {
@@ -820,12 +610,12 @@ export function SiteHeader({
                 router.push("/login");
               }}
               className={cn(
-                "shrink-0 rounded-lg p-1.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600 ltr:rotate-0 rtl:rotate-180",
+                "shrink-0 rounded-lg p-2 text-slate-400 transition-colors duration-200 hover:bg-red-50 hover:text-red-600 ltr:rotate-0 rtl:rotate-180",
                 effectiveCollapsed && "sr-only",
               )}
               title="Logout"
             >
-              <LogOut size={14} />
+              <LogOut size={16} />
             </button>
           </div>
         </div>

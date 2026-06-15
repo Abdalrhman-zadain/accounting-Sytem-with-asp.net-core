@@ -425,9 +425,122 @@ export function mapPosSaleToHeldSale(sale: PosSale): PosMarketHeldSale {
   };
 }
 
+export type PosMarketAmendSale = {
+  id: string;
+  reference: string;
+  receiptNumber?: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  cartLines: PosMarketCartLine[];
+  invoiceDiscountType: DiscountType;
+  invoiceDiscountValue: number;
+};
+
+export function mapPosSaleToAmendSale(sale: PosSale): PosMarketAmendSale {
+  const held = mapPosSaleToHeldSale(sale);
+  return {
+    id: held.id,
+    reference: held.title,
+    receiptNumber: sale.receiptNumber ?? null,
+    customerId: held.customerId ?? null,
+    customerName: held.customerName ?? null,
+    cartLines: held.cartLines,
+    invoiceDiscountType: "FIXED",
+    invoiceDiscountValue: parseAmount(sale.discountAmount),
+  };
+}
+
+/** Quantities from the invoice being amended — released back on commit, virtual during edit. */
+export function buildAmendReleasedQtyByItemIdRecord(
+  lines: Array<Pick<PosMarketCartLine, "itemId" | "quantity">>,
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const line of lines) {
+    if (!line.itemId) continue;
+    map[line.itemId] = (map[line.itemId] ?? 0) + line.quantity;
+  }
+  return map;
+}
+
+export function getAmendEffectiveOnHand(
+  catalogOnHand: number,
+  itemId: string,
+  releasedQtyByItemId: Record<string, number>,
+): number {
+  const released = releasedQtyByItemId[itemId] ?? 0;
+  if (released <= 0) {
+    return catalogOnHand;
+  }
+  return Number((catalogOnHand + released).toFixed(4));
+}
+
+export function applyAmendEffectiveStockToCartLines(
+  cartLines: PosMarketCartLine[],
+  catalogItems: InventoryItem[],
+  releasedQtyByItemId: Record<string, number>,
+): PosMarketCartLine[] {
+  if (Object.keys(releasedQtyByItemId).length === 0) {
+    return cartLines;
+  }
+  const catalogOnHandByItemId = new Map(
+    catalogItems.map((item) => [item.id, parseAmount(item.onHandQuantity)]),
+  );
+  return cartLines.map((line) => ({
+    ...line,
+    onHandQuantity: getAmendEffectiveOnHand(
+      catalogOnHandByItemId.get(line.itemId) ?? 0,
+      line.itemId,
+      releasedQtyByItemId,
+    ),
+  }));
+}
+
+export function applyAmendEffectiveStockToCatalogItems(
+  catalogItems: InventoryItem[],
+  releasedQtyByItemId: Record<string, number>,
+): InventoryItem[] {
+  if (Object.keys(releasedQtyByItemId).length === 0) {
+    return catalogItems;
+  }
+  return catalogItems.map((item) => {
+    const effective = getAmendEffectiveOnHand(
+      parseAmount(item.onHandQuantity),
+      item.id,
+      releasedQtyByItemId,
+    );
+    if (effective === parseAmount(item.onHandQuantity)) {
+      return item;
+    }
+    return { ...item, onHandQuantity: effective };
+  });
+}
+
+export const POS_MARKET_AMEND_SNAPSHOT_KEY = "pos-market-amend-sale-snapshot";
+
+export function stashAmendSaleForEdit(sale: PosMarketAmendSale) {
+  try {
+    sessionStorage.setItem(POS_MARKET_AMEND_SNAPSHOT_KEY, JSON.stringify(sale));
+  } catch {
+    // ignore
+  }
+}
+
+export function consumeStashedAmendSale(saleId: string): PosMarketAmendSale | null {
+  try {
+    const raw = sessionStorage.getItem(POS_MARKET_AMEND_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const sale = JSON.parse(raw) as PosMarketAmendSale;
+    if (sale.id !== saleId) return null;
+    sessionStorage.removeItem(POS_MARKET_AMEND_SNAPSHOT_KEY);
+    return sale;
+  } catch {
+    return null;
+  }
+}
+
 export function mapPosReceiptToPrintData(
   receipt: PosReceipt,
-  options?: { destinationMarketName?: string | null },
+  options?: { destinationMarketName?: string | null; saleReference?: string | null },
 ): PosMarketReceiptData {
   const paid = parseAmount(receipt.paid);
   const invoiceOutstanding = receipt.deliveryOutstanding
@@ -446,9 +559,14 @@ export function mapPosReceiptToPrintData(
       ? parseAmount(receipt.totalPaid)
       : undefined;
   const isCreditDelivery = paid <= 0.009 && invoiceOutstanding > 0.009;
+  const previousBalance =
+    isCreditDelivery && accountOutstanding != null
+      ? Math.max(accountOutstanding - invoiceOutstanding, 0)
+      : undefined;
 
   return {
     receiptNumber: receipt.receiptNumber,
+    saleReference: options?.saleReference ?? null,
     soldAt: receipt.soldAt,
     companyName: receipt.companyName,
     branchName: receipt.branchName,
@@ -464,6 +582,7 @@ export function mapPosReceiptToPrintData(
     change: parseAmount(receipt.change),
     invoiceOutstanding,
     accountOutstanding,
+    previousBalance,
     totalDelivered,
     totalPaid: totalPaidLifetime,
     isCreditDelivery,
@@ -475,6 +594,7 @@ export function mapPosReceiptToPrintData(
       unitPrice: parseAmount(line.unitPrice),
       discountAmount: parseAmount(line.discountAmount),
       lineTotal: parseAmount(line.lineTotal),
+      unitCode: (line as { unitCode?: string | null }).unitCode ?? undefined,
     })),
   };
 }

@@ -40,7 +40,7 @@ const server = http.createServer((req, res) => {
   };
 
   if (path === "/health" && req.method === "GET") {
-    send(200, { ok: true, version: "1.0.0-mock" });
+    send(200, { ok: true, version: "1.0.3-mock" });
     return;
   }
 

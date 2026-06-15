@@ -17,6 +17,7 @@ function marketRepUser(overrides: Partial<AuthUser> = {}): AuthUser {
     ],
     allowedRoutes: [
       "/pos-market/register",
+      "/pos-market/amend-sales",
       "/pos-market/receivables",
       "/pos-market/my-stock",
       "/pos-market/printers",
@@ -48,6 +49,40 @@ describe("auth-access restaurant vs market isolation", () => {
     expect(canAccessRoute(user, "/pos-market/register")).toBe(true);
     expect(canAccessRoute(user, "/pos-market/my-stock")).toBe(true);
     expect(canAccessRoute(user, "/pos-market/printers")).toBe(true);
+  });
+
+  it("blocks amend-sales without POS_MARKET_AMEND_SALE permission", () => {
+    const user = marketRepUser({
+      permissions: ["POS_VIEW_POS_SCREEN", "POS_PRINT_RECEIPT", "POS_MARKET_VIEW_RECEIVABLES"],
+      allowedRoutes: [
+        "/pos-market/register",
+        "/pos-market/receivables",
+        "/pos-market/my-stock",
+        "/pos-market/printers",
+      ],
+    });
+
+    expect(canAccessRoute(user, "/pos-market/amend-sales")).toBe(false);
+  });
+
+  it("allows amend-sales when POS_MARKET_AMEND_SALE is granted", () => {
+    const user = marketRepUser({
+      permissions: [
+        "POS_VIEW_POS_SCREEN",
+        "POS_PRINT_RECEIPT",
+        "POS_MARKET_VIEW_RECEIVABLES",
+        "POS_MARKET_AMEND_SALE",
+      ],
+      allowedRoutes: [
+        "/pos-market/register",
+        "/pos-market/amend-sales",
+        "/pos-market/receivables",
+        "/pos-market/my-stock",
+        "/pos-market/printers",
+      ],
+    });
+
+    expect(canAccessRoute(user, "/pos-market/amend-sales")).toBe(true);
   });
 
   it("allows restaurant POS when the user also has restaurant access", () => {

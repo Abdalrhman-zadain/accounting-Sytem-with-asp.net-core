@@ -4530,6 +4530,13 @@ export class SalesReceivablesService {
     };
   }
 
+  async recomputeInvoiceAllocationAmounts(
+    tx: Prisma.TransactionClient,
+    invoiceId: string,
+  ) {
+    return this.recomputeInvoiceAmounts(tx, invoiceId);
+  }
+
   private async refreshSalesOrderStatus(orderId: string | null | undefined) {
     if (!orderId) {
       return;

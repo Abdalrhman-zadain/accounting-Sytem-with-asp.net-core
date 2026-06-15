@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 
 import { PageShell, SectionHeading } from "@/components/ui";
+import { PosMarketAmendWorkspace } from "@/features/pos-market/pos-market-amend-workspace";
 import { PosMarketHeldWorkspace } from "@/features/pos-market/pos-market-held-workspace";
 import { PosMarketPrinterSettingsPanel } from "@/features/pos-market/pos-market-printer-settings-panel";
 import { PosMarketReceivablesWorkspace } from "@/features/pos-market/pos-market-receivables-workspace";
@@ -26,6 +27,7 @@ type PosMarketWorkspace =
   | "register"
   | "sessions"
   | "held"
+  | "amend"
   | "review"
   | "returns"
   | "reports"
@@ -43,6 +45,7 @@ const pathnameWorkspaceMap: Record<string, PosMarketWorkspace> = {
   "/pos-market/register": "register",
   "/pos-market/sessions": "sessions",
   "/pos-market/held-sales": "held",
+  "/pos-market/amend-sales": "amend",
   "/pos-market/accounting-review": "review",
   "/pos-market/returns": "returns",
   "/pos-market/reports": "reports",
@@ -61,6 +64,7 @@ const workspaceTitleKey: Record<PosMarketWorkspace, string> = {
   register: "posMarket.workspace.register",
   sessions: "posMarket.workspace.sessions",
   held: "posMarket.workspace.held",
+  amend: "posMarket.workspace.amend",
   review: "posMarket.workspace.review",
   returns: "posMarket.workspace.returns",
   reports: "posMarket.workspace.reports",
@@ -100,6 +104,8 @@ export function PosMarketPage() {
         return <PosMarketSessionsWorkspace />;
       case "held":
         return <PosMarketHeldWorkspace />;
+      case "amend":
+        return <PosMarketAmendWorkspace />;
       case "review":
         return <PosMarketReviewWorkspace />;
       case "returns":

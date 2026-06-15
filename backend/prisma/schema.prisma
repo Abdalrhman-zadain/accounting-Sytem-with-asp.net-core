@@ -213,6 +213,7 @@ enum PosPermissionCode {
   POS_MARKET_COLLECT_RECEIVABLE
   POS_MARKET_MANAGE_REP_LOADS
   POS_MARKET_REP_STOCKTAKE
+  POS_MARKET_AMEND_SALE
 }
 
 enum OrderType {
@@ -420,6 +421,7 @@ enum RepCarStockMovementType {
   LOAD_IN
   LOAD_OUT
   SALE_OUT
+  SALE_RETURN_IN
   STOCKTAKE_IN
   STOCKTAKE_OUT
   TRANSFER_OUT
@@ -2693,6 +2695,13 @@ model SalesInvoice {
   correctedByUserId String?
   correctedByUser   User?      @relation("InvoiceCorrector", fields: [correctedByUserId], references: [id], onDelete: SetNull)
 
+  posAmendedFromInvoiceId String?
+  posAmendedFromInvoice   SalesInvoice?  @relation("PosInvoiceAmendmentChain", fields: [posAmendedFromInvoiceId], references: [id], onDelete: SetNull)
+  posAmendedToInvoiceId   String?
+  posAmendedToInvoice     SalesInvoice?  @relation("PosInvoiceAmendmentReplacement", fields: [posAmendedToInvoiceId], references: [id], onDelete: SetNull)
+  posAmendmentReplacements SalesInvoice[] @relation("PosInvoiceAmendmentChain")
+  posAmendmentSources      SalesInvoice[] @relation("PosInvoiceAmendmentReplacement")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2703,6 +2712,8 @@ model SalesInvoice {
   @@index([invoiceType, posOperationalStatus, invoiceDate])
   @@index([invoiceType, posAccountingStatus, invoiceDate])
   @@index([posSessionId])
+  @@index([posAmendedFromInvoiceId])
+  @@index([posAmendedToInvoiceId])
 }
 
 model PosSession {

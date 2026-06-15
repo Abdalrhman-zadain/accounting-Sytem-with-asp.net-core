@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
+import { useEffect, useMemo, useState } from "react";
+import { LuEye, LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
 
 import {
   loadPosMarketPrinterConfig,
@@ -9,6 +9,7 @@ import {
   type PosMarketPrinterConfig,
 } from "@/features/pos-market/pos-market-printer-config";
 import {
+  buildPosMarketReceiptPreviewHtml,
   getMarketPrinterBridgeStatus,
   testPosMarketReceiptPrinter,
 } from "@/features/pos-market/pos-market-print-service";
@@ -22,8 +23,11 @@ export function PosMarketPrinterSettingsPanel() {
   const [printers, setPrinters] = useState<string[]>([]);
   const [isLoadingPrinters, setIsLoadingPrinters] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+
+  const previewHtml = useMemo(() => buildPosMarketReceiptPreviewHtml(), []);
 
   const refreshPrinters = async () => {
     setIsLoadingPrinters(true);
@@ -173,6 +177,20 @@ export function PosMarketPrinterSettingsPanel() {
         </button>
         <button
           type="button"
+          onClick={() => setShowPreview((prev) => !prev)}
+          className="rounded-full border px-4 py-2 text-sm font-bold"
+          style={{ borderColor: POS_MARKET_THEME.colors.outline, color: POS_MARKET_THEME.colors.text }}
+        >
+          <span className="inline-flex items-center gap-2">
+            <LuEye className="h-4 w-4" />
+            {getLocalizedText(
+              showPreview ? "Hide preview / إخفاء المعاينة" : "Preview receipt / معاينة الفاتورة",
+              language,
+            )}
+          </span>
+        </button>
+        <button
+          type="button"
           onClick={() => void testPrinter()}
           disabled={isTesting}
           className="rounded-full border px-4 py-2 text-sm font-bold disabled:opacity-50"
@@ -181,6 +199,28 @@ export function PosMarketPrinterSettingsPanel() {
           {isTesting ? t("posMarket.printers.testing") : t("posMarket.printers.test")}
         </button>
       </div>
+
+      {showPreview ? (
+        <div
+          className="mt-5 overflow-hidden rounded-[18px] border bg-zinc-100 p-4"
+          style={{ borderColor: POS_MARKET_THEME.colors.outline }}
+        >
+          <p className="mb-3 text-xs font-semibold" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
+            {getLocalizedText(
+              "Sample credit delivery receipt (80mm thermal) / معاينة فاتورة ذمة تجريبية",
+              language,
+            )}
+          </p>
+          <div className="mx-auto max-w-[340px] overflow-auto rounded-[12px] border bg-white shadow-sm">
+            <iframe
+              title="Market receipt preview"
+              srcDoc={previewHtml}
+              className="block w-full border-0"
+              style={{ minHeight: 620 }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

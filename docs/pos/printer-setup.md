@@ -39,6 +39,29 @@ This writes `frontend/public/downloads/simple-account-print-agent.zip`. Deploy t
 
 See `tools/print-agent/README.md` for WebView2 requirements (preinstalled on Windows 11; Evergreen bootstrapper for Windows 10).
 
+### Dual XPrinter USB on one Windows 10 PC (XP-V320N + XP-Q851L)
+
+Both models are 80mm ESC/POS thermal printers. Plug both into the **same cashier PC** via USB (use a powered hub if front-panel ports are weak).
+
+1. Install the [Xprinter 58/80/76 universal driver](https://www.xprinter.net/Download_Details/3.html) once; Windows should list two separate printers.
+2. Rename each printer in **Control Panel → Devices and Printers** to stable names, for example:
+   - `XPrinter-V320N`
+   - `XPrinter-Q851L`
+3. Install [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) on Windows 10 (required for silent HTML printing).
+4. Print a Windows test page from each printer before installing the Print Agent.
+5. Extract and run `SimpleAccount.PrintAgent.exe`; tray → **Open settings** → assign kitchen and receipt roles (either model can be either role) → enable **Start with Windows** → Save.
+6. Run the pre-deploy smoke test from the repo root:
+
+   ```powershell
+   node tools\print-agent\smoke-test-agent-api.mjs http://127.0.0.1:9188 "XPrinter-V320N" "XPrinter-Q851L"
+   ```
+
+   Replace names with your exact Windows printer names. Both printers must receive an 80mm test slip.
+
+7. In POS → Printers: **Local agent (recommended)** → Refresh → select the same names → **Test kitchen** and **Test receipt** → Save.
+
+**Pre-deploy pass criteria:** tray test kitchen/receipt go to different devices; POS test prints match; a real **Send to kitchen** prints KOT only on the kitchen printer; **Complete payment** prints the Arabic receipt only on the receipt printer.
+
 ### When the agent is not running
 
 If the agent is stopped, POS shows **Print Agent is not running** and falls back to QZ Tray (if configured) or browser print.

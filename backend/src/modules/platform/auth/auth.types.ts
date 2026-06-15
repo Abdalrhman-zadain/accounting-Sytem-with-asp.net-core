@@ -69,7 +69,8 @@ export type PosPermissionCode =
   | "POS_MARKET_VIEW_RECEIVABLES"
   | "POS_MARKET_COLLECT_RECEIVABLE"
   | "POS_MARKET_MANAGE_REP_LOADS"
-  | "POS_MARKET_REP_STOCKTAKE";
+  | "POS_MARKET_REP_STOCKTAKE"
+  | "POS_MARKET_AMEND_SALE";
 
 
 export type AuthorizedUser = {

@@ -233,8 +233,14 @@ export async function getDraftPosMarketSales(
   );
 }
 
-export async function getCompletedPosMarketSales(token?: string | null) {
-  return apiRequest<PosSale[]>("/pos-market/sales/completed", { token });
+export async function getCompletedPosMarketSales(
+  token?: string | null,
+  sessionId?: string | null,
+) {
+  const searchParams = sessionId
+    ? `?sessionId=${encodeURIComponent(sessionId)}`
+    : "";
+  return apiRequest<PosSale[]>(`/pos-market/sales/completed${searchParams}`, { token });
 }
 
 export async function getPendingPosMarketReview(token?: string | null) {
@@ -268,6 +274,18 @@ export async function completePosMarketSale(
   token?: string | null,
 ) {
   return apiRequest<PosCompleteSaleResponse>("/pos-market/sales/complete", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
+export async function amendPosMarketSale(
+  id: string,
+  payload: CompletePosSalePayload,
+  token?: string | null,
+) {
+  return apiRequest<PosCompleteSaleResponse>(`/pos-market/sales/${id}/amend`, {
     method: "POST",
     body: JSON.stringify(payload),
     token,
@@ -547,6 +565,9 @@ export type PosMarketReceivableDelivery = {
   totalAmount: string;
   allocatedAmount: string;
   outstandingAmount: string;
+  amendedFromInvoiceId?: string | null;
+  amendedFromReference?: string | null;
+  amendedFromReceiptNumber?: string | null;
   lines: PosMarketReceivableDeliveryLine[];
 };
 

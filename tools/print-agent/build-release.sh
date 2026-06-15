@@ -11,11 +11,16 @@ ZIP_NAME="simple-account-print-agent.zip"
 DEST="$ROOT/../../frontend/public/downloads/$ZIP_NAME"
 
 echo "Publishing Print Agent (win-x64, self-contained)..."
+EXTRA_PUBLISH_ARGS=()
+if [ "$(uname -s)" != "Darwin" ] && [ "$(uname -s)" != "MINGW"* ] && [ "$(uname -s)" != "MSYS"* ]; then
+  EXTRA_PUBLISH_ARGS=(-p:EnableWindowsTargeting=true)
+fi
 dotnet publish "$PROJECT/SimpleAccount.PrintAgent.csproj" \
   -c Release \
   -r win-x64 \
   --self-contained true \
   -p:PublishSingleFile=false \
+  "${EXTRA_PUBLISH_ARGS[@]}" \
   -o "$OUT"
 
 mkdir -p "$(dirname "$DEST")"

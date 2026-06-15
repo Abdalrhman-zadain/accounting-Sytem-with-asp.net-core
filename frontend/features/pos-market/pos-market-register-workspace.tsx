@@ -8,13 +8,18 @@ import { LuScanLine, LuSearch } from "react-icons/lu";
 import { Card, Modal } from "@/components/ui";
 import { Field, Input } from "@/components/ui/forms";
 import {
+  applyAmendEffectiveStockToCartLines,
+  applyAmendEffectiveStockToCatalogItems,
+  buildAmendReleasedQtyByItemIdRecord,
   buildSaleLinesPayload,
+  consumeStashedAmendSale,
   consumeStashedHeldSale,
   formatCurrency,
   getCartLineKey,
   getErrorMessage,
   mapPosReceiptToPrintData,
   parseAmount,
+  type PosMarketAmendSale,
 } from "@/features/pos-market/pos-market-cart-utils";
 import { PosMarketCartPanel } from "@/features/pos-market/pos-market-cart-panel";
 import { PosMarketCheckoutModal } from "@/features/pos-market/pos-market-checkout-modal";
@@ -22,6 +27,7 @@ import { PosMarketDestinationPicker } from "@/features/pos-market/pos-market-des
 import { PosMarketOpenShiftPanel } from "@/features/pos-market/pos-market-open-shift-panel";
 import {
   printMarketCustomerReceipt,
+  reprintMarketCustomerReceipt,
   shouldAutoPrintReceiptOnPay,
 } from "@/features/pos-market/pos-market-print-service";
 import { PosMarketProductCard, type PosMarketSaleEntry } from "@/features/pos-market/pos-market-product-card";
@@ -35,6 +41,7 @@ import { usePosMarketSession } from "@/features/pos-market/use-pos-market-sessio
 import { PosMarketWeightEntryModal } from "@/features/pos-market/pos-market-weight-entry-modal";
 import { isWeightSaleItem } from "@/features/pos-market/pos-market-weight-utils";
 import {
+  amendPosMarketSale,
   completePosMarketSale,
   getBankCashAccounts,
   getDraftPosMarketSales,
@@ -77,6 +84,18 @@ export function PosMarketRegisterWorkspace() {
   const [closingNotes, setClosingNotes] = useState("");
   const [weightModalItem, setWeightModalItem] = useState<InventoryItem | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [amendingSaleId, setAmendingSaleId] = useState<string | null>(null);
+  const [amendingSaleLabel, setAmendingSaleLabel] = useState<string | null>(null);
+  const [amendReleasedQtyByItemId, setAmendReleasedQtyByItemId] = useState<Record<string, number>>(
+    {},
+  );
+  const [pendingAmendSale, setPendingAmendSale] = useState<PosMarketAmendSale | null>(null);
+  const amendLoadHandledRef = useRef<string | null>(null);
+  const [lastCompletedSale, setLastCompletedSale] = useState<{
+    id: string;
+    reference: string;
+    customerName: string | null;
+  } | null>(null);
 
   const session = usePosMarketSession(token);
   const activeSession = session.activeSession;
@@ -124,7 +143,13 @@ export function PosMarketRegisterWorkspace() {
     paymentAccounts,
     posSettings,
     defaultCashAccountId: activeSession?.cashAccount?.id,
+    amendReleasedQtyByItemId,
   });
+
+  const catalogItemsForRegister = useMemo(
+    () => applyAmendEffectiveStockToCatalogItems(catalog.items, amendReleasedQtyByItemId),
+    [amendReleasedQtyByItemId, catalog.items],
+  );
 
   const currencyCode = activeSession?.cashAccount?.currencyCode ?? "JOD";
 
@@ -190,28 +215,33 @@ export function PosMarketRegisterWorkspace() {
         throw new Error(t("posMarket.checkout.insufficientPayment"));
       }
 
-      return completePosMarketSale(
-        {
-          sessionId: activeSession.id,
-          invoiceId: cart.editingInvoiceId ?? undefined,
-          customerId: selectedCustomerId,
-          lines: buildSaleLinesPayload({
-            cartLines: cart.cartLines,
-            cartMetrics: cart.cartMetrics,
-            taxPolicy: posSettings?.runtime.invoiceDiscountTaxPolicy,
-            taxFreeEnabled: posSettings?.runtime.taxFreeEnabled,
-          }),
-          payments: paymentPayload,
-        },
-        token,
-      );
+      const payload = {
+        sessionId: activeSession.id,
+        invoiceId: amendingSaleId ? undefined : cart.editingInvoiceId ?? undefined,
+        customerId: selectedCustomerId,
+        lines: buildSaleLinesPayload({
+          cartLines: cart.cartLines,
+          cartMetrics: cart.cartMetrics,
+          taxPolicy: posSettings?.runtime.invoiceDiscountTaxPolicy,
+          taxFreeEnabled: posSettings?.runtime.taxFreeEnabled,
+        }),
+        payments: paymentPayload,
+      };
+
+      if (amendingSaleId) {
+        return amendPosMarketSale(amendingSaleId, payload, token);
+      }
+
+      return completePosMarketSale(payload, token);
     },
     onSuccess: async (response) => {
+      const wasAmending = Boolean(amendingSaleId);
       if (shouldAutoPrintReceiptOnPay()) {
         try {
           await printMarketCustomerReceipt(
             mapPosReceiptToPrintData(response.receipt, {
               destinationMarketName: selectedCustomer?.name ?? response.sale.customer?.name ?? null,
+              saleReference: response.sale.reference,
             }),
           );
         } catch {
@@ -219,6 +249,15 @@ export function PosMarketRegisterWorkspace() {
         }
       }
       cart.clearCart();
+      setAmendingSaleId(null);
+      setAmendingSaleLabel(null);
+      setAmendReleasedQtyByItemId({});
+      setPendingAmendSale(null);
+      setLastCompletedSale({
+        id: response.sale.id,
+        reference: response.sale.reference,
+        customerName: selectedCustomer?.name ?? response.sale.customer?.name ?? null,
+      });
       setIsCheckoutOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketActiveSession(token ?? null) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.posMarketCompletedSales(token ?? null) });
@@ -232,7 +271,9 @@ export function PosMarketRegisterWorkspace() {
           queryKey: queryKeys.posMarketCatalog(token ?? null, activeSession.salesRep.id),
         });
       }
-      pushMessage(t("posMarket.checkout.success"));
+      pushMessage(
+        wasAmending ? t("posMarket.amend.success") : t("posMarket.checkout.success"),
+      );
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("posMarket.checkout.error")), "error");
@@ -289,14 +330,14 @@ export function PosMarketRegisterWorkspace() {
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return catalog.items;
-    return catalog.items.filter(
+    if (!term) return catalogItemsForRegister;
+    return catalogItemsForRegister.filter(
       (item) =>
         item.code.toLowerCase().includes(term) ||
         item.name.toLowerCase().includes(term) ||
         item.barcode?.toLowerCase().includes(term),
     );
-  }, [catalog.items, search]);
+  }, [catalogItemsForRegister, search]);
 
   const addItemToCart = useCallback(
     (item: InventoryItem, entry?: PosMarketSaleEntry) => {
@@ -340,13 +381,13 @@ export function PosMarketRegisterWorkspace() {
     const term = search.trim();
     if (!term) return;
     const exact =
-      catalog.items.find((item) => item.barcode === term) ??
-      catalog.items.find((item) => item.code.toLowerCase() === term.toLowerCase());
+      catalogItemsForRegister.find((item) => item.barcode === term) ??
+      catalogItemsForRegister.find((item) => item.code.toLowerCase() === term.toLowerCase());
     if (exact) {
       handleSelectItem(exact);
       setSearch("");
     }
-  }, [catalog.items, handleSelectItem, search]);
+  }, [catalogItemsForRegister, handleSelectItem, search]);
 
   useEffect(() => {
     const resumeId = searchParams.get("resume");
@@ -361,6 +402,42 @@ export function PosMarketRegisterWorkspace() {
     }
   }, [activeSession, cart, persistSelectedCustomer, router, searchParams]);
 
+  useEffect(() => {
+    const amendId = searchParams.get("amend");
+    if (!amendId || !activeSession) return;
+    if (amendLoadHandledRef.current === amendId) return;
+
+    const stashed = consumeStashedAmendSale(amendId);
+    if (!stashed) return;
+
+    amendLoadHandledRef.current = amendId;
+    setPendingAmendSale(stashed);
+    setAmendReleasedQtyByItemId(buildAmendReleasedQtyByItemIdRecord(stashed.cartLines));
+    setAmendingSaleId(stashed.id);
+    setAmendingSaleLabel(stashed.receiptNumber ?? stashed.reference);
+    if (stashed.customerId) {
+      persistSelectedCustomer(stashed.customerId);
+    }
+    router.replace("/pos-market/register");
+  }, [activeSession, persistSelectedCustomer, router, searchParams]);
+
+  useEffect(() => {
+    if (!pendingAmendSale || catalog.isLoading) return;
+
+    const releasedQty = buildAmendReleasedQtyByItemIdRecord(pendingAmendSale.cartLines);
+    const cartLines = applyAmendEffectiveStockToCartLines(
+      pendingAmendSale.cartLines,
+      catalog.items,
+      releasedQty,
+    );
+    cart.loadAmendSale({
+      cartLines,
+      invoiceDiscountType: pendingAmendSale.invoiceDiscountType,
+      invoiceDiscountValue: pendingAmendSale.invoiceDiscountValue,
+    });
+    setPendingAmendSale(null);
+  }, [cart.loadAmendSale, catalog.isLoading, catalog.items, pendingAmendSale]);
+
   const heldQuery = useQuery({
     queryKey: queryKeys.posMarketHeldSales(token ?? null, activeSession?.id ?? null),
     queryFn: () => getHeldPosMarketSales(activeSession!.id, token),
@@ -372,6 +449,11 @@ export function PosMarketRegisterWorkspace() {
     queryFn: () => getDraftPosMarketSales(activeSession!.id, token),
     enabled: Boolean(token && activeSession?.id),
   });
+
+  const weightModalCatalogItem = useMemo(() => {
+    if (!weightModalItem) return null;
+    return catalogItemsForRegister.find((item) => item.id === weightModalItem.id) ?? weightModalItem;
+  }, [catalogItemsForRegister, weightModalItem]);
 
   const cashierLabel = user?.name?.trim() || user?.email || "Cashier";
 
@@ -510,7 +592,47 @@ export function PosMarketRegisterWorkspace() {
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
         >
-          {flashMessage}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>{flashMessage}</span>
+            {flashTone === "success" && lastCompletedSale && hasPermission(user, "POS_PRINT_RECEIPT") ? (
+              <button
+                type="button"
+                onClick={() =>
+                  void reprintMarketCustomerReceipt(lastCompletedSale.id, token, {
+                    destinationMarketName: lastCompletedSale.customerName,
+                    saleReference: lastCompletedSale.reference,
+                  })
+                }
+                className="rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-800"
+              >
+                {t("posMarket.reprint.action")}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {amendingSaleId ? (
+        <div
+          className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm"
+        >
+          <span className="font-semibold text-amber-900">
+            {t("posMarket.amend.banner", { invoice: amendingSaleLabel ?? amendingSaleId })}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setAmendingSaleId(null);
+              setAmendingSaleLabel(null);
+              setAmendReleasedQtyByItemId({});
+              setPendingAmendSale(null);
+              amendLoadHandledRef.current = null;
+              cart.clearCart();
+            }}
+            className="rounded-full border border-amber-300 px-3 py-1 text-xs font-bold text-amber-900"
+          >
+            {t("posMarket.amend.cancel")}
+          </button>
         </div>
       ) : null}
 
@@ -656,21 +778,21 @@ export function PosMarketRegisterWorkspace() {
       />
 
       <PosMarketWeightEntryModal
-        isOpen={Boolean(weightModalItem)}
-        item={weightModalItem}
+        isOpen={Boolean(weightModalCatalogItem)}
+        item={weightModalCatalogItem}
         language={language}
         currencyCode={currencyCode}
         onClose={() => setWeightModalItem(null)}
         onConfirm={(payload) => {
-          if (!weightModalItem) return;
-          const result = cart.addItem(weightModalItem, {
+          if (!weightModalCatalogItem) return;
+          const result = cart.addItem(weightModalCatalogItem, {
             weight: payload.weight,
             discountType: payload.discountType,
             discountValue: payload.discountValue,
           });
           if (result === "STOCK_EXCEEDED") {
             pushMessage(
-              t("pos.sales.alert.stockExceeded", { item: weightModalItem.name }),
+              t("pos.sales.alert.stockExceeded", { item: weightModalCatalogItem.name }),
               "error",
             );
           }

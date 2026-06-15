@@ -2,7 +2,7 @@ import {
   buildPosMarketCollectionReceiptHtml,
   type PosMarketCollectionReceiptData,
 } from "@/features/pos-market/pos-market-collection-receipt-print";
-import { buildPosMarketReceiptHtml, type PosMarketReceiptData } from "@/features/pos-market/pos-market-receipt-print";
+import { buildPosMarketReceiptHtml, buildSamplePosMarketReceiptData, type PosMarketReceiptData } from "@/features/pos-market/pos-market-receipt-print";
 import {
   buildPosMarketAccountStatementA4Html,
 } from "@/features/pos-market/pos-market-statement-a4-print";
@@ -20,6 +20,8 @@ import {
   type PosMarketPrintBridgeStatus,
 } from "@/features/pos-market/pos-market-print-bridge";
 import { loadPosMarketPrinterConfig } from "@/features/pos-market/pos-market-printer-config";
+import { mapPosReceiptToPrintData } from "@/features/pos-market/pos-market-cart-utils";
+import { reprintPosMarketReceipt } from "@/lib/api/pos-market";
 import type { PosMarketAccountStatementReport, PosMarketRepStatementReport } from "@/lib/api/pos-market";
 
 export type PosMarketPrintResult = {
@@ -118,31 +120,16 @@ export async function exportMarketRepStatementPdf(
 }
 
 export async function testPosMarketReceiptPrinter(): Promise<PosMarketPrintResult> {
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Market Receipt Printer Test</title>
-  <style>
-    @page { size: 80mm auto; margin: 0; }
-    body {
-      width: 76mm;
-      padding: 5mm 2mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 13pt;
-      font-weight: 800;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div>Market POS Receipt Test</div>
-  <div>${new Date().toLocaleString()}</div>
-  <div>فاتورة مبيعات / Sales Invoice</div>
-</body>
-</html>`;
+  return printConfiguredHtml(
+    buildPosMarketReceiptHtml(buildSamplePosMarketReceiptData()),
+    "pos-market-receipt-printer-test",
+  );
+}
 
-  return printConfiguredHtml(html, "pos-market-receipt-printer-test");
+export function buildPosMarketReceiptPreviewHtml(
+  receipt: PosMarketReceiptData = buildSamplePosMarketReceiptData(),
+): string {
+  return buildPosMarketReceiptHtml(receipt);
 }
 
 export async function getMarketPrinterBridgeStatus(): Promise<PosMarketPrintBridgeStatus> {
@@ -151,4 +138,18 @@ export async function getMarketPrinterBridgeStatus(): Promise<PosMarketPrintBrid
 
 export function shouldAutoPrintReceiptOnPay(): boolean {
   return loadPosMarketPrinterConfig().autoPrintReceiptOnPay;
+}
+
+export async function reprintMarketCustomerReceipt(
+  saleId: string,
+  token?: string | null,
+  options?: { destinationMarketName?: string | null; saleReference?: string | null },
+): Promise<PosMarketPrintResult> {
+  const response = await reprintPosMarketReceipt(saleId, token);
+  return printMarketCustomerReceipt(
+    mapPosReceiptToPrintData(response.receipt, {
+      destinationMarketName: options?.destinationMarketName ?? response.sale.customer?.name ?? null,
+      saleReference: options?.saleReference ?? response.sale.reference,
+    }),
+  );
 }

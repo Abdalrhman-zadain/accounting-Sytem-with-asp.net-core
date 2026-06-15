@@ -9,7 +9,7 @@
     <ApplicationIcon></ApplicationIcon>
     <AssemblyName>SimpleAccount.PrintAgent</AssemblyName>
     <RootNamespace>SimpleAccount.PrintAgent</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.3</Version>
   </PropertyGroup>
 
   <ItemGroup>

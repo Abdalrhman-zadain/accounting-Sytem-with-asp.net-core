@@ -178,8 +178,9 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE`.
 - Register checkout allows **partial payment** or **pay later** (zero tender) when `allowCreditSale` is true in POS settings (permission or `POS_ALLOW_CREDIT_SALE`).
 - Outstanding balance is stored on the POS `SalesInvoice` (`outstandingAmount`, `PARTIALLY_PAID`) and debited to the customer's receivable account on accounting posting.
-- Register receipts print as **فاتورة مبيعات** (sales invoice), not a tax receipt: no VAT lines on the slip. Thermal layout is **compact** (table-based rows at 302px / 80mm, one line per product, up to 28 characters per item name) to reduce paper use and avoid empty gaps between text and amounts.
-- Each invoice shows **مدفوع** / **متبقي** when relevant; **الذمم** (account balance) prints as a single line when outstanding. Full delivered/collected lifetime totals are on the receivables screens, not repeated on every slip.
+- Register receipts print as **فاتورة بيع** (Shoug-branded sales invoice), not a tax receipt: no VAT lines on the slip. Thermal layout is **80mm** (302px) with the Shoug logo, Arabic company header, right-aligned metadata, and a **four-column** line table (الصنف / الكمية / السعر / المجموع). Amounts use **three decimal places**.
+- Cash sales show invoice total (and paid/change when applicable). **Credit/delivery (ذمة)** sales also print **رصيد سابق** and **الرصيد الحالي**; the ERP sale `reference` prints as **الرقم المرجعي** and `receiptNumber` as **رقم الفاتورة**.
+- Collection receipts and thermal account statements share the same Shoug header/branding. Logo path: `frontend/public/pos-market/shoug-logo.png`. Preview sample receipt on `/pos-market/printers`.
 - **المندوب** (customer-linked sales rep) prints on the invoice when configured on the market customer.
 
 ### Market account statements (كشف حساب)
@@ -288,6 +289,22 @@ Market POS sells from stock loaded onto a sales rep's car, not directly from mai
 
 Backend services live in `backend/src/modules/phase-3-sales-receivables/pos-market/rep-car-stock/`.
 
+### Rep invoice amend + reprint
+
+| Capability | Rule |
+|------------|------|
+| Who | `MARKET_REP` with `POS_MARKET_AMEND_SALE` |
+| When | `posAccountingStatus` not `POSTED`/`REVERSED`, session `OPEN`, `POS_POSTING_MODE = BY_INVOICE` |
+| After session close | Amend blocked |
+| After ERP collection on invoice | Allowed — prior receipt allocations transfer to the new invoice (capped at the amended total); register checkout still re-enters POS payments |
+| After return on invoice | Amend blocked |
+
+**Amend flow:** dedicated page `/pos-market/amend-sales` lists amendable completed invoices for the open shift. The rep selects an invoice, then edits on `/pos-market/register` (cart pre-filled). While editing, **effective on-hand** = current rep-car stock + quantity from the original invoice line (virtual release until commit). Checkout calls `POST /api/pos-market/sales/:id/amend` (same body as complete sale). The old invoice is cancelled (`VOIDED`), rep-car `SALE_OUT` is reversed (`SALE_RETURN_IN`), the draft journal is deleted, and a **new** invoice + draft journal is created. Prior **receivable collections** (`ReceiptAllocation`) on the old invoice are moved to the new invoice up to the new total. The rep **re-enters register payments** at checkout. Receivables detail shows an **معدّلة / Amended** badge and the replaced invoice reference.
+
+**Reprint:** `POST /api/pos-market/sales/:id/reprint` — post-sale toast on register, receivables delivery list; requires `POS_PRINT_RECEIPT`.
+
+**Posting mode:** Market demo seed sets `POS_POSTING_MODE = BY_INVOICE`. Existing deployments should update `PosRuntimeSetting` (or `/pos-market/settings`) before enabling amend.
+
 ## Current status
 
 Implemented:
@@ -303,6 +320,7 @@ Frontend workspaces (in `frontend/features/pos-market/`):
 | Route | Workspace |
 |-------|-----------|
 | `/pos-market/register` | Register — destination market (customer) required, catalog, cart, checkout, **compact thermal receipt** print (one line per item); sell-by-weight items show quick-pick buttons (ربع كيلو / نص كيلو / 750 غم / كيلو) plus manual weight entry; **rep discount** on line (fixed or %) in the add-to-cart modal, weight modal, or cart; whole-invoice discount in cart; receipt shows **خصم المندوب** when applicable |
+| `/pos-market/amend-sales` | Dedicated amend picker — choose a completed shift invoice, then continue editing on the register (`MARKET_REP` + `POS_MARKET_AMEND_SALE`) |
 | `/pos-market/sessions` | Shift list and session reports |
 | `/pos-market/held-sales` | Draft and held sales |
 | `/pos-market/accounting-review` | Pending sales approve/reject/reverse |

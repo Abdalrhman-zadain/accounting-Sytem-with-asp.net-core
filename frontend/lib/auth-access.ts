@@ -231,6 +231,13 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
   }
 
   if (
+    normalizedPath === "/pos-market/amend-sales" ||
+    normalizedPath.startsWith("/pos-market/amend-sales/")
+  ) {
+    return hasPermission(user, "POS_MARKET_AMEND_SALE");
+  }
+
+  if (
     normalizedPath === "/pos-market/sessions" ||
     normalizedPath.startsWith("/pos-market/sessions/")
   ) {

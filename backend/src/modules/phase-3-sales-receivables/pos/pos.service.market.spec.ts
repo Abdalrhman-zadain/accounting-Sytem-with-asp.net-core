@@ -275,4 +275,81 @@ describe("PosService market operations", () => {
       ),
     ).toThrow(/POS_APPROVE_ACCOUNTING/);
   });
+
+  describe("market sale amend eligibility", () => {
+    const marketRep = {
+      userId: "rep-u1",
+      permissions: ["POS_MARKET_AMEND_SALE", "POS_COMPLETE_SALE", "POS_CREDIT_SALE"],
+      posRoles: ["MARKET_REP"],
+      salesRepId: "rep-1",
+    } as any;
+
+    const amendableSale = {
+      posOperationalStatus: "COMPLETED",
+      posAccountingStatus: "PENDING_REVIEW",
+      journalEntry: { status: "DRAFT" },
+      posSession: {
+        status: PosSessionStatus.OPEN,
+        salesRepId: "rep-1",
+        posProduct: PosProduct.MARKET,
+      },
+      _count: { posReturns: 0, receiptAllocations: 0 },
+    };
+
+    it("allows amend when all rules pass", () => {
+      const result = (service as any).evaluateMarketSaleAmendable(
+        amendableSale,
+        marketRep,
+        "BY_INVOICE",
+      );
+      expect(result).toEqual({ canAmend: true, amendBlockReason: null });
+    });
+
+    it("blocks amend when posting mode is BY_SESSION", () => {
+      const result = (service as any).evaluateMarketSaleAmendable(
+        amendableSale,
+        marketRep,
+        "BY_SESSION",
+      );
+      expect(result.canAmend).toBe(false);
+      expect(result.amendBlockReason).toBe("POSTING_MODE");
+    });
+
+    it("blocks amend when session is closed", () => {
+      const result = (service as any).evaluateMarketSaleAmendable(
+        {
+          ...amendableSale,
+          posSession: { ...amendableSale.posSession, status: PosSessionStatus.CLOSED },
+        },
+        marketRep,
+        "BY_INVOICE",
+      );
+      expect(result.amendBlockReason).toBe("SESSION_CLOSED");
+    });
+
+    it("allows amend when invoice has receipt allocations", () => {
+      const result = (service as any).evaluateMarketSaleAmendable(
+        {
+          ...amendableSale,
+          _count: { posReturns: 0, receiptAllocations: 1 },
+        },
+        marketRep,
+        "BY_INVOICE",
+      );
+      expect(result).toEqual({ canAmend: true, amendBlockReason: null });
+    });
+
+    it("blocks amend for non-rep users", () => {
+      const cashierWithAmend = {
+        ...marketCashier,
+        permissions: [...marketCashier.permissions, "POS_MARKET_AMEND_SALE"],
+      };
+      const result = (service as any).evaluateMarketSaleAmendable(
+        amendableSale,
+        cashierWithAmend,
+        "BY_INVOICE",
+      );
+      expect(result.amendBlockReason).toBe("REP_ONLY");
+    });
+  });
 });

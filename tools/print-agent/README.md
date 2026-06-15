@@ -51,16 +51,23 @@ npm run build
 # Terminal 1 — mock agent (Linux/macOS/Windows with Node 18+)
 node tools/print-agent/mock-agent-server.mjs
 
-# Terminal 2
+# Terminal 2 — API + dual-printer routing (uses mock config or CLI printer names)
 node tools/print-agent/smoke-test-agent-api.mjs
+
+# Explicit kitchen + receipt names (Windows cashier PC with both USB printers)
+node tools/print-agent/smoke-test-agent-api.mjs http://127.0.0.1:9188 "XPrinter-V320N" "XPrinter-Q851L"
 ```
+
+The smoke test prints realistic 80mm HTML to **both** configured kitchen and receipt printers and fails if a configured name is missing from `GET /printers`.
 
 **On a Windows cashier PC (required before rollout):**
 
 1. Run `.\build-release.ps1` and extract the zip.
 2. Start `SimpleAccount.PrintAgent.exe`.
-3. Run `node tools\print-agent\smoke-test-agent-api.mjs`.
-4. In POS → Printers: **Local agent** → Refresh → Test kitchen + Test receipt.
+3. Configure kitchen + receipt in tray settings.
+4. Run `node tools\print-agent\smoke-test-agent-api.mjs` (or pass explicit printer names).
+5. Or run `.\verify-windows-hardware.ps1` from `tools\print-agent` for a full Windows checklist.
+6. In POS → Printers: **Local agent** → Refresh → Test kitchen + Test receipt.
 
 ## Cashier setup
 

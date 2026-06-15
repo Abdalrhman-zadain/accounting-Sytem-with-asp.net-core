@@ -69,7 +69,8 @@ export type PosPermissionCode =
   | "POS_MARKET_VIEW_RECEIVABLES"
   | "POS_MARKET_COLLECT_RECEIVABLE"
   | "POS_MARKET_MANAGE_REP_LOADS"
-  | "POS_MARKET_REP_STOCKTAKE";
+  | "POS_MARKET_REP_STOCKTAKE"
+  | "POS_MARKET_AMEND_SALE";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -3833,6 +3834,8 @@ export type PosSale = {
     sessionNumber: string;
     terminalName: string;
     branchName?: string | null;
+    status?: "OPEN" | "CLOSED";
+    salesRepId?: string | null;
     cashierUser?: {
       id: string;
       email: string;
@@ -3840,6 +3843,15 @@ export type PosSale = {
     } | null;
     warehouse: Pick<InventoryWarehouse, "id" | "code" | "name">;
   } | null;
+  canAmend?: boolean;
+  amendBlockReason?: string | null;
+  hasPriorCollections?: boolean;
+  posAmendedFromInvoiceId?: string | null;
+  posAmendedToInvoiceId?: string | null;
+  posAmendedFromReference?: string | null;
+  posAmendedFromReceiptNumber?: string | null;
+  posAmendedToReference?: string | null;
+  posAmendedToReceiptNumber?: string | null;
   customer?: {
     id: string;
     name: string;

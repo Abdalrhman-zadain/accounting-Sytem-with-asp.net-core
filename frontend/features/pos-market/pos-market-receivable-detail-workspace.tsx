@@ -18,6 +18,7 @@ import {
   printMarketAccountStatement,
   printMarketAccountStatementA4,
   printMarketCollectionReceipt,
+  reprintMarketCustomerReceipt,
 } from "@/features/pos-market/pos-market-print-service";
 import { POS_MARKET_THEME } from "@/features/pos-market/pos-market-theme";
 import {
@@ -110,6 +111,22 @@ export function PosMarketReceivableDetailWorkspace({
   const detail = detailQuery.data;
   const bankAccounts = bankAccountsQuery.data ?? [];
   const outstanding = parseAmount(detail?.summary.outstandingBalance ?? 0);
+
+  const reprintMutation = useMutation({
+    mutationFn: (delivery: { id: string; reference: string }) =>
+      reprintMarketCustomerReceipt(delivery.id, token, {
+        destinationMarketName: detail?.customer.customerName ?? null,
+        saleReference: delivery.reference,
+      }),
+    onSuccess: () => {
+      setFlashMessage(t("posMarket.reprint.success"));
+      setFlashTone("success");
+    },
+    onError: (error) => {
+      setFlashMessage(getErrorMessage(error, t("posMarket.reprint.error")));
+      setFlashTone("error");
+    },
+  });
 
   useEffect(() => {
     if (!isCollectOpen || collectBankAccountId || bankAccounts.length === 0) return;
@@ -223,9 +240,28 @@ export function PosMarketReceivableDetailWorkspace({
               <div>
                 <div className="font-bold" style={{ color: POS_MARKET_THEME.colors.text }}>
                   {delivery.receiptNumber ?? delivery.reference}
+                  {delivery.amendedFromInvoiceId ? (
+                    <span
+                      className="ms-2 rounded-full px-2 py-0.5 text-[10px] font-black uppercase"
+                      style={{
+                        backgroundColor: POS_MARKET_THEME.colors.primarySoft,
+                        color: POS_MARKET_THEME.colors.primary,
+                      }}
+                    >
+                      {t("posMarket.receivables.detail.amendedInvoice")}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="text-xs" style={{ color: POS_MARKET_THEME.colors.textMuted }}>
                   {formatDetailDate(delivery.deliveredAt)}
+                  {delivery.amendedFromReference ? (
+                    <span className="block mt-0.5">
+                      {t("posMarket.receivables.detail.amendedFrom", {
+                        reference:
+                          delivery.amendedFromReceiptNumber ?? delivery.amendedFromReference,
+                      })}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="text-end">
@@ -237,6 +273,19 @@ export function PosMarketReceivableDetailWorkspace({
                     {t("posMarket.receivables.detail.deliveryOutstanding")}:{" "}
                     {formatCurrency(parseAmount(delivery.outstandingAmount))}
                   </div>
+                ) : null}
+                {hasPermission(user, "POS_PRINT_RECEIPT") ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      reprintMutation.mutate({ id: delivery.id, reference: delivery.reference })
+                    }
+                    disabled={reprintMutation.isPending}
+                    className="mt-2 rounded-full border px-3 py-1 text-xs font-bold"
+                    style={{ borderColor: POS_MARKET_THEME.colors.outline, color: POS_MARKET_THEME.colors.primary }}
+                  >
+                    {t("posMarket.reprint.action")}
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -258,7 +307,7 @@ export function PosMarketReceivableDetailWorkspace({
         ))}
       </div>
     );
-  }, [detail?.deliveries, t]);
+  }, [detail?.deliveries, reprintMutation, t, user]);
 
   const paymentsContent = useMemo(() => {
     const payments = detail?.payments ?? [];

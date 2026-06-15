@@ -1,16 +1,18 @@
 import { formatWeightQuantity } from "@/features/pos-market/pos-market-weight-utils";
 import {
-  buildThermalReceiptDocumentHtml,
-  fmtThermalReceiptAmt,
-  thermalReceiptFooterSpacerHtml,
-  thermalReceiptItemLine,
-  thermalReceiptRowLine,
-  thermalReceiptTableClose,
-  thermalReceiptTableOpen,
-} from "@/features/pos-shared/thermal-receipt-layout";
+  buildPosMarketBrandedDocumentHtml,
+  buildShougDividerHtml,
+  buildShougMetaRow,
+  buildShougReceiptHeaderHtml,
+  buildShougTotalRow,
+  fmtMarketReceiptAmt,
+  fmtMarketReceiptDateCompact,
+} from "@/features/pos-market/pos-market-receipt-brand";
 
 export type PosMarketReceiptData = {
   receiptNumber: string;
+  /** ERP sale reference (الرقم المرجعي). */
+  saleReference?: string | null;
   soldAt: string;
   companyName: string;
   logoUrl?: string | null;
@@ -31,6 +33,8 @@ export type PosMarketReceiptData = {
   invoiceOutstanding?: number;
   /** Total customer account balance after this sale. */
   accountOutstanding?: number;
+  /** Balance before this credit delivery (رصيد سابق). */
+  previousBalance?: number | null;
   /** Lifetime delivered total for the destination market. */
   totalDelivered?: number;
   /** Lifetime collections total for the destination market. */
@@ -47,15 +51,6 @@ export type PosMarketReceiptData = {
   }>;
 };
 
-const SEP = "─".repeat(32);
-
-function fmtDateCompact(val?: string | Date | null): string {
-  if (!val) return "—";
-  const d = new Date(val);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function formatReceiptQuantity(line: PosMarketReceiptData["lines"][number]): string {
   if (line.unitCode) {
     return formatWeightQuantity(line.quantity, line.unitCode, 3);
@@ -63,91 +58,137 @@ function formatReceiptQuantity(line: PosMarketReceiptData["lines"][number]): str
   return String(line.quantity);
 }
 
+function buildItemsTableHtml(receipt: PosMarketReceiptData): string {
+  const header = `
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th class="col-item">الصنف</th>
+          <th class="col-qty">الكمية</th>
+          <th class="col-price">السعر</th>
+          <th class="col-total">المجموع</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  const rows = receipt.lines
+    .map((line) => {
+      const discountNote =
+        line.discountAmount > 0.009
+          ? `<span class="disc"> (-${fmtMarketReceiptAmt(line.discountAmount)})</span>`
+          : "";
+      return `
+        <tr>
+          <td class="col-item">${line.name}${discountNote}</td>
+          <td class="col-qty">${formatReceiptQuantity(line)}</td>
+          <td class="col-price">${fmtMarketReceiptAmt(line.unitPrice)}</td>
+          <td class="col-total">${fmtMarketReceiptAmt(line.lineTotal)}</td>
+        </tr>`;
+    })
+    .join("");
+
+  return `${header}${rows}</tbody></table>`;
+}
+
 function buildReceiptBodyHtml(receipt: PosMarketReceiptData): string {
   const rows: string[] = [];
-  const invoiceOutstanding = receipt.invoiceOutstanding ?? 0;
 
-  rows.push(`<div class="center title">${receipt.companyName}</div>`);
-  rows.push(`<div class="center sub">فاتورة مبيعات</div>`);
+  rows.push(buildShougReceiptHeaderHtml("فاتورة بيع", receipt.logoUrl));
+  rows.push(buildShougDividerHtml());
 
-  if (receipt.branchName) {
-    rows.push(`<div class="center meta">${receipt.branchName}</div>`);
+  if (receipt.saleReference) {
+    rows.push(buildShougMetaRow("الرقم المرجعي:", receipt.saleReference));
+  }
+  rows.push(buildShougMetaRow("رقم الفاتورة:", receipt.receiptNumber));
+  rows.push(buildShougMetaRow("التاريخ والوقت:", fmtMarketReceiptDateCompact(receipt.soldAt)));
+
+  if (receipt.salesRepName) {
+    rows.push(buildShougMetaRow("المندوب:", receipt.salesRepName));
+  } else if (receipt.cashierName) {
+    rows.push(buildShougMetaRow("البائع:", receipt.cashierName));
   }
 
-  rows.push(`<div class="sep">${SEP}</div>`);
-
-  const metaParts = [
-    receipt.receiptNumber,
-    fmtDateCompact(receipt.soldAt),
-    receipt.isCreditDelivery ? "ذمة" : null,
-  ].filter(Boolean);
-  rows.push(`<div class="center meta">${metaParts.join(" · ")}</div>`);
-
-  const partyParts = [
-    receipt.destinationMarketName ? `سوق: ${receipt.destinationMarketName}` : null,
-    receipt.salesRepName
-      ? `مندوب: ${receipt.salesRepName}`
-      : receipt.cashierName
-        ? `بائع: ${receipt.cashierName}`
-        : null,
-  ].filter(Boolean);
-
-  if (partyParts.length > 0) {
-    rows.push(`<div class="center meta">${partyParts.join(" · ")}</div>`);
+  if (receipt.destinationMarketName) {
+    rows.push(buildShougMetaRow("العميل:", receipt.destinationMarketName));
   }
 
-  rows.push(`<div class="sep">${SEP}</div>`);
-
-  rows.push(thermalReceiptTableOpen());
-  for (const line of receipt.lines) {
-    const qty = formatReceiptQuantity(line);
-    const discountNote =
-      line.discountAmount > 0.009
-        ? ` <span class="disc">(-${fmtThermalReceiptAmt(line.discountAmount)})</span>`
-        : "";
-    rows.push(thermalReceiptItemLine(qty, line.name, line.lineTotal, discountNote));
-  }
-  rows.push(thermalReceiptTableClose());
-
-  rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(thermalReceiptTableOpen());
+  rows.push(buildShougDividerHtml());
+  rows.push(buildItemsTableHtml(receipt));
+  rows.push(buildShougDividerHtml());
 
   if (receipt.discount > 0.009) {
-    rows.push(thermalReceiptRowLine("خصم المندوب", `-${fmtThermalReceiptAmt(receipt.discount)}`));
+    rows.push(buildShougTotalRow("خصم المندوب:", `-${fmtMarketReceiptAmt(receipt.discount)}`));
   }
 
-  rows.push(thermalReceiptRowLine("الإجمالي", fmtThermalReceiptAmt(receipt.total)));
+  rows.push(buildShougTotalRow("إجمالي الفاتورة:", fmtMarketReceiptAmt(receipt.total)));
 
   if (receipt.paid > 0.009) {
-    rows.push(thermalReceiptRowLine("مدفوع", fmtThermalReceiptAmt(receipt.paid)));
+    rows.push(buildShougTotalRow("مدفوع:", fmtMarketReceiptAmt(receipt.paid)));
   }
 
-  if (invoiceOutstanding > 0.009) {
-    rows.push(thermalReceiptRowLine("متبقي", fmtThermalReceiptAmt(invoiceOutstanding)));
+  const invoiceOutstanding = receipt.invoiceOutstanding ?? 0;
+  if (!receipt.isCreditDelivery && invoiceOutstanding > 0.009) {
+    rows.push(buildShougTotalRow("متبقي:", fmtMarketReceiptAmt(invoiceOutstanding)));
   }
 
   if (!receipt.isCreditDelivery && receipt.paid > 0.009) {
     if (receipt.change > 0.009) {
-      rows.push(thermalReceiptRowLine("الباقي", fmtThermalReceiptAmt(receipt.change)));
+      rows.push(buildShougTotalRow("الباقي:", fmtMarketReceiptAmt(receipt.change)));
     }
     if (receipt.paymentSummary.trim()) {
-      rows.push(thermalReceiptRowLine("الدفع", receipt.paymentSummary));
+      rows.push(buildShougMetaRow("الدفع:", receipt.paymentSummary));
     }
   }
 
-  if (receipt.accountOutstanding != null && receipt.accountOutstanding > 0.009) {
-    rows.push(thermalReceiptRowLine("الذمم", fmtThermalReceiptAmt(receipt.accountOutstanding)));
+  if (receipt.isCreditDelivery) {
+    if (receipt.previousBalance != null && receipt.previousBalance >= 0) {
+      rows.push(buildShougTotalRow("رصيد سابق:", fmtMarketReceiptAmt(receipt.previousBalance)));
+    }
+    if (receipt.accountOutstanding != null && receipt.accountOutstanding > 0.009) {
+      rows.push(buildShougTotalRow("الرصيد الحالي:", fmtMarketReceiptAmt(receipt.accountOutstanding)));
+    }
   }
 
-  rows.push(thermalReceiptTableClose());
-
-  rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(`<div class="center thanks">شكراً لتعاملكم</div>`);
-  rows.push(thermalReceiptFooterSpacerHtml());
+  rows.push(`<div class="thanks">شكراً لتعاملكم</div>`);
 
   return rows.join("\n");
 }
 
 export function buildPosMarketReceiptHtml(receipt: PosMarketReceiptData): string {
-  return buildThermalReceiptDocumentHtml(receipt.receiptNumber, buildReceiptBodyHtml(receipt));
+  return buildPosMarketBrandedDocumentHtml(receipt.receiptNumber, buildReceiptBodyHtml(receipt));
+}
+
+export function buildSamplePosMarketReceiptData(): PosMarketReceiptData {
+  return {
+    receiptNumber: "7",
+    saleReference: "POS-0042",
+    soldAt: new Date().toISOString(),
+    companyName: "SHOUG CHOCOLATE",
+    destinationMarketName: "أسواق",
+    salesRepName: "عامر البارلين",
+    cashierName: "كاشير",
+    terminalName: null,
+    warehouseName: "—",
+    paymentSummary: "",
+    total: 30,
+    paid: 0,
+    tendered: 0,
+    change: 0,
+    subtotal: 30,
+    discount: 0,
+    invoiceOutstanding: 30,
+    accountOutstanding: 130,
+    previousBalance: 100,
+    isCreditDelivery: true,
+    lines: [
+      {
+        name: "شوكولاتة شوق",
+        quantity: 5,
+        unitPrice: 6,
+        discountAmount: 0,
+        lineTotal: 30,
+        unitCode: "كغ",
+      },
+    ],
+  };
 }

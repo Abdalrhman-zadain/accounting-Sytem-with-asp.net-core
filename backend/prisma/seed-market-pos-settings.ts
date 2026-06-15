@@ -33,7 +33,7 @@ export async function seedMarketPosRuntimeSettings(prisma: PrismaClient) {
   }
 
   const settings: PosSettingSeed[] = [
-    { key: 'POS_POSTING_MODE', value: 'BY_SESSION' },
+    { key: 'POS_POSTING_MODE', value: 'BY_INVOICE' },
     { key: 'POS_MAPPING_CASH_ACCOUNT_ID', value: mainCash.id },
     { key: 'POS_MAPPING_SALES_REVENUE_ACCOUNT_ID', value: salesRevenue.id },
   ];

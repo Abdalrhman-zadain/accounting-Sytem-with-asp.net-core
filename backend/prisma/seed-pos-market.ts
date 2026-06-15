@@ -6,11 +6,52 @@ import {
 } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
+export const MARKET_SNACKS_GROUP_CODE = 'MARKET-SNACKS';
+
+/** Item group + category required by market showcase and Shouq catalog seeds. */
+export async function ensureMarketSnackFoundation(prisma: PrismaClient) {
+  const group = await prisma.inventoryItemGroup.upsert({
+    where: { code: MARKET_SNACKS_GROUP_CODE },
+    update: {
+      name: 'سناكات',
+      description: 'Market snacks',
+      isActive: true,
+    },
+    create: {
+      id: 'GRP-MARKET-SNACKS',
+      code: MARKET_SNACKS_GROUP_CODE,
+      name: 'سناكات',
+      description: 'Market snacks',
+      isActive: true,
+    },
+  });
+
+  await prisma.inventoryItemCategory.upsert({
+    where: { code: MARKET_SNACKS_GROUP_CODE },
+    update: {
+      name: 'سناكات',
+      description: 'Market snacks',
+      itemGroupId: group.id,
+      isActive: true,
+    },
+    create: {
+      id: 'CAT-MARKET-SNACKS',
+      code: MARKET_SNACKS_GROUP_CODE,
+      name: 'سناكات',
+      description: 'Market snacks',
+      itemGroupId: group.id,
+      isActive: true,
+    },
+  });
+}
+
 export async function seedPosMarketDemo(
   prisma: PrismaClient,
   _options: { adminUserId: string },
 ) {
   console.log('Seeding market POS destination markets and reps...');
+
+  await ensureMarketSnackFoundation(prisma);
 
   const [tradeReceivableAccount, taxableTreatment] = await Promise.all([
     prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
@@ -47,12 +88,26 @@ export async function seedPosMarketDemo(
     },
   });
 
-  const marketDestinationCustomers: Array<{
-    code: string;
-    name: string;
-    contactInfo: string;
-    salesRepId: string;
-  }> = [];
+  const marketDestinationCustomers = [
+    {
+      code: 'MKT-AMMAN-01',
+      name: 'سوق عمان الشمال / Amman North Market',
+      contactInfo: '+962 79 100 0001',
+      salesRepId: marketRepNorth.id,
+    },
+    {
+      code: 'MKT-IRBID-02',
+      name: 'سوق إربد / Irbid Market',
+      contactInfo: '+962 79 100 0002',
+      salesRepId: marketRepNorth.id,
+    },
+    {
+      code: 'MKT-ZARQA-03',
+      name: 'سوق الزرقاء / Zarqa Market',
+      contactInfo: '+962 79 100 0003',
+      salesRepId: marketRepCentral.id,
+    },
+  ] as const;
 
   for (const marketCustomer of marketDestinationCustomers) {
     await prisma.customer.upsert({
@@ -88,7 +143,7 @@ export async function seedPosMarketDemo(
   await seedMarketRepUser(prisma, marketRepNorth.id);
 
   console.log(
-    `Market POS: seeded ${marketDestinationCustomers.length} destination markets and market rep access without inventory demo products.`,
+    `Market POS: seeded ${marketDestinationCustomers.length} destination markets and market rep access. Run npm run seed:market-showcase for demo products.`,
   );
 }
 
@@ -113,6 +168,7 @@ const marketRepPermissionCodes: PosPermissionCode[] = [
   'POS_CREDIT_SALE',
   'POS_MARKET_VIEW_RECEIVABLES',
   'POS_MARKET_COLLECT_RECEIVABLE',
+  'POS_MARKET_AMEND_SALE',
 ];
 
 async function seedMarketRepUser(prisma: PrismaClient, salesRepId: string) {
@@ -124,6 +180,9 @@ async function seedMarketRepUser(prisma: PrismaClient, salesRepId: string) {
   );
   await prisma.$executeRawUnsafe(
     `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_COLLECT_RECEIVABLE'`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_AMEND_SALE'`,
   );
 
   await prisma.$transaction(async (tx) => {

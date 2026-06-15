@@ -110,6 +110,10 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
     name: 'Rep car stocktake',
     description: 'Create and post monthly جرد for goods on rep cars.',
   },
+  POS_MARKET_AMEND_SALE: {
+    name: 'Amend market POS sale',
+    description: 'Amend a completed market POS invoice before accounting posting while the session is open.',
+  },
 };
 
 @Injectable()
@@ -458,6 +462,9 @@ export class AuthService {
     );
     await this.prisma.$executeRawUnsafe(
       `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_REP_STOCKTAKE'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_AMEND_SALE'`,
     );
   }
 

@@ -173,8 +173,11 @@ export class PosMarketController {
   }
 
   @Get("sales/completed")
-  listCompletedSales(@Req() req: Request & { user?: AuthorizedUser }) {
-    return this.service.listCompletedSales(req.user);
+  listCompletedSales(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Query("sessionId") sessionId?: string,
+  ) {
+    return this.service.listCompletedSales(req.user, sessionId);
   }
 
   @Get("sales/review")
@@ -244,6 +247,15 @@ export class PosMarketController {
   @Post("sales/complete")
   completeSale(@Req() req: Request & { user?: AuthorizedUser }, @Body() dto: CompletePosSaleDto) {
     return this.service.completeSale(dto, req.user);
+  }
+
+  @Post("sales/:id/amend")
+  amendSale(
+    @Req() req: Request & { user?: AuthorizedUser },
+    @Param("id") id: string,
+    @Body() dto: CompletePosSaleDto,
+  ) {
+    return this.service.amendSale(id, dto, req.user);
   }
 
   @Post("sales/:id/void")

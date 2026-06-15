@@ -8,6 +8,7 @@ import {
 } from '../src/generated/prisma';
 
 import { postOpeningInventoryToGl } from './seed-shouq-catalog';
+import { ensureMarketSnackFoundation } from './seed-pos-market';
 import { seedMarketPosRuntimeSettings } from './seed-market-pos-settings';
 import { setupPosMarketCashierUser } from './setup-pos-market-cashier';
 
@@ -26,27 +27,93 @@ type ShowcaseProduct = {
 };
 
 /** Round-number demo products for warehouse + market POS register demos. */
-const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [];
+const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
+  {
+    code: 'MKT-DEMO-01',
+    name: 'شوكولاتة بالحليب — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 500,
+    purchasePrice: 0.85,
+    salesPrice: 1.25,
+    repCarQty: 80,
+  },
+  {
+    code: 'MKT-DEMO-02',
+    name: 'بسكويت محشي — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 400,
+    purchasePrice: 0.6,
+    salesPrice: 0.95,
+    repCarQty: 60,
+  },
+  {
+    code: 'MKT-DEMO-03',
+    name: 'كيك شوكولا — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 200,
+    purchasePrice: 1.2,
+    salesPrice: 1.8,
+    repCarQty: 40,
+  },
+  {
+    code: 'MKT-DEMO-04',
+    name: 'حلاوة طحينية — عرض',
+    unitCode: 'KG',
+    warehouseQty: 150,
+    purchasePrice: 3.5,
+    salesPrice: 5.0,
+    repCarQty: 25,
+  },
+  {
+    code: 'MKT-DEMO-05',
+    name: 'مكسرات مشكلة — عرض',
+    unitCode: 'KG',
+    warehouseQty: 100,
+    purchasePrice: 8.0,
+    salesPrice: 12.0,
+    repCarQty: 15,
+  },
+  {
+    code: 'MKT-DEMO-06',
+    name: 'عصير برتقال — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 300,
+    purchasePrice: 0.45,
+    salesPrice: 0.75,
+    repCarQty: 50,
+  },
+  {
+    code: 'MKT-DEMO-07',
+    name: 'رقائق بطاطا — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 600,
+    purchasePrice: 0.35,
+    salesPrice: 0.55,
+    repCarQty: 100,
+  },
+  {
+    code: 'MKT-DEMO-08',
+    name: 'علكة نعناع — عرض',
+    unitCode: 'PCS',
+    warehouseQty: 800,
+    purchasePrice: 0.15,
+    salesPrice: 0.25,
+    repCarQty: 120,
+  },
+];
 
 export async function seedMarketShowcase(
   prisma: PrismaClient,
   options: { adminUserId: string },
 ) {
-  if (SHOWCASE_PRODUCTS.length === 0) {
-    await setupPosMarketCashierUser(prisma);
-    console.log('Market showcase seed skipped because showcase inventory demo items were removed.');
-    return;
-  }
-
   console.log('Seeding market showcase demo (MKT-DEMO-* products with warehouse + rep car stock)...');
 
-  const snackGroup = await prisma.inventoryItemGroup.findUnique({
+  await ensureMarketSnackFoundation(prisma);
+
+  const snackGroup = await prisma.inventoryItemGroup.findUniqueOrThrow({
     where: { code: 'MARKET-SNACKS' },
     select: { id: true },
   });
-  if (!snackGroup) {
-    throw new Error('MARKET-SNACKS group not found. Run npm run seed:market first.');
-  }
 
   const [
     inventoryAccount,
@@ -438,15 +505,8 @@ async function main() {
       throw new Error('Admin user not found. Run npm run seed first.');
     }
 
-    const hasMarketFoundation = await prisma.inventoryItemGroup.findUnique({
-      where: { code: 'MARKET-SNACKS' },
-      select: { id: true },
-    });
-    if (!hasMarketFoundation) {
-      const { seedPosMarketDemo } = await import('./seed-pos-market');
-      await seedPosMarketDemo(prisma, { adminUserId: admin.id });
-    }
-
+    const { seedPosMarketDemo } = await import('./seed-pos-market');
+    await seedPosMarketDemo(prisma, { adminUserId: admin.id });
     await seedMarketShowcase(prisma, { adminUserId: admin.id });
     await setupPosMarketCashierUser(prisma);
   } finally {

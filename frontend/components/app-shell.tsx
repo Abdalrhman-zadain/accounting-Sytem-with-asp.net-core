@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { MobileNavBar } from "@/components/mobile-nav-bar";
+import { NavQuickAccessProvider } from "@/components/nav-quick-access-provider";
 import { SiteHeader } from "@/components/site-header";
 import { useNavDesktopLayout } from "@/lib/hooks/use-viewport-breakpoints";
 import { useKdsMode } from "@/providers/kds-mode-provider";
@@ -51,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const mobileNavVariant = isPosPage ? "floating" : "bar";
 
   return (
-    <>
+    <NavQuickAccessProvider>
       <DevRoutePerf />
       {!hideSidebar ? (
         <SiteHeader
@@ -77,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               ? "pl-0 pr-0"
               : isSidebarCollapsed
                 ? "ltr:pl-20 rtl:pr-20"
-                : "ltr:pl-60 rtl:pr-60",
+                : "ltr:pl-[340px] rtl:pr-[340px]",
           isPosPage && "pb-[env(safe-area-inset-bottom,0px)]",
           showMobileNavBar && mobileNavVariant === "bar" && "pt-[calc(3.5rem+env(safe-area-inset-top,0px))]",
         )}
@@ -93,6 +94,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
-    </>
+    </NavQuickAccessProvider>
   );
 }

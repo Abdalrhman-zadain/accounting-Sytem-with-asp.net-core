@@ -933,26 +933,52 @@ export class PosService {
   async listCompletedSales(
     user?: AuthorizedUser,
     posProduct: PosProduct = PosProduct.RESTAURANT,
+    sessionId?: string,
   ) {
     this.ensurePosPermissionCode("POS_VIEW_COMPLETED_SALES", user);
     const canSeeAll = this.canReviewAllSessions(user);
+    const normalizedSessionId = sessionId?.trim() || undefined;
     const rows = await this.prisma.salesInvoice.findMany({
       where: {
         invoiceType: SalesInvoiceType.POS,
         posOperationalStatus: {
           in: [PosOperationalStatus.COMPLETED, PosOperationalStatus.REFUNDED],
         },
+        ...(normalizedSessionId ? { posSessionId: normalizedSessionId } : {}),
         posSession: {
           posProduct,
           ...(canSeeAll ? {} : { cashierUserId: user?.userId ?? undefined }),
         },
       },
-      include: this.posSaleInclude(),
+      include: {
+        ...this.posSaleInclude(),
+        _count: {
+          select: {
+            posReturns: true,
+            receiptAllocations: true,
+          },
+        },
+      },
       orderBy: [{ posCompletedAt: "desc" }, { updatedAt: "desc" }],
       take: 100,
     });
 
-    return rows.map((row) => this.mapPosSale(row));
+    const postingMode =
+      posProduct === PosProduct.MARKET ? await this.getPosPostingMode() : null;
+
+    return rows.map((row) => {
+      const mapped = this.mapPosSale(row);
+      if (posProduct !== PosProduct.MARKET) {
+        return mapped;
+      }
+      const eligibility = this.evaluateMarketSaleAmendable(row, user, postingMode ?? undefined);
+      return {
+        ...mapped,
+        canAmend: eligibility.canAmend,
+        amendBlockReason: eligibility.amendBlockReason,
+        hasPriorCollections: (row._count?.receiptAllocations ?? 0) > 0,
+      };
+    });
   }
 
   async listPendingReview(
@@ -1840,6 +1866,488 @@ export class PosService {
         deliveryOutstanding:
           Number(result.outstandingAmount) > 0
             ? Number(result.outstandingAmount).toFixed(2)
+            : null,
+        accountOutstanding:
+          marketAccountSummary != null
+            ? marketAccountSummary.accountOutstanding.toFixed(2)
+            : null,
+        salesRepName: marketAccountSummary?.salesRepName ?? null,
+        totalDelivered:
+          marketAccountSummary != null
+            ? marketAccountSummary.totalDelivered.toFixed(2)
+            : null,
+        totalPaid:
+          marketAccountSummary != null ? marketAccountSummary.totalPaid.toFixed(2) : null,
+      },
+    };
+  }
+
+  async amendCompletedMarketSale(
+    id: string,
+    dto: CompletePosSaleDto,
+    user?: AuthorizedUser,
+    posProduct: PosProduct = PosProduct.RESTAURANT,
+  ) {
+    if (posProduct !== PosProduct.MARKET) {
+      throw new BadRequestException("POS sale amendment is only available for market POS.");
+    }
+    this.ensurePosPermissionCode("POS_MARKET_AMEND_SALE", user);
+    this.ensurePosPermission("SELL", user);
+
+    const postingMode = await this.getPosPostingMode();
+    const existingSale = await this.prisma.salesInvoice.findUnique({
+      where: { id },
+      include: {
+        ...this.posSaleInclude(),
+        lines: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                type: true,
+                trackInventory: true,
+                inventoryAccountId: true,
+                cogsAccountId: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: { lineNumber: "asc" },
+        },
+        _count: {
+          select: {
+            posReturns: true,
+            receiptAllocations: true,
+          },
+        },
+        receiptAllocations: {
+          select: {
+            bankCashTransactionId: true,
+            amount: true,
+          },
+        },
+      },
+    });
+    if (!existingSale || existingSale.invoiceType !== SalesInvoiceType.POS) {
+      throw new BadRequestException(`POS sale ${id} was not found.`);
+    }
+    this.ensureSalePosProduct(existingSale, posProduct);
+    this.assertMarketSaleAmendable(existingSale, user, postingMode);
+
+    const session = await this.ensureOpenSession(dto.sessionId, posProduct);
+    if (existingSale.posSessionId !== session.id) {
+      throw new BadRequestException("Amended sales must stay in the same open POS session.");
+    }
+    if (!session.salesRepId) {
+      throw new BadRequestException(
+        "Market POS session must be linked to a sales representative before amending sales.",
+      );
+    }
+
+    const runtimeConfig = await this.getPosRuntimeConfig();
+    if (runtimeConfig.taxFreeEnabled) {
+      dto.lines = dto.lines.map((l) => ({
+        ...l,
+        taxId: undefined,
+        taxAmount: 0,
+      }));
+    }
+    const customerId = await this.resolvePosSaleCustomerId(dto, true);
+    await this.assertActiveDestinationMarket(customerId);
+    if (existingSale.customerId !== customerId) {
+      throw new BadRequestException(
+        "Amended market sales must keep the same destination market customer.",
+      );
+    }
+
+    const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
+    await this.ensurePriceChangePermission(dto.lines, user);
+    this.ensureDiscountPermission(resolvedLines, user, { isMarketSession: true });
+    const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
+    if (totals.totalAmount <= 0) {
+      throw new BadRequestException("POS sale total must be greater than zero.");
+    }
+
+    const accountMappings = await this.getPosAccountMappings();
+    const paymentDtos = dto.payments;
+    if (paymentDtos?.length) {
+      await this.resolvePaymentDtoAccounts(
+        paymentDtos,
+        accountMappings,
+        this.prisma,
+        session.cashAccountId,
+      );
+    }
+
+    const allowCreditSale =
+      this.parseBoolean(process.env.POS_ALLOW_CREDIT_SALE, false) ||
+      this.hasPosPermissionCode("POS_CREDIT_SALE", user);
+    const bankCashIds = Array.from(
+      new Set(
+        (paymentDtos ?? [])
+          .map((payment) => payment.bankCashAccountId?.trim())
+          .filter((bankCashId): bankCashId is string => Boolean(bankCashId)),
+      ),
+    );
+    const bankCashAccounts = bankCashIds.length
+      ? await this.prisma.bankCashAccount.findMany({
+          where: { id: { in: bankCashIds }, isActive: true },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            currencyCode: true,
+            accountId: true,
+            account: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                isActive: true,
+                isPosting: true,
+                allowManualPosting: true,
+              },
+            },
+          },
+        })
+      : [];
+    if (bankCashAccounts.length !== bankCashIds.length) {
+      throw new BadRequestException("Every POS payment must use an active bank/cash account.");
+    }
+    const accountMap = new Map(bankCashAccounts.map((account) => [account.id, account]));
+    const allowNegativeStockIssue =
+      this.parseBoolean(process.env.POS_ALLOW_NEGATIVE_STOCK, false) ||
+      this.hasPosPermissionCode("POS_SELL_NEGATIVE_STOCK", user);
+    const normalizedPayments = this.normalizePayments(
+      paymentDtos ?? [],
+      accountMap,
+      totals.totalAmount,
+      allowCreditSale,
+    );
+    const autoPost = this.parseBoolean(process.env.POS_AUTO_POST, false);
+    const oldCashApplied = this.computePosPaymentCashApplied(existingSale.posPayments);
+    const priorReceiptAllocations = existingSale.receiptAllocations ?? [];
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (priorReceiptAllocations.length > 0) {
+        await tx.receiptAllocation.deleteMany({
+          where: { salesInvoiceId: existingSale.id },
+        });
+      }
+
+      await this.repCarStockService.revertSaleDeduction(tx, session.salesRepId!, {
+        id: existingSale.id,
+        reference: existingSale.reference,
+        invoiceDate: existingSale.invoiceDate,
+      });
+
+      if (existingSale.journalEntryId) {
+        await tx.salesInvoice.update({
+          where: { id: existingSale.id },
+          data: { journalEntryId: null },
+        });
+        await tx.journalEntryLine.deleteMany({
+          where: { journalEntryId: existingSale.journalEntryId },
+        });
+        await tx.journalEntry.delete({
+          where: { id: existingSale.journalEntryId },
+        });
+      }
+
+      await tx.posPayment.deleteMany({ where: { salesInvoiceId: existingSale.id } });
+
+      const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : new Date();
+      const reference = await this.generateInvoiceReference(tx);
+      const receiptNumber = await this.generateReceiptNumber(tx);
+
+      const invoice = await tx.salesInvoice.create({
+        data: {
+          reference,
+          invoiceType: SalesInvoiceType.POS,
+          status:
+            normalizedPayments.outstandingAmount > 0
+              ? SalesInvoiceStatus.PARTIALLY_PAID
+              : SalesInvoiceStatus.FULLY_PAID,
+          invoiceDate,
+          customerId,
+          currencyCode: dto.currencyCode?.trim().toUpperCase() || "JOD",
+          description: dto.description?.trim() || null,
+          subtotalAmount: this.toAmount(totals.subtotalAmount),
+          discountAmount: this.toAmount(totals.discountAmount),
+          taxAmount: this.toAmount(totals.taxAmount),
+          totalAmount: this.toAmount(totals.totalAmount),
+          allocatedAmount: this.toAmount(normalizedPayments.totalApplied),
+          outstandingAmount: this.toAmount(normalizedPayments.outstandingAmount),
+          allocationStatus:
+            normalizedPayments.outstandingAmount > 0
+              ? AllocationStatus.PARTIAL
+              : AllocationStatus.FULLY_ALLOCATED,
+          posOperationalStatus: PosOperationalStatus.COMPLETED,
+          posAccountingStatus: autoPost
+            ? PosAccountingStatus.POSTED
+            : PosAccountingStatus.PENDING_REVIEW,
+          posSessionId: session.id,
+          posCompletedAt: new Date(),
+          posReceiptNumber: receiptNumber,
+          posChangeAmount: this.toAmount(normalizedPayments.changeAmount),
+          posAmendedFromInvoiceId: existingSale.id,
+          lines: {
+            create: resolvedLines.map((line, index) =>
+              this.salesReceivablesService.buildSalesInvoiceLineInput(line, index + 1),
+            ),
+          },
+          ...this.emptyRestaurantFields(),
+        },
+        include: this.posSaleInclude(),
+      });
+
+      await tx.salesInvoice.update({
+        where: { id: existingSale.id },
+        data: {
+          status: SalesInvoiceStatus.CANCELLED,
+          posOperationalStatus: PosOperationalStatus.VOIDED,
+          posVoidedAt: new Date(),
+          posVoidReason: `Amended to ${invoice.reference}`,
+          posAmendedToInvoiceId: invoice.id,
+          outstandingAmount: this.toAmount(0),
+          allocatedAmount: this.toAmount(0),
+          allocationStatus: AllocationStatus.FULLY_ALLOCATED,
+        },
+      });
+
+      await tx.posPayment.createMany({
+        data: normalizedPayments.payments.map((payment) => ({
+          salesInvoiceId: invoice.id,
+          bankCashAccountId: payment.bankCashAccountId!,
+          paymentMethod: payment.paymentMethod as PosPaymentMethod,
+          amount: this.toAmount(payment.appliedAmount),
+          tenderedAmount: this.toAmount(payment.amount),
+          reference: payment.reference?.trim() || null,
+          deliveryCompanyId: null,
+        })),
+      });
+
+      let transferredCollectionTotal = 0;
+      if (priorReceiptAllocations.length > 0) {
+        let remainingAllocatable = Number(
+          Math.max(0, totals.totalAmount - normalizedPayments.totalApplied).toFixed(2),
+        );
+        for (const allocation of priorReceiptAllocations) {
+          if (remainingAllocatable <= 0) {
+            break;
+          }
+          const transferAmount = Number(
+            Math.min(remainingAllocatable, Number(allocation.amount)).toFixed(2),
+          );
+          if (transferAmount <= 0) {
+            continue;
+          }
+          await tx.receiptAllocation.create({
+            data: {
+              salesInvoiceId: invoice.id,
+              bankCashTransactionId: allocation.bankCashTransactionId,
+              amount: this.toAmount(transferAmount),
+            },
+          });
+          transferredCollectionTotal = Number(
+            (transferredCollectionTotal + transferAmount).toFixed(2),
+          );
+          remainingAllocatable = Number((remainingAllocatable - transferAmount).toFixed(2));
+        }
+        await this.salesReceivablesService.recomputeInvoiceAllocationAmounts(tx, invoice.id);
+      }
+
+      const invoiceWithDetails = await tx.salesInvoice.findUniqueOrThrow({
+        where: { id: invoice.id },
+        include: {
+          customer: { include: { receivableAccount: true } },
+          lines: {
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  type: true,
+                  trackInventory: true,
+                  inventoryAccountId: true,
+                  cogsAccountId: true,
+                  isActive: true,
+                },
+              },
+            },
+            orderBy: { lineNumber: "asc" },
+          },
+          posPayments: {
+            include: { bankCashAccount: { include: { account: true } } },
+          },
+        },
+      });
+
+      const inventoryPosting = await this.repCarStockService.applySaleDeduction(
+        tx,
+        session.salesRepId!,
+        {
+          id: invoiceWithDetails.id,
+          reference: invoiceWithDetails.reference,
+          invoiceDate: invoiceWithDetails.invoiceDate,
+          lines: invoiceWithDetails.lines.map((line) => ({
+            id: line.id,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            description: line.description,
+            item: line.item,
+          })),
+        },
+        { allowNegative: allowNegativeStockIssue },
+      );
+
+      const description = invoiceWithDetails.description
+        ? `${invoiceWithDetails.reference} - ${invoiceWithDetails.description}`
+        : invoiceWithDetails.reference;
+
+      const { creditLines, debitLines } = await this.buildSaleAccountingCredits(
+        tx,
+        {
+          id: invoiceWithDetails.id,
+          reference: invoiceWithDetails.reference,
+          serviceChargeAmount: invoiceWithDetails.serviceChargeAmount,
+          deliveryFeeAmount: invoiceWithDetails.deliveryFeeAmount,
+          lines: invoiceWithDetails.lines.map((line) => ({
+            lineNumber: line.lineNumber,
+            description: line.description,
+            revenueAccountId: line.revenueAccountId,
+            taxId: line.taxId,
+            taxAmount: line.taxAmount,
+            lineSubtotalAmount: line.lineSubtotalAmount,
+            discountAmount: line.discountAmount,
+          })),
+        },
+        accountMappings,
+        description,
+      );
+
+      const receivableAccountId = invoiceWithDetails.customer.receivableAccountId;
+      const paymentDebits = this.aggregatePaymentDebits(
+        normalizedPayments.payments.map((payment) => ({
+          accountId: payment.accountId,
+          appliedAmount: payment.appliedAmount,
+        })),
+        description,
+      );
+      const journalOutstanding = Number(invoiceWithDetails.outstandingAmount);
+      const receivableDebits =
+        journalOutstanding > 0
+          ? [
+              {
+                accountId: receivableAccountId,
+                description: `${description} credit balance`,
+                debitAmount: journalOutstanding,
+                creditAmount: 0,
+              },
+            ]
+          : [];
+      const cogsPostingEnabled = runtimeConfig.cogsPostingEnabled;
+      const journalLines = [
+        ...paymentDebits,
+        ...receivableDebits,
+        ...debitLines,
+        ...creditLines,
+        ...(cogsPostingEnabled ? inventoryPosting.accountingLines : []),
+      ];
+      this.salesReceivablesService.ensureBalancedJournalLines(journalLines);
+
+      const journal = await this.journalEntriesService.create(
+        {
+          entryDate: invoiceWithDetails.invoiceDate.toISOString(),
+          description,
+          sourceType: "SalesInvoice",
+          sourceId: invoiceWithDetails.id,
+          sourceNumber: invoiceWithDetails.reference,
+          lines: journalLines,
+        },
+        { tx },
+      );
+
+      let postedAt: Date | null = null;
+      if (autoPost) {
+        const posted = await this.postingService.post(journal.id, tx as never);
+        postedAt = posted.postedAt ? new Date(posted.postedAt) : new Date();
+      }
+
+      await tx.salesInvoice.update({
+        where: { id: invoiceWithDetails.id },
+        data: {
+          journalEntryId: journal.id,
+          postedAt,
+        },
+      });
+
+      await tx.posSession.update({
+        where: { id: session.id },
+        data: {
+          expectedCash: {
+            increment: this.toAmount(
+              normalizedPayments.cashAppliedAmount - oldCashApplied,
+            ),
+          },
+        },
+      });
+
+      return {
+        sale: await tx.salesInvoice.findUniqueOrThrow({
+          where: { id: invoiceWithDetails.id },
+          include: this.posSaleInclude(),
+        }),
+        transferredCollectionTotal,
+      };
+    });
+
+    const amendedSale = result.sale;
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "SalesInvoice",
+      entityId: existingSale.id,
+      action: AuditAction.UPDATE,
+      details: {
+        reference: existingSale.reference,
+        event: "AMEND_SOURCE",
+        replacementInvoiceId: amendedSale.id,
+        replacementReference: amendedSale.reference,
+        priorCollectionCount: priorReceiptAllocations.length,
+        transferredCollectionTotal: result.transferredCollectionTotal,
+      },
+    });
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "SalesInvoice",
+      entityId: amendedSale.id,
+      action: AuditAction.UPDATE,
+      details: {
+        reference: amendedSale.reference,
+        event: "AMEND_REPLACEMENT",
+        sourceInvoiceId: existingSale.id,
+        sourceReference: existingSale.reference,
+        priorCollectionCount: priorReceiptAllocations.length,
+        transferredCollectionTotal: result.transferredCollectionTotal,
+      },
+    });
+
+    const marketAccountSummary =
+      amendedSale.customer?.id != null
+        ? await this.buildMarketReceiptAccountSummary(amendedSale.customer.id)
+        : null;
+
+    return {
+      sale: this.mapPosSale(amendedSale),
+      receipt: {
+        ...this.mapReceipt(amendedSale),
+        deliveryOutstanding:
+          Number(amendedSale.outstandingAmount) > 0
+            ? Number(amendedSale.outstandingAmount).toFixed(2)
             : null,
         accountOutstanding:
           marketAccountSummary != null
@@ -5525,6 +6033,10 @@ export class PosService {
           outstandingAmount: true,
           posReceiptNumber: true,
           posCompletedAt: true,
+          posAmendedFromInvoiceId: true,
+          posAmendedFromInvoice: {
+            select: { reference: true, posReceiptNumber: true },
+          },
           lines: {
             select: {
               id: true,
@@ -5594,6 +6106,9 @@ export class PosService {
         totalAmount: invoice.totalAmount.toString(),
         allocatedAmount: invoice.allocatedAmount.toString(),
         outstandingAmount: invoice.outstandingAmount.toString(),
+        amendedFromInvoiceId: invoice.posAmendedFromInvoiceId ?? null,
+        amendedFromReference: invoice.posAmendedFromInvoice?.reference ?? null,
+        amendedFromReceiptNumber: invoice.posAmendedFromInvoice?.posReceiptNumber ?? null,
         lines: invoice.lines.map((line) => ({
           id: line.id,
           lineNumber: line.lineNumber,
@@ -6321,6 +6836,111 @@ export class PosService {
     };
   }
 
+  private computePosPaymentCashApplied(
+    payments: Array<{ paymentMethod: PosPaymentMethod; amount: Prisma.Decimal }>,
+  ) {
+    return Number(
+      payments
+        .filter((payment) => payment.paymentMethod === PosPaymentMethod.CASH)
+        .reduce((sum, payment) => sum + Number(payment.amount), 0)
+        .toFixed(2),
+    );
+  }
+
+  private evaluateMarketSaleAmendable(
+    sale: {
+      posOperationalStatus: PosOperationalStatus | null;
+      posAccountingStatus: PosAccountingStatus | null;
+      journalEntry?: { status: string } | null;
+      posSession?: {
+        status: PosSessionStatus;
+        salesRepId: string | null;
+        posProduct: PosProduct;
+      } | null;
+      _count?: {
+        posReturns: number;
+        receiptAllocations: number;
+      };
+    },
+    user?: AuthorizedUser,
+    postingMode: "BY_INVOICE" | "BY_SESSION" = "BY_SESSION",
+  ) {
+    if (!this.hasPosPermissionCode("POS_MARKET_AMEND_SALE", user)) {
+      return { canAmend: false, amendBlockReason: "NO_PERMISSION" };
+    }
+    if (!user?.posRoles?.includes("MARKET_REP")) {
+      return { canAmend: false, amendBlockReason: "REP_ONLY" };
+    }
+    if (sale.posSession?.posProduct !== PosProduct.MARKET) {
+      return { canAmend: false, amendBlockReason: "NOT_MARKET" };
+    }
+    if (sale.posOperationalStatus !== PosOperationalStatus.COMPLETED) {
+      return { canAmend: false, amendBlockReason: "NOT_COMPLETED" };
+    }
+    if (
+      sale.posAccountingStatus === PosAccountingStatus.POSTED ||
+      sale.posAccountingStatus === PosAccountingStatus.REVERSED
+    ) {
+      return { canAmend: false, amendBlockReason: "ACCOUNTING_POSTED" };
+    }
+    if (postingMode !== "BY_INVOICE") {
+      return { canAmend: false, amendBlockReason: "POSTING_MODE" };
+    }
+    if (sale.posSession?.status !== PosSessionStatus.OPEN) {
+      return { canAmend: false, amendBlockReason: "SESSION_CLOSED" };
+    }
+    if (sale.journalEntry?.status && sale.journalEntry.status !== "DRAFT") {
+      return { canAmend: false, amendBlockReason: "JOURNAL_POSTED" };
+    }
+    if ((sale._count?.posReturns ?? 0) > 0) {
+      return { canAmend: false, amendBlockReason: "HAS_RETURNS" };
+    }
+    if (!user?.salesRepId || sale.posSession?.salesRepId !== user.salesRepId) {
+      return { canAmend: false, amendBlockReason: "WRONG_REP" };
+    }
+    return { canAmend: true, amendBlockReason: null };
+  }
+
+  private assertMarketSaleAmendable(
+    sale: {
+      posOperationalStatus: PosOperationalStatus | null;
+      posAccountingStatus: PosAccountingStatus | null;
+      journalEntry?: { status: string } | null;
+      posSession?: {
+        status: PosSessionStatus;
+        salesRepId: string | null;
+        posProduct: PosProduct;
+      } | null;
+      _count?: {
+        posReturns: number;
+        receiptAllocations: number;
+      };
+    },
+    user?: AuthorizedUser,
+    postingMode: "BY_INVOICE" | "BY_SESSION" = "BY_SESSION",
+  ) {
+    const eligibility = this.evaluateMarketSaleAmendable(sale, user, postingMode);
+    if (eligibility.canAmend) {
+      return;
+    }
+    const messages: Record<string, string> = {
+      NO_PERMISSION: "You do not have permission to amend market POS sales.",
+      REP_ONLY: "Only market sales representatives can amend completed invoices.",
+      NOT_MARKET: "This sale is not a market POS invoice.",
+      NOT_COMPLETED: "Only completed POS sales can be amended.",
+      ACCOUNTING_POSTED: "Posted POS sales cannot be amended.",
+      POSTING_MODE: "Market POS sale amendment requires BY_INVOICE posting mode.",
+      SESSION_CLOSED: "Cannot amend sales after the POS session is closed.",
+      JOURNAL_POSTED: "Cannot amend sales after the journal entry is posted.",
+      HAS_RETURNS: "Cannot amend a sale that already has returns.",
+      WRONG_REP: "You can only amend sales from your own rep session.",
+    };
+    throw new BadRequestException(
+      messages[eligibility.amendBlockReason ?? "NOT_COMPLETED"] ??
+        "This market POS sale cannot be amended.",
+    );
+  }
+
   private ensureDraftLikePosSale(
     sale: {
       id: string;
@@ -6820,6 +7440,9 @@ export class PosService {
           terminalName: true,
           branchName: true,
           posProduct: true,
+          status: true,
+          salesRepId: true,
+          cashAccountId: true,
           cashierUser: {
             select: { id: true, email: true, name: true },
           },
@@ -6873,6 +7496,12 @@ export class PosService {
       },
       journalEntry: {
         select: { id: true, reference: true, status: true, postedAt: true },
+      },
+      posAmendedFromInvoice: {
+        select: { id: true, reference: true, posReceiptNumber: true },
+      },
+      posAmendedToInvoice: {
+        select: { id: true, reference: true, posReceiptNumber: true },
       },
     } satisfies Prisma.SalesInvoiceInclude;
   }
@@ -7144,6 +7773,12 @@ export class PosService {
       isCorrected: row.isCorrected ?? false,
       correctedAt: row.correctedAt?.toISOString() ?? null,
       correctionReason: row.correctionReason ?? null,
+      posAmendedFromInvoiceId: row.posAmendedFromInvoiceId ?? null,
+      posAmendedToInvoiceId: row.posAmendedToInvoiceId ?? null,
+      posAmendedFromReference: row.posAmendedFromInvoice?.reference ?? null,
+      posAmendedFromReceiptNumber: row.posAmendedFromInvoice?.posReceiptNumber ?? null,
+      posAmendedToReference: row.posAmendedToInvoice?.reference ?? null,
+      posAmendedToReceiptNumber: row.posAmendedToInvoice?.posReceiptNumber ?? null,
       postedAt: row.postedAt?.toISOString() ?? null,
       journalEntry: row.journalEntry
         ? {

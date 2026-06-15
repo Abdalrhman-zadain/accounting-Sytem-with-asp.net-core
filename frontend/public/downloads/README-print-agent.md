@@ -47,4 +47,6 @@ Include the zip in the frontend static assets when deploying (same as other file
 
 See `tools/print-agent/README.md` for agent install steps and WebView2 requirements.
 
-**Note:** `build-release.sh` exists only for optional CI/Linux automation; the Windows `.ps1` / `.cmd` scripts are what you should use to produce the cashier zip.
+**Current build:** v1.0.3 — rebuild with `tools\print-agent\build-release.ps1` (Windows) or `tools/print-agent/build-release.sh` (Linux with .NET 8 SDK) after agent code changes.
+
+**Note:** `build-release.sh` exists for optional CI/Linux automation; the Windows `.ps1` / `.cmd` scripts are what you should use to produce the cashier zip.

@@ -148,8 +148,8 @@ export class PosMarketService {
     return this.terminal.listDraftSales(sessionId, user);
   }
 
-  listCompletedSales(user?: AuthorizedUser) {
-    return this.terminal.listCompletedSales(user);
+  listCompletedSales(user?: AuthorizedUser, sessionId?: string) {
+    return this.terminal.listCompletedSales(user, sessionId);
   }
 
   listPendingReview(user?: AuthorizedUser) {
@@ -202,6 +202,10 @@ export class PosMarketService {
 
   completeSale(dto: CompletePosSaleDto, user?: AuthorizedUser) {
     return this.terminal.completeSale(dto, user);
+  }
+
+  amendSale(id: string, dto: CompletePosSaleDto, user?: AuthorizedUser) {
+    return this.terminal.amendSale(id, dto, user);
   }
 
   voidSale(id: string, dto: VoidPosSaleDto, user?: AuthorizedUser) {

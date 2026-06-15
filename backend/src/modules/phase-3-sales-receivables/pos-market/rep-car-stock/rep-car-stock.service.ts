@@ -283,6 +283,71 @@ export class RepCarStockService {
     return { accountingLines };
   }
 
+  async revertSaleDeduction(
+    tx: Prisma.TransactionClient,
+    salesRepId: string,
+    invoice: {
+      id: string;
+      reference: string;
+      invoiceDate: Date;
+    },
+  ) {
+    const saleMovements = await tx.repCarStockMovement.findMany({
+      where: {
+        salesRepId,
+        transactionType: "SalesInvoice",
+        transactionId: invoice.id,
+        movementType: RepCarStockMovementType.SALE_OUT,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (saleMovements.length === 0) {
+      return;
+    }
+
+    const alreadyReverted = await tx.repCarStockMovement.count({
+      where: {
+        salesRepId,
+        transactionType: "SalesInvoice",
+        transactionId: invoice.id,
+        movementType: RepCarStockMovementType.SALE_RETURN_IN,
+      },
+    });
+    if (alreadyReverted > 0) {
+      throw new BadRequestException(
+        `Rep car stock for invoice ${invoice.reference} was already reversed.`,
+      );
+    }
+
+    for (const movement of saleMovements) {
+      const quantityIn = movement.quantityOut;
+      const valueIn = movement.valueOut;
+
+      await this.applyRepCarBalance(tx, {
+        salesRepId,
+        itemId: movement.itemId,
+        quantityDelta: quantityIn,
+        valueDelta: valueIn,
+      });
+
+      await this.createRepCarMovement(tx, {
+        movementType: RepCarStockMovementType.SALE_RETURN_IN,
+        transactionType: "SalesInvoice",
+        transactionId: invoice.id,
+        transactionLineId: movement.transactionLineId,
+        transactionReference: invoice.reference,
+        transactionDate: invoice.invoiceDate,
+        salesRepId,
+        itemId: movement.itemId,
+        quantityIn,
+        unitCost: movement.unitCost,
+        valueIn,
+        description: movement.description,
+      });
+    }
+  }
+
   async listBalances(salesRepId: string, user?: AuthorizedUser) {
     const scope = this.resolveSalesRepScope(user, salesRepId);
     const targetRepId = scope ?? salesRepId;

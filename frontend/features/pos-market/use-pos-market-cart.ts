@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   computeCartMetrics,
   createLocalId,
+  getAmendEffectiveOnHand,
   getCartLineKey,
   mapInventoryItemToCartLine,
   normalizePaymentAccountMethod,
@@ -20,6 +21,8 @@ type UsePosMarketCartOptions = {
   paymentAccounts: BankCashAccount[];
   posSettings?: PosSettings | null;
   defaultCashAccountId?: string | null;
+  /** Original invoice line qty per item while amending — adds virtual stock on the register. */
+  amendReleasedQtyByItemId?: Record<string, number>;
 };
 
 export function usePosMarketCart({
@@ -27,6 +30,7 @@ export function usePosMarketCart({
   paymentAccounts,
   posSettings,
   defaultCashAccountId,
+  amendReleasedQtyByItemId = {},
 }: UsePosMarketCartOptions) {
   const [cartLines, setCartLines] = useState<PosMarketCartLine[]>([]);
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<DiscountType>("FIXED");
@@ -120,7 +124,8 @@ export function usePosMarketCart({
     ): string | null => {
       const warehouseId = sessionWarehouseId ?? item.preferredWarehouseId ?? null;
       const sellByWeight = Boolean(item.allowFractionalQuantity);
-      const onHand = parseAmount(item.onHandQuantity);
+      const catalogOnHand = parseAmount(item.onHandQuantity);
+      const onHand = getAmendEffectiveOnHand(catalogOnHand, item.id, amendReleasedQtyByItemId);
       const weight = options?.weight;
       const hasExplicitEntry =
         !sellByWeight && options?.quantity != null && options?.unitPrice != null;
@@ -134,6 +139,7 @@ export function usePosMarketCart({
       }
 
       const draftLine = mapInventoryItemToCartLine(item, warehouseId, weight);
+      draftLine.onHandQuantity = onHand;
 
       if (hasExplicitEntry) {
         const quantity = Math.max(1, Math.floor(options!.quantity!));
@@ -204,7 +210,7 @@ export function usePosMarketCart({
       ensureDefaultPayment();
       return null;
     },
-    [ensureDefaultPayment, negativeStockAllowed, sessionWarehouseId],
+    [amendReleasedQtyByItemId, ensureDefaultPayment, negativeStockAllowed, sessionWarehouseId],
   );
 
   const updateLineQuantity = useCallback(
@@ -332,6 +338,21 @@ export function usePosMarketCart({
     });
   }, [cartMetrics.total]);
 
+  const loadAmendSale = useCallback(
+    (sale: {
+      cartLines: PosMarketCartLine[];
+      invoiceDiscountType: DiscountType;
+      invoiceDiscountValue: number;
+    }) => {
+      setEditingInvoiceId(null);
+      setCartLines(sale.cartLines);
+      setInvoiceDiscountType(sale.invoiceDiscountType);
+      setInvoiceDiscountValue(sale.invoiceDiscountValue);
+      setPaymentEntries([]);
+    },
+    [],
+  );
+
   return {
     cartLines,
     cartMetrics,
@@ -348,6 +369,7 @@ export function usePosMarketCart({
     removeLine,
     clearCart,
     loadHeldSale,
+    loadAmendSale,
     setSinglePaymentMethod,
     updatePaymentAmount,
     syncPaymentTotal,
