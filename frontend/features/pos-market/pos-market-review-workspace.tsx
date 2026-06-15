@@ -10,6 +10,7 @@ import {
   approvePosMarketAccounting,
   approvePosMarketSessionAccounting,
   getPendingPosMarketReview,
+  getPosMarketSettings,
   getPosMarketSessions,
   rejectPosMarketAccounting,
   rejectPosMarketSessionAccounting,
@@ -47,6 +48,14 @@ export function PosMarketReviewWorkspace() {
     queryFn: () => getPosMarketSessions(token),
     enabled: Boolean(token),
   });
+
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.posMarketSettings(token ?? null),
+    queryFn: () => getPosMarketSettings(token),
+    enabled: Boolean(token),
+  });
+
+  const isSessionPosting = settingsQuery.data?.runtime.postingMode === "BY_SESSION";
 
   const reviewSessionGroups = useMemo<ReviewSessionGroup[]>(() => {
     const groups = new Map<string, ReviewSessionGroup>();
@@ -142,6 +151,12 @@ export function PosMarketReviewWorkspace() {
         </div>
       ) : null}
 
+      {isSessionPosting ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          {t("pos.review.sessionPostingOnly")}
+        </div>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-3">
           <div className="text-sm font-black uppercase tracking-wide" style={{ color: POS_MARKET_THEME.colors.primary }}>
@@ -234,7 +249,7 @@ export function PosMarketReviewWorkspace() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
+                      {!isSessionPosting && hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
                         <button
                           type="button"
                           onClick={() => approveSaleMutation.mutate(sale.id)}
@@ -244,7 +259,7 @@ export function PosMarketReviewWorkspace() {
                           {t("pos.review.approve")}
                         </button>
                       ) : null}
-                      {hasPermission(user, "POS_REJECT_ACCOUNTING") ? (
+                      {!isSessionPosting && hasPermission(user, "POS_REJECT_ACCOUNTING") ? (
                         <button
                           type="button"
                           onClick={() => rejectSaleMutation.mutate(sale.id)}
@@ -254,7 +269,7 @@ export function PosMarketReviewWorkspace() {
                           {t("pos.review.reject")}
                         </button>
                       ) : null}
-                      {hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
+                      {!isSessionPosting && hasPermission(user, "POS_APPROVE_ACCOUNTING") ? (
                         <button
                           type="button"
                           onClick={() => reverseSaleMutation.mutate(sale.id)}

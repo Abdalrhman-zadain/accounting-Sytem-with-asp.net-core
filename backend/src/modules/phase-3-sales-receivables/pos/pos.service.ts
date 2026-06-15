@@ -965,7 +965,7 @@ export class PosService {
         invoiceType: SalesInvoiceType.POS,
         posOperationalStatus: PosOperationalStatus.COMPLETED,
         posAccountingStatus: {
-          in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.REJECTED],
+          in: [PosAccountingStatus.PENDING_REVIEW, PosAccountingStatus.UNPOSTED],
         },
         posSession: { posProduct },
       },
