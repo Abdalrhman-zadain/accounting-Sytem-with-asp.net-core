@@ -354,7 +354,7 @@ export class RepCarStockService {
     if (!targetRepId) {
       throw new BadRequestException("salesRepId is required.");
     }
-    if (scope && scope !== salesRepId) {
+    if (scope && salesRepId && scope !== salesRepId) {
       throw new ForbiddenException("You can only view your own rep car stock.");
     }
 

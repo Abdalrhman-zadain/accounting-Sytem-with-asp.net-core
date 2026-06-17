@@ -69,9 +69,14 @@ Access is controlled by **POS access roles** on the user (`UserPosAccessRole`).
 
 ### Create a market cashier
 
-**Seed (dev):** `market_cashier` / `market123` — created by `npm run seed:market-cashier` (`backend/prisma/setup-pos-market-cashier.ts`)
+**Seed (dev, main `npm run seed`):**
 
-**Market sales rep (dev):** `market_rep` / `market123` — created by `npm run seed:market` with `MARKET_REP` role and linked `User.salesRepId` → `REP-MARKET-01`. Sees only destination markets assigned to that rep. The sidebar does not show **نقاط بيع المطعم** (restaurant POS); direct `/pos/*` URLs are denied by `canAccessRoute`.
+- `admin` / `admin123` — ERP admin with `ACCOUNTANT` POS role (review, receivables, rep loads)
+- `amer` / `amer123` — `MARKET_REP` linked to `REP-AMER` (مندوب عامر). Opening inventory in `WH-AMER` is auto-loaded onto the rep car (`RCL-AMER-OPENING-01`).
+
+Optional scripts (not part of main seed): `npm run seed:market-cashier` (`market` / `market123`), restaurant `cashier` from foundation seed.
+
+**Market sales rep (standalone):** `npm run seed:market` creates `REP-AMER` + `amer` login. Run `npm run seed:amer-rep-load` after opening inventory to move `WH-AMER` stock to the rep car.
 
 ### Create a market sales rep login (admin UI)
 
@@ -143,7 +148,8 @@ For a new site with many products, use **Inventory → Items → Import Products
 Market products can be loaded from `backend/data/shouq.xlsx` (sweets/snacks catalog). Codes are `MKT-SHQ-*` under `MARKET-SNACKS`. This script now expects the target item group/category and warehouse to already exist. Legacy demo products (`MKT-001` … `MKT-012`) are deactivated when this seed runs.
 
 ```bash
-cd backend && npm run seed:market    # destination markets, reps, market logins
+cd backend && npm run seed:market    # REP-AMER + amer login
+cd backend && npm run seed:amer-rep-load  # move WH-AMER opening stock to rep car (after opening inventory)
 cd backend && npm run seed:shouq     # load Shouq catalog inventory only (requires existing group/category + warehouse)
 ```
 
@@ -168,10 +174,9 @@ Market POS sells **to** downstream markets. Each destination market is an ERP `C
 - Cashier must select a destination market before **Pay** or **Hold** (picker below the shift bar on `/pos-market/register`).
 - Markets load from `GET /api/pos-market/destination-markets` — **every active ERP customer** except walk-in (`POS-WALKIN`). No customer is exclusive to a sales rep; optional `salesRepId` on the customer is for reporting only.
 - Walk-in customer (`POS-WALKIN`) is rejected for market sales.
-- Demo destination markets are seeded with codes `MKT-AMMAN-01`, `MKT-IRBID-02`, `MKT-ZARQA-03` (`npm run seed:market`).
-- Session warehouse = main stock location for **loads** (تحميل سيارة); customer = who received the goods on sale.
-- Register catalog on-hand quantities are scoped to the **active sales rep's car balance** (`RepCarStockBalance`), not main-warehouse on-hand. Provide actual market inventory through normal inventory entry/import/receipt flows or the optional `npm run seed:shouq` catalog load if you need seeded stock.
-- Demo markets are linked to sales reps `REP-MARKET-01` / `REP-MARKET-02` for receivables filtering.
+- Demo destination markets are **not** seeded by default. Add ERP customers and optional `salesRepId` for reporting.
+- Session warehouse = stock location for **loads** (تحميل سيارة); customer = who received the goods on sale.
+- Register catalog on-hand quantities are scoped to the **active sales rep's car balance** (`RepCarStockBalance`), not main-warehouse on-hand. Main seed loads `WH-AMER` opening stock onto `REP-AMER` automatically.
 
 ### Credit sales (ذمم)
 
@@ -412,5 +417,5 @@ Golden path creates real auditable POS sales and a customer receipt (not rolled 
 4. Receipt print (browser fallback when QZ Tray unavailable)
 5. Restaurant user `cashier` still works on `/pos/register`; cannot call `/api/pos-market`
 6. Accountant sees market review/reports routes under `/pos-market/*`
-7. Login `market_rep / market123` → `/pos-market/receivables` shows only `REP-MARKET-01` markets; `/pos-market/my-stock` shows car balances after a rep load
+7. Login `amer / amer123` → `/pos-market/my-stock` shows car balances loaded from `WH-AMER`; `/pos-market/receivables` for collections
 8. Partial or pay-later sale from register → balance appears in receivables; collect reduces `outstandingAmount`

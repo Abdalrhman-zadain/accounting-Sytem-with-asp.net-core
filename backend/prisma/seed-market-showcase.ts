@@ -138,7 +138,7 @@ export async function seedMarketShowcase(
     prisma.inventoryWarehouse.findUniqueOrThrow({ where: { code: 'WH-MAIN' } }),
     prisma.inventoryItemCategory.findUniqueOrThrow({ where: { code: 'MARKET-SNACKS' } }),
     prisma.inventoryUnitOfMeasure.findMany(),
-    prisma.salesRepresentative.findUniqueOrThrow({ where: { code: 'REP-MARKET-01' } }),
+    prisma.salesRepresentative.findUniqueOrThrow({ where: { code: 'REP-AMER' } }),
   ]);
 
   const unitByCode = new Map(units.map((unit) => [unit.code, unit]));
@@ -263,7 +263,7 @@ export async function seedMarketShowcase(
   const totalRepCarQty = SHOWCASE_PRODUCTS.reduce((sum, row) => sum + row.repCarQty, 0);
 
   console.log(
-    `Market showcase ready: ${SHOWCASE_PRODUCTS.length} products (${MARKET_DEMO_CODE_PREFIX}*), ${totalWarehouseQty} units in WH-MAIN, ${totalRepCarQty} units on REP-MARKET-01 car.`,
+    `Market showcase ready: ${SHOWCASE_PRODUCTS.length} products (${MARKET_DEMO_CODE_PREFIX}*), ${totalWarehouseQty} units in WH-MAIN, ${totalRepCarQty} units on REP-AMER car.`,
   );
   await seedMarketPosRuntimeSettings(prisma);
   printShowcaseGuide();
@@ -477,7 +477,7 @@ async function seedShowcaseRepCarLoad(
   });
 
   console.log(
-    `Showcase rep car load ${SHOWCASE_REP_LOAD_REF}: ${repLines.length} products on REP-MARKET-01.`,
+    `Showcase rep car load ${SHOWCASE_REP_LOAD_REF}: ${repLines.length} products on REP-AMER.`,
   );
 }
 
@@ -488,8 +488,8 @@ function printShowcaseGuide() {
   console.log('Chart of accounts:      /accounts   → 1131001 Merchandise Inventory');
   console.log('Market POS register:    /pos-market/register');
   console.log('  Login: market_cashier / market123');
-  console.log('  Open shift → pick rep REP-MARKET-01 → pick destination market → sell MKT-DEMO-*');
-  console.log('Rep car stock:            /pos-market/my-stock  (login as market_rep / market123)');
+  console.log('  Open shift → pick rep REP-AMER → pick destination market → sell MKT-DEMO-*');
+  console.log('Rep car stock:            /pos-market/my-stock  (login as amer / amer123)');
   console.log('---');
 }
 

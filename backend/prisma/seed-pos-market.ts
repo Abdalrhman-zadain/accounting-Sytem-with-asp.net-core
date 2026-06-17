@@ -1,12 +1,12 @@
 import {
   PosAccessRoleCode,
   PosPermissionCode,
-  Prisma,
   PrismaClient,
 } from '../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
 export const MARKET_SNACKS_GROUP_CODE = 'MARKET-SNACKS';
+export const REP_AMER_CODE = 'REP-AMER';
 
 /** Item group + category required by market showcase and Shouq catalog seeds. */
 export async function ensureMarketSnackFoundation(prisma: PrismaClient) {
@@ -49,101 +49,29 @@ export async function seedPosMarketDemo(
   prisma: PrismaClient,
   _options: { adminUserId: string },
 ) {
-  console.log('Seeding market POS destination markets and reps...');
+  console.log('Seeding market POS Amer sales rep...');
 
   await ensureMarketSnackFoundation(prisma);
 
-  const [tradeReceivableAccount, taxableTreatment] = await Promise.all([
-    prisma.account.findUniqueOrThrow({ where: { code: '1121001' } }),
-    prisma.taxTreatment.findFirstOrThrow({ where: { code: 'TAXABLE' } }),
-  ]);
-
-  const marketRepNorth = await prisma.salesRepresentative.upsert({
-    where: { code: 'REP-MARKET-01' },
+  const amerRep = await prisma.salesRepresentative.upsert({
+    where: { code: REP_AMER_CODE },
     update: {
-      name: 'مندوب الشمال / North Market Rep',
-      phone: '+962 79 200 0001',
+      name: 'مندوب عامر / Amer Sales Rep',
+      phone: '+962 79 200 0000',
       status: 'ACTIVE',
     },
     create: {
-      code: 'REP-MARKET-01',
-      name: 'مندوب الشمال / North Market Rep',
-      phone: '+962 79 200 0001',
+      code: REP_AMER_CODE,
+      name: 'مندوب عامر / Amer Sales Rep',
+      phone: '+962 79 200 0000',
       status: 'ACTIVE',
     },
   });
 
-  const marketRepCentral = await prisma.salesRepresentative.upsert({
-    where: { code: 'REP-MARKET-02' },
-    update: {
-      name: 'مندوب الوسط / Central Market Rep',
-      phone: '+962 79 200 0002',
-      status: 'ACTIVE',
-    },
-    create: {
-      code: 'REP-MARKET-02',
-      name: 'مندوب الوسط / Central Market Rep',
-      phone: '+962 79 200 0002',
-      status: 'ACTIVE',
-    },
-  });
-
-  const marketDestinationCustomers = [
-    {
-      code: 'MKT-AMMAN-01',
-      name: 'سوق عمان الشمال / Amman North Market',
-      contactInfo: '+962 79 100 0001',
-      salesRepId: marketRepNorth.id,
-    },
-    {
-      code: 'MKT-IRBID-02',
-      name: 'سوق إربد / Irbid Market',
-      contactInfo: '+962 79 100 0002',
-      salesRepId: marketRepNorth.id,
-    },
-    {
-      code: 'MKT-ZARQA-03',
-      name: 'سوق الزرقاء / Zarqa Market',
-      contactInfo: '+962 79 100 0003',
-      salesRepId: marketRepCentral.id,
-    },
-  ] as const;
-
-  for (const marketCustomer of marketDestinationCustomers) {
-    await prisma.customer.upsert({
-      where: { code: marketCustomer.code },
-      update: {
-        name: marketCustomer.name,
-        contactInfo: marketCustomer.contactInfo,
-        salesRepId: marketCustomer.salesRepId,
-        salesRepresentative:
-          marketCustomer.salesRepId === marketRepNorth.id
-            ? marketRepNorth.name
-            : marketRepCentral.name,
-        isActive: true,
-        taxTreatmentId: taxableTreatment.id,
-      },
-      create: {
-        code: marketCustomer.code,
-        name: marketCustomer.name,
-        contactInfo: marketCustomer.contactInfo,
-        salesRepId: marketCustomer.salesRepId,
-        salesRepresentative:
-          marketCustomer.salesRepId === marketRepNorth.id
-            ? marketRepNorth.name
-            : marketRepCentral.name,
-        taxTreatmentId: taxableTreatment.id,
-        creditLimit: new Prisma.Decimal(1000),
-        receivableAccountId: tradeReceivableAccount.id,
-        isActive: true,
-      },
-    });
-  }
-
-  await seedMarketRepUser(prisma, marketRepNorth.id);
+  await seedAmerRepUser(prisma, amerRep.id);
 
   console.log(
-    `Market POS: seeded ${marketDestinationCustomers.length} destination markets and market rep access. Run npm run seed:market-showcase for demo products.`,
+    'Market POS: seeded Amer sales rep. Run seed after opening inventory to load WH-AMER stock onto the rep car.',
   );
 }
 
@@ -171,7 +99,7 @@ const marketRepPermissionCodes: PosPermissionCode[] = [
   'POS_MARKET_AMEND_SALE',
 ];
 
-async function seedMarketRepUser(prisma: PrismaClient, salesRepId: string) {
+async function seedAmerRepUser(prisma: PrismaClient, salesRepId: string) {
   await prisma.$executeRawUnsafe(
     `ALTER TYPE "PosAccessRoleCode" ADD VALUE IF NOT EXISTS 'MARKET_REP'`,
   );
@@ -191,14 +119,14 @@ async function seedMarketRepUser(prisma: PrismaClient, salesRepId: string) {
       update: {
         name: 'Market Sales Rep',
         description:
-          'Market field sales rep — sell on credit and collect receivables for assigned destination markets.',
+          'Market field sales rep — sell on credit and collect receivables.',
         isActive: true,
       },
       create: {
         code: PosAccessRoleCode.MARKET_REP,
         name: 'Market Sales Rep',
         description:
-          'Market field sales rep — sell on credit and collect receivables for assigned destination markets.',
+          'Market field sales rep — sell on credit and collect receivables.',
         isActive: true,
       },
     });
@@ -224,42 +152,41 @@ async function seedMarketRepUser(prisma: PrismaClient, salesRepId: string) {
       });
     }
 
-    const hashedPassword = await bcrypt.hash('market123', 10);
-    const marketRepUser = await tx.user.upsert({
-      where: { username: 'market_rep' },
+    const hashedPassword = await bcrypt.hash('amer123', 10);
+    const amerRepUser = await tx.user.upsert({
+      where: { username: 'amer' },
       update: {
-        email: 'market_rep@genius.com',
+        email: 'amer@genius.com',
         password: hashedPassword,
-        name: 'Market Sales Rep',
+        name: 'مندوب عامر',
         salesRepId,
         isActive: true,
         role: 'USER',
       },
       create: {
-        username: 'market_rep',
-        email: 'market_rep@genius.com',
+        username: 'amer',
+        email: 'amer@genius.com',
         password: hashedPassword,
-        name: 'Market Sales Rep',
+        name: 'مندوب عامر',
         salesRepId,
         isActive: true,
         role: 'USER',
       },
     });
 
-    await tx.userPosAccessRole.deleteMany({ where: { userId: marketRepUser.id } });
+    await tx.userPosAccessRole.deleteMany({ where: { userId: amerRepUser.id } });
     await tx.userPosAccessRole.create({
       data: {
-        userId: marketRepUser.id,
+        userId: amerRepUser.id,
         roleId: marketRepRole.id,
       },
     });
   });
 
-  console.log('Market rep user ready: market_rep / market123 (default route /pos-market/receivables)');
+  console.log('Amer rep user ready: amer / amer123 (default route /pos-market/receivables)');
 }
 
 async function main() {
-  const { PrismaClient } = await import('../src/generated/prisma');
   const prisma = new PrismaClient();
   try {
     const admin = await prisma.user.findFirst({

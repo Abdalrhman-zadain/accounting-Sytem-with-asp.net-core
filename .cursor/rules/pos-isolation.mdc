@@ -1,0 +1,44 @@
+---
+description: Keep restaurant POS and market POS code isolated
+globs:
+  - frontend/features/pos/**
+  - frontend/features/pos-market/**
+  - frontend/features/pos-shared/**
+  - backend/src/modules/phase-3-sales-receivables/pos/**
+  - backend/src/modules/phase-3-sales-receivables/pos-market/**
+---
+
+# POS product isolation
+
+## Restaurant POS (frozen for new features)
+
+- Frontend: `frontend/features/pos/`
+- Routes: `/pos/*`
+- Backend: `backend/src/modules/phase-3-sales-receivables/pos/`
+- API: `/api/pos/*`
+
+Only bugfixes unless the user explicitly asks for restaurant POS changes.
+
+## Market POS (new work)
+
+- Frontend: `frontend/features/pos-market/`
+- Routes: `/pos-market/*`
+- Backend: `backend/src/modules/phase-3-sales-receivables/pos-market/`
+- API: `/api/pos-market/*`
+
+All new market/retail POS features go here.
+
+## Shared layer
+
+- `frontend/features/pos-shared` — hooks/helpers used by both products
+- `frontend/lib/api` — HTTP fetchers (`/pos/*`, `/pos-market/*`, inventory, etc.)
+
+## Hard rules
+
+- Never import `features/pos` from `features/pos-market` or the reverse.
+- Both products may import `features/pos-shared` and `lib/api`.
+- `pos-shared` must not import `features/pos` or `features/pos-market`.
+- Never add market flows to `pos-page.tsx`.
+- Never add restaurant table/kitchen/delivery flows to `pos-market`.
+- Shared UI primitives (`components/ui`) and ERP modules (inventory, accounting) may be reused.
+- Update `docs/pos-market/README.md` when market POS structure or behavior changes.

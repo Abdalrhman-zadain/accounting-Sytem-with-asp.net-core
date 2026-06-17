@@ -2,11 +2,9 @@ import { PrismaClient } from '../src/generated/prisma';
 import { truncateDatabase } from './seed-database';
 import { runFoundationSeed } from './seed-foundation';
 import { seedPosMarketDemo } from './seed-pos-market';
+import { seedAmerRepCarLoad } from './seed-amer-rep-load';
 import { seedMarketPosRuntimeSettings } from './seed-market-pos-settings';
-import { seedPosRegisterDemo } from './seed-pos-register';
-import { setupPosKitchenUser } from './setup-pos-kitchen';
-import { setupPosMarketCashierUser } from './setup-pos-market-cashier';
-import { setupPosWaiterUser } from './setup-pos-waiter';
+import { setupAdminAccountantRole } from './setup-admin-accountant';
 
 import { seedOpeningJournalEntry } from './seed-opening-entry';
 import { seedOpeningInventoryFromWorkbook } from './seed-opening-inventory';
@@ -23,23 +21,18 @@ async function main() {
 
   await seedOpeningInventoryFromWorkbook(prisma);
 
-  await seedPosRegisterDemo(prisma, {
-    adminUserId: ctx.admin.id,
-    cashierUserId: ctx.cashier.id,
-  });
-
   await seedPosMarketDemo(prisma, {
     adminUserId: ctx.admin.id,
   });
 
+  await seedAmerRepCarLoad(prisma);
+
   await seedMarketPosRuntimeSettings(prisma);
 
-  await setupPosKitchenUser(prisma);
-  await setupPosWaiterUser(prisma);
-  await setupPosMarketCashierUser(prisma);
+  await setupAdminAccountantRole(prisma);
 
   console.log('Basic seed complete.');
-  console.log('POS logins: cashier/cashier123 (restaurant), market/market123 (market POS only), kitchen/kitchen123, waiter/waiter123, admin from foundation seed.');
+  console.log('Logins: admin / admin123 (ERP + accountant), amer / amer123 (market rep).');
 }
 
 main()
