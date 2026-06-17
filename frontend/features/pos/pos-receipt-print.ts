@@ -1,10 +1,23 @@
 /**
  * pos-receipt-print.ts
- * Thermal 80mm sales receipt print utility for POS payment completion.
+ * Compact thermal 80mm sales receipt for POS payment completion.
  * Generates client-side HTML and triggers window.print() for receipt printers.
  */
 
 import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
+import {
+  THERMAL_PRINT_READY_DELAY_MS,
+  waitForDocumentImages,
+} from "@/features/pos/pos-print-bridge";
+import {
+  buildThermalReceiptDocumentHtml,
+  fmtThermalReceiptAmt,
+  thermalReceiptFooterSpacerHtml,
+  thermalReceiptItemLine,
+  thermalReceiptRowLine,
+  thermalReceiptTableClose,
+  thermalReceiptTableOpen,
+} from "@/features/pos-shared/thermal-receipt-layout";
 
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
 export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
@@ -38,27 +51,78 @@ export type PosReceiptData = {
   }>;
 };
 
-const SEP = "─".repeat(28);
+const ARABIC_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: "نقد",
+  CARD: "بطاقة",
+  CLIQ: "كليك",
+  BANK_TRANSFER: "تحويل بنكي",
+  WALLET: "محفظة",
+  MIXED: "مختلط",
+  DELIVERY: "توصيل",
+};
 
-function fmtDate(val?: string | Date | null): string {
+export function buildArabicPaymentSummary(
+  methods: string[],
+  amounts?: number[],
+): string {
+  const uniqueMethods = [...new Set(methods.filter(Boolean))];
+  if (uniqueMethods.length === 0) {
+    return "";
+  }
+  if (uniqueMethods.length === 1) {
+    const label = ARABIC_PAYMENT_METHOD_LABELS[uniqueMethods[0]] ?? uniqueMethods[0];
+    if (amounts?.length === 1) {
+      return `${label} ${amounts[0].toFixed(2)}`;
+    }
+    return label;
+  }
+  return "مختلط";
+}
+
+export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosReceiptData {
+  return {
+    ...receipt,
+    cashierName:
+      receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
+        ? "كاشير"
+        : receipt.cashierName,
+    paymentSummary: receipt.paymentSummary.trim() || receipt.paymentSummary,
+  };
+}
+
+const SEP = "─".repeat(32);
+
+const RESTAURANT_RECEIPT_EXTRA_CSS = `
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 2px;
+    }
+    .brand-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: right;
+    }
+    .logo {
+      flex: 0 0 auto;
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+    }
+    @media print {
+      .logo {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+`;
+
+function fmtDateCompact(val?: string | Date | null): string {
   if (!val) return "—";
   const d = new Date(val);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  );
-}
-
-function fmtAmt(val: number): string {
-  return val.toFixed(2);
-}
-
-function rowLine(label: string, value: string): string {
-  const maxLabel = 16;
-  const truncLabel = label.length > maxLabel ? label.slice(0, maxLabel) : label;
-  const padLabel = truncLabel.padEnd(maxLabel, " ");
-  return `<div class="row"><span class="lbl">${padLabel}</span><span class="val">${value}</span></div>`;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
@@ -80,189 +144,113 @@ function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+function buildBrandHeaderHtml(receipt: PosReceiptData): string {
+  const logoUrl = resolveReceiptLogoUrl(receipt);
+  const identityMeta = [
+    receipt.branchName,
+    receipt.taxNumber ? `ض.ب: ${receipt.taxNumber}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  if (logoUrl) {
+    return `
+      <div class="brand-row">
+        <img class="logo" src="${logoUrl}" alt="Logo"/>
+        <div class="brand-text">
+          <div class="title">${receipt.companyName}</div>
+          <div class="sub">إيصال بيع</div>
+        </div>
+      </div>
+      ${identityMeta ? `<div class="center meta">${identityMeta}</div>` : ""}`;
+  }
+
+  return [
+    `<div class="center title">${receipt.companyName}</div>`,
+    `<div class="center sub">إيصال بيع</div>`,
+    identityMeta ? `<div class="center meta">${identityMeta}</div>` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
 
-  const logoUrl = resolveReceiptLogoUrl(receipt);
-  if (logoUrl) {
-    rows.push(`<div class="center"><img class="logo" src="${logoUrl}" alt="Logo"/></div>`);
+  rows.push(buildBrandHeaderHtml(receipt));
+  rows.push(`<div class="sep">${SEP}</div>`);
+
+  const metaParts = [receipt.receiptNumber, fmtDateCompact(receipt.soldAt)].filter(Boolean);
+  rows.push(`<div class="center meta">${metaParts.join(" · ")}</div>`);
+
+  const partyParts = [
+    receipt.cashierName ? `كاشير: ${receipt.cashierName}` : null,
+    receipt.terminalName ? `جهاز: ${receipt.terminalName}` : null,
+    receipt.warehouseName ? `مستودع: ${receipt.warehouseName}` : null,
+  ].filter(Boolean);
+
+  if (partyParts.length > 0) {
+    rows.push(`<div class="center meta">${partyParts.join(" · ")}</div>`);
   }
 
-  if (receipt.branchName) {
-    rows.push(`<div class="center sub">${receipt.branchName}</div>`);
-  }
-  if (receipt.taxNumber) {
-    rows.push(`<div class="center sub">الرقم الضريبي: ${receipt.taxNumber}</div>`);
-  }
+  rows.push(`<div class="sep">${SEP}</div>`);
 
-  rows.push(
-    `<div class="sep">${SEP}</div>`,
-    `<div class="center bold">${receipt.receiptNumber}</div>`,
-    `<div class="center sub">Sales Receipt / إيصال بيع</div>`,
-    rowLine("التاريخ", fmtDate(receipt.soldAt)),
-    rowLine("الكاشير", receipt.cashierName),
-    `<div class="sep">${SEP}</div>`,
-  );
-
+  rows.push(thermalReceiptTableOpen());
   for (const line of receipt.lines) {
-    const name = line.name.slice(0, 18);
     const qty = formatReceiptQuantity(line);
-    rows.push(
-      `<div class="row"><span class="lbl bold">${name}</span><span class="val bold">${fmtAmt(line.lineTotal)}</span></div>`,
-      `<div class="row sub-line"><span class="lbl">${qty} x ${fmtAmt(line.unitPrice)}</span><span class="val"></span></div>`,
-    );
-    if (line.discountAmount > 0) {
-      rows.push(rowLine("  خصم", `-${fmtAmt(line.discountAmount)}`));
-    }
-    if (line.taxAmount > 0) {
-      rows.push(rowLine("  ضريبة", fmtAmt(line.taxAmount)));
-    }
+    const discountNote =
+      line.discountAmount > 0.009
+        ? ` <span class="disc">(-${fmtThermalReceiptAmt(line.discountAmount)})</span>`
+        : "";
+    rows.push(thermalReceiptItemLine(qty, line.name, line.lineTotal, discountNote));
+  }
+  rows.push(thermalReceiptTableClose());
+
+  rows.push(`<div class="sep">${SEP}</div>`);
+  rows.push(thermalReceiptTableOpen());
+
+  if (receipt.discount > 0.009) {
+    rows.push(thermalReceiptRowLine("خصم", `-${fmtThermalReceiptAmt(receipt.discount)}`));
   }
 
-  rows.push(
-    `<div class="sep">${SEP}</div>`,
-    rowLine("الإجمالي قبل الضريبة", fmtAmt(receipt.subtotal)),
-  );
-
-  if (receipt.discount > 0) {
-    rows.push(rowLine("الخصومات", fmtAmt(receipt.discount)));
+  if (receipt.tax > 0.009) {
+    rows.push(thermalReceiptRowLine("قبل الضريبة", fmtThermalReceiptAmt(receipt.subtotal)));
+    rows.push(thermalReceiptRowLine("الضريبة", fmtThermalReceiptAmt(receipt.tax)));
   }
 
-  rows.push(
-    rowLine("الضريبة", fmtAmt(receipt.tax)),
-    rowLine("الإجمالي", fmtAmt(receipt.total)),
-    `<div class="sep">${"-".repeat(28)}</div>`,
-    rowLine("المبلغ المقبوض", fmtAmt(receipt.tendered)),
-    rowLine("المدفوع", fmtAmt(receipt.paid)),
-  );
+  rows.push(thermalReceiptRowLine("الإجمالي", fmtThermalReceiptAmt(receipt.total)));
 
-  if (receipt.change > 0) {
-    rows.push(rowLine("الباقي", fmtAmt(receipt.change)));
+  if (receipt.paid > 0.009) {
+    rows.push(thermalReceiptRowLine("مدفوع", fmtThermalReceiptAmt(receipt.paid)));
   }
 
-  rows.push(
-    rowLine("الدفع", receipt.paymentSummary),
-    `<div class="sep">${SEP}</div>`,
-    `<div class="center muted">شكراً لزيارتكم</div>`,
-    `<div class="center sub">Thank you for your visit</div>`,
-  );
+  if (receipt.tendered > receipt.paid + 0.009) {
+    rows.push(thermalReceiptRowLine("مقبوض", fmtThermalReceiptAmt(receipt.tendered)));
+  }
+
+  if (receipt.change > 0.009) {
+    rows.push(thermalReceiptRowLine("الباقي", fmtThermalReceiptAmt(receipt.change)));
+  }
+
+  if (receipt.paymentSummary.trim()) {
+    rows.push(thermalReceiptRowLine("الدفع", receipt.paymentSummary));
+  }
+
+  rows.push(thermalReceiptTableClose());
+
+  rows.push(`<div class="sep">${SEP}</div>`);
+  rows.push(`<div class="center thanks">شكراً لزيارتكم</div>`);
+  rows.push(thermalReceiptFooterSpacerHtml());
 
   return rows.join("\n");
 }
 
 export function buildPosReceiptHtml(receipt: PosReceiptData): string {
-  const bodyHtml = buildPosReceiptBodyHtml(receipt);
-
-  return `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8"/>
-  <title>${receipt.receiptNumber}</title>
-  <style>
-    @page {
-      size: 80mm auto;
-      margin: 0;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 14pt;
-      font-weight: 700;
-      color: #000;
-      background: #fff;
-      width: 76mm;
-      padding: 1.5mm 1.75mm 1mm;
-      direction: rtl;
-      -webkit-font-smoothing: antialiased;
-    }
-    .center { text-align: center; }
-    .title {
-      font-size: 20pt;
-      font-weight: 900;
-      margin-bottom: 1pt;
-      letter-spacing: 0.02em;
-      line-height: 1.1;
-    }
-    .sub {
-      font-size: 12pt;
-      font-weight: 700;
-      color: #000;
-      margin-bottom: 0;
-      line-height: 1.02;
-    }
-    .sep {
-      text-align: center;
-      color: #000;
-      margin: 1pt 0;
-      font-size: 13pt;
-      font-weight: 900;
-      white-space: pre;
-      letter-spacing: -0.05em;
-      line-height: 0.92;
-    }
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin: 0;
-      line-height: 1.02;
-    }
-    .row + .row {
-      margin-top: 0.5pt;
-    }
-    .sub-line .lbl {
-      font-size: 11pt;
-      font-weight: 600;
-      color: #000;
-    }
-    .lbl {
-      flex: 0 0 55%;
-      font-size: 13pt;
-      font-weight: 700;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .val {
-      flex: 0 0 45%;
-      text-align: left;
-      font-size: 13pt;
-      font-weight: 700;
-    }
-    .bold { font-weight: 900; }
-    .muted {
-      color: #000;
-      font-size: 14pt;
-      font-weight: 700;
-      margin: 1pt 0 0;
-      line-height: 1.02;
-    }
-    .logo {
-      display: block;
-      max-width: 52mm;
-      max-height: 28mm;
-      margin: 0 auto 1.5pt;
-      object-fit: contain;
-    }
-    @media print {
-      html, body {
-        width: 76mm;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      .logo {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      * {
-        color: #000 !important;
-      }
-    }
-  </style>
-</head>
-<body>
-${bodyHtml}
-</body>
-</html>`;
+  return buildThermalReceiptDocumentHtml(
+    receipt.receiptNumber,
+    buildPosReceiptBodyHtml(receipt),
+    RESTAURANT_RECEIPT_EXTRA_CSS,
+  );
 }
 
 export function printPosReceipt(receipt: PosReceiptData): void {
@@ -278,11 +266,13 @@ export function printPosReceipt(receipt: PosReceiptData): void {
   win.document.close();
   win.focus();
 
-  setTimeout(() => {
-    try {
-      win.print();
-    } catch {
-      throw new Error("PRINT_FAILED");
-    }
-  }, 400);
+  void waitForDocumentImages(win.document).then(() => {
+    window.setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        throw new Error("PRINT_FAILED");
+      }
+    }, THERMAL_PRINT_READY_DELAY_MS);
+  });
 }

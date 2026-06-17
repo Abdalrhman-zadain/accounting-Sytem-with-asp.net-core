@@ -1,5 +1,22 @@
-import { buildKitchenOrderTicketHtml } from "@/features/pos/pos-kot-print";
-import { buildPosReceiptHtml, type PosReceiptData } from "@/features/pos/pos-receipt-print";
+import {
+  buildKitchenDeltaTicketHtml,
+  buildKitchenOrderTicketHtml,
+  buildKitchenTicketHtmlForLines,
+  buildKitchenVoidTicketHtml,
+} from "@/features/pos/pos-kot-print";
+import {
+  captureKitchenLineSnapshotFromSale,
+  diffKitchenSnapshots,
+  hasKitchenPrintDiff,
+  type KitchenLineSnapshot,
+  type KitchenPrintDiff,
+  unsentKitchenLines,
+} from "@/features/pos/pos-kitchen-print-delta";
+import {
+  buildPosReceiptHtml,
+  normalizeReceiptForArabicPrint,
+  type PosReceiptData,
+} from "@/features/pos/pos-receipt-print";
 import {
   buildSessionRollReportDocumentHtml,
   type RollPrintContext,
@@ -10,14 +27,18 @@ import {
   type PosPrintBridgeStatus,
   getPosPrintBridgeStatus,
 } from "@/features/pos/pos-print-bridge";
-import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
+import {
+  getPosLocalAgentBridgeStatus,
+  printHtmlWithLocalAgentBridge,
+} from "@/features/pos/pos-local-agent-bridge";
+import { loadPosPrinterConfig, type PosPrintBridgeMode } from "@/features/pos/pos-printer-config";
 import type { PosSale } from "@/types/api";
 
 export type PosPrintTarget = "kitchen" | "receipt";
 
 export type PosPrintResult = {
   ok: boolean;
-  mode: "qz" | "browser";
+  mode: PosPrintBridgeMode;
   fallback: boolean;
   error?: string;
 };
@@ -27,30 +48,59 @@ function getPrinterName(target: PosPrintTarget): string | null {
   return target === "kitchen" ? config.kitchenPrinterName : config.receiptPrinterName;
 }
 
+async function tryAgentPrint(
+  printerName: string | null,
+  html: string,
+): Promise<void> {
+  await printHtmlWithLocalAgentBridge(printerName, prepareHtmlForAgentPrint(html));
+}
+
+/** Ensure relative asset URLs resolve when the agent renders HTML via NavigateToString. */
+function prepareHtmlForAgentPrint(html: string): string {
+  if (typeof window === "undefined") {
+    return html;
+  }
+  if (html.includes("<base ") || html.includes("<base>")) {
+    return html;
+  }
+  const baseTag = `<base href="${window.location.origin}/">`;
+  if (html.includes("<head>")) {
+    return html.replace("<head>", `<head>${baseTag}`);
+  }
+  if (html.includes("<HEAD>")) {
+    return html.replace("<HEAD>", `<HEAD>${baseTag}`);
+  }
+  return html;
+}
+
+async function tryQzPrint(printerName: string | null, html: string): Promise<void> {
+  await printHtmlWithQz(printerName, html);
+}
+
 async function printConfiguredHtml(
   html: string,
   target: PosPrintTarget,
   browserWindowName: string,
 ): Promise<PosPrintResult> {
   const config = loadPosPrinterConfig();
+  const printerName = getPrinterName(target);
 
   if (config.printBridge === "browser") {
     printHtmlWithBrowser(html, browserWindowName);
     return { ok: true, mode: "browser", fallback: false };
   }
 
-  try {
-    await printHtmlWithQz(getPrinterName(target), html);
-    return { ok: true, mode: "qz", fallback: false };
-  } catch (error) {
-    printHtmlWithBrowser(html, browserWindowName);
-    return {
-      ok: true,
-      mode: "browser",
-      fallback: true,
-      error: error instanceof Error ? error.message : String(error),
-    };
+  if (config.printBridge === "agent") {
+    await tryAgentPrint(printerName, html);
+    return { ok: true, mode: "agent", fallback: false };
   }
+
+  await tryQzPrint(printerName, html);
+  return { ok: true, mode: "qz", fallback: false };
+}
+
+function skippedPrintResult(): PosPrintResult {
+  return { ok: true, mode: loadPosPrinterConfig().printBridge, fallback: false };
 }
 
 export async function printKitchenTicket(
@@ -64,11 +114,143 @@ export async function printKitchenTicket(
   );
 }
 
+export async function printKitchenTicketForLineIds(
+  sale: PosSale,
+  lineIds: string[],
+  language: string,
+): Promise<PosPrintResult> {
+  if (lineIds.length === 0) {
+    return skippedPrintResult();
+  }
+  return printConfiguredHtml(
+    buildKitchenTicketHtmlForLines(sale, lineIds, language),
+    "kitchen",
+    "pos-kitchen-ticket",
+  );
+}
+
+export async function printKitchenDelta(
+  sale: PosSale,
+  deltaLines: KitchenPrintDiff["additions"],
+  language: string,
+): Promise<PosPrintResult> {
+  if (deltaLines.length === 0) {
+    return skippedPrintResult();
+  }
+  return printConfiguredHtml(
+    buildKitchenDeltaTicketHtml(sale, deltaLines, language),
+    "kitchen",
+    "pos-kitchen-delta",
+  );
+}
+
+export async function printKitchenVoid(
+  sale: PosSale,
+  voidLines: KitchenPrintDiff["voids"],
+  language: string,
+): Promise<PosPrintResult> {
+  if (voidLines.length === 0) {
+    return skippedPrintResult();
+  }
+  return printConfiguredHtml(
+    buildKitchenVoidTicketHtml(sale, voidLines, language),
+    "kitchen",
+    "pos-kitchen-void",
+  );
+}
+
+export async function printKitchenDiff(
+  sale: PosSale,
+  diff: KitchenPrintDiff,
+  language: string,
+): Promise<PosPrintResult[]> {
+  const results: PosPrintResult[] = [];
+  const voidLines = [...diff.voids, ...diff.qtyDecreases];
+  if (voidLines.length > 0) {
+    results.push(await printKitchenVoid(sale, voidLines, language));
+  }
+  if (diff.additions.length > 0) {
+    results.push(await printKitchenDelta(sale, diff.additions, language));
+  }
+  return results;
+}
+
+export async function applyPosKitchenUpdatePrints(options: {
+  snapshotBefore: KitchenLineSnapshot[];
+  sale: PosSale;
+  autoPrintKot: boolean;
+  language: string;
+}): Promise<PosPrintResult[]> {
+  if (!options.autoPrintKot) {
+    return [];
+  }
+
+  const after = captureKitchenLineSnapshotFromSale(options.sale);
+  const diff = diffKitchenSnapshots(options.snapshotBefore, after);
+  if (!hasKitchenPrintDiff(diff)) {
+    return [];
+  }
+
+  return printKitchenDiff(options.sale, diff, options.language);
+}
+
+export async function applyPosPayCompletePrints(options: {
+  snapshotBefore: KitchenLineSnapshot[];
+  sale: PosSale;
+  receipt: PosReceiptData;
+  autoPrintKot: boolean;
+  autoPrintReceipt: boolean;
+  language: string;
+}): Promise<{ receipt?: PosPrintResult; kitchen: PosPrintResult[] }> {
+  const results: { receipt?: PosPrintResult; kitchen: PosPrintResult[] } = {
+    kitchen: [],
+  };
+
+  const unsentBefore = unsentKitchenLines(options.snapshotBefore);
+  if (options.autoPrintKot && unsentBefore.length > 0) {
+    const newlySentLineIds = options.sale.lines
+      .filter((line) => line.kitchenSentAt)
+      .filter((line) =>
+        unsentBefore.some(
+          (beforeLine) =>
+            beforeLine.lineId === line.id ||
+            (beforeLine.itemId === (line.itemId ?? "") &&
+              !beforeLine.kitchenSentAt),
+        ),
+      )
+      .map((line) => line.id);
+
+    if (newlySentLineIds.length > 0) {
+      results.kitchen.push(
+        await printKitchenTicketForLineIds(
+          options.sale,
+          newlySentLineIds,
+          options.language,
+        ),
+      );
+    } else {
+      const after = captureKitchenLineSnapshotFromSale(options.sale);
+      const diff = diffKitchenSnapshots(options.snapshotBefore, after);
+      if (diff.additions.length > 0) {
+        results.kitchen.push(
+          await printKitchenDelta(options.sale, diff.additions, options.language),
+        );
+      }
+    }
+  }
+
+  if (options.autoPrintReceipt) {
+    results.receipt = await printCustomerReceipt(options.receipt);
+  }
+
+  return results;
+}
+
 export async function printCustomerReceipt(
   receipt: PosReceiptData,
 ): Promise<PosPrintResult> {
   return printConfiguredHtml(
-    buildPosReceiptHtml(receipt),
+    buildPosReceiptHtml(normalizeReceiptForArabicPrint(receipt)),
     "receipt",
     "pos-customer-receipt",
   );
@@ -86,7 +268,7 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
   const isKitchen = target === "kitchen";
   const title = isKitchen ? "Kitchen Printer Test" : "Receipt Printer Test";
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8"/>
   <title>${title}</title>
@@ -117,5 +299,14 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
 }
 
 export async function getPrinterBridgeStatus(): Promise<PosPrintBridgeStatus> {
+  const config = loadPosPrinterConfig();
+  if (config.printBridge === "browser") {
+    return { mode: "browser", available: true, printers: [] };
+  }
+  if (config.printBridge === "agent") {
+    return getPosLocalAgentBridgeStatus();
+  }
   return getPosPrintBridgeStatus();
 }
+
+export type { KitchenLineSnapshot, KitchenPrintDiff };

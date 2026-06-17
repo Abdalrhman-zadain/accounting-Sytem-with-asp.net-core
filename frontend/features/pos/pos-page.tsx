@@ -150,8 +150,13 @@ import {
   isWeightSaleItem,
 } from "@/features/pos/pos-weight-utils";
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
+import {
+  captureKitchenLineSnapshotFromCart,
+  type KitchenLineSnapshot,
+} from "@/features/pos/pos-kitchen-print-delta";
 import { useKitchenPrintHub } from "@/features/pos/pos-kitchen-print-hub";
 import {
+  applyPosKitchenUpdatePrints,
   printCustomerReceipt,
   printKitchenTicket,
   printSessionRoll,
@@ -1087,6 +1092,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
+  const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
   const kitchenHubActionsRef = useRef({
     markKitchenOrderItemsPrinted: (_itemIds: string[]) => {},
     markKitchenOrderItemsPrintedForSale: (_salesInvoiceId: string) => {},
@@ -1670,8 +1676,60 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     },
   });
 
+  const captureCurrentKitchenSnapshot = () =>
+    captureKitchenLineSnapshotFromCart(
+      cartLines.map((line) => ({
+        salesInvoiceLineId: line.salesInvoiceLineId,
+        clientLineId: line.clientLineId,
+        itemId: line.itemId,
+        name: line.name,
+        quantity: line.quantity,
+        kitchenSentAt: line.kitchenSentAt,
+        modifiers: line.modifiers,
+        lineNote: line.lineNote,
+      })),
+    );
+
+  const runKitchenUpdatePrints = async (
+    sale: PosSale,
+    snapshotBefore: KitchenLineSnapshot[],
+  ) => {
+    const config = loadPosPrinterConfig();
+    if (!config.autoPrintKotOnSend) {
+      return;
+    }
+    try {
+      await applyPosKitchenUpdatePrints({
+        snapshotBefore,
+        sale,
+        autoPrintKot: true,
+        language,
+      });
+      try {
+        const orders = await queryClient.fetchQuery({
+          queryKey: queryKeys.posKitchenOrders(token),
+          queryFn: () => getPosKitchenOrders(token),
+        });
+        const order = orders.find((row) => row.salesInvoiceId === sale.id);
+        if (order) {
+          kitchenHubActionsRef.current.markKitchenOrderItemsPrinted(
+            order.items.map((item) => item.id),
+          );
+        } else {
+          kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
+        }
+      } catch {
+        kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
+      }
+    } catch (err) {
+      console.error("Failed to print kitchen ticket:", err);
+      pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
+    }
+  };
+
   const sendKitchenMutation = useMutation({
     mutationFn: async () => {
+      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1705,37 +1763,8 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
           language,
         ),
       );
-      if (loadPosPrinterConfig().autoPrintKotOnSend && !waiterMode) {
-        printKitchenTicket(sale, language)
-          .then(async (result) => {
-          if (result.fallback) {
-            pushMessage(
-              getLocalizedText(
-                "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
-                language,
-              ),
-            );
-          }
-          try {
-            const orders = await queryClient.fetchQuery({
-              queryKey: queryKeys.posKitchenOrders(token),
-              queryFn: () => getPosKitchenOrders(token),
-            });
-            const order = orders.find((row) => row.salesInvoiceId === sale.id);
-            if (order) {
-              kitchenHubActionsRef.current.markKitchenOrderItemsPrinted(
-                order.items.map((item) => item.id),
-              );
-            } else {
-              kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
-            }
-          } catch {
-            kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
-          }
-        }).catch((err) => {
-          console.error("Failed to print kitchen ticket:", err);
-          pushMessage(t("pos.sales.alert.printBlocked"));
-        });
+      if (!waiterMode) {
+        await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
       }
       // Auto-start a new order so the cashier is ready for the next customer
       resetSaleRef.current();
@@ -1750,6 +1779,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
 
   const updateKitchenMutation = useMutation({
     mutationFn: async (_options?: { silent?: boolean }) => {
+      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1804,6 +1834,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
             language,
           ),
         );
+      }
+      if (!waiterMode) {
+        await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
       }
     },
     onError: (error) => {

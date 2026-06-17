@@ -1,4 +1,4 @@
-export type PosPrintBridgeMode = "qz" | "browser";
+export type PosPrintBridgeMode = "agent" | "qz" | "browser";
 
 export type PosPrinterConfig = {
   kitchenPrinterName: string | null;
@@ -18,7 +18,7 @@ export const DEFAULT_POS_PRINTER_CONFIG: PosPrinterConfig = {
   autoPrintKotOnSend: true,
   autoPrintReceiptOnPay: true,
   kitchenPrintHubEnabled: true,
-  printBridge: "qz",
+  printBridge: "agent",
 };
 
 function normalizeConfig(raw: Partial<PosPrinterConfig> | null | undefined): PosPrinterConfig {
@@ -32,7 +32,14 @@ function normalizeConfig(raw: Partial<PosPrinterConfig> | null | undefined): Pos
       raw?.autoPrintReceiptOnPay ?? DEFAULT_POS_PRINTER_CONFIG.autoPrintReceiptOnPay,
     kitchenPrintHubEnabled:
       raw?.kitchenPrintHubEnabled ?? DEFAULT_POS_PRINTER_CONFIG.kitchenPrintHubEnabled,
-    printBridge: raw?.printBridge === "browser" ? "browser" : "qz",
+    printBridge:
+      raw?.printBridge === "browser"
+        ? "browser"
+        : raw?.printBridge === "qz"
+          ? "qz"
+          : raw?.printBridge === "agent"
+            ? "agent"
+            : DEFAULT_POS_PRINTER_CONFIG.printBridge,
   };
 }
 
@@ -83,12 +90,4 @@ export function updatePosPrinterConfig(
     ...loadPosPrinterConfig(),
     ...patch,
   });
-}
-
-export function hasDuplicatePosPrinterTargets(config: PosPrinterConfig): boolean {
-  return Boolean(
-    config.kitchenPrinterName &&
-    config.receiptPrinterName &&
-    config.kitchenPrinterName === config.receiptPrinterName,
-  );
 }

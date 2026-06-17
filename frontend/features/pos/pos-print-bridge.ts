@@ -1,3 +1,23 @@
+import {
+  ensureQzSigningConfigured,
+  isQzSigningEnabled,
+  markSkipQzSigning,
+  shouldSkipQzSigning,
+} from "@/features/pos-shared/qz-tray-security";
+
+type QzPrintJob =
+  | {
+      type: "pixel";
+      format: "html";
+      flavor: "plain";
+      data: string;
+    }
+  | {
+      type: "raw";
+      format: "plain";
+      data: string;
+    };
+
 type QzApi = {
   websocket: {
     isActive: () => boolean;
@@ -9,19 +29,25 @@ type QzApi = {
   configs: {
     create: (printerName: string) => unknown;
   };
-  print: (
-    config: unknown,
-    data: Array<{
-      type: "pixel";
-      format: "html";
-      flavor: "plain";
-      data: string;
-    }>,
-  ) => Promise<void>;
+  print: (config: unknown, data: QzPrintJob[]) => Promise<void>;
+  security: {
+    setSignatureAlgorithm: (algorithm: string) => void;
+    setCertificatePromise: (
+      handler: (resolve: (certificate: string) => void, reject: (error: unknown) => void) => void,
+    ) => void;
+    setSignaturePromise: (
+      handler: (
+        toSign: string,
+      ) => (
+        resolve: (signature: string) => void,
+        reject: (error: unknown) => void,
+      ) => void,
+    ) => void;
+  };
 };
 
 export type PosPrintBridgeStatus = {
-  mode: "qz" | "browser";
+  mode: "agent" | "qz" | "browser";
   available: boolean;
   printers: string[];
   error?: string;
@@ -42,12 +68,65 @@ export class PosPrintBridgeError extends Error {
   }
 }
 
+/** Delay after layout/images are ready before triggering browser print. */
+export const THERMAL_PRINT_READY_DELAY_MS = 800;
+
+/** Blank feed lines sent after HTML jobs so thermal cutters do not clip the footer. */
+const THERMAL_QZ_TRAILING_FEED = "\n\n\n\n";
+
+export async function waitForDocumentImages(doc: Document): Promise<void> {
+  const images = Array.from(doc.images);
+  const pending = images.filter((image) => !image.complete);
+  if (pending.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    pending.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+        }),
+    ),
+  );
+}
+
+function scheduleBrowserPrint(win: Window): void {
+  void waitForDocumentImages(win.document).then(() => {
+    window.setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
+      }
+    }, THERMAL_PRINT_READY_DELAY_MS);
+  });
+}
+
 function getWindowQz(): QzApi | null {
   if (typeof window === "undefined") return null;
   return ((window as Window & { qz?: QzApi }).qz ?? null);
 }
 
+const QZ_CLIENT_SCRIPT_URLS = [
+  "/vendor/qz-tray/qz-tray.js",
+  "https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js",
+  "https://unpkg.com/qz-tray/qz-tray.js",
+];
+
 let qzClientLoadPromise: Promise<QzApi | null> | null = null;
+
+function loadScript(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => resolve(Boolean(getWindowQz()));
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
 
 async function loadQzClientScript(): Promise<QzApi | null> {
   if (typeof document === "undefined") return null;
@@ -55,16 +134,28 @@ async function loadQzClientScript(): Promise<QzApi | null> {
   if (existing) return existing;
   if (qzClientLoadPromise) return qzClientLoadPromise;
 
-  qzClientLoadPromise = new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js";
-    script.async = true;
-    script.onload = () => resolve(getWindowQz());
-    script.onerror = () => resolve(null);
-    document.head.appendChild(script);
-  });
+  qzClientLoadPromise = (async () => {
+    for (const url of QZ_CLIENT_SCRIPT_URLS) {
+      const loaded = await loadScript(url);
+      if (loaded) {
+        return getWindowQz();
+      }
+    }
+    return null;
+  })();
 
   return qzClientLoadPromise;
+}
+
+function formatQzConnectError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/trusted|certificate|signature|untrusted|anonymous/i.test(message)) {
+    return `${message}. Download the QZ certificate from POS → Printers, then run: java -jar qz-tray.jar --allow digital-certificate.txt on this PC.`;
+  }
+  if (/connection|websocket|refused|offline|active/i.test(message)) {
+    return `${message}. Make sure QZ Tray is installed and running (green icon in the Windows tray).`;
+  }
+  return message;
 }
 
 async function getQz(): Promise<QzApi | null> {
@@ -80,7 +171,27 @@ async function ensureQzConnected(): Promise<QzApi> {
     );
   }
   if (!qz.websocket.isActive()) {
-    await qz.websocket.connect();
+    const skipSigning = shouldSkipQzSigning();
+    if (!skipSigning) {
+      await ensureQzSigningConfigured(qz);
+    }
+
+    try {
+      await qz.websocket.connect();
+    } catch (error) {
+      if (!skipSigning && isQzSigningEnabled()) {
+        markSkipQzSigning();
+        if (typeof window !== "undefined") {
+          window.location.reload();
+          await new Promise<void>(() => {});
+        }
+      }
+
+      throw new PosPrintBridgeError(
+        "PRINT_BRIDGE_OFFLINE",
+        formatQzConnectError(error),
+      );
+    }
   }
   return qz;
 }
@@ -96,7 +207,7 @@ export async function getPosPrintBridgeStatus(): Promise<PosPrintBridgeStatus> {
     return { mode: "qz", available: true, printers };
   } catch (error) {
     return {
-      mode: "browser",
+      mode: "qz",
       available: false,
       printers: [],
       error: error instanceof Error ? error.message : String(error),
@@ -128,74 +239,24 @@ export async function printHtmlWithQz(printerName: string | null, html: string):
       flavor: "plain",
       data: html,
     },
+    {
+      type: "raw",
+      format: "plain",
+      data: THERMAL_QZ_TRAILING_FEED,
+    },
   ]);
 }
 
 export function printHtmlWithBrowser(html: string, windowName = "_blank"): void {
   if (typeof window === "undefined") return;
 
-  try {
-    const iframe = document.createElement("iframe");
-    iframe.id = `pos-print-iframe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) {
-      throw new Error("Cannot access iframe document");
-    }
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    setTimeout(() => {
-      try {
-        iframe?.contentWindow?.focus();
-        iframe?.contentWindow?.print();
-        setTimeout(() => {
-          iframe.remove();
-        }, 1000);
-      } catch (e) {
-        console.error("Iframe print execution failed, trying window.open fallback:", e);
-        iframe.remove();
-        // Fallback
-        const win = window.open("", windowName, "width=400,height=700");
-        if (!win) {
-          throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
-        }
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        setTimeout(() => {
-          try {
-            win.print();
-          } catch {
-            throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
-          }
-        }, 400);
-      }
-    }, 250);
-  } catch (err) {
-    console.error("Iframe setup failed, trying window.open fallback:", err);
-    const win = window.open("", windowName, "width=400,height=700");
-    if (!win) {
-      throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
-    }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-      try {
-        win.print();
-      } catch {
-        throw new PosPrintBridgeError("PRINT_FAILED", "Browser print failed.");
-      }
-    }, 400);
+  const win = window.open("", windowName, "width=400,height=700");
+  if (!win) {
+    throw new PosPrintBridgeError("PRINT_BLOCKED", "Print window was blocked.");
   }
+
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  scheduleBrowserPrint(win);
 }

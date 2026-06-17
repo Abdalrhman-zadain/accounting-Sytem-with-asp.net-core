@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
 import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
-import { printKitchenTicket } from "@/features/pos/pos-print-service";
+import { printKitchenDelta } from "@/features/pos/pos-print-service";
+import type { PosLineModifiersPayload } from "@/features/pos/pos-addon-types";
 import { getPosKitchenOrders } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { KitchenOrder, PosSale } from "@/types/api";
@@ -42,16 +44,13 @@ export function findUnprintedKitchenItems(
   return groups;
 }
 
-export function kitchenOrderToSaleStub(
-  order: KitchenOrder,
-  items: KitchenOrder["items"],
-): PosSale {
+export function kitchenOrderToSaleStub(order: KitchenOrder): PosSale {
   return {
     reference: order.orderNumber,
     table: order.tableName ? { tableNumber: order.tableName } : null,
     waiter: order.waiterName ? { name: order.waiterName } : null,
     description: order.notes ?? null,
-    lines: items.map((item, index) => ({
+    lines: order.items.map((item, index) => ({
       id: resolveKitchenLineId(item as KitchenOrderPrintItem),
       lineNumber: index + 1,
       itemId: item.itemId,
@@ -62,6 +61,17 @@ export function kitchenOrderToSaleStub(
       kitchenSentAt: item.createdAt,
     })),
   } as PosSale;
+}
+
+export function kitchenItemsToDeltaLines(items: KitchenOrder["items"]): KitchenDeltaLine[] {
+  return items.map((item) => ({
+    lineId: resolveKitchenLineId(item as KitchenOrderPrintItem),
+    itemId: item.itemId,
+    name: item.itemName,
+    qty: Number(item.quantity) || 0,
+    modifiers: (item.modifiers as PosLineModifiersPayload | null | undefined) ?? null,
+    lineNote: item.notes ?? undefined,
+  }));
 }
 
 function createTabId(): string {
@@ -201,8 +211,9 @@ export function useKitchenPrintHub({
           for (const item of group.items) {
             printedIdsRef.current.add(item.id);
           }
-          await printKitchenTicket(
-            kitchenOrderToSaleStub(group.order, group.items),
+          await printKitchenDelta(
+            kitchenOrderToSaleStub(group.order),
+            kitchenItemsToDeltaLines(group.items),
             language,
           );
         }

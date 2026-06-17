@@ -1,0 +1,105 @@
+# Simple Account Print Agent
+
+Windows tray application for **silent Restaurant POS printing** (kitchen KOT + customer receipt) without QZ Tray or Java.
+
+## Requirements
+
+- Windows 10/11 x64
+- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (or use `--self-contained` publish)
+- [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11)
+
+## Build (Windows)
+
+From PowerShell (recommended):
+
+```powershell
+cd tools\print-agent
+.\build-release.ps1
+```
+
+Or double-click `build-release.cmd`.
+
+This publishes a self-contained `win-x64` build and writes `frontend/public/downloads/simple-account-print-agent.zip`.
+
+Manual publish:
+
+```powershell
+cd tools\print-agent
+dotnet publish src\SimpleAccount.PrintAgent\SimpleAccount.PrintAgent.csproj `
+  -c Release -r win-x64 --self-contained true `
+  -o publish\win-x64
+```
+
+Then zip the contents of `publish\win-x64\` as `frontend/public/downloads/simple-account-print-agent.zip`.
+
+`build-release.sh` is an optional CI/Linux helper only; build on Windows for the cashier installer.
+
+## Test before deploy
+
+**Automated (any OS):**
+
+```bash
+cd frontend
+npm run typecheck
+npm run test -- features/pos-shared/local-print-agent.test.ts
+npm run build
+```
+
+**API contract smoke test (mock or real agent on port 9188):**
+
+```bash
+# Terminal 1 — mock agent (Linux/macOS/Windows with Node 18+)
+node tools/print-agent/mock-agent-server.mjs
+
+# Terminal 2 — API + dual-printer routing (uses mock config or CLI printer names)
+node tools/print-agent/smoke-test-agent-api.mjs
+
+# Explicit kitchen + receipt names (Windows cashier PC with both USB printers)
+node tools/print-agent/smoke-test-agent-api.mjs http://127.0.0.1:9188 "XPrinter-V320N" "XPrinter-Q851L"
+```
+
+The smoke test prints realistic 80mm HTML to **both** configured kitchen and receipt printers and fails if a configured name is missing from `GET /printers`.
+
+**On a Windows cashier PC (required before rollout):**
+
+1. Run `.\build-release.ps1` and extract the zip.
+2. Start `SimpleAccount.PrintAgent.exe`.
+3. Configure kitchen + receipt in tray settings.
+4. Run `node tools\print-agent\smoke-test-agent-api.mjs` (or pass explicit printer names).
+5. Or run `.\verify-windows-hardware.ps1` from `tools\print-agent` for a full Windows checklist.
+6. In POS → Printers: **Local agent** → Refresh → Test kitchen + Test receipt.
+
+## Cashier setup
+
+1. Download from **POS → Printers → Download Print Agent**
+2. Extract and run `SimpleAccount.PrintAgent.exe`
+3. Right-click tray icon → **Open settings** → pick kitchen + receipt printers → Save
+4. In POS → Printers, choose **Local agent (recommended)** → Refresh → Save → Test print
+
+## Local API
+
+Listens on `http://127.0.0.1:9188` only.
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/health` | — |
+| GET | `/printers` | — |
+| GET | `/config` | — |
+| PUT | `/config` | `{ kitchenPrinterName, receiptPrinterName }` |
+| POST | `/print` | `{ printerName, html }` |
+
+Config file: `%AppData%/SimpleAccount/PrintAgent/config.json`
+
+Optional header: `Authorization: Bearer simple-account-print-agent`
+
+## Troubleshooting
+
+- **POS says agent not running:** start `SimpleAccount.PrintAgent.exe` and confirm tray icon is visible.
+- **Agent crashes immediately on start (v1.0.3):** upgrade to v1.0.6+ from POS → Printers. Older v1.0.3 builds threw `PrintService must be created on the UI thread` during startup.
+- **POST /print returns handle / UI-thread errors:** upgrade to v1.0.6+ and install [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) on Windows 10 cashier PCs.
+- **Browser says "Request blocked" / connection failed from HTTPS site:** Chrome blocks public HTTPS pages from calling `http://127.0.0.1` unless the agent returns `Access-Control-Allow-Private-Network: true` (v1.0.1+). Download the latest agent zip from POS → Printers, replace the old exe, restart the tray app, then refresh printers in POS.
+- **Browser shows CORS / "Print Agent connection blocked":** ensure Print Agent v1.0.7+ is running. By default `AllowAllOrigins` is `true` so any POS domain may call `http://127.0.0.1:9188`. To restrict access, set `"AllowAllOrigins": false` and list domains in `AllowedOrigins` inside `%AppData%/SimpleAccount/PrintAgent/config.json`, then restart the tray app.
+- **POST /print returns "UI thread" error:** download the latest agent zip from POS → Printers (v1.0.3+). Older builds called WebView2 from the HTTP worker thread.
+- **QZ "Untrusted website" popup while using Local agent:** agent print failed and an old build fell back to QZ Tray. Update to agent v1.0.3+, exit QZ Tray from the Windows tray, then retry. Local agent mode no longer uses QZ.
+- **WebView2 missing:** install WebView2 Evergreen bootstrapper from Microsoft.
+- **Printer not found:** open agent settings and reselect exact Windows printer names.

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectKitchenOrderItemIds,
   findUnprintedKitchenItems,
+  kitchenItemsToDeltaLines,
   kitchenOrderToSaleStub,
 } from "@/features/pos/pos-kitchen-print-hub";
 import type { KitchenOrder } from "@/types/api";
@@ -78,16 +79,25 @@ describe("pos-kitchen-print-hub helpers", () => {
     ]);
   });
 
-  it("builds a sale stub for only the new items", () => {
+  it("builds a sale stub and delta lines for printing", () => {
     const order = makeOrder("o1", [{ id: "i1", itemName: "Falafel" }]);
-    const saleStub = kitchenOrderToSaleStub(order, order.items);
+
+    const saleStub = kitchenOrderToSaleStub(order);
+    const deltaLines = kitchenItemsToDeltaLines(order.items);
 
     expect(saleStub.reference).toBe("KOT-o1");
     expect(saleStub.table).toEqual({ tableNumber: "12" });
     expect(saleStub.waiter).toEqual({ name: "Ali" });
-    expect(saleStub.lines).toHaveLength(1);
-    expect(saleStub.lines[0]?.itemName).toBe("Falafel");
-    expect(saleStub.lines[0]?.kitchenSentAt).toBe("2026-06-17T10:00:00.000Z");
+    expect(deltaLines).toEqual([
+      {
+        lineId: "line-i1",
+        itemId: "item-1",
+        name: "Falafel",
+        qty: 1,
+        modifiers: null,
+        lineNote: undefined,
+      },
+    ]);
   });
 
   it("treats marked ids as printed and skips them on the next detection pass", () => {
