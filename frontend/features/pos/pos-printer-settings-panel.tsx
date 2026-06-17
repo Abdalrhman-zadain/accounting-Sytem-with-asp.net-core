@@ -25,23 +25,40 @@ const BRIDGE_OPTIONS: Array<{
   value: PosPrintBridgeMode;
   labelEn: string;
   labelAr: string;
+  hintEn: string;
+  hintAr: string;
 }> = [
   {
     value: "agent",
-    labelEn: "Local agent (recommended)",
-    labelAr: "الوكيل المحلي (موصى به)",
-  },
-  {
-    value: "qz",
-    labelEn: "QZ Tray",
-    labelAr: "QZ Tray",
+    labelEn: "Local agent (production)",
+    labelAr: "الوكيل المحلي (تشغيلي)",
+    hintEn: "Silent named-printer routing through the Simple Account Print Agent.",
+    hintAr: "طباعة صامتة للطابعات المحددة عبر وكيل Simple Account المحلي.",
   },
   {
     value: "browser",
-    labelEn: "Browser only",
-    labelAr: "المتصفح فقط",
+    labelEn: "Browser print (manual emergency)",
+    labelAr: "طباعة المتصفح (يدوي للطوارئ)",
+    hintEn: "Opens the browser print dialog. Choose the printer manually each time.",
+    hintAr: "يفتح نافذة طباعة المتصفح. اختر الطابعة يدوياً في كل مرة.",
   },
 ];
+
+function getBridgeOptions(selectedMode: PosPrintBridgeMode) {
+  if (selectedMode === "qz") {
+    return [
+      ...BRIDGE_OPTIONS,
+      {
+        value: "qz" as const,
+        labelEn: "QZ Tray (legacy)",
+        labelAr: "QZ Tray (قديم)",
+        hintEn: "Legacy bridge kept only for existing cashier PCs already configured for QZ.",
+        hintAr: "جسر قديم يبقى فقط للأجهزة المضبوطة مسبقاً على QZ.",
+      },
+    ];
+  }
+  return BRIDGE_OPTIONS;
+}
 
 function bridgeModeLabel(mode: PosPrintBridgeMode, language: string): string {
   const option = BRIDGE_OPTIONS.find((entry) => entry.value === mode);
@@ -58,15 +75,18 @@ export function PosPrinterSettingsPanel() {
   const [isLoadingPrinters, setIsLoadingPrinters] = useState(false);
   const [isTesting, setIsTesting] = useState<PosPrintTarget | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [bridgeConnected, setBridgeConnected] = useState(false);
 
   const isAr = language === "ar";
+  const bridgeOptions = getBridgeOptions(config.printBridge);
 
   const refreshPrinters = async () => {
     setIsLoadingPrinters(true);
     setBridgeError(null);
     setMessage(null);
+    setMessageTone("success");
     try {
       const status = await getPrinterBridgeStatus();
       setPrinters(status.printers);
@@ -85,31 +105,26 @@ export function PosPrinterSettingsPanel() {
 
   const saveConfig = () => {
     setConfig(savePosPrinterConfig(config));
+    setMessageTone("success");
     setMessage(getLocalizedText("Printer settings saved / تم حفظ إعدادات الطابعات", language));
   };
 
   const testPrinter = async (target: PosPrintTarget) => {
     setIsTesting(target);
     setMessage(null);
+    setMessageTone("success");
     try {
       const result = await testPosPrinter(target);
       const modeLabel = bridgeModeLabel(result.mode, language);
-      if (result.fallback) {
-        setMessage(
-          getLocalizedText(
-            `Fallback to ${modeLabel}: ${result.error ?? "primary bridge unavailable"} / تم التبديل إلى ${modeLabel}: ${result.error ?? "الجسر غير متصل"}`,
-            language,
-          ),
-        );
-      } else {
-        setMessage(
-          getLocalizedText(
-            `Test print sent via ${modeLabel} / تم إرسال طباعة اختبار عبر ${modeLabel}`,
-            language,
-          ),
-        );
-      }
+      setMessageTone("success");
+      setMessage(
+        getLocalizedText(
+          `Test print sent via ${modeLabel} / تم إرسال طباعة اختبار عبر ${modeLabel}`,
+          language,
+        ),
+      );
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsTesting(null);
@@ -119,12 +134,14 @@ export function PosPrinterSettingsPanel() {
   const downloadCertificate = async () => {
     const token = loadStoredToken();
     if (!token) {
+      setMessageTone("error");
       setMessage(getLocalizedText("Please log in first / سجّل الدخول أولاً", language));
       return;
     }
 
     try {
       await downloadQzCertificate(token);
+      setMessageTone("success");
       setMessage(
         getLocalizedText(
           "Certificate downloaded. On this PC run: cd \"C:\\Program Files\\QZ Tray\" then java -jar qz-tray.jar --allow \"path\\to\\digital-certificate.txt\" / تم تنزيل الشهادة. على هذا الجهاز نفّذ أمر QZ Tray --allow",
@@ -132,6 +149,7 @@ export function PosPrinterSettingsPanel() {
         ),
       );
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : String(error));
     }
   };
@@ -177,14 +195,14 @@ export function PosPrinterSettingsPanel() {
                 : getLocalizedText(
                     "Print Agent is not running. Download, install, and start it, then refresh printers. / الوكيل المحلي غير متصل. نزّله وشغّله ثم حدّث الطابعات.",
                     language,
-                  )}
+              )}
               {bridgeError ? ` ${bridgeError}` : null}
             </p>
           ) : bridgeError ? (
             <p className="mt-2 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
               {config.printBridge === "qz"
                 ? getLocalizedText(
-                    "QZ Tray is not connected; fallback printing may be used.",
+                    "QZ Tray is not connected. QZ mode is legacy and does not fall back automatically.",
                     language,
                   )
                 : null}
@@ -193,7 +211,13 @@ export function PosPrinterSettingsPanel() {
             </p>
           ) : null}
           {message ? (
-            <p className="mt-2 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+            <p
+              className={`mt-2 rounded-[14px] border px-3 py-2 text-xs font-semibold ${
+                messageTone === "error"
+                  ? "border-rose-200 bg-rose-50 text-rose-900"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-900"
+              }`}
+            >
               {message}
             </p>
           ) : null}
@@ -226,12 +250,19 @@ export function PosPrinterSettingsPanel() {
             }
             className="mt-2 w-full rounded-[16px] border border-[#d7ddd8] bg-[#fbfcfb] px-3 py-3 text-sm font-semibold text-[#233329] md:max-w-md"
           >
-            {BRIDGE_OPTIONS.map((option) => (
+            {bridgeOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {language === "ar" ? option.labelAr : option.labelEn}
               </option>
             ))}
           </select>
+          <span className="mt-2 block text-xs font-semibold leading-6 text-[#64736b]">
+            {(() => {
+              const option = bridgeOptions.find((entry) => entry.value === config.printBridge);
+              if (!option) return null;
+              return language === "ar" ? option.hintAr : option.hintEn;
+            })()}
+          </span>
         </label>
       </div>
 

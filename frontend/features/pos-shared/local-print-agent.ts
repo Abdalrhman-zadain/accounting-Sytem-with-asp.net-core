@@ -34,7 +34,7 @@ async function agentFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
     throw new LocalPrintAgentError(
       blockedByBrowser
-        ? "Browser blocked the Print Agent connection. Download the latest Print Agent from POS → Printers, restart it, then refresh. If it still fails, use Print bridge → Browser only."
+        ? "Browser blocked the Print Agent connection. Download the latest Print Agent from POS → Printers, restart it, then refresh. For a manual emergency print, switch Print bridge to Browser print."
         : "Simple Account Print Agent is not running on this PC. Download and start it from POS → Printers.",
       "AGENT_OFFLINE",
     );

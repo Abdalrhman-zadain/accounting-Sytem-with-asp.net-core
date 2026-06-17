@@ -93,11 +93,13 @@ What this means for future edits:
 Current behavior:
 
 - POS kitchen KOT, customer receipt, and session roll prints route through a client-side print service.
-- **Simple Account Print Agent** (recommended on Windows) provides silent named-printer routing via `127.0.0.1:9188` without QZ Tray or browser dialogs when selected in POS → Printers.
-- Silent named-printer routing via QZ Tray remains available as a fallback when the agent is not running or when **Print bridge** is set to QZ Tray.
-- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray or use browser-print fallback. QZ is optional when the Print Agent is used.
+- **Simple Account Print Agent** (production path on Windows) provides silent named-printer routing via `127.0.0.1:9188` without QZ Tray or browser dialogs when selected in POS → Printers.
+- Agent mode fails loudly when the agent is offline, the configured printer is missing, or a print job fails. It does not silently fall back to browser print.
+- Browser print is an explicit manual/emergency bridge mode; it cannot automatically choose between kitchen and receipt printers.
+- QZ Tray remains legacy/optional code for already-configured cashier PCs only. It is not part of the normal production cashier/kitchen flow.
+- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray. QZ is optional when the Print Agent is used.
 - Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
-- If the Print Agent, QZ Tray, or a configured printer is unavailable, the POS falls back through agent → QZ → browser (depending on settings); browser printing cannot automatically choose between kitchen and receipt printers.
+- If the Print Agent or a configured printer is unavailable in agent mode, POS shows the error and no browser dialog appears unless Browser print mode is selected.
 
 What this means for future edits:
 

@@ -568,6 +568,7 @@ export function PosKitchenWorkspace({ embedded = false }: { embedded?: boolean }
   const [mobileTab, setMobileTab] = React.useState<KitchenStatus>("NEW");
   const [selectedOrder, setSelectedOrder] = React.useState<KitchenOrder | null>(null);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [printError, setPrintError] = React.useState<string | null>(null);
 
   const knownUpdateIdsRef = React.useRef<Set<string>>(new Set());
   const updateChimePrimedRef = React.useRef(false);
@@ -600,6 +601,7 @@ export function PosKitchenWorkspace({ embedded = false }: { embedded?: boolean }
     onSuccess: async (_result, orderId) => {
       const order = orders.find((row) => row.id === orderId);
       if (!order) return;
+      setPrintError(null);
       try {
         await printKitchenTicket(
           {
@@ -620,9 +622,12 @@ export function PosKitchenWorkspace({ embedded = false }: { embedded?: boolean }
           } as PosSale,
           language,
         );
-      } catch {
-        // Audit succeeded; the operator can retry physical printing after fixing the printer.
+      } catch (error) {
+        setPrintError(error instanceof Error ? error.message : String(error));
       }
+    },
+    onError: (error) => {
+      setPrintError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -878,6 +883,15 @@ export function PosKitchenWorkspace({ embedded = false }: { embedded?: boolean }
           >
             {t("pos.kitchen.filterUpdates")}
           </button>
+        </div>
+      ) : null}
+
+      {printError ? (
+        <div
+          className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900 sm:px-6"
+          role="alert"
+        >
+          {printError}
         </div>
       ) : null}
 

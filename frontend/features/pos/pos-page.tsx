@@ -156,7 +156,6 @@ import {
   printCustomerReceipt,
   printSessionRoll,
   type KitchenLineSnapshot,
-  type PosPrintResult,
 } from "@/features/pos/pos-print-service";
 import { loadPosPrinterConfig, updatePosPrinterConfig } from "@/features/pos/pos-printer-config";
 import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-panel";
@@ -1615,7 +1614,7 @@ export function PosPage() {
         printType: "SESSION_ROLL_REPORT",
       }).catch((err) => {
         console.error("Failed to print session roll:", err);
-        pushMessage(t("pos.sales.alert.printBlocked"));
+        pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
       });
     },
     onError: (error) => {
@@ -1651,17 +1650,6 @@ export function PosPage() {
       })),
     );
 
-  const notifyKitchenPrintResults = (results: PosPrintResult[]) => {
-    if (results.some((result) => result.fallback)) {
-      pushMessage(
-        getLocalizedText(
-          "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
-          language,
-        ),
-      );
-    }
-  };
-
   const runKitchenUpdatePrints = async (
     sale: PosSale,
     snapshotBefore: KitchenLineSnapshot[],
@@ -1671,16 +1659,15 @@ export function PosPage() {
       return;
     }
     try {
-      const results = await applyPosKitchenUpdatePrints({
+      await applyPosKitchenUpdatePrints({
         snapshotBefore,
         sale,
         autoPrintKot: true,
         language,
       });
-      notifyKitchenPrintResults(results);
     } catch (err) {
       console.error("Failed to print kitchen ticket:", err);
-      pushMessage(t("pos.sales.alert.printBlocked"));
+      pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
     }
   };
 
@@ -1839,7 +1826,7 @@ export function PosPage() {
       pushMessage(t("pos.sales.alert.saleCompleted"));
       const config = loadPosPrinterConfig();
       try {
-        const printResults = await applyPosPayCompletePrints({
+        await applyPosPayCompletePrints({
           snapshotBefore: payContext?.kitchenSnapshot ?? [],
           sale: response.sale,
           receipt,
@@ -1847,18 +1834,9 @@ export function PosPage() {
           autoPrintReceipt: config.autoPrintReceiptOnPay,
           language,
         });
-        if (printResults.receipt?.fallback) {
-          pushMessage(
-            getLocalizedText(
-              `Receipt printed via ${printResults.receipt.mode}${printResults.receipt.error ? `: ${printResults.receipt.error}` : ""} / تمت الطباعة عبر ${printResults.receipt.mode}`,
-              language,
-            ),
-          );
-        }
-        notifyKitchenPrintResults(printResults.kitchen);
       } catch (err) {
         console.error("Failed to print sale documents:", err);
-        pushMessage(t("pos.sales.alert.printBlocked"));
+        pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
       }
       pendingPayPrintContextRef.current = null;
     },
@@ -3570,18 +3548,9 @@ export function PosPage() {
   };
 
   const printReceipt = (receipt: CompletedReceipt) => {
-    printCustomerReceipt(receipt).then((result) => {
-      if (result.fallback) {
-        pushMessage(
-          getLocalizedText(
-            `Receipt fallback (${result.mode})${result.error ? `: ${result.error}` : ""} / طباعة احتياطية (${result.mode})`,
-            language,
-          ),
-        );
-      }
-    }).catch((err) => {
+    printCustomerReceipt(receipt).catch((err) => {
       console.error("Failed to print receipt:", err);
-      pushMessage(t("pos.sales.alert.printBlocked"));
+      pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
     });
   };
 

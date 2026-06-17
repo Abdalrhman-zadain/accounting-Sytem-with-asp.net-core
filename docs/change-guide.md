@@ -327,17 +327,21 @@ What else to check:
 - kitchen print routing uses delta ADD tickets on send/update and VOID tickets on cashier cancel; pay-without-send prints kitchen + Arabic receipt together when unsent lines exist
 - kitchen KOT and customer receipt templates are intentionally separate; do not merge kitchen notes/table routing into the customer receipt template unless the business explicitly asks for it
 - OS printer names are machine-local, so kitchen/receipt printer names should stay in browser-local configuration unless a network/IP print service is introduced
-- default print bridge for new installs is **Local agent**; fallback chain is agent → QZ → browser when agent mode is selected
-- QZ Tray named-printer routing should fall back to browser `window.print()` when QZ is unavailable so sale completion and kitchen send are not blocked by printer setup
-- for silent QZ printing without the untrusted-site dialog, configure backend QZ signing (`npm run qz:generate-cert` in `backend/`) and trust the generated certificate on each cashier PC; see `docs/pos/printer-setup.md`
+- default print bridge for new installs is **Local agent**; agent mode must fail loudly when the agent/printer is unavailable and must not automatically open browser print
+- browser print is an explicit manual/emergency bridge mode; it cannot automatically route kitchen and receipt jobs to different OS printers
+- QZ Tray is legacy/optional only for already-configured cashier PCs; do not put QZ back into the normal cashier/kitchen flow unless explicitly requested
+- for silent QZ printing without the untrusted-site dialog on legacy QZ machines, configure backend QZ signing (`npm run qz:generate-cert` in `backend/`) and trust the generated certificate on each cashier PC; see `docs/pos/printer-setup.md`
 - rebuild and deploy the print-agent zip when the C# agent changes
 
 Checks to run:
 
 - frontend typecheck
-- manual browser fallback print for KOT and customer receipt
+- Local Print Agent wrapper tests
+- local contract smoke test with `node tools/print-agent/mock-agent-server.mjs` and `node tools/print-agent/smoke-test-agent-api.mjs`
+- manual Browser print mode check for KOT and customer receipt when emergency mode is selected
 - Print Agent test print on a Windows cashier PC with configured XPrinter devices
-- QZ Tray printer list/test print when QZ bridge mode is used
+- Windows cashier hardware test with `.\tools\print-agent\verify-windows-hardware.ps1 -KitchenPrinter "XPrinter-Kitchen" -ReceiptPrinter "XPrinter-Cashier"`
+- QZ Tray printer list/test print only when legacy QZ bridge mode is intentionally used
 
 ## POS Tax-Free Sales Mode
 

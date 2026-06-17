@@ -90,42 +90,17 @@ async function printConfiguredHtml(
     return { ok: true, mode: "browser", fallback: false };
   }
 
-  const attempts: PosPrintBridgeMode[] =
-    config.printBridge === "agent" ? ["agent", "browser"] : ["qz", "browser"];
-
-  let lastError: string | undefined;
-
-  for (let i = 0; i < attempts.length; i += 1) {
-    const mode = attempts[i];
-    const isLast = i === attempts.length - 1;
-
-    try {
-      if (mode === "agent") {
-        await tryAgentPrint(printerName, html);
-        return { ok: true, mode: "agent", fallback: i > 0 };
-      }
-      if (mode === "qz") {
-        await tryQzPrint(printerName, html);
-        return { ok: true, mode: "qz", fallback: i > 0 };
-      }
-      printHtmlWithBrowser(html, browserWindowName);
-      return {
-        ok: true,
-        mode: "browser",
-        fallback: i > 0,
-        error: lastError,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-      if (isLast && mode !== "browser") {
-        printHtmlWithBrowser(html, browserWindowName);
-        return { ok: true, mode: "browser", fallback: true, error: lastError };
-      }
-    }
+  if (config.printBridge === "agent") {
+    await tryAgentPrint(printerName, html);
+    return { ok: true, mode: "agent", fallback: false };
   }
 
-  printHtmlWithBrowser(html, browserWindowName);
-  return { ok: true, mode: "browser", fallback: true, error: lastError };
+  await tryQzPrint(printerName, html);
+  return { ok: true, mode: "qz", fallback: false };
+}
+
+function skippedPrintResult(): PosPrintResult {
+  return { ok: true, mode: loadPosPrinterConfig().printBridge, fallback: false };
 }
 
 export async function printKitchenTicket(
@@ -145,7 +120,7 @@ export async function printKitchenTicketForLineIds(
   language: string,
 ): Promise<PosPrintResult> {
   if (lineIds.length === 0) {
-    return { ok: true, mode: "qz", fallback: false };
+    return skippedPrintResult();
   }
   return printConfiguredHtml(
     buildKitchenTicketHtmlForLines(sale, lineIds, language),
@@ -160,7 +135,7 @@ export async function printKitchenDelta(
   language: string,
 ): Promise<PosPrintResult> {
   if (deltaLines.length === 0) {
-    return { ok: true, mode: "qz", fallback: false };
+    return skippedPrintResult();
   }
   return printConfiguredHtml(
     buildKitchenDeltaTicketHtml(sale, deltaLines, language),
@@ -175,7 +150,7 @@ export async function printKitchenVoid(
   language: string,
 ): Promise<PosPrintResult> {
   if (voidLines.length === 0) {
-    return { ok: true, mode: "qz", fallback: false };
+    return skippedPrintResult();
   }
   return printConfiguredHtml(
     buildKitchenVoidTicketHtml(sale, voidLines, language),
