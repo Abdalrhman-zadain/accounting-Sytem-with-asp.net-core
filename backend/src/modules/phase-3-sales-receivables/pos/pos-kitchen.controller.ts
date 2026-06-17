@@ -16,7 +16,7 @@ export class PosKitchenController {
 
   @Get("orders")
   async listOrders(@Req() req: { user?: AuthorizedUser }, @Query("status") status?: KitchenStatus) {
-    this.posService.assertKitchenViewPermission(req.user);
+    this.posService.assertKitchenOrdersListPermission(req.user);
     return this.prisma.kitchenOrder.findMany({
       where: status ? { status } : undefined,
       include: {

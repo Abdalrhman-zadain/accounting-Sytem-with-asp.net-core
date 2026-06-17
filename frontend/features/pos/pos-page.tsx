@@ -3007,7 +3007,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     enabled:
       !waiterMode &&
       !isWaiterOnlyUser(user) &&
-      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN") &&
+      hasPermission(user, "POS_VIEW_POS_SCREEN") &&
       loadPosPrinterConfig().kitchenPrintHubEnabled &&
       loadPosPrinterConfig().autoPrintKotOnSend &&
       Boolean(token),

@@ -61,7 +61,7 @@ Both models are 80mm ESC/POS thermal printers. Plug both into the **same cashier
    Replace names with your exact Windows printer names. Both printers must receive an 80mm test slip.
 
 7. In POS → Printers: **Local agent (production)** → Refresh → select the same names → **Test kitchen** and **Test receipt** → Save.
-8. Enable **Print waiter kitchen tickets on this PC** and keep **Register** (`/pos/register`) open while waiters are taking orders.
+8. Enable **Print waiter kitchen tickets on this PC** and keep **Register** (`/pos/register`) open while waiters are taking orders. The cashier account only needs normal register access (`POS_VIEW_POS_SCREEN`); it does not need the kitchen display role.
 
 **Pre-deploy pass criteria:** tray test kitchen/receipt go to different devices; POS test prints match; a real **Send to kitchen** prints KOT only on the kitchen printer; **Complete payment** prints the Arabic receipt only on the receipt printer; a waiter confirm from a phone/tablet prints on the cashier PC kitchen printer within a few seconds while the register tab stays open.
 

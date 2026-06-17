@@ -23,6 +23,47 @@ const HUB_CHANNEL_NAME = "pos-kitchen-print-hub";
 const POLL_INTERVAL_MS = 3000;
 const LEADER_HEARTBEAT_MS = 1000;
 const LEADER_STALE_MS = 2500;
+/** Items newer than this still print when the register tab opens after a waiter send. */
+const RECENT_KITCHEN_ITEM_MS = 5 * 60 * 1000;
+const PRINTED_IDS_STORAGE_KEY = "pos.kitchen-print-hub.printed-ids";
+
+function loadPersistedPrintedIds(): Set<string> {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+  try {
+    const raw = window.sessionStorage.getItem(PRINTED_IDS_STORAGE_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const ids = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(ids) ? ids : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistPrintedIds(ids: ReadonlySet<string>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(PRINTED_IDS_STORAGE_KEY, JSON.stringify([...ids]));
+}
+
+export function primePrintedKitchenItemIds(
+  orders: KitchenOrder[],
+  knownIds: Set<string>,
+  nowMs = Date.now(),
+): void {
+  for (const order of orders) {
+    for (const item of order.items) {
+      const createdAt = new Date(item.createdAt).getTime();
+      if (nowMs - createdAt > RECENT_KITCHEN_ITEM_MS) {
+        knownIds.add(item.id);
+      }
+    }
+  }
+}
 
 export function collectKitchenOrderItemIds(orders: KitchenOrder[]): string[] {
   return orders.flatMap((order) => order.items.map((item) => item.id));
@@ -146,7 +187,7 @@ export function useKitchenPrintHub({
   language,
   onPrintError,
 }: UseKitchenPrintHubOptions): KitchenPrintHubController {
-  const printedIdsRef = useRef(new Set<string>());
+  const printedIdsRef = useRef(loadPersistedPrintedIds());
   const primedRef = useRef(false);
   const printingRef = useRef(false);
   const latestOrdersRef = useRef<KitchenOrder[]>([]);
@@ -164,6 +205,7 @@ export function useKitchenPrintHub({
     for (const id of itemIds) {
       printedIdsRef.current.add(id);
     }
+    persistPrintedIds(printedIdsRef.current);
   }, []);
 
   const markKitchenOrderItemsPrintedForSale = useCallback(
@@ -187,11 +229,9 @@ export function useKitchenPrintHub({
     latestOrdersRef.current = ordersQuery.data;
 
     if (!primedRef.current) {
-      for (const id of collectKitchenOrderItemIds(ordersQuery.data)) {
-        printedIdsRef.current.add(id);
-      }
+      primePrintedKitchenItemIds(ordersQuery.data, printedIdsRef.current);
+      persistPrintedIds(printedIdsRef.current);
       primedRef.current = true;
-      return;
     }
 
     const config = loadPosPrinterConfig();

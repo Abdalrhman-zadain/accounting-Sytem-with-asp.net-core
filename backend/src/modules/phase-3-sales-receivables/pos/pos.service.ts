@@ -3067,6 +3067,19 @@ export class PosService {
     this.ensurePosPermissionCode("RST_VIEW_KITCHEN_SCREEN", user);
   }
 
+  /** Cashier register polls kitchen orders for the print hub without kitchen-screen access. */
+  assertKitchenOrdersListPermission(user?: AuthorizedUser) {
+    if (
+      this.hasPosPermissionCode("RST_VIEW_KITCHEN_SCREEN", user) ||
+      this.hasPosPermissionCode("POS_VIEW_POS_SCREEN", user)
+    ) {
+      return;
+    }
+    throw new BadRequestException(
+      "You do not have permission to view kitchen orders.",
+    );
+  }
+
   assertKitchenUpdatePermission(user?: AuthorizedUser) {
     this.ensurePosPermissionCode("RST_UPDATE_KITCHEN_STATUS", user);
   }

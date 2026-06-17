@@ -5,6 +5,7 @@ import {
   findUnprintedKitchenItems,
   kitchenItemsToDeltaLines,
   kitchenOrderToSaleStub,
+  primePrintedKitchenItemIds,
 } from "@/features/pos/pos-kitchen-print-hub";
 import type { KitchenOrder } from "@/types/api";
 
@@ -112,5 +113,28 @@ describe("pos-kitchen-print-hub helpers", () => {
     }
 
     expect(findUnprintedKitchenItems(known, orders)).toEqual([]);
+  });
+
+  it("primes only kitchen items older than the recent window", () => {
+    const now = new Date("2026-06-17T12:00:00.000Z").getTime();
+    const orders = [
+      makeOrder("o1", [
+        { id: "old", itemName: "Old item" },
+        { id: "new", itemName: "New item" },
+      ]),
+    ];
+    orders[0].items[0].createdAt = "2026-06-17T11:00:00.000Z";
+    orders[0].items[1].createdAt = "2026-06-17T11:58:00.000Z";
+
+    const known = new Set<string>();
+    primePrintedKitchenItemIds(orders, known, now);
+
+    expect([...known]).toEqual(["old"]);
+    expect(findUnprintedKitchenItems(known, orders)).toEqual([
+      {
+        order: orders[0],
+        items: [orders[0].items[1]],
+      },
+    ]);
   });
 });
