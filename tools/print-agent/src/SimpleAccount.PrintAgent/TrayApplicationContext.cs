@@ -25,6 +25,13 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         RefreshMenu();
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
+        Application.Idle += WarmUpOnce;
+    }
+
+    private void WarmUpOnce(object? sender, EventArgs e)
+    {
+        Application.Idle -= WarmUpOnce;
+        _printService.EnsureReady();
     }
 
     private void RefreshMenu()

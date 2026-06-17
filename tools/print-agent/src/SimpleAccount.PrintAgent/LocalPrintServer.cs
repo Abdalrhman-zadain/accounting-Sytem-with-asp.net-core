@@ -123,7 +123,7 @@ public sealed class LocalPrintServer : IDisposable
         switch (path)
         {
             case "/health":
-                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.3" });
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true, version = "1.0.7" });
                 return;
             case "/printers":
                 await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { printers = PrintService.ListInstalledPrinters() });
@@ -196,6 +196,11 @@ public sealed class LocalPrintServer : IDisposable
 
     private static string? ResolveAllowedOrigin(string? origin, AgentConfig config)
     {
+        if (config.AllowAllOrigins)
+        {
+            return string.IsNullOrWhiteSpace(origin) ? "*" : origin;
+        }
+
         if (string.IsNullOrWhiteSpace(origin))
         {
             return config.AllowedOrigins.FirstOrDefault();

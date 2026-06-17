@@ -95,7 +95,10 @@ Optional header: `Authorization: Bearer simple-account-print-agent`
 ## Troubleshooting
 
 - **POS says agent not running:** start `SimpleAccount.PrintAgent.exe` and confirm tray icon is visible.
+- **Agent crashes immediately on start (v1.0.3):** upgrade to v1.0.6+ from POS → Printers. Older v1.0.3 builds threw `PrintService must be created on the UI thread` during startup.
+- **POST /print returns handle / UI-thread errors:** upgrade to v1.0.6+ and install [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) on Windows 10 cashier PCs.
 - **Browser says "Request blocked" / connection failed from HTTPS site:** Chrome blocks public HTTPS pages from calling `http://127.0.0.1` unless the agent returns `Access-Control-Allow-Private-Network: true` (v1.0.1+). Download the latest agent zip from POS → Printers, replace the old exe, restart the tray app, then refresh printers in POS.
+- **Browser shows CORS / "Print Agent connection blocked":** ensure Print Agent v1.0.7+ is running. By default `AllowAllOrigins` is `true` so any POS domain may call `http://127.0.0.1:9188`. To restrict access, set `"AllowAllOrigins": false` and list domains in `AllowedOrigins` inside `%AppData%/SimpleAccount/PrintAgent/config.json`, then restart the tray app.
 - **POST /print returns "UI thread" error:** download the latest agent zip from POS → Printers (v1.0.3+). Older builds called WebView2 from the HTTP worker thread.
 - **QZ "Untrusted website" popup while using Local agent:** agent print failed and an old build fell back to QZ Tray. Update to agent v1.0.3+, exit QZ Tray from the Windows tray, then retry. Local agent mode no longer uses QZ.
 - **WebView2 missing:** install WebView2 Evergreen bootstrapper from Microsoft.

@@ -6,6 +6,7 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
+        SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         Application.Run(new TrayApplicationContext());
     }
 }

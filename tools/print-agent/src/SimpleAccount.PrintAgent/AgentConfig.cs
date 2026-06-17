@@ -18,8 +18,15 @@ public sealed class AgentConfig
 
     public bool StartWithWindows { get; set; }
 
+    /// <summary>
+    /// When true (default), any HTTPS/HTTP POS origin may call the local agent.
+    /// Set false to restrict to <see cref="AllowedOrigins"/> only.
+    /// </summary>
+    public bool AllowAllOrigins { get; set; } = true;
+
     public string[] AllowedOrigins { get; set; } =
     [
+        "https://market.trusttechlimited.com",
         "https://sabina.trusttechlimited.com",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -43,7 +50,13 @@ public sealed class AgentConfig
             }
 
             var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize<AgentConfig>(json, JsonOptions()) ?? new AgentConfig();
+            var config = JsonSerializer.Deserialize<AgentConfig>(json, JsonOptions()) ?? new AgentConfig();
+            if (!json.Contains("allowAllOrigins", StringComparison.OrdinalIgnoreCase))
+            {
+                config.AllowAllOrigins = true;
+            }
+
+            return config;
         }
         catch
         {

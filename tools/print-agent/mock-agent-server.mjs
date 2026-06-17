@@ -6,13 +6,18 @@
 import http from "node:http";
 
 const PORT = 9188;
+const ALLOW_ALL_ORIGINS = true;
 const ALLOWED_ORIGINS = [
+  "https://market.trusttechlimited.com",
   "https://sabina.trusttechlimited.com",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
 ];
 
 function corsOrigin(origin) {
+  if (ALLOW_ALL_ORIGINS) {
+    return origin || "*";
+  }
   if (!origin) return ALLOWED_ORIGINS[0];
   return ALLOWED_ORIGINS.find((o) => o.toLowerCase() === origin.toLowerCase()) ?? null;
 }

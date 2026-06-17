@@ -6,6 +6,7 @@ namespace SimpleAccount.PrintAgent;
 
 public sealed class PrintService : IDisposable
 {
+    private readonly SynchronizationContext _uiContext;
     private readonly Form _hostForm;
     private readonly WebView2 _webView;
     private readonly SemaphoreSlim _printLock = new(1, 1);
@@ -13,10 +14,7 @@ public sealed class PrintService : IDisposable
 
     public PrintService()
     {
-        if (SynchronizationContext.Current is null)
-        {
-            throw new InvalidOperationException("PrintService must be created on the UI thread.");
-        }
+        _uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
         _hostForm = new Form
         {
@@ -34,6 +32,17 @@ public sealed class PrintService : IDisposable
         _hostForm.Controls.Add(_webView);
     }
 
+    public void EnsureReady()
+    {
+        if (_hostForm.IsHandleCreated)
+        {
+            return;
+        }
+
+        _hostForm.Show();
+        _hostForm.Hide();
+    }
+
     public static IReadOnlyList<string> ListInstalledPrinters()
     {
         var printers = new List<string>();
@@ -47,17 +56,20 @@ public sealed class PrintService : IDisposable
 
     public async Task PrintHtmlAsync(string printerName, string html, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(printerName))
+        await RunOnUiThreadAsync(async () =>
         {
-            throw new InvalidOperationException("Printer name is required.");
-        }
+            if (string.IsNullOrWhiteSpace(printerName))
+            {
+                throw new InvalidOperationException("Printer name is required.");
+            }
 
-        if (!ListInstalledPrinters().Contains(printerName, StringComparer.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException($"Printer \"{printerName}\" was not found on this machine.");
-        }
+            if (!ListInstalledPrinters().Contains(printerName, StringComparer.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Printer \"{printerName}\" was not found on this machine.");
+            }
 
-        await RunOnUiThreadAsync(() => PrintHtmlCoreAsync(printerName, html, cancellationToken));
+            await PrintHtmlCoreAsync(printerName, html, cancellationToken);
+        });
     }
 
     private async Task PrintHtmlCoreAsync(string printerName, string html, CancellationToken cancellationToken)
@@ -109,34 +121,32 @@ public sealed class PrintService : IDisposable
 
     private Task RunOnUiThreadAsync(Func<Task> action)
     {
-        if (!_hostForm.InvokeRequired)
-        {
-            return action();
-        }
-
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _hostForm.BeginInvoke(new Action(async () =>
+        _uiContext.Post(_ =>
         {
-            try
+            _ = RunCoreAsync();
+
+            async Task RunCoreAsync()
             {
-                await action().ConfigureAwait(true);
-                tcs.TrySetResult();
+                try
+                {
+                    EnsureReady();
+                    await action().ConfigureAwait(true);
+                    tcs.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
             }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
-        }));
+        }, null);
 
         return tcs.Task;
     }
 
     private void EnsureFormHandle()
     {
-        if (!_hostForm.IsHandleCreated)
-        {
-            _hostForm.CreateControl();
-        }
+        EnsureReady();
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
