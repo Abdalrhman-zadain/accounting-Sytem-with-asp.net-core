@@ -61,8 +61,9 @@ Both models are 80mm ESC/POS thermal printers. Plug both into the **same cashier
    Replace names with your exact Windows printer names. Both printers must receive an 80mm test slip.
 
 7. In POS → Printers: **Local agent (production)** → Refresh → select the same names → **Test kitchen** and **Test receipt** → Save.
+8. Enable **Print waiter kitchen tickets on this PC** and keep **Register** (`/pos/register`) open while waiters are taking orders.
 
-**Pre-deploy pass criteria:** tray test kitchen/receipt go to different devices; POS test prints match; a real **Send to kitchen** prints KOT only on the kitchen printer; **Complete payment** prints the Arabic receipt only on the receipt printer.
+**Pre-deploy pass criteria:** tray test kitchen/receipt go to different devices; POS test prints match; a real **Send to kitchen** prints KOT only on the kitchen printer; **Complete payment** prints the Arabic receipt only on the receipt printer; a waiter confirm from a phone/tablet prints on the cashier PC kitchen printer within a few seconds while the register tab stays open.
 
 ### Required pre-deploy hardware test
 
@@ -180,7 +181,8 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 | Pay — kitchen already sent | Nothing | Arabic receipt |
 | Pay — never sent to kitchen | KOT for unsent lines | Arabic receipt |
 
-- `Send to kitchen`, waiter confirm, and kitchen update (including silent table sync) print delta KOT slips when `autoPrintKotOnSend` is enabled.
+- `Send to kitchen`, cashier kitchen update (including silent table sync), and payment catch-up KOT print delta slips on the **cashier PC** when `autoPrintKotOnSend` is enabled.
+- **Waiter confirm** does not print on the waiter device. When **Print waiter kitchen tickets on this PC** is enabled, the open cashier register polls kitchen orders every 3 seconds and prints new waiter KOT items through the local Print Agent on the cashier PC.
 - Completing payment prints the customer receipt when `autoPrintReceiptOnPay` is enabled.
 - If payment completes and some lines were never sent to the kitchen, the POS sends separate print jobs: a KOT to the kitchen printer and the Arabic receipt to the cashier printer.
 - Only the **cashier** may remove or reduce items already sent to the kitchen; the kitchen receives a void/cancel slip. Waiters cannot cancel sent kitchen lines.
@@ -190,6 +192,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
 - Delta/void kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and routed through `frontend/features/pos/pos-print-service.ts`.
+- Waiter-send kitchen printing is handled by `frontend/features/pos/pos-kitchen-print-hub.ts` on the cashier register; only one register tab per browser profile acts as the print leader when multiple tabs are open.
 - Customer receipts print in **Arabic only** (RTL). Payment method labels use Arabic (`نقد`, `بطاقة`, etc.). Set `POS_RECEIPT_COMPANY_NAME` to the Arabic business name for a fully Arabic header.
 - The customer receipt uses a compact 80mm layout (single-line items, joined meta rows, smaller fonts) similar to Market POS, with a small horizontal logo beside the company name when a logo is available.
 - Item and total rows use a fixed-width HTML table (302px / ~80mm) so labels and amounts sit on one line without large empty gaps; item names allow up to 28 characters before truncation.
@@ -201,6 +204,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 ## Operational Notes
 
 - Print Agent must be running on each cashier computer that needs production silent named-printer routing.
+- Keep the cashier **Register** open on the PC connected to the kitchen printer when waiters are sending orders remotely.
 - If the POS cannot list printers in Local agent mode, verify the agent tray icon is green.
 - If browser storage is cleared, the cashier computer must reselect its kitchen and receipt printers.
 - Rebuild and redeploy `frontend/public/downloads/simple-account-print-agent.zip` when the agent version changes.

@@ -40,9 +40,6 @@ import {
   savePosDraft,
   sendPosSaleToKitchen,
 } from "@/lib/api";
-import { captureKitchenLineSnapshotFromCart } from "@/features/pos/pos-kitchen-print-delta";
-import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
-import { applyPosKitchenUpdatePrints } from "@/features/pos/pos-print-service";
 import { hasPermission } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { cn, getLocalizedText } from "@/lib/utils";
@@ -321,17 +318,6 @@ export function PosWaiterOrderPage() {
       if (cartLines.length === 0) {
         throw new Error(isAr ? "السلة فارغة" : "Cart is empty.");
       }
-      const snapshotBefore = captureKitchenLineSnapshotFromCart(
-        cartLines.map((line) => ({
-          salesInvoiceLineId: line.salesInvoiceLineId,
-          itemId: line.itemId,
-          name: line.name,
-          quantity: line.quantity,
-          kitchenSentAt: line.kitchenSentAt,
-          modifiers: line.modifiers,
-          lineNote: line.lineNote,
-        })),
-      );
       const saved = await savePosDraft(
         {
           sessionId: session.id,
@@ -344,29 +330,13 @@ export function PosWaiterOrderPage() {
         token,
       );
       const sale = await sendPosSaleToKitchen(saved.id, token);
-      return { sale, snapshotBefore };
+      return { sale };
     },
-    onSuccess: async ({ sale, snapshotBefore }) => {
+    onSuccess: async ({ sale }) => {
       setEditingInvoiceId(sale.id);
       setWaiterConfirmedAt(sale.waiterConfirmedAt ?? new Date().toISOString());
       setCartLines(mapSaleToCart(sale));
       setNotice(isAr ? "تم تأكيد الطلب وإرساله للمطبخ" : "Order confirmed and sent to kitchen.");
-      if (loadPosPrinterConfig().autoPrintKotOnSend) {
-        try {
-          await applyPosKitchenUpdatePrints({
-            snapshotBefore,
-            sale,
-            autoPrintKot: true,
-            language,
-          });
-        } catch {
-          setNotice(
-            isAr
-              ? "تم إرسال الطلب للمطبخ، لكن تعذرت الطباعة."
-              : "Order was sent to kitchen, but printing failed.",
-          );
-        }
-      }
       try {
         const waiterOrders = await getPosWaiterOrders(token);
         const kitchenOrder = waiterOrders.find((row) => row.salesInvoiceId === sale.id);
@@ -374,7 +344,7 @@ export function PosWaiterOrderPage() {
           await reprintKot(kitchenOrder.id, "WAITER_SEND", token);
         }
       } catch {
-        // Audit reprint is best-effort after client print
+        // Audit reprint is best-effort; physical print is handled on the cashier PC hub
       }
       await queryClient.invalidateQueries({ queryKey: ["pos-drafts"] });
       await queryClient.invalidateQueries({ queryKey: ["pos-tables"] });

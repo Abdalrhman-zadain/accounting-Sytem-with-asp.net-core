@@ -115,10 +115,11 @@ import {
   getPosItemAddonConfig,
   getInventoryItemGroups,
   printPosSessionRollReport,
+  getPosKitchenOrders,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
-import { hasPermission, isCashierPosUser } from "@/lib/auth-access";
+import { hasPermission, isCashierPosUser, isWaiterOnlyUser } from "@/lib/auth-access";
 import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -150,6 +151,7 @@ import {
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
 import { buildArabicPaymentSummary } from "@/features/pos/pos-receipt-print";
 import { captureKitchenLineSnapshotFromCart } from "@/features/pos/pos-kitchen-print-delta";
+import { useKitchenPrintHub } from "@/features/pos/pos-kitchen-print-hub";
 import {
   applyPosKitchenUpdatePrints,
   applyPosPayCompletePrints,
@@ -1074,6 +1076,10 @@ export function PosPage() {
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
   const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
+  const kitchenHubActionsRef = useRef({
+    markKitchenOrderItemsPrinted: (_itemIds: string[]) => {},
+    markKitchenOrderItemsPrintedForSale: (_salesInvoiceId: string) => {},
+  });
   const pendingPayPrintContextRef = useRef<{
     kitchenSnapshot: KitchenLineSnapshot[];
     paymentMethods: string[];
@@ -1665,6 +1671,22 @@ export function PosPage() {
         autoPrintKot: true,
         language,
       });
+      try {
+        const orders = await queryClient.fetchQuery({
+          queryKey: queryKeys.posKitchenOrders(token),
+          queryFn: () => getPosKitchenOrders(token),
+        });
+        const order = orders.find((row) => row.salesInvoiceId === sale.id);
+        if (order) {
+          kitchenHubActionsRef.current.markKitchenOrderItemsPrinted(
+            order.items.map((item) => item.id),
+          );
+        } else {
+          kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
+        }
+      } catch {
+        kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
+      }
     } catch (err) {
       console.error("Failed to print kitchen ticket:", err);
       pushError(getErrorMessage(err, t("pos.sales.alert.printBlocked")));
@@ -2883,6 +2905,19 @@ export function PosPage() {
   const pushError = (message: string) => {
     pushMessage(message, "error");
   };
+
+  const kitchenHub = useKitchenPrintHub({
+    enabled:
+      !isWaiterOnlyUser(user) &&
+      hasPermission(user, "RST_VIEW_KITCHEN_SCREEN") &&
+      loadPosPrinterConfig().kitchenPrintHubEnabled &&
+      loadPosPrinterConfig().autoPrintKotOnSend &&
+      Boolean(token),
+    token,
+    language,
+    onPrintError: (message) => pushError(message),
+  });
+  kitchenHubActionsRef.current = kitchenHub;
 
   const toggleItemFavorite = (itemId: string) => {
     if (!hasPermission(user, "POS_ADD_ITEM_TO_CART")) {

@@ -48,7 +48,7 @@ vi.mock("@/features/pos/pos-session-roll-print", () => ({
   buildSessionRollReportDocumentHtml: vi.fn(() => "<html><body>Session</body></html>"),
 }));
 
-const STORAGE_KEY = "pos.printer-config.v1";
+const STORAGE_KEY = "pos.printer-config.v2";
 
 function stubWindow() {
   const store = new Map<string, string>();
@@ -74,6 +74,7 @@ function setPrinterConfig(printBridge: "agent" | "qz" | "browser") {
       receiptPrinterName: "XPrinter-Cashier",
       autoPrintKotOnSend: true,
       autoPrintReceiptOnPay: true,
+      kitchenPrintHubEnabled: true,
       printBridge,
     }),
   );

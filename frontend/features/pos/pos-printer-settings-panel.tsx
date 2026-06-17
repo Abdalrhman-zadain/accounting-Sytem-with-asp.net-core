@@ -316,7 +316,29 @@ export function PosPrinterSettingsPanel() {
           checked={config.autoPrintReceiptOnPay}
           onChange={(checked) => setConfig((prev) => ({ ...prev, autoPrintReceiptOnPay: checked }))}
         />
+        <ToggleRow
+          label={getLocalizedText(
+            "Print waiter kitchen tickets on this PC / طباعة طلبات النادل على هذا الجهاز",
+            language,
+          )}
+          checked={config.kitchenPrintHubEnabled}
+          onChange={(checked) =>
+            setConfig((prev) => ({ ...prev, kitchenPrintHubEnabled: checked }))
+          }
+        />
       </div>
+
+      {config.kitchenPrintHubEnabled ? (
+        <p className="mt-3 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-6 text-emerald-950">
+          {getLocalizedText(
+            "Keep the register open on this PC while waiters are taking orders. This machine will print kitchen tickets for waiter sends.",
+            language,
+          )}
+          {isAr
+            ? " اترك شاشة الكاشير مفتوحة على هذا الجهاز أثناء عمل النادل. سيطبع هذا الجهاز تذاكر المطبخ لطلبات النادل."
+            : ""}
+        </p>
+      ) : null}
 
       {config.printBridge === "browser" ? (
         <p className="mt-3 rounded-[14px] border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-6 text-sky-950">
