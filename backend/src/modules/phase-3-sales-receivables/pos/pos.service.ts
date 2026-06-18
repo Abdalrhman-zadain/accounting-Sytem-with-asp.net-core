@@ -5809,6 +5809,7 @@ export class PosService {
         taxAmount: line.taxAmount.toString(),
         lineTotal: line.lineAmount.toString(),
         unitCode: line.item?.unitOfMeasure ?? null,
+        modifiers: line.modifiers === null ? undefined : line.modifiers,
       })),
     };
   }

@@ -39,6 +39,7 @@ export {
   thermalReceiptItemLine,
   thermalReceiptItemRow4Col,
   thermalReceiptItemDiscountRow,
+  thermalReceiptItemAddonRow,
   thermalReceiptMetaLineHtml,
   thermalReceiptMetaRowSplit,
   thermalReceiptPaymentBlockHtml,

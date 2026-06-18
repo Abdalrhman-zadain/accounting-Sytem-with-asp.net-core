@@ -138,6 +138,12 @@ export function thermalReceiptItemDiscountRow(discountAmount: number): string {
 </tr>`;
 }
 
+export function thermalReceiptItemAddonRow(addonText: string): string {
+  return `<tr class="item-addon-row">
+  <td class="col-name item-addon" colspan="4">${addonText}</td>
+</tr>`;
+}
+
 export function thermalReceiptMetaLineHtml(text: string): string {
   return `<div class="center meta meta-line">${text}</div>`;
 }
@@ -323,6 +329,15 @@ const THERMAL_RECEIPT_BASE_CSS = `
       padding-top: 0;
       padding-bottom: 4px;
       text-align: right;
+    }
+    table.items-table tr.item-addon-row td.item-addon {
+      font-size: 10px;
+      font-weight: 900;
+      color: #000;
+      padding-top: 0;
+      padding-bottom: 4px;
+      text-align: right;
+      word-break: break-word;
     }
     .thermal-amt {
       overflow: visible;

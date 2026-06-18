@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPosReceiptHtml,
+  extractDailyOrderNumber,
   normalizeReceiptForArabicPrint,
   type PosReceiptData,
 } from "@/features/pos/pos-receipt-print";
@@ -44,10 +45,21 @@ function buildSampleReceipt(overrides: Partial<PosReceiptData> = {}): PosReceipt
   };
 }
 
+describe("extractDailyOrderNumber", () => {
+  it("returns the daily sequence without date prefix", () => {
+    expect(extractDailyOrderNumber("RECEIPT-20260618-0042")).toBe("42");
+    expect(extractDailyOrderNumber("RECEIPT-20260618-1042")).toBe("1042");
+    expect(extractDailyOrderNumber("POS-20260618-0007")).toBe("7");
+  });
+});
+
 describe("buildPosReceiptHtml", () => {
   it("renders Kashouka-style Arabic columns, totals, and payment box", () => {
     const html = buildPosReceiptHtml(normalizeReceiptForArabicPrint(buildSampleReceipt()));
 
+    expect(html).toContain("التاريخ:");
+    expect(html).toContain("الوقت:");
+    expect(html).toContain("رقم الطلب: 30");
     expect(html).toContain("الصنف");
     expect(html).toContain("السعر");
     expect(html).toContain("الكمية");
@@ -176,6 +188,40 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("السائق: خالد");
     expect(html).toContain("ملاحظات التوصيل: اتصل عند الوصول");
     expect(html).toContain("رسوم التوصيل");
+  });
+
+  it("renders bold addon rows under item lines", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "شاورما دجاج",
+              quantity: 2,
+              unitPrice: 5,
+              discountAmount: 0,
+              taxAmount: 0.8,
+              lineTotal: 10.8,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g1",
+                    groupName: "صوصات",
+                    optionId: "o1",
+                    name: "ثومية",
+                    priceAdjustment: 0.5,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain('class="item-addon-row"');
+    expect(html).toContain("ثومية");
+    expect(html).toContain("(+0.50)");
   });
 });
 

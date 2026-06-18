@@ -3,6 +3,7 @@
  * Kashouka-style Arabic restaurant receipt for 80mm thermal POS printers.
  */
 
+import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
 import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
@@ -11,9 +12,9 @@ import {
 import {
   buildThermalReceiptDocumentHtml,
   thermalReceiptColumnHeaderRow,
-  thermalReceiptDateTimeRow,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemRow4Col,
+  thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
   thermalReceiptMetaLineHtml,
   thermalReceiptMetaRowSplit,
@@ -71,8 +72,30 @@ export type PosReceiptData = {
     taxAmount: number;
     lineTotal: number;
     unitCode?: string;
+    modifiers?: unknown;
   }>;
 };
+
+/** Daily POS order sequence shown on the receipt (e.g. RECEIPT-20260618-0042 → 42). */
+export function extractDailyOrderNumber(receiptNumber: string): string | null {
+  const trimmed = receiptNumber?.trim();
+  if (!trimmed) return null;
+
+  const datedMatch = trimmed.match(/(?:RECEIPT|POS)-\d{8}-(\d+)$/i);
+  if (datedMatch) {
+    return String(Number.parseInt(datedMatch[1], 10));
+  }
+
+  const lastDash = trimmed.lastIndexOf("-");
+  if (lastDash >= 0) {
+    const tail = trimmed.slice(lastDash + 1);
+    if (/^\d+$/.test(tail)) {
+      return String(Number.parseInt(tail, 10));
+    }
+  }
+
+  return trimmed;
+}
 
 const ARABIC_PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "نقد",
@@ -281,11 +304,14 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const lineDiscountTotal = sumLineDiscounts(receipt.lines);
   const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
 
+  const orderNumber = extractDailyOrderNumber(receipt.receiptNumber);
+
   rows.push(buildBrandHeaderHtml(receipt));
   rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(thermalReceiptDateTimeRow(date, time));
-  if (receipt.receiptNumber) {
-    rows.push(thermalReceiptMetaLineHtml(`رقم الفاتورة: ${receipt.receiptNumber}`));
+  rows.push(thermalReceiptMetaLineHtml(`التاريخ: ${date}`));
+  rows.push(thermalReceiptMetaLineHtml(`الوقت: ${time}`));
+  if (orderNumber) {
+    rows.push(thermalReceiptMetaLineHtml(`رقم الطلب: ${orderNumber}`));
   }
   rows.push(`<div class="sep">${SEP}</div>`);
 
@@ -327,6 +353,10 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(
       thermalReceiptItemRow4Col(line.name, line.unitPrice, qty, line.lineTotal),
     );
+    const addons = formatAddonsForDisplay(line.modifiers, "ar");
+    if (addons) {
+      rows.push(thermalReceiptItemAddonRow(addons));
+    }
     if (line.discountAmount > 0.009) {
       rows.push(thermalReceiptItemDiscountRow(line.discountAmount));
     }

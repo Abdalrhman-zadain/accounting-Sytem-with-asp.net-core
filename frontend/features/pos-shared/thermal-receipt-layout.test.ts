@@ -3,6 +3,7 @@ import {
   fmtThermalReceiptAmtPadded,
   fmtThermalReceiptMoney,
   thermalReceiptItemDiscountRow,
+  thermalReceiptItemAddonRow,
   thermalReceiptItemRow4Col,
   thermalReceiptPaymentBoxHtml,
   thermalReceiptTotalRow,
@@ -45,5 +46,12 @@ describe("thermal-receipt-layout amounts", () => {
     expect(row).toContain('class="item-disc-row"');
     expect(row).toContain("خصم");
     expect(row).toContain("-2.50");
+  });
+
+  it("renders a bold addon row", () => {
+    const row = thermalReceiptItemAddonRow("ثومية (+0.50)");
+    expect(row).toContain('class="item-addon-row"');
+    expect(row).toContain('class="col-name item-addon"');
+    expect(row).toContain("ثومية (+0.50)");
   });
 });

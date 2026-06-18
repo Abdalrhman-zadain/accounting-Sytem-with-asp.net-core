@@ -135,6 +135,17 @@ function customerReceipt(overrides: Partial<PosReceiptData> = {}): PosReceiptDat
         discountAmount: 0,
         taxAmount: 0.8,
         lineTotal: 10.8,
+        modifiers: {
+          addons: [
+            {
+              groupId: "g1",
+              groupName: "صوصات",
+              optionId: "o1",
+              name: "ثومية",
+              priceAdjustment: 0.5,
+            },
+          ],
+        },
       },
     ],
     ...overrides,

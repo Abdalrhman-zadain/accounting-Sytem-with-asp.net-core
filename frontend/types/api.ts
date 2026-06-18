@@ -4030,6 +4030,7 @@ export type PosReceipt = {
     taxAmount: string;
     lineTotal: string;
     unitCode?: string | null;
+    modifiers?: unknown;
   }>;
 };
 

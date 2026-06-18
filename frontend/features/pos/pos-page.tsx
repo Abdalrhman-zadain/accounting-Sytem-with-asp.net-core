@@ -1061,6 +1061,7 @@ function mapReceiptResponse(receipt: {
     taxAmount: string;
     lineTotal: string;
     unitCode?: string | null;
+    modifiers?: unknown;
   }>;
 }): CompletedReceipt {
   return {
@@ -1106,6 +1107,7 @@ function mapReceiptResponse(receipt: {
       taxAmount: parseAmount(line.taxAmount),
       lineTotal: parseAmount(line.lineTotal),
       unitCode: line.unitCode ?? undefined,
+      modifiers: line.modifiers,
     })),
   };
 }
