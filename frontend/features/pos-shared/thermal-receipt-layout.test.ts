@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   fmtThermalReceiptAmtPadded,
+  fmtThermalReceiptMoney,
   thermalReceiptItemDiscountRow,
   thermalReceiptItemRow4Col,
   thermalReceiptPaymentBoxHtml,
@@ -14,18 +15,29 @@ describe("thermal-receipt-layout amounts", () => {
     expect(fmtThermalReceiptAmtPadded(-2.5)).toBe("  -2.50");
   });
 
+  it("formats clean grouped money with optional currency suffix", () => {
+    expect(fmtThermalReceiptMoney(2.5)).toBe("2.50");
+    expect(fmtThermalReceiptMoney(1234.56)).toBe("1,234.56");
+    expect(fmtThermalReceiptMoney(-2.5)).toBe("-2.50");
+    expect(fmtThermalReceiptMoney(2.5, { currency: true })).toBe("2.50 د.أ");
+  });
+
   it("marks item, total, and payment amounts with thermal-amt", () => {
     const itemRow = thermalReceiptItemRow4Col("وجبه مجانية", 2.5, "1", 0);
-    const totalRow = thermalReceiptTotalRow("الصافي", 2.5, { emphasis: true });
+    const totalRow = thermalReceiptTotalRow("الصافي", 2.5, {
+      emphasis: true,
+      currency: true,
+    });
     const paymentBox = thermalReceiptPaymentBoxHtml([
       { label: "نقد", value: 2.5 },
-      { label: "مدفوع", value: 2.5 },
+      { label: "مدفوع", value: 2.5, emphasis: true, currency: true },
     ]);
 
-    expect(itemRow).toContain('class="col-total thermal-amt">   0.00');
-    expect(itemRow).toContain('class="col-price thermal-amt">   2.50');
-    expect(totalRow).toContain('class="total-amt thermal-amt">   2.50');
-    expect(paymentBox).toContain('class="pay-amt thermal-amt">   2.50');
+    expect(itemRow).toContain('class="col-total thermal-amt">0.00');
+    expect(itemRow).toContain('class="col-price thermal-amt">2.50');
+    expect(totalRow).toContain('class="total-amt thermal-amt">2.50 د.أ');
+    expect(paymentBox).toContain('class="pay-row pay-row-emphasis"');
+    expect(paymentBox).toContain('class="pay-amt thermal-amt">2.50 د.أ');
   });
 
   it("renders a line discount row", () => {

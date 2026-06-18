@@ -4002,6 +4002,10 @@ export type PosReceipt = {
   tableNumber?: string | null;
   orderType?: string | null;
   waiterName?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyName?: string | null;
+  driverName?: string | null;
   serviceChargeAmount?: string;
   deliveryFeeAmount?: string;
   taxRatePercent?: number | null;

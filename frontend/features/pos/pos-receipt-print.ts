@@ -23,6 +23,7 @@ import {
   thermalReceiptTableOpen,
   thermalReceiptTotalRow,
   formatReceiptPaymentSummary,
+  type ThermalReceiptPaymentBoxLine,
 } from "@/features/pos-shared/thermal-receipt-layout";
 
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
@@ -43,6 +44,10 @@ export type PosReceiptData = {
   tableNumber?: string | null;
   orderType?: PosReceiptOrderType | null;
   waiterName?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyName?: string | null;
+  driverName?: string | null;
   serviceChargeAmount?: number;
   deliveryFeeAmount?: number;
   taxRatePercent?: number | null;
@@ -198,7 +203,7 @@ function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string |
   return ARABIC_ORDER_TYPE_LABELS[orderType] ?? orderType;
 }
 
-function buildPaymentBoxLines(receipt: PosReceiptData): Array<{ label: string; value: number }> {
+function buildPaymentBoxLines(receipt: PosReceiptData): ThermalReceiptPaymentBoxLine[] {
   const amountsByMethod = new Map<string, number>();
 
   for (const payment of receipt.payments ?? []) {
@@ -206,13 +211,20 @@ function buildPaymentBoxLines(receipt: PosReceiptData): Array<{ label: string; v
     amountsByMethod.set(payment.paymentMethod, current + payment.amount);
   }
 
-  const lines: Array<{ label: string; value: number }> = [
-    { label: "نقد", value: amountsByMethod.get("CASH") ?? 0 },
-    { label: "بطاقة", value: amountsByMethod.get("CARD") ?? 0 },
-  ];
+  const lines: ThermalReceiptPaymentBoxLine[] = [];
+
+  const cash = amountsByMethod.get("CASH") ?? 0;
+  if (cash > 0.009) {
+    lines.push({ label: "نقد", value: cash });
+  }
+
+  const card = amountsByMethod.get("CARD") ?? 0;
+  if (card > 0.009) {
+    lines.push({ label: "بطاقة", value: card });
+  }
 
   for (const [method, amount] of amountsByMethod.entries()) {
-    if (method === "CASH" || method === "CARD") {
+    if (method === "CASH" || method === "CARD" || amount <= 0.009) {
       continue;
     }
     lines.push({
@@ -221,7 +233,7 @@ function buildPaymentBoxLines(receipt: PosReceiptData): Array<{ label: string; v
     });
   }
 
-  lines.push({ label: "مدفوع", value: receipt.paid });
+  lines.push({ label: "مدفوع", value: receipt.paid, emphasis: true, currency: true });
   if (receipt.change > 0.009) {
     lines.push({ label: "الباقي", value: receipt.change });
   }
@@ -242,14 +254,12 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     return `
       <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
-        <div class="title">${receipt.companyName}</div>
         <div class="sub">إيصال بيع</div>
       </div>
       ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
   return [
-    `<div class="center title">${receipt.companyName}</div>`,
     `<div class="center sub">إيصال بيع</div>`,
     identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "",
   ]
@@ -289,6 +299,21 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
 
   if (orderTypeLabel) {
     rows.push(thermalReceiptMetaLineHtml(`نوع الطلب: ${orderTypeLabel}`));
+  }
+
+  if (receipt.orderType === "DELIVERY") {
+    if (receipt.deliveryAddress?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`عنوان التوصيل: ${receipt.deliveryAddress.trim()}`));
+    }
+    if (receipt.deliveryCompanyName?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`شركة التوصيل: ${receipt.deliveryCompanyName.trim()}`));
+    }
+    if (receipt.driverName?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`السائق: ${receipt.driverName.trim()}`));
+    }
+    if (receipt.deliveryNotes?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`ملاحظات التوصيل: ${receipt.deliveryNotes.trim()}`));
+    }
   }
 
   rows.push(`<div class="sep sep-strong">${SEP_STRONG}</div>`);
@@ -332,7 +357,9 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(thermalReceiptTotalRow(taxLabel, receipt.tax));
   }
 
-  rows.push(thermalReceiptTotalRow("الصافي", receipt.total, { emphasis: true }));
+  rows.push(
+    thermalReceiptTotalRow("الصافي", receipt.total, { emphasis: true, currency: true }),
+  );
   rows.push(thermalReceiptTableClose());
 
   rows.push(thermalReceiptPaymentBoxHtml(buildPaymentBoxLines(receipt)));

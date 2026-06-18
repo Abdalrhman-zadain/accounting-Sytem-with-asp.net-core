@@ -1034,6 +1034,10 @@ function mapReceiptResponse(receipt: {
   tableNumber?: string | null;
   orderType?: string | null;
   waiterName?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyName?: string | null;
+  driverName?: string | null;
   serviceChargeAmount?: string;
   deliveryFeeAmount?: string;
   taxRatePercent?: number | null;
@@ -1071,6 +1075,10 @@ function mapReceiptResponse(receipt: {
     tableNumber: receipt.tableNumber,
     orderType: receipt.orderType,
     waiterName: receipt.waiterName,
+    deliveryAddress: receipt.deliveryAddress,
+    deliveryNotes: receipt.deliveryNotes,
+    deliveryCompanyName: receipt.deliveryCompanyName,
+    driverName: receipt.driverName,
     serviceChargeAmount: receipt.serviceChargeAmount
       ? parseAmount(receipt.serviceChargeAmount)
       : 0,

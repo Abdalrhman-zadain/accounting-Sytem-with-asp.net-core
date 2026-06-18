@@ -1,15 +1,19 @@
-import assert from "assert";
-import { buildKitchenOrderTicketHtml } from "./pos-kot-print";
+import { describe, expect, it } from "vitest";
+import {
+  buildKitchenOrderTicketHtml,
+  buildKitchenDeltaTicketHtml,
+  buildKitchenVoidTicketHtml,
+} from "./pos-kot-print";
 import type { PosSale } from "@/types/api";
 
-const mockSale = {
+const mockSaleBase = {
   id: "sale-123",
   reference: "1001",
   invoiceDate: new Date().toISOString(),
   status: "DRAFT",
   invoiceType: "POS",
   currencyCode: "JOD",
-  description: "الرجاء تسليم الطلب بسرعة", // Order note / description
+  description: "الرجاء تسليم الطلب بسرعة",
   subtotalAmount: "10.00",
   discountAmount: "0.00",
   taxAmount: "1.60",
@@ -57,7 +61,7 @@ const mockSale = {
       lineNumber: 1,
       itemId: "item-1",
       itemName: "شاورما دجاج عائلي",
-      description: "بدون ثوم", // Line note
+      description: "بدون ثوم",
       quantity: "2",
       unitPrice: "5.00",
       discountAmount: "0.00",
@@ -72,50 +76,122 @@ const mockSale = {
         addons: [
           {
             groupId: "g-1",
-            groupName: "صوصات إضافية", // Addon group name
+            groupName: "صوصات إضافية",
             optionId: "o-1",
-            name: "مايونيز بالثوم", // Addon name
+            name: "مايونيز بالثوم",
             priceAdjustment: 0.5,
           },
           {
             groupId: "g-2",
-            groupName: "جبنة", // Addon group name
+            groupName: "جبنة",
             optionId: "o-2",
-            name: "جبنة شيدر مضاعفة", // Addon name
+            name: "جبنة شيدر مضاعفة",
             priceAdjustment: 1.0,
-          }
-        ]
+          },
+        ],
       },
       item: null,
       warehouse: null,
-    }
-  ]
-};
+    },
+  ],
+} satisfies Partial<PosSale>;
 
-console.log("Running KOT printing tests...");
+function mockSale(overrides: Partial<PosSale> = {}): PosSale {
+  return { ...mockSaleBase, ...overrides } as PosSale;
+}
 
-// Test 1: Arabic locale KOT
-const htmlAr = buildKitchenOrderTicketHtml(mockSale as unknown as PosSale, "ar");
+describe("buildKitchenOrderTicketHtml", () => {
+  it("renders Arabic dine-in banner, waiter, and larger item lines", () => {
+    const html = buildKitchenOrderTicketHtml(mockSale(), "ar");
 
-// Verify Arabic details
-assert.ok(htmlAr.includes("تذكرة مطبخ"), "KOT Title should be in Arabic");
-assert.ok(htmlAr.includes("طاولة 5"), "Table number should be formatted correctly in Arabic");
-assert.ok(htmlAr.includes("أحمد"), "Waiter name should be displayed");
-assert.ok(htmlAr.includes("شاورما دجاج عائلي"), "Item name should be displayed");
+    expect(html).toContain("تذكرة مطبخ");
+    expect(html).toContain("صالة — طاولة 5");
+    expect(html).toContain("order-type-banner");
+    expect(html).toContain("أحمد");
+    expect(html).not.toContain("<span>الطاولة</span>");
+    expect(html).toContain("شاورما دجاج عائلي");
+    expect(html).toContain('class="item-qty"');
+    expect(html).toContain('class="item-name"');
+    expect(html).toContain("مايونيز بالثوم (+0.50)");
+    expect(html).toContain("جبنة شيدر مضاعفة (+1.00)");
+    expect(html).toContain("بدون ثوم");
+    expect(html).toContain("الرجاء تسليم الطلب بسرعة");
+  });
 
-// Verify addon groups (مجموعات الاضافات)
-assert.ok(htmlAr.includes("صوصات إضافية: مايونيز بالثوم"), "Addon group 'صوصات إضافية' and option name should be displayed");
-assert.ok(htmlAr.includes("جبنة: جبنة شيدر مضاعفة"), "Addon group 'جبنة' and option name should be displayed");
+  it("renders English dine-in KOT", () => {
+    const html = buildKitchenOrderTicketHtml(mockSale(), "en");
 
-// Verify notes (ملاحظات)
-assert.ok(htmlAr.includes("ملاحظة: بدون ثوم"), "Line note should be displayed");
-assert.ok(htmlAr.includes("الرجاء تسليم الطلب بسرعة"), "Order description/note should be displayed");
+    expect(html).toContain("Kitchen Ticket");
+    expect(html).toContain("Dine-in — Table 5");
+    expect(html).toContain("Waiter");
+  });
 
-// Test 2: English locale KOT
-const htmlEn = buildKitchenOrderTicketHtml(mockSale as unknown as PosSale, "en");
+  it("renders takeaway without empty table/waiter rows and shows order note in meta", () => {
+    const html = buildKitchenOrderTicketHtml(
+      mockSale({
+        orderType: "TAKEAWAY",
+        originalOrderType: "TAKEAWAY",
+        table: null,
+        tableId: null,
+        waiter: null,
+        waiterId: null,
+        description: "على السريع",
+      }),
+      "ar",
+    );
 
-assert.ok(htmlEn.includes("Kitchen Ticket"), "KOT Title should be in English");
-assert.ok(htmlEn.includes("Table 5"), "Table number should be formatted correctly in English");
-assert.ok(htmlEn.includes("Note: بدون ثوم"), "Line note label should be in English");
+    expect(html).toContain("سفري");
+    expect(html).toContain("ملاحظة الطلب");
+    expect(html).toContain("على السريع");
+    expect(html).not.toContain("الطاولة");
+    expect(html).not.toContain("الويتر");
+    expect(html).not.toContain("<span>—</span>");
+  });
 
-console.log("All KOT printing tests passed successfully!");
+  it("renders delivery address, company, driver, and delivery notes", () => {
+    const html = buildKitchenOrderTicketHtml(
+      mockSale({
+        orderType: "DELIVERY",
+        originalOrderType: "DELIVERY",
+        table: null,
+        tableId: null,
+        waiter: null,
+        waiterId: null,
+        deliveryAddress: "شارع الملكة رانيا، عمّان",
+        deliveryNotes: "اتصل عند الوصول",
+        deliveryCompany: { id: "dc1", name: "Talabat", arabicName: "طلبات" },
+        driver: { id: "d1", name: "خالد", phone: null, isActive: true, createdAt: "", updatedAt: "" },
+      }),
+      "ar",
+    );
+
+    expect(html).toContain("توصيل");
+    expect(html).toContain("عنوان التوصيل");
+    expect(html).toContain("شارع الملكة رانيا");
+    expect(html).toContain("شركة التوصيل");
+    expect(html).toContain("طلبات");
+    expect(html).toContain("السائق");
+    expect(html).toContain("خالد");
+    expect(html).toContain("ملاحظات التوصيل");
+    expect(html).toContain("اتصل عند الوصول");
+  });
+
+  it("includes order-type banner on delta and void tickets", () => {
+    const sale = mockSale();
+    const deltaLine = {
+      salesInvoiceLineId: "line-1",
+      name: "بطاطا كبيرة",
+      qty: 1,
+      modifiers: null,
+      lineNote: null,
+    };
+
+    const updateHtml = buildKitchenDeltaTicketHtml(sale, [deltaLine], "ar");
+    const voidHtml = buildKitchenVoidTicketHtml(sale, [deltaLine], "ar");
+
+    expect(updateHtml).toContain("صالة — طاولة 5");
+    expect(voidHtml).toContain("صالة — طاولة 5");
+    expect(updateHtml).toContain("تحديث مطبخ");
+    expect(voidHtml).toContain("*** إلغاء ***");
+  });
+});

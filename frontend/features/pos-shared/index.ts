@@ -31,6 +31,7 @@ export {
   buildThermalReceiptDocumentHtml,
   fmtThermalReceiptAmt,
   fmtThermalReceiptAmtPadded,
+  fmtThermalReceiptMoney,
   formatReceiptPaymentSummary,
   thermalReceiptColumnHeaderRow,
   thermalReceiptDateTimeRow,
@@ -47,4 +48,6 @@ export {
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
   thermalReceiptTotalRow,
+  type ThermalReceiptMoneyOptions,
+  type ThermalReceiptPaymentBoxLine,
 } from "./thermal-receipt-layout";

@@ -5765,7 +5765,7 @@ export class PosService {
     return {
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
-      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "Simple Account",
+      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "",
       branchName: row.posSession?.branchName ?? null,
       taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
       cashierName:
@@ -5776,6 +5776,13 @@ export class PosService {
       tableNumber: row.table?.tableNumber ?? null,
       orderType: row.orderType ?? null,
       waiterName: row.waiter?.name ?? row.waiter?.email ?? null,
+      deliveryAddress: row.deliveryAddress?.trim() || null,
+      deliveryNotes: row.deliveryNotes?.trim() || null,
+      deliveryCompanyName:
+        row.deliveryCompany?.arabicName?.trim() ||
+        row.deliveryCompany?.name?.trim() ||
+        null,
+      driverName: row.driver?.name?.trim() || null,
       serviceChargeAmount: row.serviceChargeAmount?.toString() ?? "0.00",
       deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? "0.00",
       taxRatePercent,

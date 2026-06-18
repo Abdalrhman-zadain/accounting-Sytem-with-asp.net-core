@@ -34,9 +34,15 @@ const KOT_STYLES = `
     .bold { font-weight: bold; }
     .title { font-size: 12pt; margin-bottom: 4px; }
     .void-title { font-size: 12pt; margin-bottom: 4px; }
+    .order-type-banner { font-size: 14pt; font-weight: bold; text-align: center; margin: 4px 0; }
     .sep { text-align: center; margin: 6px 0; overflow: hidden; }
     .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
+    .meta-block { margin: 4px 0; word-wrap: break-word; }
+    .meta-block .label { font-weight: bold; }
     .item { margin: 6px 0; }
+    .item-row { display: flex; gap: 6px; align-items: baseline; }
+    .item-qty { font-size: 14pt; font-weight: bold; flex-shrink: 0; }
+    .item-name { font-size: 12pt; flex: 1; }
     .sub { font-size: 9pt; opacity: 0.85; margin-top: 2px; }
     .note { font-size: 9pt; font-style: italic; margin-top: 4px; }
 `;
@@ -58,18 +64,102 @@ function buildKotDocumentHtml(
 </html>`;
 }
 
-function buildSaleMetaRows(sale: PosSale, language: string): string {
-  const isAr = language === "ar";
-  const tableLabel = sale.table?.tableNumber
-    ? `${isAr ? "طاولة" : "Table"} ${sale.table.tableNumber}`
-    : "—";
-  const waiterLabel = sale.waiter?.name || sale.waiter?.email || "—";
-  const now = fmtDate(new Date());
+function resolveDeliveryCompanyName(sale: PosSale, isAr: boolean): string | null {
+  const company = sale.deliveryCompany;
+  if (!company) return null;
+  const name = isAr
+    ? company.arabicName?.trim() || company.name?.trim()
+    : company.name?.trim() || company.arabicName?.trim();
+  return name || null;
+}
 
+function resolveDriverName(sale: PosSale): string | null {
+  return sale.driver?.name?.trim() || null;
+}
+
+function kotMetaRow(label: string, value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === "—") return "";
+  return `<div class="row"><span>${label}</span><span>${trimmed}</span></div>`;
+}
+
+function kotMetaBlock(label: string, value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === "—") return "";
+  return `<div class="meta-block"><div class="label">${label}</div><div>${trimmed}</div></div>`;
+}
+
+function buildOrderTypeBanner(sale: PosSale, language: string): string {
+  const isAr = language === "ar";
+  const orderType = sale.orderType ?? "DINE_IN";
+
+  let text: string;
+  if (orderType === "TAKEAWAY") {
+    text = isAr ? "سفري" : "Takeaway";
+  } else if (orderType === "DELIVERY") {
+    text = isAr ? "توصيل" : "Delivery";
+  } else if (sale.table?.tableNumber) {
+    text = isAr
+      ? `صالة — طاولة ${sale.table.tableNumber}`
+      : `Dine-in — Table ${sale.table.tableNumber}`;
+  } else {
+    text = isAr ? "صالة" : "Dine-in";
+  }
+
+  return `<div class="order-type-banner">${text}</div>`;
+}
+
+function buildKotMetaSection(sale: PosSale, language: string): string {
+  const isAr = language === "ar";
+  const orderType = sale.orderType ?? "DINE_IN";
+  const now = fmtDate(new Date());
+  const rows: string[] = [];
+
+  if (orderType === "DINE_IN") {
+    const waiterLabel = sale.waiter?.name || sale.waiter?.email || null;
+    rows.push(kotMetaRow(isAr ? "الويتر" : "Waiter", waiterLabel));
+    rows.push(kotMetaRow(isAr ? "الوقت" : "Time", now));
+  } else if (orderType === "TAKEAWAY") {
+    rows.push(kotMetaRow(isAr ? "الوقت" : "Time", now));
+    if (sale.description?.trim()) {
+      rows.push(
+        kotMetaRow(isAr ? "ملاحظة الطلب" : "Order note", sale.description.trim()),
+      );
+    }
+  } else if (orderType === "DELIVERY") {
+    rows.push(
+      kotMetaBlock(isAr ? "عنوان التوصيل" : "Delivery address", sale.deliveryAddress),
+    );
+    rows.push(
+      kotMetaRow(
+        isAr ? "شركة التوصيل" : "Delivery company",
+        resolveDeliveryCompanyName(sale, isAr),
+      ),
+    );
+    rows.push(kotMetaRow(isAr ? "السائق" : "Driver", resolveDriverName(sale)));
+    rows.push(
+      kotMetaRow(isAr ? "ملاحظات التوصيل" : "Delivery notes", sale.deliveryNotes),
+    );
+    rows.push(kotMetaRow(isAr ? "الوقت" : "Time", now));
+  } else {
+    rows.push(kotMetaRow(isAr ? "الوقت" : "Time", now));
+  }
+
+  return rows.filter(Boolean).join("\n");
+}
+
+function buildKotHeaderSection(sale: PosSale, language: string): string {
   return `
-    <div class="row"><span>${isAr ? "الطاولة" : "Table"}</span><span>${tableLabel}</span></div>
-    <div class="row"><span>${isAr ? "الويتر" : "Waiter"}</span><span>${waiterLabel}</span></div>
-    <div class="row"><span>${isAr ? "الوقت" : "Time"}</span><span>${now}</span></div>`;
+    ${buildOrderTypeBanner(sale, language)}
+    <div class="sep">${SEP}</div>
+    ${buildKotMetaSection(sale, language)}`;
+}
+
+function shouldShowBottomOrderNote(sale: PosSale): boolean {
+  const orderType = sale.orderType ?? "DINE_IN";
+  if (!sale.description?.trim()) return false;
+  // Takeaway shows order note in meta section to avoid duplication.
+  return orderType !== "TAKEAWAY";
 }
 
 function buildLineRowsFromSaleLines(
@@ -93,13 +183,16 @@ function buildLineRowHtml(
   language: string,
   prefix = "",
 ): string {
-  const name = (line.itemName || line.description || "—").slice(0, 22);
+  const name = (line.itemName || line.description || "—").slice(0, 28);
   const addons = formatAddonsForDisplay(line.modifiers, language);
   const note =
     line.description && line.description !== (line.itemName ?? "") ? line.description : "";
   return `
     <div class="item">
-      <div class="row bold"><span>${prefix}${qty}× ${name}</span></div>
+      <div class="item-row bold">
+        <span class="item-qty">${prefix}${qty}×</span>
+        <span class="item-name">${name}</span>
+      </div>
       ${addons ? `<div class="sub">${addons}</div>` : ""}
       ${note ? `<div class="sub note">${note}</div>` : ""}
     </div>`;
@@ -133,12 +226,11 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
   const bodyHtml = `
     <div class="center bold title">${isAr ? "تذكرة مطبخ" : "Kitchen Ticket"}</div>
     <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
-    ${buildSaleMetaRows(sale, language)}
+    ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
-    ${sale.description ? `<div class="note">${sale.description}</div>` : ""}
+    ${shouldShowBottomOrderNote(sale) ? `<div class="note">${sale.description}</div>` : ""}
   `;
 
   return buildKotDocumentHtml(
@@ -160,8 +252,7 @@ export function buildKitchenTicketHtmlForLines(
   const bodyHtml = `
     <div class="center bold title">${isAr ? "تذكرة مطبخ" : "Kitchen Ticket"}</div>
     <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
-    ${buildSaleMetaRows(sale, language)}
+    ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
@@ -185,8 +276,7 @@ export function buildKitchenDeltaTicketHtml(
   const bodyHtml = `
     <div class="center bold title">${isAr ? "تحديث مطبخ" : "Kitchen Update"}</div>
     <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
-    ${buildSaleMetaRows(sale, language)}
+    ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
@@ -210,8 +300,7 @@ export function buildKitchenVoidTicketHtml(
   const bodyHtml = `
     <div class="center bold void-title">${isAr ? "*** إلغاء ***" : "*** CANCEL ***"}</div>
     <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
-    ${buildSaleMetaRows(sale, language)}
+    ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
