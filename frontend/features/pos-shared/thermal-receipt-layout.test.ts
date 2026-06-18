@@ -35,9 +35,9 @@ describe("thermal-receipt-layout amounts", () => {
 
     expect(itemRow).toContain('class="col-total thermal-amt">0.00');
     expect(itemRow).toContain('class="col-price thermal-amt">2.50');
-    expect(totalRow).toContain('class="total-amt thermal-amt">2.50 د.أ');
-    expect(paymentBox).toContain('class="pay-row pay-row-emphasis"');
-    expect(paymentBox).toContain('class="pay-amt thermal-amt">2.50 د.أ');
+    expect(totalRow).toContain('class="summary-amt thermal-amt">2.50 د.أ');
+    expect(paymentBox).toContain('class="summary-line emphasis"');
+    expect(paymentBox).toContain('class="summary-amt thermal-amt">2.50 د.أ');
   });
 
   it("renders a line discount row", () => {

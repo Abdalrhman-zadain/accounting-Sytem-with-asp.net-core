@@ -34,6 +34,9 @@ export const THERMAL_RECEIPT_AMT_PAD = 7;
  */
 export const THERMAL_RECEIPT_AMT_SAFE_INSET = "2.5mm";
 
+/** Fixed width for totals/payment amount cells so currency and non-currency lines align. */
+export const THERMAL_RECEIPT_SUMMARY_AMT_WIDTH = "26mm";
+
 export function thermalReceiptSepLine(char = "─"): string {
   return char.repeat(THERMAL_RECEIPT_SEP_CHARS);
 }
@@ -158,6 +161,18 @@ export function thermalReceiptDateTimeRow(dateText: string, timeText: string): s
 </div>`;
 }
 
+function thermalReceiptSummaryLineHtml(
+  label: string,
+  value: number,
+  options?: { emphasis?: boolean; currency?: boolean },
+): string {
+  const rowClass = options?.emphasis ? "summary-line emphasis" : "summary-line";
+  return `<div class="${rowClass}">
+  <span class="summary-label">${label}</span>
+  <span class="summary-amt thermal-amt">${fmtThermalReceiptMoney(value, { currency: options?.currency })}</span>
+</div>`;
+}
+
 export function thermalReceiptTotalRow(
   label: string,
   value: number,
@@ -165,8 +180,7 @@ export function thermalReceiptTotalRow(
 ): string {
   const rowClass = options?.emphasis ? "total-row emphasis" : "total-row";
   return `<tr class="${rowClass}">
-  <td class="total-label" colspan="3">${label}</td>
-  <td class="total-amt thermal-amt">${fmtThermalReceiptMoney(value, { currency: options?.currency })}</td>
+  <td colspan="4" class="total-line-cell">${thermalReceiptSummaryLineHtml(label, value, options)}</td>
 </tr>`;
 }
 
@@ -186,8 +200,11 @@ export function thermalReceiptPaymentBoxHtml(
 ): string {
   const rows = lines
     .map((line) => {
-      const rowClass = line.emphasis ? "pay-row pay-row-emphasis" : "pay-row";
-      return `<div class="${rowClass}"><span class="pay-label">${line.label}</span><span class="pay-amt thermal-amt">${fmtThermalReceiptMoney(line.value, { currency: line.currency })}</span></div>`;
+      const rowClass = line.emphasis ? "summary-line emphasis" : "summary-line";
+      return `<div class="${rowClass}">
+  <span class="summary-label">${line.label}</span>
+  <span class="summary-amt thermal-amt">${fmtThermalReceiptMoney(line.value, { currency: line.currency })}</span>
+</div>`;
     })
     .join("\n");
 
@@ -309,37 +326,54 @@ const THERMAL_RECEIPT_BASE_CSS = `
     }
     .thermal-amt {
       overflow: visible;
-      padding-left: ${THERMAL_RECEIPT_AMT_SAFE_INSET};
       font-variant-numeric: tabular-nums;
     }
-    table.totals-table td.total-label {
+    .summary-line {
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-start;
+      align-items: baseline;
+      gap: 1.5mm;
+      width: 100%;
+      margin: 1px 0;
+    }
+    .summary-label {
       text-align: right;
-      padding: 2px 1px;
+      flex: 0 1 auto;
       font-size: 12px;
       font-weight: 700;
     }
-    table.totals-table td.total-amt {
-      text-align: right;
-      padding: 2px 1px 2px ${THERMAL_RECEIPT_AMT_SAFE_INSET};
-      font-size: 12px;
-      font-weight: 700;
+    .summary-amt {
+      flex: 0 0 ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      min-width: ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      max-width: ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      text-align: left;
       direction: ltr;
       unicode-bidi: isolate;
       font-variant-numeric: tabular-nums;
+      padding-left: ${THERMAL_RECEIPT_AMT_SAFE_INSET};
+      font-size: 12px;
+      font-weight: 700;
       overflow: visible;
-      width: 30%;
     }
-    table.totals-table tr.total-row.emphasis td.total-label {
+    .summary-line.emphasis .summary-label {
       font-size: 15px;
       font-weight: 900;
-      padding-top: 4px;
-      padding-bottom: 4px;
+      padding-top: 2px;
+      padding-bottom: 2px;
     }
-    table.totals-table tr.total-row.emphasis td.total-amt {
+    .summary-line.emphasis .summary-amt {
       font-size: 17px;
       font-weight: 900;
-      padding-top: 4px;
-      padding-bottom: 4px;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    table.totals-table td.total-line-cell {
+      padding: 1px 0;
+      vertical-align: top;
+    }
+    table.items-table .thermal-amt {
+      padding-left: ${THERMAL_RECEIPT_AMT_SAFE_INSET};
     }
     td.item-name,
     td.item-qty,
@@ -396,27 +430,8 @@ const THERMAL_RECEIPT_BASE_CSS = `
       margin: 4px 0;
       padding: 3px 2mm;
     }
-    .pay-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-      gap: 2mm;
+    .payment-box .summary-line {
       margin: 2px 0;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .pay-label { text-align: right; }
-    .pay-amt {
-      direction: ltr;
-      unicode-bidi: isolate;
-      font-variant-numeric: tabular-nums;
-      min-width: 14mm;
-      text-align: right;
-      padding-left: ${THERMAL_RECEIPT_AMT_SAFE_INSET};
-    }
-    .pay-row-emphasis .pay-amt {
-      font-size: 14px;
-      font-weight: 900;
     }
     .disc { font-size: 10px; font-weight: 600; }
     .thanks { font-size: 13px; font-weight: 700; margin: 4px 0 0; }

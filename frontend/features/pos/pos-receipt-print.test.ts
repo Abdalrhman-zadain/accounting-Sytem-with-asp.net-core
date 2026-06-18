@@ -64,7 +64,8 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("نقد");
     expect(html).not.toContain("بطاقة");
     expect(html).toContain("مدفوع");
-    expect(html).toContain('class="pay-row pay-row-emphasis"');
+    expect(html).toContain('class="summary-line emphasis"');
+    expect(html).toContain("summary-amt");
     expect(html).toContain("شكراً لزيارتكم");
     expect(html).not.toContain("كاشوكة");
     expect(html).not.toContain("Simple Account");
