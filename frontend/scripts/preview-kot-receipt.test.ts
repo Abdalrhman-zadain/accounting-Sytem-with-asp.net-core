@@ -66,7 +66,7 @@ function baseSale(overrides: Partial<PosSale> = {}): PosSale {
     journalEntry: null,
     session: null,
     customer: null,
-    table: { id: "t1", tableNumber: "12" },
+    table: { id: "t1", tableNumber: "12", status: "OCCUPIED" },
     waiter: { id: "w1", name: "أحمد", email: "ahmed@example.com" },
     deliveryCompany: null,
     driver: null,
@@ -173,8 +173,17 @@ describe("kot and receipt preview generator", () => {
       tableId: null,
       deliveryAddress: "شارع الملكة رانيا، عمّان",
       deliveryNotes: "اتصل عند الوصول",
-      deliveryCompany: { id: "dc1", name: "Talabat", arabicName: "طلبات" },
-      driver: { id: "d1", name: "خالد", email: "k@example.com" },
+      deliveryCompany: {
+        id: "dc1",
+        name: "Talabat",
+        arabicName: "طلبات",
+        receivableAccountId: "acc-1",
+        commissionRate: "0.00",
+        isActive: true,
+        createdAt: "",
+        updatedAt: "",
+      },
+      driver: { id: "d1", name: "خالد", phone: null, isActive: true, createdAt: "", updatedAt: "" },
       deliveryFeeAmount: "1.50",
     });
 
@@ -192,11 +201,11 @@ describe("kot and receipt preview generator", () => {
     );
 
     const deltaLine: KitchenDeltaLine = {
-      salesInvoiceLineId: "line-1",
+      lineId: "line-1",
+      itemId: "item-1",
       name: "بطاطا كبيرة",
       qty: 1,
       modifiers: null,
-      lineNote: null,
     };
     writeFileSync(
       join(PREVIEW_DIR, "kot-update.html"),

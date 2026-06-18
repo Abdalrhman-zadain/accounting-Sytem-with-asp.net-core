@@ -39,6 +39,23 @@ const KOT_STYLES = `
     .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
     .meta-block { margin: 4px 0; word-wrap: break-word; }
     .meta-block .label { font-weight: bold; }
+    .order-note-panel {
+      border: 2px solid #000;
+      margin: 7px 0 4px;
+      padding: 5px 4px;
+      text-align: center;
+      word-break: break-word;
+    }
+    .order-note-label {
+      font-size: 11pt;
+      font-weight: 900;
+      margin-bottom: 3px;
+    }
+    .order-note-text {
+      font-size: 14pt;
+      font-weight: 900;
+      line-height: 1.35;
+    }
     .item { margin: 6px 0; }
     .item-row { display: flex; gap: 6px; align-items: baseline; }
     .item-qty { font-size: 14pt; font-weight: bold; flex-shrink: 0; }
@@ -46,8 +63,7 @@ const KOT_STYLES = `
     .item-addons-block { margin-top: 4px; padding-inline-start: 10px; }
     .item-addons-label { font-size: 11pt; font-weight: bold; margin-bottom: 2px; }
     .item-addon-line { font-size: 12pt; font-weight: 900; line-height: 1.45; margin: 2px 0; }
-    .sub { font-size: 9pt; opacity: 0.85; margin-top: 2px; }
-    .note { font-size: 9pt; font-style: italic; margin-top: 4px; }
+    .line-note { font-size: 11pt; font-weight: 900; line-height: 1.35; margin-top: 4px; }
 `;
 
 function buildKotDocumentHtml(
@@ -90,6 +106,17 @@ function kotMetaBlock(label: string, value: string | null | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed || trimmed === "—") return "";
   return `<div class="meta-block"><div class="label">${label}</div><div>${trimmed}</div></div>`;
+}
+
+function kotOrderNotePanel(sale: PosSale, language: string): string {
+  const trimmed = sale.description?.trim();
+  if (!trimmed) return "";
+  const isAr = language === "ar";
+  return `
+    <div class="order-note-panel">
+      <div class="order-note-label">${isAr ? "ملاحظة مهمة للمطبخ" : "Kitchen note"}</div>
+      <div class="order-note-text">${trimmed}</div>
+    </div>`;
 }
 
 function buildOrderTypeBanner(sale: PosSale, language: string): string {
@@ -155,14 +182,8 @@ function buildKotHeaderSection(sale: PosSale, language: string): string {
   return `
     ${buildOrderTypeBanner(sale, language)}
     <div class="sep">${SEP}</div>
-    ${buildKotMetaSection(sale, language)}`;
-}
-
-function shouldShowBottomOrderNote(sale: PosSale): boolean {
-  const orderType = sale.orderType ?? "DINE_IN";
-  if (!sale.description?.trim()) return false;
-  // Takeaway shows order note in meta section to avoid duplication.
-  return orderType !== "TAKEAWAY";
+    ${buildKotMetaSection(sale, language)}
+    ${kotOrderNotePanel(sale, language)}`;
 }
 
 function buildLineRowsFromSaleLines(
@@ -221,7 +242,7 @@ function buildLineRowHtml(
         <span class="item-name">${name}</span>
       </div>
       ${addonsHtml}
-      ${note ? `<div class="sub note">${note}</div>` : ""}
+      ${note ? `<div class="line-note">${note}</div>` : ""}
     </div>`;
 }
 
@@ -257,7 +278,6 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
-    ${shouldShowBottomOrderNote(sale) ? `<div class="note">${sale.description}</div>` : ""}
   `;
 
   return buildKotDocumentHtml(

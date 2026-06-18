@@ -51,7 +51,7 @@ const mockSaleBase = {
   journalEntry: null,
   session: null,
   customer: null,
-  table: { id: "table-1", tableNumber: "5" },
+  table: { id: "table-1", tableNumber: "5", status: "OCCUPIED" },
   waiter: { id: "waiter-1", name: "أحمد", email: "ahmed@example.com" },
   deliveryCompany: null,
   driver: null,
@@ -119,7 +119,11 @@ describe("buildKitchenOrderTicketHtml", () => {
     expect(html).toContain("إضافات");
     expect(html).not.toContain("مايونيز بالثوم (+0.50)");
     expect(html).toContain("بدون ثوم");
+    expect(html).toContain("ملاحظة مهمة للمطبخ");
+    expect(html).toContain('class="order-note-panel"');
     expect(html).toContain("الرجاء تسليم الطلب بسرعة");
+    expect(html).toContain("font-size: 14pt");
+    expect(html).not.toContain("font-size: 9pt");
   });
 
   it("renders English dine-in KOT", () => {
@@ -163,7 +167,16 @@ describe("buildKitchenOrderTicketHtml", () => {
         waiterId: null,
         deliveryAddress: "شارع الملكة رانيا، عمّان",
         deliveryNotes: "اتصل عند الوصول",
-        deliveryCompany: { id: "dc1", name: "Talabat", arabicName: "طلبات" },
+        deliveryCompany: {
+          id: "dc1",
+          name: "Talabat",
+          arabicName: "طلبات",
+          receivableAccountId: "acc-1",
+          commissionRate: "0.00",
+          isActive: true,
+          createdAt: "",
+          updatedAt: "",
+        },
         driver: { id: "d1", name: "خالد", phone: null, isActive: true, createdAt: "", updatedAt: "" },
       }),
       "ar",
@@ -183,11 +196,11 @@ describe("buildKitchenOrderTicketHtml", () => {
   it("includes order-type banner on delta and void tickets", () => {
     const sale = mockSale();
     const deltaLine = {
-      salesInvoiceLineId: "line-1",
+      lineId: "line-1",
+      itemId: "item-1",
       name: "بطاطا كبيرة",
       qty: 1,
       modifiers: null,
-      lineNote: null,
     };
 
     const updateHtml = buildKitchenDeltaTicketHtml(sale, [deltaLine], "ar");
@@ -195,6 +208,9 @@ describe("buildKitchenOrderTicketHtml", () => {
 
     expect(updateHtml).toContain("صالة — طاولة 5");
     expect(voidHtml).toContain("صالة — طاولة 5");
+    expect(updateHtml).toContain("ملاحظة مهمة للمطبخ");
+    expect(updateHtml).toContain("الرجاء تسليم الطلب بسرعة");
+    expect(voidHtml).toContain("ملاحظة مهمة للمطبخ");
     expect(updateHtml).toContain("تحديث مطبخ");
     expect(voidHtml).toContain("*** إلغاء ***");
   });
