@@ -86,11 +86,13 @@ Current behavior:
 - The kitchen print hub runs from the shared `/pos` layout so it stays active while the cashier visits the floor plan (`/pos/tables`) and other POS screens; it does not restart on every navigation.
 - Paying a dine-in order that was already sent to the kitchen should print only the customer receipt on the cashier printer, not a second kitchen ticket. The print hub dedupes by invoice id and invoice line id, skips completed sales, and marks already-sent orders when the cashier resumes the table.
 - If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
+- Customer receipt amounts use padded LTR cells with a left safe inset in `frontend/features/pos-shared/thermal-receipt-layout.ts` so values such as `2.50` are not clipped to `50` on the physical left edge of 80mm rolls. Line-level discounts print under the item row; invoice-level `خصم` prints only for cart-level discounts above summed line discounts.
 
 What this means for future edits:
 
 - do not move local OS printer names into global POS settings unless printing is changed to a network/IP or local-agent model with stable printer identifiers.
 - keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, or fallback changes.
+- keep receipt amount columns right-aligned inside the printable safe area; test real printer output after changing `thermal-receipt-layout.ts`.
 
 ## Local Docker Port Reservation On Windows
 

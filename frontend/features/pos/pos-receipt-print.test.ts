@@ -53,6 +53,8 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("الكمية");
     expect(html).toContain("الإجمالي");
     expect(html).toContain("2.50");
+    expect(html).toContain("thermal-amt");
+    expect(html).toContain("2.5mm");
     expect(html).toContain("المجموع الفرعي");
     expect(html).toContain("الضريبة 16%");
     expect(html).toContain("الصافي");
@@ -62,6 +64,37 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("بطاقة");
     expect(html).toContain("مدفوع");
     expect(html).toContain("شكراً لزيارتكم");
+  });
+
+  it("shows line discount rows for discounted items without duplicating invoice discount", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          total: 0,
+          paid: 0,
+          tendered: 0,
+          subtotal: 0,
+          discount: 2.5,
+          tax: 0,
+          payments: [],
+          lines: [
+            {
+              name: "وجبه مجانية لشخص واحد",
+              quantity: 1,
+              unitPrice: 2.5,
+              discountAmount: 2.5,
+              taxAmount: 0,
+              lineTotal: 0,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("وجبه مجانية لشخص واحد");
+    expect(html).toContain('class="item-disc-row"');
+    expect(html).toContain("-2.50");
+    expect(html.match(/خصم/g)?.length).toBe(1);
   });
 
   it("shows table and staff row for dine-in orders", () => {

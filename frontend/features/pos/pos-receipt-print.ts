@@ -14,6 +14,7 @@ import {
   thermalReceiptDateTimeRow,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemRow4Col,
+  thermalReceiptItemDiscountRow,
   thermalReceiptMetaLineHtml,
   thermalReceiptMetaRowSplit,
   thermalReceiptPaymentBoxHtml,
@@ -256,6 +257,10 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     .join("\n");
 }
 
+function sumLineDiscounts(lines: PosReceiptData["lines"]): number {
+  return lines.reduce((sum, line) => sum + (line.discountAmount > 0 ? line.discountAmount : 0), 0);
+}
+
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
   const { date, time } = fmtDateParts(receipt.soldAt);
@@ -263,6 +268,8 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
   const serviceCharge = receipt.serviceChargeAmount ?? 0;
   const deliveryFee = receipt.deliveryFeeAmount ?? 0;
+  const lineDiscountTotal = sumLineDiscounts(receipt.lines);
+  const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
 
   rows.push(buildBrandHeaderHtml(receipt));
   rows.push(`<div class="sep">${SEP}</div>`);
@@ -295,6 +302,9 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(
       thermalReceiptItemRow4Col(line.name, line.unitPrice, qty, line.lineTotal),
     );
+    if (line.discountAmount > 0.009) {
+      rows.push(thermalReceiptItemDiscountRow(line.discountAmount));
+    }
   }
   rows.push(thermalReceiptTableClose());
 
@@ -302,8 +312,8 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(thermalReceiptTableOpen("totals-table"));
   rows.push(thermalReceiptTotalRow("المجموع الفرعي", receipt.subtotal));
 
-  if (receipt.discount > 0.009) {
-    rows.push(thermalReceiptTotalRow("خصم", -receipt.discount));
+  if (cartLevelDiscount > 0.009) {
+    rows.push(thermalReceiptTotalRow("خصم", -cartLevelDiscount));
   }
 
   if (serviceCharge > 0.009) {
