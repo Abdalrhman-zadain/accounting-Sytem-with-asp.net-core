@@ -37,6 +37,10 @@ export type PosReceiptData = {
   terminalName?: string | null;
   warehouseName: string;
   paymentSummary: string;
+  payments?: Array<{
+    paymentMethod: string;
+    amount: number;
+  }>;
   total: number;
   paid: number;
   tendered: number;
@@ -83,6 +87,21 @@ export function buildArabicPaymentSummary(
   return "مختلط";
 }
 
+export function resolveReceiptPaymentDisplay(receipt: PosReceiptData): string {
+  if (receipt.payments?.length) {
+    return buildArabicPaymentSummary(
+      receipt.payments.map((payment) => payment.paymentMethod),
+      receipt.payments.map((payment) => payment.amount),
+    );
+  }
+
+  if (receipt.paymentSummary.trim()) {
+    return formatReceiptPaymentSummary(receipt.paymentSummary);
+  }
+
+  return "";
+}
+
 export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosReceiptData {
   return {
     ...receipt,
@@ -90,7 +109,7 @@ export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosRece
       receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
         ? "كاشير"
         : receipt.cashierName,
-    paymentSummary: receipt.paymentSummary.trim() || receipt.paymentSummary,
+    paymentSummary: resolveReceiptPaymentDisplay(receipt),
   };
 }
 
@@ -170,6 +189,27 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     .join("\n");
 }
 
+function buildWarehouseMetaLines(warehouseName: string): string[] {
+  const trimmed = warehouseName.trim();
+  if (!trimmed || trimmed === "—") {
+    return [];
+  }
+
+  const parts = trimmed
+    .split(/\s*\/\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) {
+    return [thermalReceiptMetaLineHtml(`مستودع: ${trimmed}`)];
+  }
+
+  return [
+    thermalReceiptMetaLineHtml(`مستودع: ${parts[0]}`),
+    ...parts.slice(1).map((part) => thermalReceiptMetaLineHtml(part)),
+  ];
+}
+
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
 
@@ -187,9 +227,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   if (receipt.terminalName) {
     rows.push(thermalReceiptMetaLineHtml(`جهاز: ${receipt.terminalName}`));
   }
-  if (receipt.warehouseName) {
-    rows.push(thermalReceiptMetaLineHtml(`مستودع: ${receipt.warehouseName}`));
-  }
+  rows.push(...buildWarehouseMetaLines(receipt.warehouseName));
 
   rows.push(`<div class="sep">${SEP}</div>`);
 
@@ -230,13 +268,9 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(thermalReceiptRowLine("الباقي", fmtThermalReceiptAmt(receipt.change)));
   }
 
-  if (receipt.paymentSummary.trim()) {
-    rows.push(
-      thermalReceiptPaymentBlockHtml(
-        "الدفع",
-        formatReceiptPaymentSummary(receipt.paymentSummary),
-      ),
-    );
+  const paymentDisplay = resolveReceiptPaymentDisplay(receipt);
+  if (paymentDisplay) {
+    rows.push(thermalReceiptPaymentBlockHtml("الدفع", paymentDisplay));
   }
 
   rows.push(thermalReceiptTableClose());

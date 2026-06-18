@@ -5776,6 +5776,10 @@ export class PosService {
       paymentSummary: row.posPayments
         .map((payment: any) => `${payment.bankCashAccount.name} ${payment.amount.toString()}`)
         .join(" + "),
+      payments: row.posPayments.map((payment: any) => ({
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount.toString(),
+      })),
       warehouseName: row.posSession?.warehouse?.name ?? "—",
       lines: row.lines.map((line: any) => ({
         name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,

@@ -7,17 +7,17 @@ export const THERMAL_ROLL_PAGE_WIDTH = "80mm";
  */
 export const THERMAL_PRINTABLE_WIDTH_MM = 72;
 
-/** CSS px width for ~68mm safe content at 96dpi (68 / 25.4 * 96 ≈ 257). */
-export const THERMAL_RECEIPT_WIDTH_PX = 260;
+/** CSS px width for ~63mm safe content at 96dpi (63 / 25.4 * 96 ≈ 238). */
+export const THERMAL_RECEIPT_WIDTH_PX = 240;
 
 /** Horizontal padding inside the content safe area (each side). */
-export const THERMAL_RECEIPT_SIDE_PADDING = "4mm";
+export const THERMAL_RECEIPT_SIDE_PADDING = "5mm";
 
 /** `@page` left/right margin to center content on an 80mm roll. */
 export const THERMAL_PAGE_SIDE_MARGIN = "5mm";
 
 /** Separator character count for narrow courier receipts. */
-export const THERMAL_RECEIPT_SEP_CHARS = 26;
+export const THERMAL_RECEIPT_SEP_CHARS = 22;
 
 /** Max visible characters for item names on one receipt line. */
 export const THERMAL_RECEIPT_ITEM_NAME_MAX = 22;
@@ -119,7 +119,7 @@ const THERMAL_RECEIPT_BASE_CSS = `
     .meta-line {
       word-break: break-word;
       overflow-wrap: anywhere;
-      padding: 0 1px;
+      padding: 0 2mm;
     }
     .sep { text-align: center; margin: 2px 0; font-size: 10px; white-space: pre; }
     table.receipt-table {
@@ -130,26 +130,28 @@ const THERMAL_RECEIPT_BASE_CSS = `
     }
     td.item,
     td.label {
-      width: 74%;
+      width: 76%;
       text-align: right;
       vertical-align: top;
       word-break: break-word;
-      padding: 1px 2px;
+      padding: 1px 2mm 1px 1px;
       font-size: 10px;
       font-weight: 700;
     }
     td.amt {
-      width: 26%;
-      text-align: left;
+      width: 24%;
+      text-align: right;
       vertical-align: top;
       white-space: nowrap;
-      padding: 1px 2px;
+      padding: 1px 1px 1px 3mm;
       font-size: 10px;
       font-weight: 700;
+      direction: ltr;
+      unicode-bidi: isolate;
     }
     td.payment-block {
       text-align: right;
-      padding: 2px 2px 1px;
+      padding: 2px 2mm 1px;
       font-size: 10px;
       font-weight: 700;
       line-height: 1.3;

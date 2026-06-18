@@ -4007,6 +4007,10 @@ export type PosReceipt = {
   tendered: string;
   change: string;
   paymentSummary: string;
+  payments?: Array<{
+    paymentMethod: string;
+    amount: string;
+  }>;
   warehouseName: string;
   lines: Array<{
     name: string;

@@ -1032,6 +1032,10 @@ function mapReceiptResponse(receipt: {
   terminalName?: string | null;
   warehouseName: string;
   paymentSummary: string;
+  payments?: Array<{
+    paymentMethod: string;
+    amount: string;
+  }>;
   total: string;
   paid: string;
   tendered: string;
@@ -1059,6 +1063,10 @@ function mapReceiptResponse(receipt: {
     terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,
     paymentSummary: receipt.paymentSummary,
+    payments: receipt.payments?.map((payment) => ({
+      paymentMethod: payment.paymentMethod,
+      amount: parseAmount(payment.amount),
+    })),
     total: parseAmount(receipt.total),
     paid: parseAmount(receipt.paid),
     tendered: parseAmount(receipt.tendered),
