@@ -7,8 +7,8 @@ export const THERMAL_ROLL_PAGE_WIDTH = "80mm";
  */
 export const THERMAL_PRINTABLE_WIDTH_MM = 72;
 
-/** CSS px width for ~63mm safe content at 96dpi (63 / 25.4 * 96 ≈ 238). */
-export const THERMAL_RECEIPT_WIDTH_PX = 240;
+/** CSS px width for ~60mm safe content at 96dpi (60 / 25.4 * 96 ≈ 227). */
+export const THERMAL_RECEIPT_WIDTH_PX = 230;
 
 /** Horizontal padding inside the content safe area (each side). */
 export const THERMAL_RECEIPT_SIDE_PADDING = "5mm";
@@ -16,14 +16,17 @@ export const THERMAL_RECEIPT_SIDE_PADDING = "5mm";
 /** `@page` left/right margin to center content on an 80mm roll. */
 export const THERMAL_PAGE_SIDE_MARGIN = "5mm";
 
-/** Separator character count for narrow courier receipts. */
-export const THERMAL_RECEIPT_SEP_CHARS = 22;
+/** Separator character count for narrow courier receipts (~24 cols on XPrinter). */
+export const THERMAL_RECEIPT_SEP_CHARS = 20;
 
 /** Max visible characters for item names on one receipt line. */
-export const THERMAL_RECEIPT_ITEM_NAME_MAX = 22;
+export const THERMAL_RECEIPT_ITEM_NAME_MAX = 20;
 
 /** Max characters per payment account name on the receipt. */
 export const THERMAL_RECEIPT_PAYMENT_NAME_MAX = 16;
+
+/** Fixed character width for monospace amount cells. */
+export const THERMAL_RECEIPT_AMT_PAD = 6;
 
 export function thermalReceiptSepLine(char = "─"): string {
   return char.repeat(THERMAL_RECEIPT_SEP_CHARS);
@@ -33,8 +36,15 @@ export function fmtThermalReceiptAmt(val: number): string {
   return val.toFixed(2);
 }
 
-export function thermalReceiptRowLine(label: string, value: string): string {
-  return `<tr><td class="label">${label}</td><td class="amt">${value}</td></tr>`;
+/** Padded amount for fixed-width thermal columns (e.g. "  2.50"). */
+export function fmtThermalReceiptAmtPadded(val: number): string {
+  const negative = val < -0.0005;
+  const text = `${negative ? "-" : ""}${Math.abs(val).toFixed(2)}`;
+  return text.padStart(THERMAL_RECEIPT_AMT_PAD, " ");
+}
+
+export function thermalReceiptRowLine(label: string, value: number): string {
+  return `<tr><td class="label">${label}</td><td class="amt">${fmtThermalReceiptAmtPadded(value)}</td></tr>`;
 }
 
 export function thermalReceiptItemLine(
@@ -47,8 +57,16 @@ export function thermalReceiptItemLine(
     name.length > THERMAL_RECEIPT_ITEM_NAME_MAX
       ? `${name.slice(0, THERMAL_RECEIPT_ITEM_NAME_MAX)}…`
       : name;
-  const description = `${truncName}  ×${qty}${discountNote}`;
-  return `<tr><td class="item">${description}</td><td class="amt">${fmtThermalReceiptAmt(total)}</td></tr>`;
+  const qtyLine = `×${qty}${discountNote}`;
+  const amt = fmtThermalReceiptAmtPadded(total);
+
+  return `<tr>
+  <td class="item-name">${truncName}</td>
+  <td class="amt" rowspan="2">${amt}</td>
+</tr>
+<tr>
+  <td class="item-qty">${qtyLine}</td>
+</tr>`;
 }
 
 export function thermalReceiptMetaLineHtml(text: string): string {
@@ -101,7 +119,7 @@ const THERMAL_RECEIPT_BASE_CSS = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 700;
       color: #000;
       background: #fff;
@@ -113,8 +131,8 @@ const THERMAL_RECEIPT_BASE_CSS = `
       line-height: 1.25;
     }
     .center { text-align: center; }
-    .title { font-size: 14px; font-weight: 900; margin-bottom: 1px; line-height: 1.15; }
-    .sub { font-size: 11px; font-weight: 700; margin-bottom: 1px; }
+    .title { font-size: 13px; font-weight: 900; margin-bottom: 1px; line-height: 1.15; }
+    .sub { font-size: 10px; font-weight: 700; margin-bottom: 1px; }
     .meta { font-size: 10px; font-weight: 600; margin-bottom: 1px; line-height: 1.25; }
     .meta-line {
       word-break: break-word;
@@ -128,9 +146,10 @@ const THERMAL_RECEIPT_BASE_CSS = `
       table-layout: fixed;
       margin: 1px 0;
     }
-    td.item,
+    td.item-name,
+    td.item-qty,
     td.label {
-      width: 76%;
+      width: 70%;
       text-align: right;
       vertical-align: top;
       word-break: break-word;
@@ -138,16 +157,25 @@ const THERMAL_RECEIPT_BASE_CSS = `
       font-size: 10px;
       font-weight: 700;
     }
+    td.item-qty {
+      font-size: 9px;
+      font-weight: 600;
+      padding-top: 0;
+      padding-bottom: 2px;
+      color: #111;
+    }
     td.amt {
-      width: 24%;
-      text-align: right;
-      vertical-align: top;
-      white-space: nowrap;
-      padding: 1px 1px 1px 3mm;
+      width: 30%;
+      min-width: 12mm;
+      text-align: left;
+      vertical-align: middle;
+      white-space: pre;
+      padding: 1px 1px 1px 4mm;
       font-size: 10px;
       font-weight: 700;
       direction: ltr;
       unicode-bidi: isolate;
+      font-variant-numeric: tabular-nums;
     }
     td.payment-block {
       text-align: right;

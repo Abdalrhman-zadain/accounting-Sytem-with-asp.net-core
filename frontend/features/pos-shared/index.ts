@@ -20,6 +20,7 @@ export { PosRegisterMainGrid, type PosRegisterMainGridProps } from "./pos-regist
 export {
   THERMAL_PAGE_SIDE_MARGIN,
   THERMAL_PRINTABLE_WIDTH_MM,
+  THERMAL_RECEIPT_AMT_PAD,
   THERMAL_RECEIPT_ITEM_NAME_MAX,
   THERMAL_RECEIPT_PAYMENT_NAME_MAX,
   THERMAL_RECEIPT_SEP_CHARS,
@@ -28,6 +29,7 @@ export {
   THERMAL_ROLL_PAGE_WIDTH,
   buildThermalReceiptDocumentHtml,
   fmtThermalReceiptAmt,
+  fmtThermalReceiptAmtPadded,
   formatReceiptPaymentSummary,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemLine,

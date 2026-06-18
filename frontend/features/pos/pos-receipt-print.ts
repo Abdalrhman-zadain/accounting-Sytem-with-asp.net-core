@@ -11,8 +11,6 @@ import {
 } from "@/features/pos/pos-print-bridge";
 import {
   buildThermalReceiptDocumentHtml,
-  fmtThermalReceiptAmt,
-  formatReceiptPaymentSummary,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemLine,
   thermalReceiptMetaLineHtml,
@@ -21,6 +19,7 @@ import {
   thermalReceiptSepLine,
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
+  formatReceiptPaymentSummary,
 } from "@/features/pos-shared/thermal-receipt-layout";
 
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
@@ -189,27 +188,6 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     .join("\n");
 }
 
-function buildWarehouseMetaLines(warehouseName: string): string[] {
-  const trimmed = warehouseName.trim();
-  if (!trimmed || trimmed === "—") {
-    return [];
-  }
-
-  const parts = trimmed
-    .split(/\s*\/\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length <= 1) {
-    return [thermalReceiptMetaLineHtml(`مستودع: ${trimmed}`)];
-  }
-
-  return [
-    thermalReceiptMetaLineHtml(`مستودع: ${parts[0]}`),
-    ...parts.slice(1).map((part) => thermalReceiptMetaLineHtml(part)),
-  ];
-}
-
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
 
@@ -224,10 +202,6 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   if (receipt.cashierName) {
     rows.push(thermalReceiptMetaLineHtml(`كاشير: ${receipt.cashierName}`));
   }
-  if (receipt.terminalName) {
-    rows.push(thermalReceiptMetaLineHtml(`جهاز: ${receipt.terminalName}`));
-  }
-  rows.push(...buildWarehouseMetaLines(receipt.warehouseName));
 
   rows.push(`<div class="sep">${SEP}</div>`);
 
@@ -236,7 +210,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     const qty = formatReceiptQuantity(line);
     const discountNote =
       line.discountAmount > 0.009
-        ? ` <span class="disc">(-${fmtThermalReceiptAmt(line.discountAmount)})</span>`
+        ? ` <span class="disc">(-${line.discountAmount.toFixed(2)})</span>`
         : "";
     rows.push(thermalReceiptItemLine(qty, line.name, line.lineTotal, discountNote));
   }
@@ -246,26 +220,26 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(thermalReceiptTableOpen());
 
   if (receipt.discount > 0.009) {
-    rows.push(thermalReceiptRowLine("خصم", `-${fmtThermalReceiptAmt(receipt.discount)}`));
+    rows.push(thermalReceiptRowLine("خصم", -receipt.discount));
   }
 
   if (receipt.tax > 0.009) {
-    rows.push(thermalReceiptRowLine("قبل الضريبة", fmtThermalReceiptAmt(receipt.subtotal)));
-    rows.push(thermalReceiptRowLine("الضريبة", fmtThermalReceiptAmt(receipt.tax)));
+    rows.push(thermalReceiptRowLine("قبل الضريبة", receipt.subtotal));
+    rows.push(thermalReceiptRowLine("الضريبة", receipt.tax));
   }
 
-  rows.push(thermalReceiptRowLine("الإجمالي", fmtThermalReceiptAmt(receipt.total)));
+  rows.push(thermalReceiptRowLine("الإجمالي", receipt.total));
 
   if (receipt.paid > 0.009) {
-    rows.push(thermalReceiptRowLine("مدفوع", fmtThermalReceiptAmt(receipt.paid)));
+    rows.push(thermalReceiptRowLine("مدفوع", receipt.paid));
   }
 
   if (receipt.tendered > receipt.paid + 0.009) {
-    rows.push(thermalReceiptRowLine("مقبوض", fmtThermalReceiptAmt(receipt.tendered)));
+    rows.push(thermalReceiptRowLine("مقبوض", receipt.tendered));
   }
 
   if (receipt.change > 0.009) {
-    rows.push(thermalReceiptRowLine("الباقي", fmtThermalReceiptAmt(receipt.change)));
+    rows.push(thermalReceiptRowLine("الباقي", receipt.change));
   }
 
   const paymentDisplay = resolveReceiptPaymentDisplay(receipt);
