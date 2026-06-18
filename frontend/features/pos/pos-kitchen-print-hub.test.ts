@@ -135,6 +135,12 @@ describe("pos-kitchen-print-hub helpers", () => {
     expect(findUnprintedKitchenItems(new Set(), orders)).toEqual([]);
   });
 
+  it("skips kitchen orders when the sales invoice is already marked printed", () => {
+    const orders = [makeOrder("o1", [{ id: "i1", salesInvoiceLineId: "line-1" }])];
+
+    expect(findUnprintedKitchenItems(new Set(["invoice:sale-o1"]), orders)).toEqual([]);
+  });
+
   it("primes only kitchen items older than the recent window", () => {
     const now = new Date("2026-06-17T12:00:00.000Z").getTime();
     const orders = [

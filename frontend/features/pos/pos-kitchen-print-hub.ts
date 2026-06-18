@@ -15,6 +15,45 @@ type KitchenOrderPrintItem = KitchenOrder["items"][number] & {
   salesInvoiceLineId?: string | null;
 };
 
+function kitchenInvoicePrintKey(salesInvoiceId: string): string {
+  return `invoice:${salesInvoiceId}`;
+}
+
+function kitchenLinePrintKey(lineId: string): string {
+  return `line:${lineId}`;
+}
+
+function isKitchenInvoiceMarkedPrinted(
+  knownIds: ReadonlySet<string>,
+  salesInvoiceId: string | null | undefined,
+): boolean {
+  return Boolean(salesInvoiceId && knownIds.has(kitchenInvoicePrintKey(salesInvoiceId)));
+}
+
+function markKitchenInvoicePrinted(knownIds: Set<string>, salesInvoiceId: string): void {
+  knownIds.add(kitchenInvoicePrintKey(salesInvoiceId));
+}
+
+export type KitchenCartLinePrintRef = {
+  salesInvoiceLineId?: string | null;
+  kitchenSentAt?: string | null;
+};
+
+export function markKitchenLinesFromCartInSet(
+  knownIds: Set<string>,
+  lines: KitchenCartLinePrintRef[],
+): void {
+  for (const line of lines) {
+    if (!line.kitchenSentAt) {
+      continue;
+    }
+    const lineId = line.salesInvoiceLineId?.trim();
+    if (lineId) {
+      knownIds.add(kitchenLinePrintKey(lineId));
+    }
+  }
+}
+
 function kitchenItemPrintKeys(item: KitchenOrderPrintItem): string[] {
   const keys = [item.id];
   if (item.salesInvoiceLineId) {
@@ -103,6 +142,9 @@ export function findUnprintedKitchenItems(
 
   for (const order of orders) {
     if (!isKitchenOrderOpenForPrinting(order)) {
+      continue;
+    }
+    if (isKitchenInvoiceMarkedPrinted(knownIds, order.salesInvoiceId)) {
       continue;
     }
     const items = order.items.filter(
@@ -210,6 +252,8 @@ export type UseKitchenPrintHubOptions = {
 export type KitchenPrintHubController = {
   markKitchenOrderItemsPrinted: (itemIds: string[]) => void;
   markKitchenOrderItemsPrintedForSale: (salesInvoiceId: string) => void;
+  markKitchenInvoiceFullyPrinted: (salesInvoiceId: string) => void;
+  markKitchenLinesFromCart: (salesInvoiceId: string, lines: KitchenCartLinePrintRef[]) => void;
 };
 
 export function useKitchenPrintHub({
@@ -245,16 +289,30 @@ export function useKitchenPrintHub({
     persistPrintedIds(printedIdsRef.current);
   }, []);
 
+  const markKitchenInvoiceFullyPrinted = useCallback((salesInvoiceId: string) => {
+    markKitchenInvoicePrinted(printedIdsRef.current, salesInvoiceId);
+    persistPrintedIds(printedIdsRef.current);
+  }, []);
+
+  const markKitchenLinesFromCart = useCallback(
+    (salesInvoiceId: string, lines: KitchenCartLinePrintRef[]) => {
+      markKitchenInvoicePrinted(printedIdsRef.current, salesInvoiceId);
+      markKitchenLinesFromCartInSet(printedIdsRef.current, lines);
+      persistPrintedIds(printedIdsRef.current);
+    },
+    [],
+  );
+
   const markKitchenOrderItemsPrintedForSale = useCallback(
     (salesInvoiceId: string) => {
+      markKitchenInvoicePrinted(printedIdsRef.current, salesInvoiceId);
       const order = latestOrdersRef.current.find(
         (row) => row.salesInvoiceId === salesInvoiceId,
       );
-      if (!order) {
-        return;
-      }
-      for (const item of order.items) {
-        markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
+      if (order) {
+        for (const item of order.items) {
+          markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
+        }
       }
       persistPrintedIds(printedIdsRef.current);
     },
@@ -315,5 +373,7 @@ export function useKitchenPrintHub({
   return {
     markKitchenOrderItemsPrinted,
     markKitchenOrderItemsPrintedForSale,
+    markKitchenInvoiceFullyPrinted,
+    markKitchenLinesFromCart,
   };
 }

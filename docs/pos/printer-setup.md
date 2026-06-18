@@ -193,6 +193,8 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
 - Delta/void kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and routed through `frontend/features/pos/pos-print-service.ts`.
 - Waiter-send kitchen printing is handled by `frontend/features/pos/pos-kitchen-print-hub.ts` on the cashier register; only one register tab per browser profile acts as the print leader when multiple tabs are open.
+- The hub is mounted in `frontend/app/(erp)/pos/layout.tsx` via `PosKitchenPrintHubProvider`, so it keeps polling while the cashier navigates between `/pos/register`, `/pos/tables`, delivery, settings, and other cashier POS routes (not `/pos/waiter/*`).
+- Resuming an already-sent table order marks that invoice and its kitchen lines as printed in the hub, so opening the table for payment does not reprint KOT.
 - The kitchen print hub tracks both `KitchenOrderItem.id` and `salesInvoiceLineId`, and ignores orders whose linked POS sale is already `COMPLETED` or `REFUNDED`, so paying a dine-in order that was already sent to the kitchen does not print a second KOT.
 - Backend kitchen sync (`rebuildKitchenOrderFromInvoice`) updates existing kitchen rows in place instead of deleting and recreating them, preserving item ids and kitchen status across payment.
 - Customer receipts print in **Arabic only** (RTL). Payment method labels use Arabic (`نقد`, `بطاقة`, etc.). Set `POS_RECEIPT_COMPANY_NAME` to the Arabic business name for a fully Arabic header.

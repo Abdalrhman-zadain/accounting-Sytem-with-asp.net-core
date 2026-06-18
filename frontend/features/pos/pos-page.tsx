@@ -152,9 +152,12 @@ import {
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
 import {
   captureKitchenLineSnapshotFromCart,
+  captureKitchenLineSnapshotFromSale,
+  diffKitchenSnapshots,
+  hasKitchenPrintDiff,
   type KitchenLineSnapshot,
 } from "@/features/pos/pos-kitchen-print-delta";
-import { useKitchenPrintHub } from "@/features/pos/pos-kitchen-print-hub";
+import { useKitchenPrintHubActions } from "@/features/pos/pos-kitchen-print-hub-provider";
 import {
   applyPosKitchenUpdatePrints,
   printCustomerReceipt,
@@ -247,6 +250,23 @@ function getCartLineKey(
 
 function isKitchenSentLineLocked(line: Pick<CartLine, "kitchenSentAt">) {
   return Boolean(line.kitchenSentAt);
+}
+
+function buildCartKitchenFingerprint(
+  lines: Array<{
+    salesInvoiceLineId?: string | null;
+    itemId: string;
+    quantity: number;
+    kitchenSentAt?: string | null;
+  }>,
+): string {
+  return JSON.stringify(
+    lines.map((line) => ({
+      id: line.salesInvoiceLineId ?? line.itemId,
+      q: line.quantity,
+      sent: line.kitchenSentAt,
+    })),
+  );
 }
 
 function getOrderWaiterLockMessage(language: string) {
@@ -1092,10 +1112,16 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
+  const waiterConfirmedAtRef = useRef<string | null>(null);
   const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
   const kitchenHubActionsRef = useRef({
     markKitchenOrderItemsPrinted: (_itemIds: string[]) => {},
     markKitchenOrderItemsPrintedForSale: (_salesInvoiceId: string) => {},
+    markKitchenInvoiceFullyPrinted: (_salesInvoiceId: string) => {},
+    markKitchenLinesFromCart: (
+      _salesInvoiceId: string,
+      _lines: Array<{ salesInvoiceLineId?: string | null; kitchenSentAt?: string | null }>,
+    ) => {},
   });
   // Stable ref so mutations defined before resetSale() can still invoke it
   const resetSaleRef = useRef<() => void>(() => {});
@@ -1836,7 +1862,11 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
         );
       }
       if (!waiterMode) {
-        await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
+        const after = captureKitchenLineSnapshotFromSale(sale);
+        const diff = diffKitchenSnapshots(pendingKitchenSnapshotRef.current, after);
+        if (!variables?.silent || hasKitchenPrintDiff(diff)) {
+          await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
+        }
       }
     },
     onError: (error) => {
@@ -1883,6 +1913,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
         setPreOrderCompletedTableId(tableIdForHandoff);
       }
       if (hadKitchenTicketBeforeReset && response.sale?.id) {
+        kitchenHubActionsRef.current.markKitchenInvoiceFullyPrinted(response.sale.id);
+        kitchenHubActionsRef.current.markKitchenLinesFromCart(
+          response.sale.id,
+          response.sale.lines.map((line) => ({
+            salesInvoiceLineId: line.id,
+            kitchenSentAt: line.kitchenSentAt ?? null,
+          })),
+        );
         kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(response.sale.id);
       }
       // Clear the cart immediately so returning to register starts fresh
@@ -3006,18 +3044,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     pushMessage(message, "error");
   };
 
-  const kitchenHub = useKitchenPrintHub({
-    enabled:
-      !waiterMode &&
-      !isWaiterOnlyUser(user) &&
-      hasPermission(user, "POS_VIEW_POS_SCREEN") &&
-      loadPosPrinterConfig().kitchenPrintHubEnabled &&
-      loadPosPrinterConfig().autoPrintKotOnSend &&
-      Boolean(token),
-    token,
-    language,
-    onPrintError: (message) => pushError(message),
-  });
+  const kitchenHub = useKitchenPrintHubActions();
   kitchenHubActionsRef.current = kitchenHub;
 
   const toggleItemFavorite = (itemId: string) => {
@@ -3036,6 +3063,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     setEditingInvoiceId(null);
     hadKitchenTicketRef.current = false;
     lastKitchenSyncFingerprintRef.current = null;
+    waiterConfirmedAtRef.current = null;
     prevOrderTypeRef.current = defaultOrderType;
     setCartLines([]);
     setInvoiceDiscountType("FIXED");
@@ -3598,19 +3626,24 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     setDeliveryMode(target.deliveryCompanyId ? "THIRD_PARTY" : "DIRECT");
     setActiveReservationId(target.heldContext?.reservationId ?? null);
     hadKitchenTicketRef.current = target.cartLines.some((line) => line.kitchenSentAt);
-    lastKitchenSyncFingerprintRef.current = null;
+    waiterConfirmedAtRef.current = target.waiterConfirmedAt ?? null;
+    lastKitchenSyncFingerprintRef.current = buildCartKitchenFingerprint(target.cartLines);
+    if (hadKitchenTicketRef.current) {
+      kitchenHubActionsRef.current.markKitchenInvoiceFullyPrinted(target.id);
+      kitchenHubActionsRef.current.markKitchenLinesFromCart(
+        target.id,
+        target.cartLines.map((line) => ({
+          salesInvoiceLineId: line.salesInvoiceLineId,
+          kitchenSentAt: line.kitchenSentAt,
+        })),
+      );
+      kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(target.id);
+    }
     pushMessage(t("pos.sales.alert.resumedHeldSale"));
   };
 
   const cartKitchenFingerprint = useMemo(
-    () =>
-      JSON.stringify(
-        cartLines.map((line) => ({
-          id: line.salesInvoiceLineId ?? line.itemId,
-          q: line.quantity,
-          sent: line.kitchenSentAt,
-        })),
-      ),
+    () => buildCartKitchenFingerprint(cartLines),
     [cartLines],
   );
 
@@ -3618,7 +3651,10 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     if (!hadKitchenTicketRef.current || !editingInvoiceId || !activeSession?.id) {
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isCartLockedByWaiter || waiterConfirmedAtRef.current) {
+      return;
+    }
+    if (cartLines.length > 0 && cartLines.every((line) => line.kitchenSentAt)) {
       return;
     }
     if (cartLines.length === 0) {
