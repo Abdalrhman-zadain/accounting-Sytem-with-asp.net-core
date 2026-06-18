@@ -1882,6 +1882,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       if (wasPreOrder && tableIdForHandoff) {
         setPreOrderCompletedTableId(tableIdForHandoff);
       }
+      if (hadKitchenTicketBeforeReset && response.sale?.id) {
+        kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(response.sale.id);
+      }
       // Clear the cart immediately so returning to register starts fresh
       resetSaleRef.current();
       await refreshPosData();

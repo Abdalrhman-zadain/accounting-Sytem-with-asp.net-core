@@ -3961,6 +3961,9 @@ export type KitchenOrder = {
   id: string;
   orderNumber: string;
   salesInvoiceId?: string | null;
+  salesInvoice?: {
+    posOperationalStatus?: PosOperationalStatus | null;
+  } | null;
   tableId?: string | null;
   tableName?: string | null;
   waiterId?: string | null;
@@ -3977,6 +3980,7 @@ export type KitchenOrder = {
   items: Array<{
     id: string;
     kitchenOrderId: string;
+    salesInvoiceLineId?: string | null;
     itemId: string;
     itemName: string;
     quantity: string;

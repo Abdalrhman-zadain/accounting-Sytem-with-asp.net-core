@@ -15,8 +15,30 @@ type KitchenOrderPrintItem = KitchenOrder["items"][number] & {
   salesInvoiceLineId?: string | null;
 };
 
-function resolveKitchenLineId(item: KitchenOrderPrintItem): string {
-  return item.salesInvoiceLineId ?? item.id;
+function kitchenItemPrintKeys(item: KitchenOrderPrintItem): string[] {
+  const keys = [item.id];
+  if (item.salesInvoiceLineId) {
+    keys.push(`line:${item.salesInvoiceLineId}`);
+  }
+  return keys;
+}
+
+function isKitchenItemPrinted(
+  knownIds: ReadonlySet<string>,
+  item: KitchenOrderPrintItem,
+): boolean {
+  return kitchenItemPrintKeys(item).some((key) => knownIds.has(key));
+}
+
+function markKitchenItemPrinted(knownIds: Set<string>, item: KitchenOrderPrintItem): void {
+  for (const key of kitchenItemPrintKeys(item)) {
+    knownIds.add(key);
+  }
+}
+
+function isKitchenOrderOpenForPrinting(order: KitchenOrder): boolean {
+  const status = order.salesInvoice?.posOperationalStatus;
+  return !status || (status !== "COMPLETED" && status !== "REFUNDED");
 }
 
 const HUB_CHANNEL_NAME = "pos-kitchen-print-hub";
@@ -26,6 +48,10 @@ const LEADER_STALE_MS = 2500;
 /** Items newer than this still print when the register tab opens after a waiter send. */
 const RECENT_KITCHEN_ITEM_MS = 5 * 60 * 1000;
 const PRINTED_IDS_STORAGE_KEY = "pos.kitchen-print-hub.printed-ids";
+
+function resolveKitchenLineId(item: KitchenOrderPrintItem): string {
+  return item.salesInvoiceLineId ?? item.id;
+}
 
 function loadPersistedPrintedIds(): Set<string> {
   if (typeof window === "undefined") {
@@ -59,7 +85,7 @@ export function primePrintedKitchenItemIds(
     for (const item of order.items) {
       const createdAt = new Date(item.createdAt).getTime();
       if (nowMs - createdAt > RECENT_KITCHEN_ITEM_MS) {
-        knownIds.add(item.id);
+        markKitchenItemPrinted(knownIds, item as KitchenOrderPrintItem);
       }
     }
   }
@@ -76,7 +102,12 @@ export function findUnprintedKitchenItems(
   const groups: Array<{ order: KitchenOrder; items: KitchenOrder["items"] }> = [];
 
   for (const order of orders) {
-    const items = order.items.filter((item) => !knownIds.has(item.id));
+    if (!isKitchenOrderOpenForPrinting(order)) {
+      continue;
+    }
+    const items = order.items.filter(
+      (item) => !isKitchenItemPrinted(knownIds, item as KitchenOrderPrintItem),
+    );
     if (items.length > 0) {
       groups.push({ order, items });
     }
@@ -204,6 +235,12 @@ export function useKitchenPrintHub({
   const markKitchenOrderItemsPrinted = useCallback((itemIds: string[]) => {
     for (const id of itemIds) {
       printedIdsRef.current.add(id);
+      const item = latestOrdersRef.current
+        .flatMap((order) => order.items)
+        .find((row) => row.id === id);
+      if (item) {
+        markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
+      }
     }
     persistPrintedIds(printedIdsRef.current);
   }, []);
@@ -216,9 +253,12 @@ export function useKitchenPrintHub({
       if (!order) {
         return;
       }
-      markKitchenOrderItemsPrinted(order.items.map((item) => item.id));
+      for (const item of order.items) {
+        markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
+      }
+      persistPrintedIds(printedIdsRef.current);
     },
-    [markKitchenOrderItemsPrinted],
+    [],
   );
 
   useEffect(() => {
@@ -249,7 +289,7 @@ export function useKitchenPrintHub({
       try {
         for (const group of groups) {
           for (const item of group.items) {
-            printedIdsRef.current.add(item.id);
+            markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
           }
           await printKitchenDelta(
             kitchenOrderToSaleStub(group.order),
@@ -260,7 +300,9 @@ export function useKitchenPrintHub({
       } catch (error) {
         for (const group of groups) {
           for (const item of group.items) {
-            printedIdsRef.current.delete(item.id);
+            for (const key of kitchenItemPrintKeys(item as KitchenOrderPrintItem)) {
+              printedIdsRef.current.delete(key);
+            }
           }
         }
         onPrintError?.(error instanceof Error ? error.message : String(error));

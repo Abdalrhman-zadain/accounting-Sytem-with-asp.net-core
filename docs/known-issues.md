@@ -83,6 +83,7 @@ Current behavior:
 - Silent named-printer routing requires QZ Tray to be installed and running on each cashier computer.
 - Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
 - Waiter devices do not print kitchen tickets locally. The cashier register polls kitchen orders and prints new items when **Print waiter kitchen tickets on this PC** is enabled.
+- Paying a dine-in order that was already sent to the kitchen should print only the customer receipt on the cashier printer, not a second kitchen ticket. The print hub dedupes by invoice line id and skips completed sales; backend kitchen sync preserves existing kitchen item ids on payment.
 - If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
 
 What this means for future edits:

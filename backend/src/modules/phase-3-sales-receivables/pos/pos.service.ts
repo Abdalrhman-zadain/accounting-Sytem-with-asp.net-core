@@ -6263,22 +6263,57 @@ export class PosService {
       tableName = table?.tableNumber || null;
     }
 
-    await tx.kitchenOrderItem.deleteMany({
+    const existingItems = await tx.kitchenOrderItem.findMany({
       where: { kitchenOrderId: kitchenOrder.id },
+      select: {
+        id: true,
+        salesInvoiceLineId: true,
+      },
     });
+    const existingByLineId = new Map(
+      existingItems
+        .filter((item) => item.salesInvoiceLineId)
+        .map((item) => [item.salesInvoiceLineId!, item.id]),
+    );
+    const sentLineIds = new Set(sentLines.map((line) => line.id));
 
-    await tx.kitchenOrderItem.createMany({
-      data: sentLines.map((line) => ({
-        kitchenOrderId: kitchenOrder!.id,
-        salesInvoiceLineId: line.id,
+    for (const line of sentLines) {
+      const itemData = {
         itemId: line.itemId!,
         itemName: line.itemName || "Item",
         quantity: line.quantity,
         notes: line.description || null,
         modifiers: line.modifiers === null ? undefined : line.modifiers,
-        status: KitchenStatus.NEW,
-      })),
-    });
+      };
+      const existingItemId = existingByLineId.get(line.id);
+      if (existingItemId) {
+        await tx.kitchenOrderItem.update({
+          where: { id: existingItemId },
+          data: itemData,
+        });
+      } else {
+        await tx.kitchenOrderItem.create({
+          data: {
+            kitchenOrderId: kitchenOrder.id,
+            salesInvoiceLineId: line.id,
+            ...itemData,
+            status: KitchenStatus.NEW,
+          },
+        });
+      }
+    }
+
+    const staleItemIds = existingItems
+      .filter(
+        (item) =>
+          item.salesInvoiceLineId && !sentLineIds.has(item.salesInvoiceLineId),
+      )
+      .map((item) => item.id);
+    if (staleItemIds.length) {
+      await tx.kitchenOrderItem.deleteMany({
+        where: { id: { in: staleItemIds } },
+      });
+    }
 
     await tx.kitchenOrder.update({
       where: { id: kitchenOrder.id },

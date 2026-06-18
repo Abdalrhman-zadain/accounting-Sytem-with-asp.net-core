@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import {
   AuditAction,
   DeliveryStatus,
@@ -75,7 +74,10 @@ describe("PosService restaurant operations", () => {
       delete: jest.fn(),
     },
     kitchenOrderItem: {
+      create: jest.fn(),
       createMany: jest.fn(),
+      deleteMany: jest.fn(),
+      findMany: jest.fn(),
       delete: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
@@ -757,6 +759,54 @@ describe("PosService restaurant operations", () => {
           } as any,
         ),
       ).rejects.toThrow("permission to save POS drafts");
+    });
+  });
+
+  describe("rebuildKitchenOrderFromInvoice", () => {
+    it("preserves existing kitchen order item ids when sent lines are unchanged", async () => {
+      const sentAt = new Date("2026-06-03T10:00:00.000Z");
+      prismaMock.salesInvoice.findUnique.mockResolvedValue({
+        id: "inv1",
+        orderType: OrderType.DINE_IN,
+        tableId: "t1",
+        waiterId: "waiter1",
+        description: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            itemName: "Burger",
+            quantity: { toString: () => "1" } as any,
+            description: null,
+            modifiers: null,
+            kitchenSentAt: sentAt,
+          },
+        ],
+      });
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
+        id: "kot1",
+        orderType: OrderType.DINE_IN,
+      });
+      prismaMock.user.findUnique.mockResolvedValue({ name: "Ali" });
+      prismaMock.posTable.findUnique.mockResolvedValue({ tableNumber: "12" });
+      prismaMock.kitchenOrderItem.findMany.mockResolvedValue([
+        { id: "item-kot-1", salesInvoiceLineId: "line1" },
+      ]);
+      prismaMock.kitchenOrderItem.update.mockResolvedValue({});
+      prismaMock.kitchenOrder.update.mockResolvedValue({});
+
+      await (service as any).rebuildKitchenOrderFromInvoice(prismaMock, "inv1");
+
+      expect(prismaMock.kitchenOrderItem.update).toHaveBeenCalledWith({
+        where: { id: "item-kot-1" },
+        data: expect.objectContaining({
+          itemId: "item1",
+          itemName: "Burger",
+        }),
+      });
+      expect(prismaMock.kitchenOrderItem.create).not.toHaveBeenCalled();
+      expect(prismaMock.kitchenOrderItem.createMany).not.toHaveBeenCalled();
+      expect(prismaMock.kitchenOrderItem.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

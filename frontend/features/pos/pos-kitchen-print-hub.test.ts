@@ -115,6 +115,26 @@ describe("pos-kitchen-print-hub helpers", () => {
     expect(findUnprintedKitchenItems(known, orders)).toEqual([]);
   });
 
+  it("does not reprint when the same invoice line appears under a new kitchen item id", () => {
+    const orders = [
+      makeOrder("o1", [{ id: "i-new", salesInvoiceLineId: "line-1", itemName: "Falafel" }]),
+    ];
+    const known = new Set(["line:line-1"]);
+
+    expect(findUnprintedKitchenItems(known, orders)).toEqual([]);
+  });
+
+  it("skips kitchen orders linked to completed sales invoices", () => {
+    const orders = [
+      {
+        ...makeOrder("o1", [{ id: "i1" }]),
+        salesInvoice: { posOperationalStatus: "COMPLETED" as const },
+      },
+    ];
+
+    expect(findUnprintedKitchenItems(new Set(), orders)).toEqual([]);
+  });
+
   it("primes only kitchen items older than the recent window", () => {
     const now = new Date("2026-06-17T12:00:00.000Z").getTime();
     const orders = [
@@ -129,7 +149,7 @@ describe("pos-kitchen-print-hub helpers", () => {
     const known = new Set<string>();
     primePrintedKitchenItemIds(orders, known, now);
 
-    expect([...known]).toEqual(["old"]);
+    expect([...known].sort()).toEqual(["line:line-old", "old"].sort());
     expect(findUnprintedKitchenItems(known, orders)).toEqual([
       {
         order: orders[0],

@@ -21,6 +21,9 @@ export class PosKitchenController {
       where: status ? { status } : undefined,
       include: {
         items: true,
+        salesInvoice: {
+          select: { posOperationalStatus: true },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
