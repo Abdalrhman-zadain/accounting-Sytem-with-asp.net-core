@@ -151,7 +151,7 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("الباقي");
   });
 
-  it("shows table and staff row for dine-in orders", () => {
+  it("shows table row without staff for dine-in orders", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -162,10 +162,9 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("طاولة");
-    expect(html).toContain("6");
-    expect(html).toContain("الموظف");
-    expect(html).toContain("أحمد");
+    expect(html).toContain("طاولة: 6");
+    expect(html).not.toContain("الموظف");
+    expect(html).not.toContain("أحمد");
   });
 
   it("prints delivery address, company, driver, and notes for delivery orders", () => {

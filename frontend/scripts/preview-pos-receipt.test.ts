@@ -128,46 +128,6 @@ describe("pos receipt preview generator", () => {
       ],
     });
 
-    const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <title>POS Receipt Previews</title>
-  <style>
-    body { font-family: system-ui, sans-serif; padding: 24px; background: #f4f4f4; }
-    h1 { margin-bottom: 8px; }
-    p { color: #555; margin-bottom: 24px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
-    .card { background: #fff; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; }
-    .card h2 { margin: 0; padding: 12px 16px; font-size: 16px; border-bottom: 1px solid #eee; }
-    iframe { width: 100%; height: 720px; border: 0; background: #fff; }
-    a { display: inline-block; margin: 8px 16px 16px; color: #1d4ed8; }
-  </style>
-</head>
-<body>
-  <h1>POS Receipt Previews (80mm thermal layout)</h1>
-  <p>Open each preview below. Gray area simulates paper; receipt is 72mm wide centered.</p>
-  <div class="grid">
-    <div class="card">
-      <h2>Standard sale — 2.50 JOD cash</h2>
-      <iframe src="standard-sale.html" title="Standard sale"></iframe>
-      <a href="standard-sale.html" target="_blank">Open full page</a>
-    </div>
-    <div class="card">
-      <h2>Free meal — line discount</h2>
-      <iframe src="free-meal.html" title="Free meal"></iframe>
-      <a href="free-meal.html" target="_blank">Open full page</a>
-    </div>
-    <div class="card">
-      <h2>Large amounts — mixed payment</h2>
-      <iframe src="large-amounts-mixed-payment.html" title="Large amounts"></iframe>
-      <a href="large-amounts-mixed-payment.html" target="_blank">Open full page</a>
-    </div>
-  </div>
-</body>
-</html>`;
-
-    writeFileSync(join(PREVIEW_DIR, "index.html"), indexHtml, "utf8");
     console.log(`Receipt previews written to: ${PREVIEW_DIR}`);
   });
 });

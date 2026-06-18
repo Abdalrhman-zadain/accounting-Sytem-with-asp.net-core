@@ -179,6 +179,27 @@ function thermalReceiptSummaryLineHtml(
 </div>`;
 }
 
+/** Text/value row aligned like receipt summary lines (session roll meta). */
+export function thermalRollTextLineHtml(label: string, value: string): string {
+  return `<div class="summary-line">
+  <span class="summary-label">${label}</span>
+  <span class="summary-text">${value}</span>
+</div>`;
+}
+
+/** Money row using the same summary alignment as customer receipts. */
+export function thermalRollSummaryLineHtml(
+  label: string,
+  value: number,
+  options?: { emphasis?: boolean; currency?: boolean },
+): string {
+  return thermalReceiptSummaryLineHtml(label, value, options);
+}
+
+export function thermalRollSectionTitleHtml(title: string): string {
+  return `<div class="roll-section-title">${title}</div>`;
+}
+
 export function thermalReceiptTotalRow(
   label: string,
   value: number,
@@ -448,7 +469,53 @@ const THERMAL_RECEIPT_BASE_CSS = `
     .payment-box .summary-line {
       margin: 2px 0;
     }
-    .disc { font-size: 10px; font-weight: 600; }
+    .roll-section-title {
+      font-size: 13px;
+      font-weight: 900;
+      margin: 5px 0 3px;
+      text-decoration: underline;
+    }
+    .summary-text {
+      flex: 0 0 ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      min-width: ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      max-width: ${THERMAL_RECEIPT_SUMMARY_AMT_WIDTH};
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      word-break: break-word;
+      line-height: 1.3;
+    }
+    .receipt-block-title {
+      font-size: 14px;
+      font-weight: 900;
+      margin: 4px 0 2px;
+    }
+    .diff-alert .summary-label,
+    .diff-alert .summary-amt,
+    .diff-alert .summary-text {
+      font-weight: 900;
+    }
+    .sig-block {
+      margin-top: 8px;
+    }
+    .sig-line {
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 6px;
+      margin-bottom: 2px;
+    }
+    .sig-underline {
+      border-bottom: 1px solid #000;
+      width: 100%;
+      height: 16px;
+    }
+    .muted {
+      color: #333;
+      font-size: 12px;
+      font-weight: 600;
+      margin: 4px 0;
+      text-align: center;
+    }
     .thanks { font-size: 13px; font-weight: 700; margin: 4px 0 0; }
     .print-footer-spacer {
       height: 5mm;

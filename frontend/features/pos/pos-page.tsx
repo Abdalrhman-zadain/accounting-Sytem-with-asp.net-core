@@ -160,8 +160,8 @@ import {
 import { useKitchenPrintHubActions } from "@/features/pos/pos-kitchen-print-hub-provider";
 import {
   applyPosKitchenUpdatePrints,
+  applyPosPayCompletePrints,
   printCustomerReceipt,
-  printKitchenTicket,
   printSessionRoll,
 } from "@/features/pos/pos-print-service";
 import { loadPosPrinterConfig, updatePosPrinterConfig } from "@/features/pos/pos-printer-config";
@@ -1955,6 +1955,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       const wasPreOrder = Boolean(activeReservationId);
       const tableIdForHandoff = wasPreOrder ? selectedTableId : null;
       const hadKitchenTicketBeforeReset = hadKitchenTicketRef.current;
+      const snapshotBefore = captureKitchenLineSnapshotFromCart(cartLines);
       const receipt = mapReceiptResponse(response.receipt);
       setLastReceipt(receipt);
       setPayFlowStep("success");
@@ -1976,16 +1977,36 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       resetSaleRef.current();
       await refreshPosData();
       pushMessage(t("pos.sales.alert.saleCompleted"));
-      if (loadPosPrinterConfig().autoPrintReceiptOnPay) {
-        printReceipt(receipt);
-      }
-      if (
-        loadPosPrinterConfig().autoPrintKotOnSend &&
-        response.sale?.orderType === "TAKEAWAY" &&
-        !hadKitchenTicketBeforeReset
-      ) {
-        printKitchenTicket(response.sale, language).then((result) => {
-          if (result.fallback) {
+
+      const printerConfig = loadPosPrinterConfig();
+      const shouldPrintKitchenOnPay =
+        printerConfig.autoPrintKotOnSend &&
+        !hadKitchenTicketBeforeReset &&
+        response.sale &&
+        (response.sale.orderType === "TAKEAWAY" || response.sale.orderType === "DINE_IN");
+
+      if ((printerConfig.autoPrintReceiptOnPay || shouldPrintKitchenOnPay) && response.sale) {
+        try {
+          const printResults = await applyPosPayCompletePrints({
+            snapshotBefore,
+            sale: response.sale,
+            receipt,
+            autoPrintKot: shouldPrintKitchenOnPay,
+            autoPrintReceipt: printerConfig.autoPrintReceiptOnPay,
+            language,
+          });
+          if (shouldPrintKitchenOnPay && printResults.kitchen.length > 0) {
+            kitchenHubActionsRef.current.markKitchenInvoiceFullyPrinted(response.sale.id);
+            kitchenHubActionsRef.current.markKitchenLinesFromCart(
+              response.sale.id,
+              response.sale.lines.map((line) => ({
+                salesInvoiceLineId: line.id,
+                kitchenSentAt: line.kitchenSentAt ?? null,
+              })),
+            );
+            kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(response.sale.id);
+          }
+          if (printResults.kitchen.some((result) => result.fallback)) {
             pushMessage(
               getLocalizedText(
                 "Kitchen printer bridge unavailable; opened browser print / تعذر الاتصال بطابعة المطبخ، تم فتح طباعة المتصفح",
@@ -1993,10 +2014,10 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
               ),
             );
           }
-        }).catch((err) => {
-          console.error("Failed to print kitchen ticket at completion:", err);
+        } catch (err) {
+          console.error("Failed to print at sale completion:", err);
           pushMessage(t("pos.sales.alert.printBlocked"));
-        });
+        }
       }
     },
     onError: (error) => {

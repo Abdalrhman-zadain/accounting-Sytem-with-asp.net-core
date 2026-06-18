@@ -1,4 +1,4 @@
-import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
+import { formatAddonsForDisplay, getAddonsFromModifiers } from "@/features/pos/pos-addon-utils";
 import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
 import {
   THERMAL_PAGE_SIDE_MARGIN,
@@ -43,6 +43,9 @@ const KOT_STYLES = `
     .item-row { display: flex; gap: 6px; align-items: baseline; }
     .item-qty { font-size: 14pt; font-weight: bold; flex-shrink: 0; }
     .item-name { font-size: 12pt; flex: 1; }
+    .item-addons-block { margin-top: 4px; padding-inline-start: 10px; }
+    .item-addons-label { font-size: 11pt; font-weight: bold; margin-bottom: 2px; }
+    .item-addon-line { font-size: 12pt; font-weight: 900; line-height: 1.45; margin: 2px 0; }
     .sub { font-size: 9pt; opacity: 0.85; margin-top: 2px; }
     .note { font-size: 9pt; font-style: italic; margin-top: 4px; }
 `;
@@ -173,6 +176,30 @@ function buildLineRowsFromSaleLines(
     .join("");
 }
 
+function buildKitchenAddonsHtml(
+  modifiers: PosSale["lines"][number]["modifiers"],
+  language: string,
+): string {
+  const addons = getAddonsFromModifiers(modifiers);
+  if (addons.length > 0) {
+    const isAr = language === "ar";
+    const lines = addons
+      .map((addon) => {
+        const label = addon.name?.trim() || "—";
+        return `<div class="item-addon-line">+ ${label}</div>`;
+      })
+      .join("");
+    return `<div class="item-addons-block"><div class="item-addons-label">${isAr ? "إضافات" : "Add-ons"}</div>${lines}</div>`;
+  }
+
+  const legacy = formatAddonsForDisplay(modifiers, language);
+  if (!legacy) {
+    return "";
+  }
+
+  return `<div class="item-addons-block"><div class="item-addon-line">+ ${legacy}</div></div>`;
+}
+
 function buildLineRowHtml(
   line: {
     itemName?: string | null;
@@ -184,7 +211,7 @@ function buildLineRowHtml(
   prefix = "",
 ): string {
   const name = (line.itemName || line.description || "—").slice(0, 28);
-  const addons = formatAddonsForDisplay(line.modifiers, language);
+  const addonsHtml = buildKitchenAddonsHtml(line.modifiers, language);
   const note =
     line.description && line.description !== (line.itemName ?? "") ? line.description : "";
   return `
@@ -193,7 +220,7 @@ function buildLineRowHtml(
         <span class="item-qty">${prefix}${qty}×</span>
         <span class="item-name">${name}</span>
       </div>
-      ${addons ? `<div class="sub">${addons}</div>` : ""}
+      ${addonsHtml}
       ${note ? `<div class="sub note">${note}</div>` : ""}
     </div>`;
 }

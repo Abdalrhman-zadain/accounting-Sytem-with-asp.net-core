@@ -112,8 +112,12 @@ describe("buildKitchenOrderTicketHtml", () => {
     expect(html).toContain("شاورما دجاج عائلي");
     expect(html).toContain('class="item-qty"');
     expect(html).toContain('class="item-name"');
-    expect(html).toContain("مايونيز بالثوم (+0.50)");
-    expect(html).toContain("جبنة شيدر مضاعفة (+1.00)");
+    expect(html).toContain("مايونيز بالثوم");
+    expect(html).toContain("جبنة شيدر مضاعفة");
+    expect(html).toContain('class="item-addons-block"');
+    expect(html).toContain('class="item-addon-line"');
+    expect(html).toContain("إضافات");
+    expect(html).not.toContain("مايونيز بالثوم (+0.50)");
     expect(html).toContain("بدون ثوم");
     expect(html).toContain("الرجاء تسليم الطلب بسرعة");
   });

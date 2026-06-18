@@ -17,7 +17,6 @@ import {
   thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
   thermalReceiptMetaLineHtml,
-  thermalReceiptMetaRowSplit,
   thermalReceiptPaymentBoxHtml,
   thermalReceiptSepLine,
   thermalReceiptTableClose,
@@ -211,14 +210,6 @@ function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-function resolveStaffName(receipt: PosReceiptData): string {
-  const waiter = receipt.waiterName?.trim();
-  if (waiter) {
-    return waiter;
-  }
-  return receipt.cashierName;
-}
-
 function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string | null {
   if (!orderType) {
     return null;
@@ -297,7 +288,6 @@ function sumLineDiscounts(lines: PosReceiptData["lines"]): number {
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
   const { date, time } = fmtDateParts(receipt.soldAt);
-  const staffName = resolveStaffName(receipt);
   const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
   const serviceCharge = receipt.serviceChargeAmount ?? 0;
   const deliveryFee = receipt.deliveryFeeAmount ?? 0;
@@ -316,11 +306,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(`<div class="sep">${SEP}</div>`);
 
   if (receipt.orderType === "DINE_IN" && receipt.tableNumber) {
-    rows.push(
-      thermalReceiptMetaRowSplit("طاولة", receipt.tableNumber, "الموظف", staffName),
-    );
-  } else if (staffName) {
-    rows.push(thermalReceiptMetaLineHtml(`الموظف: ${staffName}`));
+    rows.push(thermalReceiptMetaLineHtml(`طاولة: ${receipt.tableNumber}`));
   }
 
   if (orderTypeLabel) {

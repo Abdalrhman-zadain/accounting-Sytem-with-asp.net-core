@@ -49,6 +49,9 @@ export {
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
   thermalReceiptTotalRow,
+  thermalRollSectionTitleHtml,
+  thermalRollSummaryLineHtml,
+  thermalRollTextLineHtml,
   type ThermalReceiptMoneyOptions,
   type ThermalReceiptPaymentBoxLine,
 } from "./thermal-receipt-layout";
