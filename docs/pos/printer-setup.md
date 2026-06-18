@@ -191,7 +191,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 ### Templates and language
 
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
-- Delta/void kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and routed through `frontend/features/pos/pos-print-service.ts`.
+- Delta/void kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and routed through `frontend/features/pos/pos-print-service.ts`. Cashier VOID/ADD slips diff the API response against the **last synced server snapshot** (set on table resume and after each successful kitchen update), not the live cart at button press — so remove/qty-reduce edits produce VOID slips correctly.
 - Waiter-send kitchen printing is handled by `frontend/features/pos/pos-kitchen-print-hub.ts` on the cashier register; only one register tab per browser profile acts as the print leader when multiple tabs are open.
 - The hub is mounted in `frontend/app/(erp)/pos/layout.tsx` via `PosKitchenPrintHubProvider`, so it keeps polling while the cashier navigates between `/pos/register`, `/pos/tables`, delivery, settings, and other cashier POS routes (not `/pos/waiter/*`).
 - Resuming an already-sent table order marks that invoice and its kitchen lines as printed in the hub, so opening the table for payment does not reprint KOT.

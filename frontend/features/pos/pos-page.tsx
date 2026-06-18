@@ -1156,7 +1156,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const hadKitchenTicketRef = useRef(false);
   const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
   const waiterConfirmedAtRef = useRef<string | null>(null);
-  const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
+  const lastSyncedKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
   const kitchenHubActionsRef = useRef({
     markKitchenOrderItemsPrinted: (_itemIds: string[]) => {},
     markKitchenOrderItemsPrintedForSale: (_salesInvoiceId: string) => {},
@@ -1745,20 +1745,6 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     },
   });
 
-  const captureCurrentKitchenSnapshot = () =>
-    captureKitchenLineSnapshotFromCart(
-      cartLines.map((line) => ({
-        salesInvoiceLineId: line.salesInvoiceLineId,
-        clientLineId: line.clientLineId,
-        itemId: line.itemId,
-        name: line.name,
-        quantity: line.quantity,
-        kitchenSentAt: line.kitchenSentAt,
-        modifiers: line.modifiers,
-        lineNote: line.lineNote,
-      })),
-    );
-
   const runKitchenUpdatePrints = async (
     sale: PosSale,
     snapshotBefore: KitchenLineSnapshot[],
@@ -1767,6 +1753,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     if (!config.autoPrintKotOnSend) {
       return;
     }
+    kitchenHubActionsRef.current.markKitchenLinesFromCart(
+      sale.id,
+      sale.lines.map((line) => ({
+        salesInvoiceLineId: line.id,
+        kitchenSentAt: line.kitchenSentAt ?? null,
+      })),
+    );
+    kitchenHubActionsRef.current.markKitchenOrderItemsPrintedForSale(sale.id);
     try {
       await applyPosKitchenUpdatePrints({
         snapshotBefore,
@@ -1798,7 +1792,6 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
 
   const sendKitchenMutation = useMutation({
     mutationFn: async () => {
-      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1833,7 +1826,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
         ),
       );
       if (!waiterMode) {
-        await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
+        const snapshotBefore = lastSyncedKitchenSnapshotRef.current;
+        await runKitchenUpdatePrints(sale, snapshotBefore);
+        lastSyncedKitchenSnapshotRef.current = captureKitchenLineSnapshotFromSale(sale);
       }
       // Auto-start a new order so the cashier is ready for the next customer
       resetSaleRef.current();
@@ -1848,7 +1843,6 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
 
   const updateKitchenMutation = useMutation({
     mutationFn: async (_options?: { silent?: boolean }) => {
-      pendingKitchenSnapshotRef.current = captureCurrentKitchenSnapshot();
       if (!activeSession?.id) {
         throw new Error("POS session must be open.");
       }
@@ -1904,13 +1898,15 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
           ),
         );
       }
+      const after = captureKitchenLineSnapshotFromSale(sale);
       if (!waiterMode) {
-        const after = captureKitchenLineSnapshotFromSale(sale);
-        const diff = diffKitchenSnapshots(pendingKitchenSnapshotRef.current, after);
+        const snapshotBefore = lastSyncedKitchenSnapshotRef.current;
+        const diff = diffKitchenSnapshots(snapshotBefore, after);
         if (!variables?.silent || hasKitchenPrintDiff(diff)) {
-          await runKitchenUpdatePrints(sale, pendingKitchenSnapshotRef.current);
+          await runKitchenUpdatePrints(sale, snapshotBefore);
         }
       }
+      lastSyncedKitchenSnapshotRef.current = after;
     },
     onError: (error) => {
       pushError(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
@@ -3110,6 +3106,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     setEditingInvoiceId(null);
     hadKitchenTicketRef.current = false;
     lastKitchenSyncFingerprintRef.current = null;
+    lastSyncedKitchenSnapshotRef.current = [];
     waiterConfirmedAtRef.current = null;
     prevOrderTypeRef.current = defaultOrderType;
     setCartLines([]);
@@ -3683,6 +3680,18 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     hadKitchenTicketRef.current = target.cartLines.some((line) => line.kitchenSentAt);
     waiterConfirmedAtRef.current = target.waiterConfirmedAt ?? null;
     lastKitchenSyncFingerprintRef.current = buildCartKitchenFingerprint(target.cartLines);
+    lastSyncedKitchenSnapshotRef.current = captureKitchenLineSnapshotFromCart(
+      target.cartLines.map((line) => ({
+        salesInvoiceLineId: line.salesInvoiceLineId,
+        clientLineId: line.clientLineId,
+        itemId: line.itemId,
+        name: line.name,
+        quantity: line.quantity,
+        kitchenSentAt: line.kitchenSentAt,
+        modifiers: line.modifiers,
+        lineNote: line.lineNote,
+      })),
+    );
     if (hadKitchenTicketRef.current) {
       kitchenHubActionsRef.current.markKitchenInvoiceFullyPrinted(target.id);
       kitchenHubActionsRef.current.markKitchenLinesFromCart(
