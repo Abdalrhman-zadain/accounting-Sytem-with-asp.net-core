@@ -1184,72 +1184,108 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       });
     });
 
-    it("rejects cashier saveDraft after waiter confirmed the order", async () => {
-      const salesReceivablesMock = {
-        resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
-          { itemId: "item2", quantity: 1 },
-        ]),
-        computeSalesDocumentTotals: jest.fn().mockReturnValue({
-          subtotalAmount: 5,
-          discountAmount: 0,
-          taxAmount: 0,
-          totalAmount: 5,
-        }),
-        buildSalesInvoiceLineInput: jest.fn(),
-      };
-      const lockedService = new PosService(
-        prismaMock as never,
-        { log: jest.fn() } as never,
-        {} as never,
-        {} as never,
-        {} as never,
-        {} as never,
-        salesReceivablesMock as never,
-      );
-
-      prismaMock.posSession.findUnique.mockResolvedValue({
-        id: "s1",
-        status: "OPEN",
-        cashAccountId: "bc-1",
-        warehouseId: "wh1",
-      });
-      prismaMock.customer.findFirst.mockResolvedValue({
-        id: "cust-walkin",
-        isActive: true,
-      });
-      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
-        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.NEW }],
-      });
-      prismaMock.salesInvoice.findUnique.mockResolvedValue({
+    it("allows cashier line changes after waiter confirmed when kitchen item is not ready", async () => {
+      const existing = {
         id: "inv1",
-        invoiceType: "POS",
-        posSessionId: "s1",
-        posOperationalStatus: "DRAFT",
-        journalEntryId: null,
+        posOperationalStatus: PosOperationalStatus.DRAFT,
         waiterConfirmedAt: new Date(),
         lines: [
           {
             id: "line1",
             itemId: "item1",
-            quantity: { toString: () => "2" },
+            quantity: { toString: () => "2" } as any,
             kitchenSentAt: new Date(),
           },
         ],
+      };
+      const dtoLines = [
+        { salesInvoiceLineId: "line1", itemId: "item1", quantity: 1 },
+      ];
+      const resolvedLines = [
+        {
+          salesInvoiceLineId: "line1",
+          itemId: "item1",
+          quantity: 1,
+          unitPrice: 10,
+          discountAmount: 0,
+          taxId: "tax1",
+          taxAmount: 1.6,
+          lineSubtotalAmount: 10,
+          lineTotalAmount: 11.6,
+          revenueAccountId: "rev1",
+          description: null,
+          modifiers: null,
+        },
+      ] as any;
+
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.NEW }],
+      });
+      prismaMock.$queryRaw.mockResolvedValue([]);
+      prismaMock.salesInvoiceLine.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.salesInvoiceLine.update.mockResolvedValue({} as any);
+
+      await expect(
+        (service as any).applyOpenPosSaleLineChanges(
+          prismaMock,
+          cashierUser,
+          existing,
+          dtoLines,
+          resolvedLines,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it("rejects cashier changes to kitchen-ready sent lines", async () => {
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: new Date(),
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" } as any,
+            kitchenSentAt: new Date(),
+          },
+        ],
+      };
+      const dtoLines = [
+        { salesInvoiceLineId: "line1", itemId: "item1", quantity: 1 },
+      ];
+      const resolvedLines = [
+        {
+          salesInvoiceLineId: "line1",
+          itemId: "item1",
+          quantity: 1,
+          unitPrice: 10,
+          discountAmount: 0,
+          taxId: "tax1",
+          taxAmount: 1.6,
+          lineSubtotalAmount: 10,
+          lineTotalAmount: 11.6,
+          revenueAccountId: "rev1",
+          description: null,
+          modifiers: null,
+        },
+      ] as any;
+
+      prismaMock.kitchenOrder.findUnique.mockResolvedValue({
+        items: [{ salesInvoiceLineId: "line1", status: KitchenStatus.READY }],
       });
 
       await expect(
-        lockedService.saveDraft(
-          {
-            sessionId: "s1",
-            invoiceId: "inv1",
-            lines: [{ itemId: "item2", quantity: 1 }],
-          } as any,
+        (service as any).applyOpenPosSaleLineChanges(
+          prismaMock,
           cashierUser,
+          existing,
+          dtoLines,
+          resolvedLines,
         ),
-      ).rejects.toThrow("confirmed by the waiter");
+      ).rejects.toThrow("ready or served");
     });
 
-    it("rejects any cart change when waiter already confirmed the dine-in order", async () => {
+    it("rejects waiter cart change after waiter confirmed the dine-in order", async () => {
       const salesReceivablesMock = {
         resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
           { salesInvoiceLineId: "line1", itemId: "item1", quantity: 3 },
@@ -1319,9 +1355,9 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
               { salesInvoiceLineId: "line2", itemId: "item2", quantity: 2 },
             ],
           } as any,
-          cashierUser,
+          waiterUser,
         ),
-      ).rejects.toThrow("confirmed by the waiter");
+      ).rejects.toThrow("can no longer be changed by the waiter");
     });
 
     it("updates kept lines to tax-free when taxFreeEnabled is true", async () => {

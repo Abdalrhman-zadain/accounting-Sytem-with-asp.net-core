@@ -6011,13 +6011,16 @@ export class PosService {
       );
     }
 
-    if (this.isWaiterOnlyUser(user) && existing.waiterConfirmedAt) {
+    const waiterOnly = this.isWaiterOnlyUser(user);
+    const cashierCanEdit = this.canCashierEditPosCart(user) && !waiterOnly;
+
+    if (waiterOnly && existing.waiterConfirmedAt) {
       throw new ForbiddenException(
         "This order was confirmed and can no longer be changed by the waiter.",
       );
     }
 
-    if (existing.waiterConfirmedAt) {
+    if (!cashierCanEdit && existing.waiterConfirmedAt) {
       if (existing.lines.length !== resolvedLines.length) {
         throw new BadRequestException(
           "This order was confirmed by the waiter. No order changes are allowed until payment.",
@@ -6053,25 +6056,46 @@ export class PosService {
     const sentLines = existing.lines.filter((line) => line.kitchenSentAt);
     for (const sentLine of sentLines) {
       const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
-      if (!dtoLine) {
-        throw new BadRequestException(
-          "Items already sent to the kitchen cannot be removed.",
-        );
+      const nextQty = dtoLine ? Number(dtoLine.quantity ?? 0) : 0;
+      const removed = !dtoLine;
+      const itemChanged =
+        Boolean(dtoLine) &&
+        Boolean(sentLine.itemId) &&
+        Boolean(dtoLine?.itemId) &&
+        sentLine.itemId !== dtoLine?.itemId;
+      const qtyChanged =
+        Boolean(dtoLine) &&
+        Math.abs(Number(sentLine.quantity) - nextQty) > 0.0001;
+
+      if (!removed && !itemChanged && !qtyChanged) {
+        continue;
       }
-      const nextQty = Number(dtoLine.quantity ?? 0);
-      if (sentLine.itemId && dtoLine.itemId && sentLine.itemId !== dtoLine.itemId) {
+
+      if (!cashierCanEdit) {
+        if (removed) {
+          throw new BadRequestException(
+            "Items already sent to the kitchen cannot be removed.",
+          );
+        }
         throw new BadRequestException(
           "Items already sent to the kitchen cannot be changed.",
         );
       }
-      if (Math.abs(Number(sentLine.quantity) - nextQty) > 0.0001) {
+
+      if (
+        this.isInvoiceLineKitchenLocked(
+          kitchenStatusByLineId,
+          sentLine.id,
+          sentLine.kitchenSentAt,
+        )
+      ) {
         throw new BadRequestException(
-          "Items already sent to the kitchen cannot be changed.",
+          "Items already marked ready or served in the kitchen cannot be changed.",
         );
       }
     }
 
-    if (!this.canCashierEditPosCart(user) && this.isWaiterOnlyUser(user) && sentLines.length) {
+    if (!cashierCanEdit && waiterOnly && sentLines.length) {
       const unsentDtoCount = dtoLines.filter(
         (line) =>
           !line.salesInvoiceLineId ||

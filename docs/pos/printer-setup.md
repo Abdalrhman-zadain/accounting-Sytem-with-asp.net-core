@@ -199,11 +199,36 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 - Backend kitchen sync (`rebuildKitchenOrderFromInvoice`) updates existing kitchen rows in place instead of deleting and recreating them, preserving item ids and kitchen status across payment.
 - Customer receipts print in **Arabic only** (RTL). Payment method labels use Arabic (`نقد`, `بطاقة`, etc.). Set `POS_RECEIPT_COMPANY_NAME` to the Arabic business name for a fully Arabic header.
 - The customer receipt uses a compact 80mm layout (single-line items, joined meta rows, smaller fonts) similar to Market POS, with a small horizontal logo beside the company name when a logo is available.
-- Item and total rows use a fixed-width HTML table (302px / ~80mm) so labels and amounts sit on one line without large empty gaps; item names allow up to 28 characters before truncation.
+- Item and total rows use a fixed-width HTML table (260px / ~68mm safe content) with 4mm side padding and 5mm `@page` margins on 80mm rolls so text stays inside the driver’s typical 72.1mm printable area; item names allow up to 22 characters and show quantity as `×qty` after the name; payment details use a wrapped block with shortened account names.
 - Receipt HTML includes bottom padding and a trailing spacer so thermal auto-cutters do not clip the payment/thank-you lines; QZ Tray jobs also append blank feed lines after the HTML payload.
 - Browser and QZ print paths wait for receipt images to finish loading before sending the job, reducing clipped or mis-sized prints.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.
 - If the selected print bridge is unavailable, the POS shows the print error. Browser print opens only when Browser print manual mode is selected.
+
+## Horizontal clipping (left/right characters cut off)
+
+Many XPrinter 80mm drivers report paper as **80 (72.1) × 297 mm** — only **~72mm** is printable even though the roll is 80mm wide. POS receipt, KOT, and session-roll templates target that safe area in `frontend/features/pos-shared/thermal-receipt-layout.ts`.
+
+### Cashier PC driver checks (do first)
+
+1. Open **Control Panel → Devices and Printers** → right-click the receipt printer → **Printing preferences**.
+2. Confirm paper is **80mm roll** (not A4/Letter).
+3. Set **left/right margins** to **0** or the minimum allowed.
+4. If the driver offers **scale** / **fit to page**, try **shrink to fit** at **90–95%** only when clipping persists after a POS deploy with the 72mm layout.
+5. Center the paper roll in the printer guide; use the XPrinter utility **print offset** if one side clips more than the other.
+6. Run **POS → Printers → Test receipt** after each change.
+
+### Software layout (already applied)
+
+- Content width: **260px (~68mm safe area)** with **4mm** inner side padding.
+- `@page` side margins: **5mm** on an **80mm** roll.
+- Header logo is **centered above** the company name (not side-by-side).
+- Receipt number, date, cashier, terminal, and warehouse print on **separate lines** (not joined with `·`).
+- Payment line uses a **wrapped block** with shortened register/account names.
+- Item lines show **`item name ×qty`** so quantity does not clip on the right edge.
+- Separator lines shortened to **26** characters; fonts reduced slightly for narrow receipts.
+
+After deploying the frontend, hard-refresh the POS in the browser (Ctrl+Shift+R) before re-testing.
 
 ## Operational Notes
 

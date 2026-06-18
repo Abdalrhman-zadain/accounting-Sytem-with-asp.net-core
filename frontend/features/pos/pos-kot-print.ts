@@ -1,5 +1,12 @@
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
 import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
+import {
+  THERMAL_PAGE_SIDE_MARGIN,
+  THERMAL_PRINTABLE_WIDTH_MM,
+  THERMAL_RECEIPT_SIDE_PADDING,
+  THERMAL_ROLL_PAGE_WIDTH,
+  thermalReceiptSepLine,
+} from "@/features/pos-shared/thermal-receipt-layout";
 import type { PosSale } from "@/types/api";
 
 function fmtDate(val?: string | Date | null): string {
@@ -9,16 +16,18 @@ function fmtDate(val?: string | Date | null): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())} ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const SEP = "─".repeat(32);
+const SEP = thermalReceiptSepLine();
 
 const KOT_STYLES = `
-    @page { size: 80mm auto; margin: 0; }
+    @page { size: ${THERMAL_ROLL_PAGE_WIDTH} auto; margin: 0 ${THERMAL_PAGE_SIDE_MARGIN}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
       font-size: 10pt;
-      width: 76mm;
-      padding: 4mm 2mm;
+      width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      margin: 0 auto;
+      padding: 4mm ${THERMAL_RECEIPT_SIDE_PADDING};
       color: #000;
     }
     .center { text-align: center; }

@@ -248,8 +248,20 @@ function getCartLineKey(
   return `${line.itemId}:${addonSignature(getAddonsFromModifiers(line.modifiers))}:${line.lineNote ?? ""}`;
 }
 
-function isKitchenSentLineLocked(line: Pick<CartLine, "kitchenSentAt">) {
-  return Boolean(line.kitchenSentAt);
+function isKitchenProductionLocked(
+  line: Pick<CartLine, "kitchenItemStatus">,
+) {
+  return line.kitchenItemStatus === "READY" || line.kitchenItemStatus === "SERVED";
+}
+
+function isKitchenSentLineLocked(
+  line: Pick<CartLine, "kitchenSentAt" | "kitchenItemStatus">,
+  waiterOnly: boolean,
+) {
+  if (waiterOnly) {
+    return Boolean(line.kitchenSentAt);
+  }
+  return isKitchenProductionLocked(line);
 }
 
 function buildCartKitchenFingerprint(
@@ -272,6 +284,13 @@ function buildCartKitchenFingerprint(
 function getOrderWaiterLockMessage(language: string) {
   return getLocalizedText(
     "This order was confirmed by the waiter. You cannot add, edit, or change the order until payment. / تم تأكيد الطلب من الويتر. لا يمكن الإضافة أو التعديل أو أي تغيير حتى الدفع.",
+    language,
+  );
+}
+
+function getKitchenProductionLockMessage(language: string) {
+  return getLocalizedText(
+    "This item is already ready or served in the kitchen and cannot be changed. / هذا الصنف جاهز أو تم تقديمه في المطبخ ولا يمكن تعديله.",
     language,
   );
 }
@@ -2870,9 +2889,13 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     );
   }, [editingInvoiceId, draftSales, heldSales]);
 
-  const isCartLockedByWaiter = useMemo(
-    () => orderType === "DINE_IN" && Boolean(activeEditingSale?.waiterConfirmedAt),
-    [orderType, activeEditingSale?.waiterConfirmedAt],
+  const waiterOnlyUser = isWaiterOnlyUser(user);
+  const isWaiterOrderLocked = useMemo(
+    () =>
+      waiterOnlyUser &&
+      orderType === "DINE_IN" &&
+      Boolean(activeEditingSale?.waiterConfirmedAt),
+    [waiterOnlyUser, orderType, activeEditingSale?.waiterConfirmedAt],
   );
 
   const selectedReturnSale =
@@ -3119,7 +3142,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3270,7 +3293,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3278,7 +3301,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   };
 
   const openLineAddonEditor = async (line: CartLine) => {
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3339,14 +3362,18 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     targetLine: CartLine,
     updater: (line: CartLine) => CartLine | null,
   ) => {
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
     const lineKey = getCartLineKey(targetLine);
     const target = cartLines.find((line) => getCartLineKey(line) === lineKey);
-    if (target && isKitchenSentLineLocked(target)) {
-      pushError(getOrderWaiterLockMessage(language));
+    if (target && isKitchenSentLineLocked(target, waiterOnlyUser)) {
+      pushError(
+        waiterOnlyUser
+          ? getOrderWaiterLockMessage(language)
+          : getKitchenProductionLockMessage(language),
+      );
       return;
     }
     setCartLines((current) =>
@@ -3357,7 +3384,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   };
 
   const bumpLineQty = (line: CartLine, delta: number) => {
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3365,8 +3392,12 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushMessage(getWeightLineLockedMessage(language));
       return;
     }
-    if (isKitchenSentLineLocked(line)) {
-      pushError(getOrderWaiterLockMessage(language));
+    if (isKitchenSentLineLocked(line, waiterOnlyUser)) {
+      pushError(
+        waiterOnlyUser
+          ? getOrderWaiterLockMessage(language)
+          : getKitchenProductionLockMessage(language),
+      );
       return;
     }
     const qtyDelta = line.sellByWeight
@@ -3461,7 +3492,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   };
 
   const autoSaveCurrentTableOrderIfAny = async (tableIdToExclude?: string | null) => {
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       return;
     }
     if (
@@ -3495,7 +3526,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3526,7 +3557,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       resetSale();
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3557,7 +3588,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       pushMessage(t("pos.sales.alert.sessionClosed"));
       return;
     }
-    if (isCartLockedByWaiter) {
+    if (isWaiterOrderLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
@@ -3651,10 +3682,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     if (!hadKitchenTicketRef.current || !editingInvoiceId || !activeSession?.id) {
       return;
     }
-    if (isCartLockedByWaiter || waiterConfirmedAtRef.current) {
+    if (waiterOnlyUser && (isWaiterOrderLocked || waiterConfirmedAtRef.current)) {
       return;
     }
-    if (cartLines.length > 0 && cartLines.every((line) => line.kitchenSentAt)) {
+    if (
+      waiterOnlyUser &&
+      cartLines.length > 0 &&
+      cartLines.every((line) => line.kitchenSentAt)
+    ) {
       return;
     }
     if (cartLines.length === 0) {
@@ -3691,7 +3726,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     cartLines.length,
     editingInvoiceId,
     activeSession?.id,
+    isWaiterOrderLocked,
     user,
+    waiterOnlyUser,
     updateKitchenMutation.isPending,
   ]);
 
@@ -4125,8 +4162,8 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       !payCannotCompleteCredit &&
       hasValidPayments;
     const isCartLineLocked = (line: CartLine) =>
-      isCartLockedByWaiter || isKitchenSentLineLocked(line);
-    const orderKitchenLocked = isCartLockedByWaiter;
+      isWaiterOrderLocked || isKitchenSentLineLocked(line, waiterOnlyUser);
+    const orderKitchenLocked = isWaiterOrderLocked;
 
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#f6f7f8]">

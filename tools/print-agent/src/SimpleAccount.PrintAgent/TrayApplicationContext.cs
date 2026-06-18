@@ -73,8 +73,16 @@ public sealed class TrayApplicationContext : ApplicationContext
 <head>
   <meta charset=""UTF-8""/>
   <style>
-    @page {{ size: 80mm auto; margin: 0; }}
-    body {{ width: 76mm; font-family: 'Courier New', monospace; text-align: center; font-size: 13pt; }}
+    @page {{ size: 80mm auto; margin: 0 4mm; }}
+    body {{
+      width: 72mm;
+      max-width: 72mm;
+      margin: 0 auto;
+      padding: 5mm 3mm;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      font-size: 13pt;
+    }}
   </style>
 </head>
 <body>

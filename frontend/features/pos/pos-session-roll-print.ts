@@ -6,6 +6,13 @@
  */
 
 import type { PosSession, PosSessionReport } from "@/types/api";
+import {
+  THERMAL_PAGE_SIDE_MARGIN,
+  THERMAL_PRINTABLE_WIDTH_MM,
+  THERMAL_RECEIPT_SIDE_PADDING,
+  THERMAL_ROLL_PAGE_WIDTH,
+  thermalReceiptSepLine,
+} from "@/features/pos-shared/thermal-receipt-layout";
 
 export type SessionRollPrintType =
   | "SESSION_ROLL_REPORT"
@@ -36,9 +43,9 @@ function fmtAmt(val?: string | number | null): string {
   return Number(val).toFixed(2);
 }
 
-// Build a dashed separator line (48 dashes for ~80mm courier font at 9pt)
-const SEP = "─".repeat(32);
-const DASH_SEP = "-".repeat(32);
+// Separator lines sized for ~72mm printable width on 80mm rolls
+const SEP = thermalReceiptSepLine();
+const DASH_SEP = thermalReceiptSepLine("-");
 
 // ─── Label row helper ─────────────────────────────────────────────────────────
 
@@ -315,8 +322,8 @@ export function buildSessionRollReportDocumentHtml(ctx: RollPrintContext): strin
   <title>${titleAr}</title>
   <style>
     @page {
-      size: 80mm auto;
-      margin: 0;
+      size: ${THERMAL_ROLL_PAGE_WIDTH} auto;
+      margin: 0 ${THERMAL_PAGE_SIDE_MARGIN};
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -324,8 +331,10 @@ export function buildSessionRollReportDocumentHtml(ctx: RollPrintContext): strin
       font-size: 9pt;
       color: #000;
       background: #fff;
-      width: 76mm;
-      padding: 4mm 2mm;
+      width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      margin: 0 auto;
+      padding: 4mm ${THERMAL_RECEIPT_SIDE_PADDING};
       direction: rtl;
     }
     .center { text-align: center; }
@@ -394,7 +403,7 @@ export function buildSessionRollReportDocumentHtml(ctx: RollPrintContext): strin
       height: 16pt;
     }
     @media print {
-      html, body { width: 76mm; }
+      html, body { width: ${THERMAL_PRINTABLE_WIDTH_MM}mm; max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm; }
       .no-print { display: none !important; }
     }
   </style>

@@ -12,9 +12,13 @@ import {
 import {
   buildThermalReceiptDocumentHtml,
   fmtThermalReceiptAmt,
+  formatReceiptPaymentSummary,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemLine,
+  thermalReceiptMetaLineHtml,
+  thermalReceiptPaymentBlockHtml,
   thermalReceiptRowLine,
+  thermalReceiptSepLine,
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
 } from "@/features/pos-shared/thermal-receipt-layout";
@@ -90,24 +94,18 @@ export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosRece
   };
 }
 
-const SEP = "─".repeat(32);
+const SEP = thermalReceiptSepLine();
 
 const RESTAURANT_RECEIPT_EXTRA_CSS = `
-    .brand-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    .brand-stack {
+      text-align: center;
       margin-bottom: 2px;
     }
-    .brand-text {
-      flex: 1 1 auto;
-      min-width: 0;
-      text-align: right;
-    }
     .logo {
-      flex: 0 0 auto;
-      width: 48px;
-      height: 48px;
+      display: block;
+      width: 32px;
+      height: 32px;
+      margin: 0 auto 2px;
       object-fit: contain;
     }
     @media print {
@@ -155,20 +153,18 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
 
   if (logoUrl) {
     return `
-      <div class="brand-row">
+      <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
-        <div class="brand-text">
-          <div class="title">${receipt.companyName}</div>
-          <div class="sub">إيصال بيع</div>
-        </div>
+        <div class="title">${receipt.companyName}</div>
+        <div class="sub">إيصال بيع</div>
       </div>
-      ${identityMeta ? `<div class="center meta">${identityMeta}</div>` : ""}`;
+      ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
   return [
     `<div class="center title">${receipt.companyName}</div>`,
     `<div class="center sub">إيصال بيع</div>`,
-    identityMeta ? `<div class="center meta">${identityMeta}</div>` : "",
+    identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -180,17 +176,19 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(buildBrandHeaderHtml(receipt));
   rows.push(`<div class="sep">${SEP}</div>`);
 
-  const metaParts = [receipt.receiptNumber, fmtDateCompact(receipt.soldAt)].filter(Boolean);
-  rows.push(`<div class="center meta">${metaParts.join(" · ")}</div>`);
+  if (receipt.receiptNumber) {
+    rows.push(thermalReceiptMetaLineHtml(receipt.receiptNumber));
+  }
+  rows.push(thermalReceiptMetaLineHtml(fmtDateCompact(receipt.soldAt)));
 
-  const partyParts = [
-    receipt.cashierName ? `كاشير: ${receipt.cashierName}` : null,
-    receipt.terminalName ? `جهاز: ${receipt.terminalName}` : null,
-    receipt.warehouseName ? `مستودع: ${receipt.warehouseName}` : null,
-  ].filter(Boolean);
-
-  if (partyParts.length > 0) {
-    rows.push(`<div class="center meta">${partyParts.join(" · ")}</div>`);
+  if (receipt.cashierName) {
+    rows.push(thermalReceiptMetaLineHtml(`كاشير: ${receipt.cashierName}`));
+  }
+  if (receipt.terminalName) {
+    rows.push(thermalReceiptMetaLineHtml(`جهاز: ${receipt.terminalName}`));
+  }
+  if (receipt.warehouseName) {
+    rows.push(thermalReceiptMetaLineHtml(`مستودع: ${receipt.warehouseName}`));
   }
 
   rows.push(`<div class="sep">${SEP}</div>`);
@@ -233,7 +231,12 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   }
 
   if (receipt.paymentSummary.trim()) {
-    rows.push(thermalReceiptRowLine("الدفع", receipt.paymentSummary));
+    rows.push(
+      thermalReceiptPaymentBlockHtml(
+        "الدفع",
+        formatReceiptPaymentSummary(receipt.paymentSummary),
+      ),
+    );
   }
 
   rows.push(thermalReceiptTableClose());

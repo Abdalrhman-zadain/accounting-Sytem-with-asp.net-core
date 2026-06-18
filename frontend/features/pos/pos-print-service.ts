@@ -22,6 +22,12 @@ import {
   type RollPrintContext,
 } from "@/features/pos/pos-session-roll-print";
 import {
+  THERMAL_PAGE_SIDE_MARGIN,
+  THERMAL_PRINTABLE_WIDTH_MM,
+  THERMAL_RECEIPT_SIDE_PADDING,
+  THERMAL_ROLL_PAGE_WIDTH,
+} from "@/features/pos-shared/thermal-receipt-layout";
+import {
   printHtmlWithBrowser,
   printHtmlWithQz,
   type PosPrintBridgeStatus,
@@ -273,11 +279,13 @@ export async function testPosPrinter(target: PosPrintTarget): Promise<PosPrintRe
   <meta charset="UTF-8"/>
   <title>${title}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
+    @page { size: ${THERMAL_ROLL_PAGE_WIDTH} auto; margin: 0 ${THERMAL_PAGE_SIDE_MARGIN}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 76mm;
-      padding: 5mm 2mm;
+      width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      margin: 0 auto;
+      padding: 5mm ${THERMAL_RECEIPT_SIDE_PADDING};
       font-family: 'Courier New', Courier, monospace;
       color: #000;
       font-size: 13pt;
