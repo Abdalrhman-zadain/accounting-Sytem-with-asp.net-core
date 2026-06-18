@@ -23,3 +23,7 @@ frontend/.env
 .gemini/
 new.md
 next-env.d.ts
+
+# QZ Tray certificates - local only
+backend/certs/qz/private-key.pem
+backend/certs/qz/digital-certificate.txt
