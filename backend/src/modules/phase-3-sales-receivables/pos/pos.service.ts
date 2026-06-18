@@ -5755,6 +5755,13 @@ export class PosService {
       (sum: number, payment: any) => sum + Number(payment.amount),
       0,
     );
+    const subtotalAmount = Number(row.subtotalAmount);
+    const taxAmount = Number(row.taxAmount);
+    const taxRatePercent =
+      subtotalAmount > 0 && taxAmount > 0
+        ? Math.round((taxAmount / subtotalAmount) * 100)
+        : null;
+
     return {
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
@@ -5766,6 +5773,12 @@ export class PosService {
         row.posSession?.cashierUser?.email ??
         "Cashier",
       terminalName: row.posSession?.terminalName ?? null,
+      tableNumber: row.table?.tableNumber ?? null,
+      orderType: row.orderType ?? null,
+      waiterName: row.waiter?.name ?? row.waiter?.email ?? null,
+      serviceChargeAmount: row.serviceChargeAmount?.toString() ?? "0.00",
+      deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? "0.00",
+      taxRatePercent,
       total: row.totalAmount.toString(),
       tax: row.taxAmount.toString(),
       discount: row.discountAmount.toString(),

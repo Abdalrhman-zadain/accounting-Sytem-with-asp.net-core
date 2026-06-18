@@ -198,8 +198,9 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 - The kitchen print hub tracks both `KitchenOrderItem.id` and `salesInvoiceLineId`, and ignores orders whose linked POS sale is already `COMPLETED` or `REFUNDED`, so paying a dine-in order that was already sent to the kitchen does not print a second KOT.
 - Backend kitchen sync (`rebuildKitchenOrderFromInvoice`) updates existing kitchen rows in place instead of deleting and recreating them, preserving item ids and kitchen status across payment.
 - Customer receipts print in **Arabic only** (RTL). Payment method labels use Arabic (`نقد`, `بطاقة`, etc.). Set `POS_RECEIPT_COMPANY_NAME` to the Arabic business name for a fully Arabic header.
-- The customer receipt uses a compact 80mm XPrinter layout: centered logo, receipt #, date, and cashier only (no warehouse or terminal on paper).
-- Item and total rows use a fixed-width HTML table (230px safe content) with two-line items (name + qty) and padded LTR amount column; payment prints as Arabic method + amount when the receipt API returns `payments[]`.
+- The customer receipt uses a **restaurant-style 80mm** layout (Kashouka-inspired): centered **64px** logo, company name, branch/tax number when configured, date/time split, invoice number, table + staff for dine-in, order type, then a **4-column item table** (الصنف / السعر / الكمية / الإجمالي).
+- Totals show **المجموع الفرعي**, optional discount/service/delivery lines, **الضريبة N%** when tax applies, and a bold **الصافي** row. Payments print inside a bordered box (نقد, بطاقة, مدفوع, الباقي).
+- Receipt payload includes `tableNumber`, `orderType`, `waiterName`, `serviceChargeAmount`, `deliveryFeeAmount`, and computed `taxRatePercent` from the completed sale API.
 - Receipt HTML includes bottom padding and a trailing spacer so thermal auto-cutters do not clip the payment/thank-you lines; QZ Tray jobs also append blank feed lines after the HTML payload.
 - Browser and QZ print paths wait for receipt images to finish loading before sending the job, reducing clipped or mis-sized prints.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.
@@ -220,14 +221,13 @@ Many XPrinter 80mm drivers report paper as **80 (72.1) × 297 mm** — only **~7
 
 ### Software layout (already applied)
 
-- Content width: **230px (~60mm safe area)** with **5mm** inner side padding.
-- `@page` side margins: **5mm** on an **80mm** roll.
-- Amount column: **30%** width, **left-aligned LTR** with **4mm inset** and **padded** monospace amounts (`  2.50`) so digits do not clip on the physical left edge.
-- Header logo is **centered above** the company name.
-- Meta lines: **receipt #**, **date**, and **cashier** only — warehouse (`مستودع`) and terminal (`جهاز`) are **not** printed on customer receipts.
-- Item lines are **two rows**: truncated name (max **20** chars), then `×qty` on the second row with price in a fixed column.
-- Payment line uses **Arabic method labels** (`نقد`, `بطاقة`, …) with amounts when `payments[]` is returned by the API.
-- Separator lines: **20** characters; body font **10px**.
+- Content width: **72mm** printable area with **3mm** inner side padding.
+- `@page` side margins: **4mm** on an **80mm** roll.
+- Item table: four columns (name, unit price, quantity, line total); names truncate at **28** characters.
+- Dine-in receipts show **طاولة** and **الموظف** (waiter name when set, otherwise cashier).
+- Totals table ends with bold **الصافي**; payment box always lists **نقد** and **بطاقة** (0.00 when unused) plus **مدفوع** and **الباقي** when applicable.
+- Body font **12px**; title **17px**; net total **15px** bold.
+- Separator lines: **32** characters.
 
 After deploying the **frontend**, hard-refresh the POS in the browser (Ctrl+Shift+R) before re-testing.
 

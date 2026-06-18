@@ -3999,6 +3999,12 @@ export type PosReceipt = {
   taxNumber?: string | null;
   cashierName: string;
   terminalName?: string | null;
+  tableNumber?: string | null;
+  orderType?: string | null;
+  waiterName?: string | null;
+  serviceChargeAmount?: string;
+  deliveryFeeAmount?: string;
+  taxRatePercent?: number | null;
   total: string;
   tax: string;
   discount: string;
@@ -4019,6 +4025,7 @@ export type PosReceipt = {
     discountAmount: string;
     taxAmount: string;
     lineTotal: string;
+    unitCode?: string | null;
   }>;
 };
 

@@ -1031,6 +1031,12 @@ function mapReceiptResponse(receipt: {
   cashierName: string;
   terminalName?: string | null;
   warehouseName: string;
+  tableNumber?: string | null;
+  orderType?: string | null;
+  waiterName?: string | null;
+  serviceChargeAmount?: string;
+  deliveryFeeAmount?: string;
+  taxRatePercent?: number | null;
   paymentSummary: string;
   payments?: Array<{
     paymentMethod: string;
@@ -1062,6 +1068,16 @@ function mapReceiptResponse(receipt: {
     cashierName: receipt.cashierName,
     terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,
+    tableNumber: receipt.tableNumber,
+    orderType: receipt.orderType,
+    waiterName: receipt.waiterName,
+    serviceChargeAmount: receipt.serviceChargeAmount
+      ? parseAmount(receipt.serviceChargeAmount)
+      : 0,
+    deliveryFeeAmount: receipt.deliveryFeeAmount
+      ? parseAmount(receipt.deliveryFeeAmount)
+      : 0,
+    taxRatePercent: receipt.taxRatePercent ?? null,
     paymentSummary: receipt.paymentSummary,
     payments: receipt.payments?.map((payment) => ({
       paymentMethod: payment.paymentMethod,

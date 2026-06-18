@@ -30,7 +30,7 @@ Use this folder when **both** restaurant POS and market POS need the same React 
 | `posProductGridClass`, etc. | `pos-layout-classes.ts` | Responsive grid / register shell classes |
 | `POS_REGISTER_DEFAULT_THEME` | `pos-layout-classes.ts` | Restaurant green accent (default) |
 | `POS_REGISTER_MARKET_THEME` | `pos-layout-classes.ts` | Market blue accent |
-| `buildThermalReceiptDocumentHtml`, `thermalReceiptRowLine`, etc. | `thermal-receipt-layout.ts` | Shared 230px XPrinter receipt HTML: two-line items, padded LTR amounts, no warehouse/terminal on slip |
+| `buildThermalReceiptDocumentHtml`, `thermalReceiptItemRow4Col`, etc. | `thermal-receipt-layout.ts` | Shared 72mm restaurant receipt HTML: 4-column items, totals, bordered payment box |
 
 Pass `mobileCartBar` to `PosRegisterMainGrid` (item count, labels, total). Optional `theme` on the cart bar props overrides accent colors.
 

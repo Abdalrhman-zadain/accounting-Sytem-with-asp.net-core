@@ -7,26 +7,26 @@ export const THERMAL_ROLL_PAGE_WIDTH = "80mm";
  */
 export const THERMAL_PRINTABLE_WIDTH_MM = 72;
 
-/** CSS px width for ~60mm safe content at 96dpi (60 / 25.4 * 96 ≈ 227). */
-export const THERMAL_RECEIPT_WIDTH_PX = 230;
+/** Legacy px width kept for callers that still reference it. */
+export const THERMAL_RECEIPT_WIDTH_PX = 272;
 
 /** Horizontal padding inside the content safe area (each side). */
-export const THERMAL_RECEIPT_SIDE_PADDING = "5mm";
+export const THERMAL_RECEIPT_SIDE_PADDING = "3mm";
 
 /** `@page` left/right margin to center content on an 80mm roll. */
-export const THERMAL_PAGE_SIDE_MARGIN = "5mm";
+export const THERMAL_PAGE_SIDE_MARGIN = "4mm";
 
-/** Separator character count for narrow courier receipts (~24 cols on XPrinter). */
-export const THERMAL_RECEIPT_SEP_CHARS = 20;
+/** Separator character count for restaurant receipts on 72mm printable width. */
+export const THERMAL_RECEIPT_SEP_CHARS = 32;
 
 /** Max visible characters for item names on one receipt line. */
-export const THERMAL_RECEIPT_ITEM_NAME_MAX = 20;
+export const THERMAL_RECEIPT_ITEM_NAME_MAX = 28;
 
 /** Max characters per payment account name on the receipt. */
 export const THERMAL_RECEIPT_PAYMENT_NAME_MAX = 16;
 
 /** Fixed character width for monospace amount cells. */
-export const THERMAL_RECEIPT_AMT_PAD = 6;
+export const THERMAL_RECEIPT_AMT_PAD = 7;
 
 export function thermalReceiptSepLine(char = "─"): string {
   return char.repeat(THERMAL_RECEIPT_SEP_CHARS);
@@ -69,12 +69,89 @@ export function thermalReceiptItemLine(
 </tr>`;
 }
 
+export function thermalReceiptColumnHeaderRow(
+  nameLabel: string,
+  priceLabel: string,
+  qtyLabel: string,
+  totalLabel: string,
+): string {
+  return `<tr class="col-header">
+  <td class="col-name">${nameLabel}</td>
+  <td class="col-price">${priceLabel}</td>
+  <td class="col-qty">${qtyLabel}</td>
+  <td class="col-total">${totalLabel}</td>
+</tr>`;
+}
+
+export function thermalReceiptItemRow4Col(
+  name: string,
+  unitPrice: number,
+  qty: string,
+  total: number,
+): string {
+  const truncName =
+    name.length > THERMAL_RECEIPT_ITEM_NAME_MAX
+      ? `${name.slice(0, THERMAL_RECEIPT_ITEM_NAME_MAX)}…`
+      : name;
+
+  return `<tr class="item-row">
+  <td class="col-name">${truncName}</td>
+  <td class="col-price">${fmtThermalReceiptAmt(unitPrice)}</td>
+  <td class="col-qty">${qty}</td>
+  <td class="col-total">${fmtThermalReceiptAmt(total)}</td>
+</tr>`;
+}
+
 export function thermalReceiptMetaLineHtml(text: string): string {
   return `<div class="center meta meta-line">${text}</div>`;
 }
 
+export function thermalReceiptMetaRowSplit(
+  rightLabel: string,
+  rightValue: string,
+  leftLabel: string,
+  leftValue: string,
+): string {
+  return `<div class="meta-split">
+  <span class="meta-split-right">${rightLabel}: ${rightValue}</span>
+  <span class="meta-split-left">${leftLabel}: ${leftValue}</span>
+</div>`;
+}
+
+export function thermalReceiptDateTimeRow(dateText: string, timeText: string): string {
+  return `<div class="meta-split">
+  <span class="meta-split-right">التاريخ: ${dateText}</span>
+  <span class="meta-split-left">الوقت: ${timeText}</span>
+</div>`;
+}
+
+export function thermalReceiptTotalRow(
+  label: string,
+  value: number,
+  options?: { emphasis?: boolean },
+): string {
+  const rowClass = options?.emphasis ? "total-row emphasis" : "total-row";
+  return `<tr class="${rowClass}">
+  <td class="total-label" colspan="3">${label}</td>
+  <td class="total-amt">${fmtThermalReceiptAmt(value)}</td>
+</tr>`;
+}
+
 export function thermalReceiptPaymentBlockHtml(label: string, detail: string): string {
   return `<tr><td class="payment-block" colspan="2"><span class="payment-label">${label}</span><span class="payment-detail">${detail}</span></td></tr>`;
+}
+
+export function thermalReceiptPaymentBoxHtml(
+  lines: Array<{ label: string; value: number }>,
+): string {
+  const rows = lines
+    .map(
+      (line) =>
+        `<div class="pay-row"><span class="pay-label">${line.label}</span><span class="pay-amt">${fmtThermalReceiptAmt(line.value)}</span></div>`,
+    )
+    .join("\n");
+
+  return `<div class="payment-box">${rows}</div>`;
 }
 
 export function formatReceiptPaymentSummary(summary: string): string {
@@ -102,8 +179,8 @@ export function formatReceiptPaymentSummary(summary: string): string {
     .join(" + ");
 }
 
-export function thermalReceiptTableOpen(): string {
-  return `<table class="receipt-table">`;
+export function thermalReceiptTableOpen(className = "receipt-table"): string {
+  return `<table class="${className}">`;
 }
 
 export function thermalReceiptTableClose(): string {
@@ -118,33 +195,91 @@ const THERMAL_RECEIPT_BASE_CSS = `
     @page { size: ${THERMAL_ROLL_PAGE_WIDTH} auto; margin: 0 ${THERMAL_PAGE_SIDE_MARGIN} 4mm ${THERMAL_PAGE_SIDE_MARGIN}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 10px;
+      font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+      font-size: 12px;
       font-weight: 700;
       color: #000;
       background: #fff;
-      width: ${THERMAL_RECEIPT_WIDTH_PX}px;
-      max-width: ${THERMAL_RECEIPT_WIDTH_PX}px;
+      width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+      max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
       margin: 0 auto;
-      padding: 4px ${THERMAL_RECEIPT_SIDE_PADDING} 6mm ${THERMAL_RECEIPT_SIDE_PADDING};
+      padding: 3mm ${THERMAL_RECEIPT_SIDE_PADDING} 6mm ${THERMAL_RECEIPT_SIDE_PADDING};
       direction: rtl;
-      line-height: 1.25;
+      line-height: 1.35;
     }
     .center { text-align: center; }
-    .title { font-size: 13px; font-weight: 900; margin-bottom: 1px; line-height: 1.15; }
-    .sub { font-size: 10px; font-weight: 700; margin-bottom: 1px; }
-    .meta { font-size: 10px; font-weight: 600; margin-bottom: 1px; line-height: 1.25; }
+    .title { font-size: 17px; font-weight: 900; margin-bottom: 2px; line-height: 1.2; }
+    .sub { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+    .meta { font-size: 12px; font-weight: 600; margin-bottom: 2px; line-height: 1.3; }
     .meta-line {
       word-break: break-word;
       overflow-wrap: anywhere;
-      padding: 0 2mm;
+      padding: 0 1mm;
     }
-    .sep { text-align: center; margin: 2px 0; font-size: 10px; white-space: pre; }
-    table.receipt-table {
+    .meta-split {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 2mm;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 2px;
+      line-height: 1.3;
+    }
+    .meta-split-right { text-align: right; flex: 1; }
+    .meta-split-left { text-align: left; flex: 1; }
+    .sep { text-align: center; margin: 3px 0; font-size: 11px; white-space: pre; }
+    .sep-strong { font-weight: 400; }
+    table.receipt-table,
+    table.items-table,
+    table.totals-table {
       width: 100%;
       border-collapse: collapse;
       table-layout: fixed;
-      margin: 1px 0;
+      margin: 2px 0;
+    }
+    table.items-table td.col-name,
+    table.items-table td.col-price,
+    table.items-table td.col-qty,
+    table.items-table td.col-total {
+      vertical-align: top;
+      word-break: break-word;
+      padding: 2px 1px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    table.items-table tr.col-header td {
+      font-size: 11px;
+      font-weight: 800;
+      text-decoration: underline;
+      padding-bottom: 3px;
+    }
+    table.items-table td.col-name { width: 45%; text-align: right; }
+    table.items-table td.col-price { width: 18%; text-align: center; direction: ltr; unicode-bidi: isolate; }
+    table.items-table td.col-qty { width: 15%; text-align: center; direction: ltr; unicode-bidi: isolate; }
+    table.items-table td.col-total { width: 22%; text-align: left; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+    table.items-table tr.item-row td { padding-top: 3px; padding-bottom: 3px; }
+    table.totals-table td.total-label {
+      text-align: right;
+      padding: 2px 1px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    table.totals-table td.total-amt {
+      text-align: left;
+      padding: 2px 1px;
+      font-size: 12px;
+      font-weight: 700;
+      direction: ltr;
+      unicode-bidi: isolate;
+      font-variant-numeric: tabular-nums;
+      width: 28%;
+    }
+    table.totals-table tr.total-row.emphasis td {
+      font-size: 15px;
+      font-weight: 900;
+      padding-top: 4px;
+      padding-bottom: 4px;
     }
     td.item-name,
     td.item-qty,
@@ -154,11 +289,11 @@ const THERMAL_RECEIPT_BASE_CSS = `
       vertical-align: top;
       word-break: break-word;
       padding: 1px 2mm 1px 1px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
     }
     td.item-qty {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 600;
       padding-top: 0;
       padding-bottom: 2px;
@@ -171,7 +306,7 @@ const THERMAL_RECEIPT_BASE_CSS = `
       vertical-align: middle;
       white-space: pre;
       padding: 1px 1px 1px 4mm;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       direction: ltr;
       unicode-bidi: isolate;
@@ -180,7 +315,7 @@ const THERMAL_RECEIPT_BASE_CSS = `
     td.payment-block {
       text-align: right;
       padding: 2px 2mm 1px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       line-height: 1.3;
     }
@@ -196,16 +331,37 @@ const THERMAL_RECEIPT_BASE_CSS = `
       overflow-wrap: anywhere;
       font-weight: 600;
     }
-    .disc { font-size: 9px; font-weight: 600; }
-    .thanks { font-size: 10px; font-weight: 700; margin: 2px 0 0; }
+    .payment-box {
+      border: 1px solid #000;
+      margin: 4px 0;
+      padding: 3px 2mm;
+    }
+    .pay-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 2px 0;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .pay-label { text-align: right; }
+    .pay-amt {
+      direction: ltr;
+      unicode-bidi: isolate;
+      font-variant-numeric: tabular-nums;
+      min-width: 10mm;
+      text-align: left;
+    }
+    .disc { font-size: 10px; font-weight: 600; }
+    .thanks { font-size: 13px; font-weight: 700; margin: 4px 0 0; }
     .print-footer-spacer {
-      height: 4mm;
+      height: 5mm;
       width: 100%;
     }
     @media print {
       html, body {
-        width: ${THERMAL_RECEIPT_WIDTH_PX}px;
-        max-width: ${THERMAL_RECEIPT_WIDTH_PX}px;
+        width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
+        max-width: ${THERMAL_PRINTABLE_WIDTH_MM}mm;
       }
       * { color: #000 !important; }
     }
