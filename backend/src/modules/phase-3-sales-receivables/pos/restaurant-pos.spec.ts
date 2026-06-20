@@ -2,7 +2,7 @@ import { PosTableController } from "./pos-table.controller";
 import { PosKitchenController } from "./pos-kitchen.controller";
 import { PosWaiterOrdersController } from "./pos-waiter-orders.controller";
 import { TableStatus, KitchenStatus, WaiterFoodStatus } from "../../../generated/prisma";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 
 describe("Restaurant POS Controllers", () => {
   const prismaMock = {
@@ -10,6 +10,7 @@ describe("Restaurant POS Controllers", () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     },
     kitchenOrder: {
       findMany: jest.fn(),
@@ -154,6 +155,18 @@ describe("Restaurant POS Controllers", () => {
 
       const result = await tableController.updateWaiter("t1", { assignedWaiterId: "w1" });
       expect(result.assignedWaiterId).toEqual("w1");
+    });
+
+    it("rejects deleting a table with invoice history before hitting database constraints", async () => {
+      prismaMock.posTable.findUnique.mockResolvedValue({
+        id: "t1",
+        tableNumber: "T1",
+        activeInvoice: null,
+        _count: { invoices: 1 },
+      });
+
+      await expect(tableController.deleteTable("t1")).rejects.toThrow(BadRequestException);
+      expect(prismaMock.posTable.delete).not.toHaveBeenCalled();
     });
   });
 

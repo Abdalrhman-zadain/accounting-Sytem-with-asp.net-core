@@ -267,7 +267,10 @@ export class PosTableController {
     const table = await this.prisma.posTable.findUnique({
       where: { id },
       include: {
-        activeInvoice: true
+        activeInvoice: true,
+        _count: {
+          select: { invoices: true },
+        },
       }
     });
     if (!table) {
@@ -275,6 +278,9 @@ export class PosTableController {
     }
     if (table.activeInvoice) {
       throw new BadRequestException(`Cannot delete a table with an active order / لا يمكن حذف طاولة عليها طلب نشط`);
+    }
+    if (table._count.invoices > 0) {
+      throw new BadRequestException(`Cannot delete a table with invoice history / لا يمكن حذف طاولة لديها سجل فواتير`);
     }
     return this.prisma.posTable.delete({
       where: { id }
