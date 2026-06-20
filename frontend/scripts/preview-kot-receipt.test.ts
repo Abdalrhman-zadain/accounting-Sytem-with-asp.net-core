@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { describe, it } from "vitest";
 import {
   buildKitchenDeltaTicketHtml,
+  buildKitchenNewOrderTicketHtml,
   buildKitchenOrderTicketHtml,
   buildKitchenVoidTicketHtml,
 } from "@/features/pos/pos-kot-print";
@@ -208,12 +209,26 @@ describe("kot and receipt preview generator", () => {
       modifiers: null,
     };
     writeFileSync(
+      join(PREVIEW_DIR, "kot-new-order.html"),
+      buildKitchenNewOrderTicketHtml(dineIn, [deltaLine], "ar"),
+    );
+    writeFileSync(
       join(PREVIEW_DIR, "kot-update.html"),
       buildKitchenDeltaTicketHtml(dineIn, [deltaLine], "ar"),
     );
     writeFileSync(
       join(PREVIEW_DIR, "kot-void.html"),
       buildKitchenVoidTicketHtml(dineIn, [deltaLine], "ar"),
+    );
+    const longKitchenNote =
+      "بدون بصل بدون ثوم صلصة حارة جداً بدون مخلل بدون طماطم تقديم سريع للطاولة اثنتا عشرة بدون ليمون بدون خس بدون مخلل إضافي";
+    writeFileSync(
+      join(PREVIEW_DIR, "kot-long-note.html"),
+      buildKitchenNewOrderTicketHtml(
+        baseSale({ description: longKitchenNote }),
+        [deltaLine],
+        "ar",
+      ),
     );
 
     writeFileSync(

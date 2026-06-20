@@ -64,6 +64,7 @@ import {
   ReprintKotDto,
   UpdateDeliveryCompanyStatusDto,
 } from "./dto/pos.dto";
+import { assertPosKitchenNoteLimits } from "./pos-kitchen-note-limits";
 
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
 const POS_WALK_IN_CUSTOMER_NAME = "POS Walk-in Customer";
@@ -976,6 +977,7 @@ export class PosService {
     options?: { skipKitchenSync?: boolean },
   ) {
     const session = await this.ensureOpenSession(dto.sessionId);
+    assertPosKitchenNoteLimits(dto);
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({
@@ -1191,6 +1193,7 @@ export class PosService {
       throw new ForbiddenException("Waiters cannot complete sales or take payment.");
     }
     const session = await this.ensureOpenSession(dto.sessionId);
+    assertPosKitchenNoteLimits(dto);
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({
@@ -2314,6 +2317,41 @@ export class PosService {
     return {
       sale: this.mapPosSale(sale),
       receipt: this.mapReceipt(sale),
+    };
+  }
+
+  async printBill(id: string, user?: AuthorizedUser) {
+    this.ensurePosPermission("REPRINT_RECEIPT", user);
+    const sale = await this.prisma.salesInvoice.findUnique({
+      where: { id },
+      include: this.posSaleInclude(),
+    });
+    if (!sale || sale.invoiceType !== SalesInvoiceType.POS) {
+      throw new BadRequestException(`POS sale ${id} was not found.`);
+    }
+    if (
+      sale.posOperationalStatus !== PosOperationalStatus.DRAFT &&
+      sale.posOperationalStatus !== PosOperationalStatus.HELD
+    ) {
+      throw new BadRequestException(
+        "Only draft or held POS sales can be printed as a bill before payment.",
+      );
+    }
+
+    await this.auditService.log({
+      userId: user?.userId,
+      entity: "SalesInvoice",
+      entityId: sale.id,
+      action: AuditAction.VIEW,
+      details: {
+        reference: sale.reference,
+        event: "PRINT_BILL",
+      },
+    });
+
+    return {
+      sale: this.mapPosSale(sale),
+      receipt: this.mapProvisionalBill(sale),
     };
   }
 
@@ -5763,6 +5801,7 @@ export class PosService {
         : null;
 
     return {
+      receiptKind: "sale" as const,
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
       companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "",
@@ -5800,6 +5839,62 @@ export class PosService {
         paymentMethod: payment.paymentMethod,
         amount: payment.amount.toString(),
       })),
+      warehouseName: row.posSession?.warehouse?.name ?? "—",
+      lines: row.lines.map((line: any) => ({
+        name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
+        quantity: line.quantity.toString(),
+        unitPrice: line.unitPrice.toString(),
+        discountAmount: line.discountAmount.toString(),
+        taxAmount: line.taxAmount.toString(),
+        lineTotal: line.lineAmount.toString(),
+        unitCode: line.item?.unitOfMeasure ?? null,
+        modifiers: line.modifiers === null ? undefined : line.modifiers,
+      })),
+    };
+  }
+
+  private mapProvisionalBill(row: any) {
+    const subtotalAmount = Number(row.subtotalAmount);
+    const taxAmount = Number(row.taxAmount);
+    const taxRatePercent =
+      subtotalAmount > 0 && taxAmount > 0
+        ? Math.round((taxAmount / subtotalAmount) * 100)
+        : null;
+
+    return {
+      receiptKind: "provisional" as const,
+      receiptNumber: row.reference,
+      soldAt: row.updatedAt.toISOString(),
+      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "",
+      branchName: row.posSession?.branchName ?? null,
+      taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
+      cashierName:
+        row.posSession?.cashierUser?.name ??
+        row.posSession?.cashierUser?.email ??
+        "Cashier",
+      terminalName: row.posSession?.terminalName ?? null,
+      tableNumber: row.table?.tableNumber ?? null,
+      orderType: row.orderType ?? null,
+      waiterName: row.waiter?.name ?? row.waiter?.email ?? null,
+      deliveryAddress: row.deliveryAddress?.trim() || null,
+      deliveryNotes: row.deliveryNotes?.trim() || null,
+      deliveryCompanyName:
+        row.deliveryCompany?.arabicName?.trim() ||
+        row.deliveryCompany?.name?.trim() ||
+        null,
+      driverName: row.driver?.name?.trim() || null,
+      serviceChargeAmount: row.serviceChargeAmount?.toString() ?? "0.00",
+      deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? "0.00",
+      taxRatePercent,
+      total: row.totalAmount.toString(),
+      tax: row.taxAmount.toString(),
+      discount: row.discountAmount.toString(),
+      subtotal: row.subtotalAmount.toString(),
+      paid: "0.00",
+      tendered: "0.00",
+      change: "0.00",
+      paymentSummary: "غير مدفوع",
+      payments: [],
       warehouseName: row.posSession?.warehouse?.name ?? "—",
       lines: row.lines.map((line: any) => ({
         name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,

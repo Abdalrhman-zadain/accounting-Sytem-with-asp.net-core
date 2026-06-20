@@ -2862,6 +2862,9 @@ Object.assign(arTranslations, {
     "يمكن في المرحلة القادمة ربط التعليق والمرتجعات والمراجعة المحاسبية وإغلاق الوردية دون الحاجة لتغيير هيكل هذه الشاشة.",
   "pos.sales.lastReceipt": "آخر إيصال",
   "pos.sales.printLastReceipt": "طباعة آخر إيصال",
+  "pos.sales.printBill": "طباعة الفاتورة",
+  "pos.sales.recentReceipts": "إيصالات حديثة",
+  "pos.sales.reprintReceipt": "إعادة طباعة",
   "pos.sales.heldSectionTitle": "المبيعات المعلقة",
   "pos.sales.heldSectionDescription":
     "استكمل أي عملية بيع معلقة مباشرة من شاشة البيع.",

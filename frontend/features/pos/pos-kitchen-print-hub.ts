@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
 import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
-import { printKitchenDelta } from "@/features/pos/pos-print-service";
+import { printKitchenDelta, printKitchenNewOrder } from "@/features/pos/pos-print-service";
 import type { PosLineModifiersPayload } from "@/features/pos/pos-addon-types";
 import { getPosKitchenOrders } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -132,6 +132,15 @@ export function primePrintedKitchenItemIds(
 
 export function collectKitchenOrderItemIds(orders: KitchenOrder[]): string[] {
   return orders.flatMap((order) => order.items.map((item) => item.id));
+}
+
+export function isKitchenOrderFirstPrint(
+  knownIds: ReadonlySet<string>,
+  order: KitchenOrder,
+): boolean {
+  return !order.items.some((item) =>
+    isKitchenItemPrinted(knownIds, item as KitchenOrderPrintItem),
+  );
 }
 
 export function findUnprintedKitchenItems(
@@ -346,14 +355,17 @@ export function useKitchenPrintHub({
     void (async () => {
       try {
         for (const group of groups) {
+          const isFirstSend = isKitchenOrderFirstPrint(printedIdsRef.current, group.order);
           for (const item of group.items) {
             markKitchenItemPrinted(printedIdsRef.current, item as KitchenOrderPrintItem);
           }
-          await printKitchenDelta(
-            kitchenOrderToSaleStub(group.order),
-            kitchenItemsToDeltaLines(group.items),
-            language,
-          );
+          const saleStub = kitchenOrderToSaleStub(group.order);
+          const deltaLines = kitchenItemsToDeltaLines(group.items);
+          if (isFirstSend) {
+            await printKitchenNewOrder(saleStub, deltaLines, language);
+          } else {
+            await printKitchenDelta(saleStub, deltaLines, language);
+          }
         }
       } catch (error) {
         for (const group of groups) {

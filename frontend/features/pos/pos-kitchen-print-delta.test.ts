@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   diffKitchenSnapshots,
   hasKitchenPrintDiff,
+  isFirstKitchenSend,
   type KitchenLineSnapshot,
 } from "@/features/pos/pos-kitchen-print-delta";
 
@@ -88,5 +89,28 @@ describe("diffKitchenSnapshots", () => {
     const diff = diffKitchenSnapshots(lines, lines);
 
     expect(hasKitchenPrintDiff(diff)).toBe(false);
+  });
+});
+
+describe("isFirstKitchenSend", () => {
+  it("returns true when no line was previously sent", () => {
+    expect(
+      isFirstKitchenSend([
+        {
+          lineId: "line-1",
+          itemId: "item-1",
+          name: "Burger",
+          qty: 1,
+          kitchenSentAt: null,
+          modifiers: null,
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("returns false when at least one line was already sent", () => {
+    expect(isFirstKitchenSend([sentLine({ lineId: "line-1", name: "Burger", qty: 1 })])).toBe(
+      false,
+    );
   });
 });

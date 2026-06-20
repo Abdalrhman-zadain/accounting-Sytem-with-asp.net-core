@@ -138,6 +138,11 @@ export function hasKitchenPrintDiff(diff: KitchenPrintDiff): boolean {
   );
 }
 
+/** True when no line had been sent to the kitchen before this print batch. */
+export function isFirstKitchenSend(before: KitchenLineSnapshot[]): boolean {
+  return !before.some((line) => line.kitchenSentAt);
+}
+
 export function unsentKitchenLines(snapshot: KitchenLineSnapshot[]): KitchenLineSnapshot[] {
   return snapshot.filter((line) => !line.kitchenSentAt && line.qty > 0);
 }

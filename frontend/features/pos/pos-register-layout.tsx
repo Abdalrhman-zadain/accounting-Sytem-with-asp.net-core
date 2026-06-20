@@ -6,6 +6,9 @@ import {
   posRegisterCartPanelClass,
   posRegisterCatalogClass,
   posRegisterGridClass,
+  posWaiterTabletRegisterCartPanelClass,
+  posWaiterTabletRegisterCatalogClass,
+  posWaiterTabletRegisterGridClass,
 } from "@/features/pos/pos-layout-classes";
 import {
   PosRegisterMobileOrderSheet,
@@ -31,13 +34,23 @@ export function PosRegisterMainGrid({
   catalog,
   salePanel,
   mobileCartBar,
+  waiterMode = false,
 }: {
   catalog: ReactNode;
   salePanel: ReactNode;
   mobileCartBar: Omit<PosRegisterMobileCartBarProps, "isOpen" | "onToggle">;
+  waiterMode?: boolean;
 }) {
-  const isWide = useRegisterWideLayout();
+  const wideMinPx = waiterMode ? 1180 : 960;
+  const isWide = useRegisterWideLayout(wideMinPx);
   const [isMobileOrderOpen, setIsMobileOrderOpen] = useState(false);
+  const gridClass = waiterMode ? posWaiterTabletRegisterGridClass : posRegisterGridClass;
+  const catalogClass = waiterMode
+    ? posWaiterTabletRegisterCatalogClass
+    : posRegisterCatalogClass;
+  const cartPanelClass = waiterMode
+    ? posWaiterTabletRegisterCartPanelClass
+    : posRegisterCartPanelClass;
 
   useEffect(() => {
     if (isWide) setIsMobileOrderOpen(false);
@@ -45,11 +58,11 @@ export function PosRegisterMainGrid({
 
   return (
     <>
-      <div className={posRegisterGridClass}>
-        <section className={posRegisterCatalogClass}>{catalog}</section>
+      <div className={gridClass}>
+        <section className={catalogClass}>{catalog}</section>
 
         {isWide ? (
-          <aside className={posRegisterCartPanelClass}>
+          <aside className={cartPanelClass}>
             <SalePanelShell>{salePanel}</SalePanelShell>
           </aside>
         ) : null}
@@ -59,6 +72,7 @@ export function PosRegisterMainGrid({
         <>
           <PosRegisterStickyCartBar
             {...mobileCartBar}
+            wideMinPx={wideMinPx}
             isOpen={isMobileOrderOpen}
             onToggle={() => setIsMobileOrderOpen((open) => !open)}
           />
@@ -66,6 +80,7 @@ export function PosRegisterMainGrid({
             isOpen={isMobileOrderOpen}
             onClose={() => setIsMobileOrderOpen(false)}
             orderTitle={mobileCartBar.orderTitle}
+            wideMinPx={wideMinPx}
           >
             <SalePanelShell>{salePanel}</SalePanelShell>
           </PosRegisterMobileOrderSheet>

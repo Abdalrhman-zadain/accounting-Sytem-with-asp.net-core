@@ -27,6 +27,7 @@ vi.mock("@/features/pos/pos-local-agent-bridge", () => ({
 
 vi.mock("@/features/pos/pos-kot-print", () => ({
   buildKitchenDeltaTicketHtml: vi.fn(() => "<html><body>KOT delta</body></html>"),
+  buildKitchenNewOrderTicketHtml: vi.fn(() => "<html><body>KOT new</body></html>"),
   buildKitchenOrderTicketHtml: vi.fn(() => "<html><body>KOT</body></html>"),
   buildKitchenTicketHtmlForLines: vi.fn(() => "<html><body>KOT lines</body></html>"),
   buildKitchenVoidTicketHtml: vi.fn(() => "<html><body>KOT void</body></html>"),
@@ -36,6 +37,7 @@ vi.mock("@/features/pos/pos-kitchen-print-delta", () => ({
   captureKitchenLineSnapshotFromSale: vi.fn(() => []),
   diffKitchenSnapshots: vi.fn(() => ({ additions: [], voids: [], qtyDecreases: [] })),
   hasKitchenPrintDiff: vi.fn(() => false),
+  isFirstKitchenSend: vi.fn(() => false),
   unsentKitchenLines: vi.fn(() => []),
 }));
 

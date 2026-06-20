@@ -31,7 +31,10 @@ export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
 
 export type PosReceiptOrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY" | string;
 
+export type PosReceiptKind = "sale" | "provisional";
+
 export type PosReceiptData = {
+  receiptKind?: PosReceiptKind;
   receiptNumber: string;
   soldAt: string;
   companyName: string;
@@ -218,6 +221,10 @@ function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string |
 }
 
 function buildPaymentBoxLines(receipt: PosReceiptData): ThermalReceiptPaymentBoxLine[] {
+  if (receipt.receiptKind === "provisional") {
+    return [{ label: "غير مدفوع", value: receipt.total, emphasis: true, currency: true }];
+  }
+
   const amountsByMethod = new Map<string, number>();
 
   for (const payment of receipt.payments ?? []) {
@@ -264,17 +271,19 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     .filter(Boolean)
     .join(" · ");
 
+  const subtitle = receipt.receiptKind === "provisional" ? "فاتورة" : "إيصال بيع";
+
   if (logoUrl) {
     return `
       <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
-        <div class="sub">إيصال بيع</div>
+        <div class="sub">${subtitle}</div>
       </div>
       ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
   return [
-    `<div class="center sub">إيصال بيع</div>`,
+    `<div class="center sub">${subtitle}</div>`,
     identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "",
   ]
     .filter(Boolean)
@@ -294,13 +303,18 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const lineDiscountTotal = sumLineDiscounts(receipt.lines);
   const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
 
-  const orderNumber = extractDailyOrderNumber(receipt.receiptNumber);
+  const orderNumber =
+    receipt.receiptKind === "provisional"
+      ? null
+      : extractDailyOrderNumber(receipt.receiptNumber);
 
   rows.push(buildBrandHeaderHtml(receipt));
   rows.push(`<div class="sep">${SEP}</div>`);
   rows.push(thermalReceiptMetaLineHtml(`التاريخ: ${date}`));
   rows.push(thermalReceiptMetaLineHtml(`الوقت: ${time}`));
-  if (orderNumber) {
+  if (receipt.receiptKind === "provisional" && receipt.receiptNumber.trim()) {
+    rows.push(thermalReceiptMetaLineHtml(`مرجع: ${receipt.receiptNumber.trim()}`));
+  } else if (orderNumber) {
     rows.push(thermalReceiptMetaLineHtml(`رقم الطلب: ${orderNumber}`));
   }
   rows.push(`<div class="sep">${SEP}</div>`);

@@ -10,6 +10,10 @@ import type {
   PosLineAddonSelection,
 } from "@/features/pos/pos-addon-types";
 import { localizeAddonLabel } from "@/features/pos/pos-addon-utils";
+import {
+  clampKitchenLineNote,
+  POS_ITEM_KITCHEN_NOTE_MAX,
+} from "@/features/pos/pos-kitchen-note-limits";
 import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
 import { cn } from "@/lib/utils";
 
@@ -489,12 +493,25 @@ export function PosLineAddonModal({
           )}
 
           <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
-            <label className="block text-sm font-black text-amber-900">
-              {isAr ? "ملاحظة للمطبخ (هذا البند)" : "Kitchen note (this item)"}
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-black text-amber-900">
+                {isAr ? "ملاحظة للمطبخ (هذا البند)" : "Kitchen note (this item)"}
+              </label>
+              <span
+                className={cn(
+                  "text-xs font-semibold tabular-nums",
+                  lineNote.length >= POS_ITEM_KITCHEN_NOTE_MAX
+                    ? "text-amber-800"
+                    : "text-amber-700/70",
+                )}
+              >
+                {lineNote.length}/{POS_ITEM_KITCHEN_NOTE_MAX}
+              </span>
+            </div>
             <textarea
               value={lineNote}
-              onChange={(e) => setLineNote(e.target.value)}
+              onChange={(e) => setLineNote(clampKitchenLineNote(e.target.value))}
+              maxLength={POS_ITEM_KITCHEN_NOTE_MAX}
               rows={3}
               placeholder={
                 isAr ? "مثال: بدون بصل، صلصة إضافية…" : "e.g. no onion, extra sauce…"

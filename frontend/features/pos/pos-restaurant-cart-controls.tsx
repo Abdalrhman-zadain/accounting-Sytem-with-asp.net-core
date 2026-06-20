@@ -1,7 +1,15 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { LuArrowRightLeft, LuChefHat, LuCombine, LuScissors, LuUser, LuUtensils } from "react-icons/lu";
+import {
+  LuArrowRight,
+  LuArrowRightLeft,
+  LuChefHat,
+  LuCombine,
+  LuScissors,
+  LuUser,
+  LuUtensils,
+} from "react-icons/lu";
 import type {
   DeliveryCompany,
   DeliveryCollectionMethod,
@@ -125,9 +133,10 @@ export function PosRestaurantCartControls({
         <button
           type="button"
           onClick={onBackToTables}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-[12px] border border-[#cbd5d0] bg-[#edf5ef] px-4 text-xs font-bold text-[#2e5d3c] shadow-sm transition hover:bg-[#e1f2e5]"
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#b7d5bf] bg-[#edf7ef] px-4 text-sm font-black text-[#245834] shadow-sm transition hover:bg-[#e1f2e5]"
         >
-          {isAr ? "← العودة للطاولات" : "← Back to Tables"}
+          <LuArrowRight className="h-5 w-5 shrink-0 rtl:rotate-180" />
+          <span>{isAr ? "العودة للطاولات" : "Back to Tables"}</span>
         </button>
       )}
 
@@ -157,9 +166,24 @@ export function PosRestaurantCartControls({
       {orderType === "DINE_IN" ? (
         <div className="space-y-2.5">
           {/* Table badge */}
-          <div className="flex items-center gap-2 rounded-xl border border-[#d6d3f0] bg-[#f5f3ff] px-3 py-2">
-            <LuUtensils className="h-4 w-4 shrink-0 text-[#4338ca]" />
-            <span className="flex-1 text-xs font-bold text-[#4338ca]">
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-[#d6d3f0] bg-[#f5f3ff] px-3 py-2",
+              waiterMode && "rounded-[16px] border-[#bfc8ff] bg-[#f2f4ff] px-3.5 py-3",
+            )}
+          >
+            <LuUtensils
+              className={cn(
+                "shrink-0 text-[#4338ca]",
+                waiterMode ? "h-5 w-5" : "h-4 w-4",
+              )}
+            />
+            <span
+              className={cn(
+                "flex-1 font-bold text-[#4338ca]",
+                waiterMode ? "text-base" : "text-xs",
+              )}
+            >
               {visibleTableLabel
                 ? visibleTableLabel
                 : isAr
@@ -170,7 +194,10 @@ export function PosRestaurantCartControls({
               type="button"
               disabled={controlsDisabled}
               onClick={onOpenTableSelector}
-              className="rounded-lg border border-[#c7c3ff] bg-white px-2 py-1 text-[10px] font-bold text-[#4338ca] hover:bg-[#efefff] disabled:opacity-40"
+              className={cn(
+                "rounded-lg border border-[#c7c3ff] bg-white px-2 py-1 text-[10px] font-bold text-[#4338ca] hover:bg-[#efefff] disabled:opacity-40",
+                waiterMode && "min-h-[40px] px-3 text-xs",
+              )}
             >
               {isAr ? "تغيير" : "Change"}
             </button>

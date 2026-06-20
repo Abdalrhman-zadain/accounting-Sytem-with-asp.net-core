@@ -3101,6 +3101,13 @@ export async function reprintPosReceipt(id: string, token?: string | null) {
   });
 }
 
+export async function printPosBill(id: string, token?: string | null) {
+  return apiRequest<PosCompleteSaleResponse>(`/pos/sales/${id}/print-bill`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function printPosSessionRollReport(
   sessionId: string,
   printType: "SESSION_ROLL_REPORT" | "INVOICE_LIST_ROLL" | "ALL_RECEIPTS_ROLL",

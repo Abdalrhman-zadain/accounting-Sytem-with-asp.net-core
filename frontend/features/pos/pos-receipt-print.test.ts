@@ -189,6 +189,30 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("رسوم التوصيل");
   });
 
+  it("renders provisional bill with unpaid label instead of sale receipt header", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          receiptKind: "provisional",
+          receiptNumber: "POS-20260620-0012",
+          payments: [],
+          paid: 0,
+          tendered: 0,
+          change: 0,
+          paymentSummary: "غير مدفوع",
+        }),
+      ),
+    );
+
+    expect(html).toContain("فاتورة");
+    expect(html).not.toContain("إيصال بيع");
+    expect(html).toContain("مرجع: POS-20260620-0012");
+    expect(html).not.toContain("رقم الطلب:");
+    expect(html).toContain("غير مدفوع");
+    expect(html).not.toContain("نقد");
+    expect(html).not.toContain("الباقي");
+  });
+
   it("renders bold addon rows under item lines", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(

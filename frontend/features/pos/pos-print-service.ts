@@ -1,5 +1,6 @@
 import {
   buildKitchenDeltaTicketHtml,
+  buildKitchenNewOrderTicketHtml,
   buildKitchenOrderTicketHtml,
   buildKitchenTicketHtmlForLines,
   buildKitchenVoidTicketHtml,
@@ -8,6 +9,7 @@ import {
   captureKitchenLineSnapshotFromSale,
   diffKitchenSnapshots,
   hasKitchenPrintDiff,
+  isFirstKitchenSend,
   type KitchenLineSnapshot,
   type KitchenPrintDiff,
   unsentKitchenLines,
@@ -135,6 +137,21 @@ export async function printKitchenTicketForLineIds(
   );
 }
 
+export async function printKitchenNewOrder(
+  sale: PosSale,
+  lines: KitchenPrintDiff["additions"],
+  language: string,
+): Promise<PosPrintResult> {
+  if (lines.length === 0) {
+    return skippedPrintResult();
+  }
+  return printConfiguredHtml(
+    buildKitchenNewOrderTicketHtml(sale, lines, language),
+    "kitchen",
+    "pos-kitchen-new-order",
+  );
+}
+
 export async function printKitchenDelta(
   sale: PosSale,
   deltaLines: KitchenPrintDiff["additions"],
@@ -169,6 +186,7 @@ export async function printKitchenDiff(
   sale: PosSale,
   diff: KitchenPrintDiff,
   language: string,
+  snapshotBefore: KitchenLineSnapshot[] = [],
 ): Promise<PosPrintResult[]> {
   const results: PosPrintResult[] = [];
   const voidLines = [...diff.voids, ...diff.qtyDecreases];
@@ -176,7 +194,10 @@ export async function printKitchenDiff(
     results.push(await printKitchenVoid(sale, voidLines, language));
   }
   if (diff.additions.length > 0) {
-    results.push(await printKitchenDelta(sale, diff.additions, language));
+    const printAdditions = isFirstKitchenSend(snapshotBefore)
+      ? printKitchenNewOrder
+      : printKitchenDelta;
+    results.push(await printAdditions(sale, diff.additions, language));
   }
   return results;
 }
@@ -197,7 +218,7 @@ export async function applyPosKitchenUpdatePrints(options: {
     return [];
   }
 
-  return printKitchenDiff(options.sale, diff, options.language);
+  return printKitchenDiff(options.sale, diff, options.language, options.snapshotBefore);
 }
 
 export async function applyPosPayCompletePrints(options: {
@@ -226,22 +247,25 @@ export async function applyPosPayCompletePrints(options: {
       )
       .map((line) => line.id);
 
+    const after = captureKitchenLineSnapshotFromSale(options.sale);
+    const diff = diffKitchenSnapshots(options.snapshotBefore, after);
+    const firstSend = isFirstKitchenSend(options.snapshotBefore);
+
     if (newlySentLineIds.length > 0) {
-      results.kitchen.push(
-        await printKitchenTicketForLineIds(
-          options.sale,
-          newlySentLineIds,
-          options.language,
-        ),
-      );
-    } else {
-      const after = captureKitchenLineSnapshotFromSale(options.sale);
-      const diff = diffKitchenSnapshots(options.snapshotBefore, after);
-      if (diff.additions.length > 0) {
+      if (firstSend) {
+        results.kitchen.push(
+          await printKitchenNewOrder(options.sale, diff.additions, options.language),
+        );
+      } else {
         results.kitchen.push(
           await printKitchenDelta(options.sale, diff.additions, options.language),
         );
       }
+    } else if (diff.additions.length > 0) {
+      const printAdditions = firstSend ? printKitchenNewOrder : printKitchenDelta;
+      results.kitchen.push(
+        await printAdditions(options.sale, diff.additions, options.language),
+      );
     }
   }
 

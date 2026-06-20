@@ -4,6 +4,7 @@ The POS supports separate thermal print outputs for restaurant operations:
 
 - kitchen KOT: printed from the kitchen ticket template when an order is sent to the kitchen, updated, cancelled, or auto-sent on payment
 - customer receipt: printed from the sales receipt template when payment completes or a receipt is reprinted
+- provisional bill (guest check): printed before payment from the cart, held/draft list, or table floor; uses the same thermal layout with a **فاتورة** header and **غير مدفوع** status instead of payment details
 - session roll reports: printed through the receipt-printer route
 
 Production Restaurant POS printing uses **Simple Account Print Agent** as the primary path. The agent listens on `127.0.0.1:9188`, accepts HTML print jobs from the POS, and prints to the configured kitchen/receipt printers without browser dialogs.
@@ -176,7 +177,8 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 
 | Trigger | Kitchen printer | Cashier printer |
 |---------|-----------------|-----------------|
-| Send / confirm / update kitchen | Delta **ADD** ticket for new/changed qty | Nothing |
+| Send / confirm (first kitchen send) | **NEW ORDER** ticket for all new items | Nothing |
+| Send / confirm / update kitchen (after first send) | Delta **ADD** ticket for new/changed qty | Nothing |
 | Cashier removes/reduces sent line | **VOID** ticket | Nothing |
 | Pay — kitchen already sent | Nothing | Arabic receipt |
 | Pay — never sent to kitchen | KOT for unsent lines | Arabic receipt |
@@ -184,6 +186,8 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 - `Send to kitchen`, cashier kitchen update (including silent table sync), and payment catch-up KOT print delta slips on the **cashier PC** when `autoPrintKotOnSend` is enabled.
 - **Waiter confirm** does not print on the waiter device. When **Print waiter kitchen tickets on this PC** is enabled, the open cashier register polls kitchen orders every 3 seconds and prints new waiter KOT items through the local Print Agent on the cashier PC.
 - Completing payment prints the customer receipt when `autoPrintReceiptOnPay` is enabled.
+- **Print bill** (before payment) is available on the register cart, pay modal, held/draft list, and table floor. It uses the same 80mm receipt printer but renders **فاتورة** with invoice reference and **غير مدفوع** instead of receipt number and payment lines. Saved draft/held/table orders call `POST /api/pos/sales/:id/print-bill`; unsaved cart orders build the bill client-side.
+- **Recent receipts** on the register lists completed sales in the current session with one-tap reprint (`POST /api/pos/sales/:id/reprint`).
 - If payment completes and some lines were never sent to the kitchen, the POS sends separate print jobs: a KOT to the kitchen printer and the Arabic receipt to the cashier printer.
 - Only the **cashier** may remove or reduce items already sent to the kitchen; the kitchen receives a void/cancel slip. Waiters cannot cancel sent kitchen lines.
 - Cashier cannot remove sent lines that are already `READY` or `SERVED` in the kitchen order.
@@ -191,7 +195,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 ### Templates and language
 
 - Receipt/KOT layout code remains separate in `frontend/features/pos/pos-receipt-print.ts` and `frontend/features/pos/pos-kot-print.ts`.
-- Delta/void kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and routed through `frontend/features/pos/pos-print-service.ts`. Cashier VOID/ADD slips diff the API response against the **last synced server snapshot** (set on table resume and after each successful kitchen update), not the live cart at button press — so remove/qty-reduce edits produce VOID slips correctly.
+- Delta/void/new-order kitchen slips are built in `frontend/features/pos/pos-kitchen-print-delta.ts` and `frontend/features/pos/pos-kot-print.ts`, routed through `frontend/features/pos/pos-print-service.ts`. The **first** send for an invoice prints `*** طلب جديد ***` / `*** NEW ORDER ***` (normal qty, no `+` prefix). Later adds print `تحديث مطبخ` / `Kitchen Update` with `+qty`. Cashier VOID/ADD slips diff the API response against the **last synced server snapshot** (set on table resume and after each successful kitchen update), not the live cart at button press — so remove/qty-reduce edits produce VOID slips correctly.
 - Waiter-send kitchen printing is handled by `frontend/features/pos/pos-kitchen-print-hub.ts` on the cashier register; only one register tab per browser profile acts as the print leader when multiple tabs are open.
 - The hub is mounted in `frontend/app/(erp)/pos/layout.tsx` via `PosKitchenPrintHubProvider`, so it keeps polling while the cashier navigates between `/pos/register`, `/pos/tables`, delivery, settings, and other cashier POS routes (not `/pos/waiter/*`).
 - Resuming an already-sent table order marks that invoice and its kitchen lines as printed in the hub, so opening the table for payment does not reprint KOT.
@@ -202,7 +206,7 @@ Windows will show the normal print dialog; the cashier picks the printer (or use
 - **Delivery receipts** also print `عنوان التوصيل`, `شركة التوصيل`, `السائق`, and `ملاحظات التوصيل` when those fields are set on the completed sale.
 - Totals show **المجموع الفرعي**, optional discount/service/delivery lines, **الضريبة N%** when tax applies, and a bold **الصافي** row with `د.أ`. Totals and payment rows place the Arabic label beside the amount (no wide center gap) using a fixed **26mm** amount column so `2.50` and `2.50 د.أ` align on the same left edge. Payments print inside a bordered box; zero-amount methods are hidden, **مدفوع** is emphasized with `د.أ`, and **الباقي** prints only when change is due.
 - Receipt payload includes `tableNumber`, `orderType`, `waiterName`, `serviceChargeAmount`, `deliveryFeeAmount`, `deliveryAddress`, `deliveryNotes`, `deliveryCompanyName`, `driverName`, and computed `taxRatePercent` from the completed sale API.
-- **Kitchen tickets (KOT)** use Courier monospace and show an order-type banner after the KOT number: `صالة — طاولة N` for dine-in, `سفري` for takeaway, `توصيل` for delivery. Meta rows are type-specific (waiter + time for dine-in; time + order note for takeaway; delivery address/company/driver/notes + time for delivery). Main order notes print near the top in a bordered **ملاحظة مهمة للمطبخ** panel with larger bold text so waiter-entered instructions are visible on 80mm kitchen slips, including waiter-print-hub update tickets. Item lines use larger qty × name formatting, and item notes print in bold under the item. Selected add-ons print under each item in a bold **إضافات** block with one `+ option` line per add-on (12pt, no faded styling). KOT and customer receipt templates remain separate.
+- **Kitchen tickets (KOT)** use Courier monospace. Every slip (new, update, void) prints a large bordered **رقم الطلب: N** banner where **N** is the short daily sequence from the invoice reference (e.g. `POS-20260620-0042` → **42**), not the full `POS-…` string. Update slips use **تحديث — طلب #N**; void/cancel slips use **إلغاء من الطلب #N** so kitchen staff can match edits to the original ticket. Below that, an order-type banner shows `صالة — طاولة N` for dine-in, `سفري` for takeaway, or `توصيل` for delivery. Meta rows are type-specific (waiter + time for dine-in; time + order note for takeaway; delivery address/company/driver/notes + time for delivery). Main order notes print near the top in a bordered **ملاحظة مهمة للمطبخ** panel. Notes longer than 10 words auto-shrink (14pt → 11pt → 10pt), wrap inside the 72mm safe area, and are capped at **80 characters** in POS (item notes **60 characters**). Item lines use larger qty × name formatting, and item notes print in bold under the item with the same wrap rules. Selected add-ons print under each item in a bold **إضافات** block with one `+ option` line per add-on (12pt, no faded styling). KOT and customer receipt templates remain separate.
 - Receipt HTML includes bottom padding and a trailing spacer so thermal auto-cutters do not clip the payment/thank-you lines; QZ Tray jobs also append blank feed lines after the HTML payload.
 - Browser and QZ print paths wait for receipt images to finish loading before sending the job, reducing clipped or mis-sized prints.
 - The default customer receipt logo is served from `frontend/public/pos/mr-karshanji-logo.png` and can be overridden per receipt via `logoUrl` when needed.

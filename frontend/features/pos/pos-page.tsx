@@ -89,6 +89,7 @@ import {
   rejectPosAccounting,
   rejectPosReturnAccounting,
   reprintPosReceipt,
+  printPosBill,
   reversePosAccounting,
   reversePosReturnAccounting,
   getCustomers,
@@ -129,7 +130,10 @@ import {
 } from "@/features/pos/pos-catalog-chips";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import { DetailTile, DetailedTableCard } from "@/features/pos/pos-detail-cards";
-import { posProductGridClass } from "@/features/pos/pos-layout-classes";
+import {
+  posProductGridClass,
+  posWaiterTabletProductGridClass,
+} from "@/features/pos/pos-layout-classes";
 import { PosRegisterMainGrid } from "@/features/pos/pos-register-layout";
 import { PosRestaurantCartControls } from "@/features/pos/pos-restaurant-cart-controls";
 import { PosAddonAdminPanel } from "@/features/pos/pos-addon-admin-panel";
@@ -142,6 +146,10 @@ import {
   sumAddonPrices,
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
+import {
+  clampKitchenOrderNote,
+  POS_ORDER_NOTE_MAX,
+} from "@/features/pos/pos-kitchen-note-limits";
 import {
   getMinSalesQuantity,
   formatWeightQuantity,
@@ -165,6 +173,8 @@ import {
   printSessionRoll,
 } from "@/features/pos/pos-print-service";
 import { loadPosPrinterConfig, updatePosPrinterConfig } from "@/features/pos/pos-printer-config";
+import { buildProvisionalReceiptData } from "@/features/pos/pos-provisional-receipt";
+import { mapPosReceiptApiResponse } from "@/features/pos/pos-receipt-map";
 import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-panel";
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
@@ -1022,94 +1032,10 @@ function HeldSaleOrderTypeInfo({
   );
 }
 
-function mapReceiptResponse(receipt: {
-  receiptNumber: string;
-  soldAt: string;
-  companyName: string;
-  branchName?: string | null;
-  taxNumber?: string | null;
-  cashierName: string;
-  terminalName?: string | null;
-  warehouseName: string;
-  tableNumber?: string | null;
-  orderType?: string | null;
-  waiterName?: string | null;
-  deliveryAddress?: string | null;
-  deliveryNotes?: string | null;
-  deliveryCompanyName?: string | null;
-  driverName?: string | null;
-  serviceChargeAmount?: string;
-  deliveryFeeAmount?: string;
-  taxRatePercent?: number | null;
-  paymentSummary: string;
-  payments?: Array<{
-    paymentMethod: string;
-    amount: string;
-  }>;
-  total: string;
-  paid: string;
-  tendered: string;
-  change: string;
-  subtotal: string;
-  discount: string;
-  tax: string;
-  lines: Array<{
-    name: string;
-    quantity: string;
-    unitPrice: string;
-    discountAmount: string;
-    taxAmount: string;
-    lineTotal: string;
-    unitCode?: string | null;
-    modifiers?: unknown;
-  }>;
-}): CompletedReceipt {
-  return {
-    receiptNumber: receipt.receiptNumber,
-    soldAt: receipt.soldAt,
-    companyName: receipt.companyName,
-    branchName: receipt.branchName,
-    taxNumber: receipt.taxNumber,
-    cashierName: receipt.cashierName,
-    terminalName: receipt.terminalName,
-    warehouseName: receipt.warehouseName,
-    tableNumber: receipt.tableNumber,
-    orderType: receipt.orderType,
-    waiterName: receipt.waiterName,
-    deliveryAddress: receipt.deliveryAddress,
-    deliveryNotes: receipt.deliveryNotes,
-    deliveryCompanyName: receipt.deliveryCompanyName,
-    driverName: receipt.driverName,
-    serviceChargeAmount: receipt.serviceChargeAmount
-      ? parseAmount(receipt.serviceChargeAmount)
-      : 0,
-    deliveryFeeAmount: receipt.deliveryFeeAmount
-      ? parseAmount(receipt.deliveryFeeAmount)
-      : 0,
-    taxRatePercent: receipt.taxRatePercent ?? null,
-    paymentSummary: receipt.paymentSummary,
-    payments: receipt.payments?.map((payment) => ({
-      paymentMethod: payment.paymentMethod,
-      amount: parseAmount(payment.amount),
-    })),
-    total: parseAmount(receipt.total),
-    paid: parseAmount(receipt.paid),
-    tendered: parseAmount(receipt.tendered),
-    change: parseAmount(receipt.change),
-    subtotal: parseAmount(receipt.subtotal),
-    discount: parseAmount(receipt.discount),
-    tax: parseAmount(receipt.tax),
-    lines: receipt.lines.map((line) => ({
-      name: line.name,
-      quantity: parseAmount(line.quantity),
-      unitPrice: parseAmount(line.unitPrice),
-      discountAmount: parseAmount(line.discountAmount),
-      taxAmount: parseAmount(line.taxAmount),
-      lineTotal: parseAmount(line.lineTotal),
-      unitCode: line.unitCode ?? undefined,
-      modifiers: line.modifiers,
-    })),
-  };
+function mapReceiptResponse(
+  receipt: Parameters<typeof mapPosReceiptApiResponse>[0],
+): CompletedReceipt {
+  return mapPosReceiptApiResponse(receipt);
 }
 
 function PlaceholderWorkspace({
@@ -1200,6 +1126,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [returnPayments, setReturnPayments] = useState<ReturnPaymentEntry[]>([]);
   const [flashNotice, setFlashNotice] = useState<FlashNotice | null>(null);
+  const [isRecentReceiptsOpen, setIsRecentReceiptsOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedPayMethod, setSelectedPayMethod] = useState<
     "CASH" | "CARD" | "CLIQ" | "BANK_TRANSFER" | "WALLET" | "MIXED"
@@ -1525,7 +1452,11 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const completedSalesQuery = useQuery({
     queryKey: queryKeys.posCompletedSales(token),
     queryFn: () => getCompletedPosSales(token),
-    enabled: Boolean(token && workspace === "returns"),
+    enabled: Boolean(
+      token &&
+        (workspace === "returns" || workspace === "sales") &&
+        hasPermission(user, "POS_VIEW_COMPLETED_SALES"),
+    ),
   });
 
   const returnsQuery = useQuery({
@@ -2191,6 +2122,17 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     },
   });
 
+  const printBillMutation = useMutation({
+    mutationFn: (saleId: string) => printPosBill(saleId, token),
+    onSuccess: (response) => {
+      const receipt = mapReceiptResponse(response.receipt);
+      printReceipt(receipt);
+    },
+    onError: (error) => {
+      pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
   const transferTableMutation = useMutation({
     mutationFn: (payload: { fromTableId: string; toTableId: string }) =>
       transferPosTable(payload.fromTableId, payload.toTableId, token),
@@ -2306,6 +2248,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
   const selectedCustomer = customers.find((c: Customer) => c.id === selectedCustomerId) || null;
   const taxPolicy = posSettings?.runtime.invoiceDiscountTaxPolicy ?? "BEFORE_TAX";
   const completedSales = completedSalesQuery.data ?? [];
+  const sessionRecentSales = useMemo(() => {
+    if (!activeSession?.id) {
+      return [];
+    }
+    return completedSales
+      .filter((sale) => sale.session?.id === activeSession.id)
+      .slice(0, 12);
+  }, [activeSession?.id, completedSales]);
   const favoriteIdSet = useMemo(() => new Set(favoriteItemIds), [favoriteItemIds]);
   useEffect(() => {
     if (!deliveryDriverId) {
@@ -3902,6 +3852,76 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     });
   };
 
+  const buildProvisionalReceiptFromCart = (): CompletedReceipt => {
+    const payloadLines = buildSaleLinesPayload();
+    const subtotalBeforeDiscount = cartMetrics.subtotalBeforeDiscount;
+    const taxRatePercent =
+      subtotalBeforeDiscount > 0 && cartMetrics.tax > 0
+        ? Math.round((cartMetrics.tax / subtotalBeforeDiscount) * 100)
+        : null;
+    const deliveryCompany = deliveryCompanies.find((row) => row.id === deliveryCompanyId);
+    const waiter = waiters.find((row) => row.id === selectedWaiterId);
+    const referenceLabel =
+      activeEditingSale?.title ??
+      (orderType === "DINE_IN" && selectedTableNumber
+        ? `TABLE-${selectedTableNumber}`
+        : getLocalizedText("Draft order / طلب مسودة", language));
+
+    return buildProvisionalReceiptData({
+      referenceLabel,
+      branchName: sessionState.branchName || activeSession?.branchName || null,
+      cashierName: user?.name?.trim() || user?.email?.trim() || sessionState.terminalName || "Cashier",
+      terminalName: sessionState.terminalName || activeSession?.terminalName || null,
+      warehouseName: activeSession?.warehouse?.name ?? "—",
+      tableNumber: orderType === "DINE_IN" ? selectedTableNumber : null,
+      orderType,
+      waiterName: waiter?.name ?? waiter?.email ?? null,
+      deliveryAddress: orderType === "DELIVERY" ? deliveryAddress.trim() || null : null,
+      deliveryNotes: orderType === "DELIVERY" ? deliveryNotes.trim() || null : null,
+      deliveryCompanyName:
+        orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+          ? deliveryCompany?.arabicName?.trim() || deliveryCompany?.name?.trim() || null
+          : null,
+      driverName:
+        orderType === "DELIVERY" && deliveryMode === "DIRECT"
+          ? selectedDeliveryDriverName?.trim() || null
+          : null,
+      serviceChargeAmount: cartMetrics.serviceCharge,
+      deliveryFeeAmount: cartMetrics.deliveryCharge,
+      taxRatePercent,
+      subtotal: subtotalBeforeDiscount,
+      discount: cartMetrics.discountTotal,
+      tax: cartMetrics.tax,
+      total: cartMetrics.total,
+      lines: payloadLines.map((line, index) => ({
+        name: line.itemName ?? cartLines[index]?.name ?? `Line ${index + 1}`,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discountAmount: line.discountAmount,
+        taxAmount: line.taxAmount,
+        lineTotal: line.lineAmount,
+        unitCode: cartLines[index]?.unit,
+        modifiers: line.modifiers,
+      })),
+    });
+  };
+
+  const printBillFromCart = () => {
+    if (cartLines.length === 0) {
+      pushMessage(t("pos.sales.alert.emptyCart"));
+      return;
+    }
+    printReceipt(buildProvisionalReceiptFromCart());
+  };
+
+  const printBillForSale = (saleId: string) => {
+    printBillMutation.mutate(saleId);
+  };
+
+  const canPrintBill =
+    hasPermission(user, "POS_PRINT_RECEIPT") && cartLines.length > 0;
+  const canReprintReceipt = hasPermission(user, "POS_PRINT_RECEIPT");
+
   const completeSale = () => {
     const companyCollectedByDelivery =
       orderType === "DELIVERY" &&
@@ -4228,10 +4248,19 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     const isCartLineLocked = (line: CartLine) =>
       isWaiterOrderLocked || isKitchenSentLineLocked(line, waiterOnlyUser);
     const orderKitchenLocked = isWaiterOrderLocked;
+    const productGridClass = waiterMode
+      ? posWaiterTabletProductGridClass
+      : posProductGridClass;
+    const unsentLineCount = cartLines.filter((line) => !line.kitchenSentAt).length;
+    const selectedTable =
+      restaurantTables.find((table) => table.id === selectedTableId) ?? null;
+    const visibleTableLabel = selectedTable?.tableNumber ?? selectedTableNumber;
+    const waiterPrimaryKitchenAction = waiterMode && unsentLineCount > 0;
 
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#f6f7f8]">
         <PosRegisterMainGrid
+          waiterMode={waiterMode}
           catalog={
             <section className="flex flex-col gap-3 pb-3">
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white px-3 py-2 shadow-none">
@@ -4290,11 +4319,14 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
               </Card>
 
               {itemsQuery.isLoading ? (
-                <div className={posProductGridClass}>
+                <div className={productGridClass}>
                   {Array.from({ length: 10 }).map((_, index) => (
                     <div
                       key={index}
-                      className="h-[244px] animate-pulse rounded-[7px] border border-[#e4e9e6] bg-white"
+                      className={cn(
+                        "animate-pulse rounded-[7px] border border-[#e4e9e6] bg-white",
+                        waiterMode ? "h-[268px]" : "h-[244px]",
+                      )}
                     />
                   ))}
                 </div>
@@ -4332,7 +4364,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                   </button>
                 </Card>
               ) : (
-                <div className={posProductGridClass}>
+                <div className={productGridClass}>
                   {filteredItems.map((item) => (
                     <PosProductCard
                       key={item.id}
@@ -4343,6 +4375,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                       allowNegativeStock={Boolean(posSettings?.runtime.negativeStockAllowed)}
                       onAdd={() => addItemToCart(item)}
                       disabled={orderKitchenLocked}
+                      variant={waiterMode ? "tablet" : "default"}
                     />
                   ))}
                 </div>
@@ -4377,7 +4410,31 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
           salePanel={
             <div className="flex h-full min-h-0 w-full flex-col" dir={language === "ar" ? "rtl" : "ltr"}>
               {/* 1. Order Header */}
-              <div className="shrink-0 border-b border-[#eef1ef] px-3 py-2.5">
+              <div
+                className={cn(
+                  "shrink-0 border-b border-[#eef1ef] px-3 py-2.5",
+                  waiterMode && "bg-[#fbfffc]",
+                )}
+              >
+                {waiterMode ? (
+                  <div className="mb-2.5 flex items-center justify-between gap-3 rounded-[14px] border border-[#cde3d2] bg-[#f1f8f3] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-[#4f7059]">
+                        {getLocalizedText("Selected table / الطاولة المختارة", language)}
+                      </div>
+                      <div className="truncate text-lg font-black text-[#1f3427] arabic-heading">
+                        {visibleTableLabel
+                          ? getLocalizedText(`Table ${visibleTableLabel} / طاولة ${visibleTableLabel}`, language)
+                          : getLocalizedText("No table selected / لا توجد طاولة", language)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-[#a7d3ae] bg-white px-2.5 py-1 text-[10px] font-black text-[#2f6b3b]">
+                      {unsentLineCount > 0
+                        ? getLocalizedText(`${unsentLineCount} unsent / ${unsentLineCount} غير مرسل`, language)
+                        : getLocalizedText("Ready / جاهز", language)}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -4439,7 +4496,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {hasPermission(user, "POS_CLOSE_OWN_SESSION") && (
+                    {!waiterMode && hasPermission(user, "POS_CLOSE_OWN_SESSION") && (
                       <button
                         type="button"
                         onClick={() => {
@@ -4467,7 +4524,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                           : getLocalizedText("Close Shift / إغلاق الوردية", language)}
                       </button>
                     )}
-                    {hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
+                    {!waiterMode && hasPermission(user, "POS_RESUME_OWN_HELD_SALE") ? (
                       <button
                         type="button"
                         onClick={() => setIsHeldOrdersOpen(true)}
@@ -4670,13 +4727,26 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                   )}
 
                   <div>
-                    <label className="mb-1 block text-[10px] font-semibold text-[#6b7280]">
-                      {getLocalizedText("Order note / ملاحظة الطلب", language)}
-                    </label>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="block text-[10px] font-semibold text-[#6b7280]">
+                        {getLocalizedText("Order note / ملاحظة الطلب", language)}
+                      </label>
+                      <span
+                        className={cn(
+                          "text-[10px] font-medium tabular-nums",
+                          orderNotes.length >= POS_ORDER_NOTE_MAX
+                            ? "text-amber-700"
+                            : "text-[#9ca3af]",
+                        )}
+                      >
+                        {orderNotes.length}/{POS_ORDER_NOTE_MAX}
+                      </span>
+                    </div>
                     <textarea
                       value={orderNotes}
-                      onChange={(e) => setOrderNotes(e.target.value)}
+                      onChange={(e) => setOrderNotes(clampKitchenOrderNote(e.target.value))}
                       readOnly={orderKitchenLocked}
+                      maxLength={POS_ORDER_NOTE_MAX}
                       rows={2}
                       placeholder={getLocalizedText(
                         "Order notes... / ملاحظات على الطلب...",
@@ -4869,38 +4939,64 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                         saveDraftMutation.isPending ||
                         cartLines.length === 0
                       }
-                      className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border-2 border-[#ea580c] bg-white text-xs font-bold text-[#c2410c] transition hover:bg-[#fff7ed] disabled:opacity-40"
+                      className={cn(
+                        "flex w-full items-center justify-center gap-2 rounded-[10px] border-2 transition disabled:opacity-40",
+                        waiterPrimaryKitchenAction
+                          ? "h-14 border-[#ea580c] bg-[#ea580c] text-sm font-black text-white shadow-[0_14px_28px_-18px_rgba(234,88,12,0.95)] hover:bg-[#c2410c]"
+                          : "h-10 border-[#ea580c] bg-white text-xs font-bold text-[#c2410c] hover:bg-[#fff7ed]",
+                      )}
                     >
-                      <LuChefHat className="h-3.5 w-3.5" />
+                      <LuChefHat
+                        className={cn(
+                          "shrink-0",
+                          waiterPrimaryKitchenAction ? "h-5 w-5" : "h-3.5 w-3.5",
+                        )}
+                      />
                       {getLocalizedText(
-                        `Send to kitchen (${cartLines.filter((line) => !line.kitchenSentAt).length}) / إرسال للمطبخ`,
+                        `Send to kitchen (${unsentLineCount}) / إرسال للمطبخ`,
                         language,
                       )}
                     </button>
                   ) : null}
 
-                  <button
-                    type="button"
-                    onClick={
-                      orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
-                        ? completeSale
-                        : openPayModal
-                    }
-                    disabled={
-                      cartLines.length === 0 ||
-                      !hasPermission(user, "POS_COMPLETE_SALE") ||
-                      (!(orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") &&
-                        !hasPermission(user, "POS_SELECT_PAYMENT_METHOD"))
-                    }
-                    className="flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#16a34a] text-[15px] font-bold text-white shadow-sm transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <LuWallet className="h-5 w-5" />
-                    {orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
-                      ? getLocalizedText("Complete Order / إكمال الطلب", language)
-                      : getLocalizedText("Pay / دفع", language)}
-                  </button>
+                  {hasPermission(user, "POS_COMPLETE_SALE") ? (
+                    <button
+                      type="button"
+                      onClick={
+                        orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+                          ? completeSale
+                          : openPayModal
+                      }
+                      disabled={
+                        cartLines.length === 0 ||
+                        (!(orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY") &&
+                          !hasPermission(user, "POS_SELECT_PAYMENT_METHOD"))
+                      }
+                      className={cn(
+                        "flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#16a34a] text-[15px] font-bold text-white shadow-sm transition hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40",
+                        waiterMode && "hidden",
+                      )}
+                    >
+                      <LuWallet className="h-5 w-5" />
+                      {orderType === "DELIVERY" && deliveryMode === "THIRD_PARTY"
+                        ? getLocalizedText("Complete Order / إكمال الطلب", language)
+                        : getLocalizedText("Pay / دفع", language)}
+                    </button>
+                  ) : null}
 
-                  {!orderKitchenLocked ? (
+                  {canPrintBill ? (
+                    <button
+                      type="button"
+                      onClick={printBillFromCart}
+                      disabled={printBillMutation.isPending}
+                      className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border border-[#d7e2d8] bg-[#f7faf8] text-xs font-bold text-[#4e6455] transition hover:bg-white disabled:opacity-40"
+                    >
+                      <LuReceipt className="h-3.5 w-3.5" />
+                      {t("pos.sales.printBill")}
+                    </button>
+                  ) : null}
+
+                  {!waiterMode && !orderKitchenLocked ? (
                     <div className="flex items-center justify-center gap-4 border-t border-[#f3f4f6] pt-2">
                       <button
                         type="button"
@@ -4939,6 +5035,50 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                     >
                       {t("pos.sales.printLastReceipt")}
                     </button>
+                  ) : null}
+
+                  {canReprintReceipt && sessionRecentSales.length > 0 ? (
+                    <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsRecentReceiptsOpen((open) => !open)}
+                        className="flex w-full items-center justify-between gap-2 text-[11px] font-semibold text-[#6b7280]"
+                      >
+                        <span>{t("pos.sales.recentReceipts")}</span>
+                        {isRecentReceiptsOpen ? (
+                          <LuChevronDown className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <LuChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                      </button>
+                      {isRecentReceiptsOpen ? (
+                        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                          {sessionRecentSales.map((sale) => (
+                            <li
+                              key={sale.id}
+                              className="flex items-center justify-between gap-2 rounded-[8px] bg-white px-2 py-1.5"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-[10px] font-bold text-[#374151]">
+                                  {sale.receiptNumber ?? sale.reference}
+                                </div>
+                                <div className="text-[10px] text-[#9ca3af]">
+                                  {formatCurrency(parseAmount(sale.totalAmount), sale.currencyCode)}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => reprintReceiptMutation.mutate(sale.id)}
+                                disabled={reprintReceiptMutation.isPending}
+                                className="shrink-0 rounded-[6px] border border-[#e5e7eb] px-2 py-1 text-[10px] font-bold text-[#4e6455] hover:bg-[#f7faf8] disabled:opacity-40"
+                              >
+                                {t("pos.sales.reprintReceipt")}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -5234,6 +5374,18 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                 {t("pos.sales.printReceiptLabel")}
               </label>
 
+              {canPrintBill ? (
+                <button
+                  type="button"
+                  onClick={printBillFromCart}
+                  disabled={printBillMutation.isPending}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4e6455] transition hover:bg-white disabled:opacity-40"
+                >
+                  <LuReceipt className="h-4 w-4" />
+                  {t("pos.sales.printBill")}
+                </button>
+              ) : null}
+
               <button
                 type="button"
                 onClick={completeSale}
@@ -5283,17 +5435,32 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                           {language === "ar" ? `${row.cartLines.length} أسطر` : `${row.cartLines.length} lines`}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
-                        onClick={() => {
-                          setIsHeldOrdersOpen(false);
-                          resumeHeldSale(row.id, [row]);
-                        }}
-                        className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
-                      >
-                        {getLocalizedText("Resume / استئناف", language)}
-                      </button>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {canReprintReceipt ? (
+                          <button
+                            type="button"
+                            onClick={() => printBillForSale(row.id)}
+                            disabled={printBillMutation.isPending}
+                            className="rounded-[14px] border border-[#d7e2d8] bg-[#f7faf8] px-3 py-2 text-xs font-black text-[#4e6455] disabled:opacity-40"
+                          >
+                            {t("pos.sales.printBill")}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
+                          onClick={() => {
+                            setIsHeldOrdersOpen(false);
+                            resumeHeldSale(row.id, [row]);
+                          }}
+                          className={cn(
+                            "rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40",
+                            canReprintReceipt ? "" : "sm:col-span-2",
+                          )}
+                        >
+                          {getLocalizedText("Resume / استئناف", language)}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -5325,17 +5492,32 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                           {language === "ar" ? `${row.cartLines.length} أسطر` : `${row.cartLines.length} lines`}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
-                        onClick={() => {
-                          setIsHeldOrdersOpen(false);
-                          resumeHeldSale(row.id, [row]);
-                        }}
-                        className="mt-3 w-full rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40"
-                      >
-                        {getLocalizedText("Resume / استئناف", language)}
-                      </button>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {canReprintReceipt ? (
+                          <button
+                            type="button"
+                            onClick={() => printBillForSale(row.id)}
+                            disabled={printBillMutation.isPending}
+                            className="rounded-[14px] border border-[#d7e2d8] bg-[#f7faf8] px-3 py-2 text-xs font-black text-[#4e6455] disabled:opacity-40"
+                          >
+                            {t("pos.sales.printBill")}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={!hasPermission(user, "POS_RESUME_OWN_HELD_SALE")}
+                          onClick={() => {
+                            setIsHeldOrdersOpen(false);
+                            resumeHeldSale(row.id, [row]);
+                          }}
+                          className={cn(
+                            "rounded-[14px] bg-[#5f8a67] px-3 py-2 text-xs font-black text-white disabled:opacity-40",
+                            canReprintReceipt ? "" : "sm:col-span-2",
+                          )}
+                        >
+                          {getLocalizedText("Resume / استئناف", language)}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

@@ -1,6 +1,12 @@
 import { formatAddonsForDisplay, getAddonsFromModifiers } from "@/features/pos/pos-addon-utils";
 import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
 import {
+  kotLineNoteSizeClass,
+  kotOrderNoteSizeClass,
+  wrapThermalKotNoteText,
+} from "@/features/pos/pos-kitchen-note-limits";
+import { extractDailyOrderNumber } from "@/features/pos/pos-receipt-print";
+import {
   THERMAL_PAGE_SIDE_MARGIN,
   THERMAL_PRINTABLE_WIDTH_MM,
   THERMAL_RECEIPT_SIDE_PADDING,
@@ -8,6 +14,14 @@ import {
   thermalReceiptSepLine,
 } from "@/features/pos-shared/thermal-receipt-layout";
 import type { PosSale } from "@/types/api";
+
+export function resolveKotDisplayOrderNumber(sale: PosSale): string {
+  const reference = sale.reference?.trim();
+  if (!reference) {
+    return "—";
+  }
+  return extractDailyOrderNumber(reference) ?? reference;
+}
 
 function fmtDate(val?: string | Date | null): string {
   if (!val) return "—";
@@ -33,18 +47,37 @@ const KOT_STYLES = `
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .title { font-size: 12pt; margin-bottom: 4px; }
+    .new-order-title {
+      font-size: 14pt;
+      font-weight: 900;
+      margin-bottom: 4px;
+      border: 2px solid #000;
+      padding: 4px 2px;
+    }
     .void-title { font-size: 12pt; margin-bottom: 4px; }
-    .order-type-banner { font-size: 14pt; font-weight: bold; text-align: center; margin: 4px 0; }
+    .order-number-banner {
+      font-size: 20pt;
+      font-weight: 900;
+      text-align: center;
+      margin: 6px 0 4px;
+      padding: 5px 4px;
+      border: 2px solid #000;
+    }
+    .order-type-banner { font-size: 16pt; font-weight: bold; text-align: center; margin: 4px 0; }
     .sep { text-align: center; margin: 6px 0; overflow: hidden; }
     .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
     .meta-block { margin: 4px 0; word-wrap: break-word; }
     .meta-block .label { font-weight: bold; }
     .order-note-panel {
+      width: 100%;
+      max-width: 100%;
       border: 2px solid #000;
       margin: 7px 0 4px;
       padding: 5px 4px;
+      overflow: hidden;
       text-align: center;
       word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .order-note-label {
       font-size: 11pt;
@@ -52,9 +85,23 @@ const KOT_STYLES = `
       margin-bottom: 3px;
     }
     .order-note-text {
-      font-size: 14pt;
       font-weight: 900;
-      line-height: 1.35;
+      line-height: 1.4;
+      text-align: start;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
+      max-width: 100%;
+    }
+    .order-note-text--lg {
+      font-size: 14pt;
+      text-align: center;
+    }
+    .order-note-text--md {
+      font-size: 11pt;
+    }
+    .order-note-text--sm {
+      font-size: 10pt;
     }
     .item { margin: 6px 0; }
     .item-row { display: flex; gap: 6px; align-items: baseline; }
@@ -63,7 +110,18 @@ const KOT_STYLES = `
     .item-addons-block { margin-top: 4px; padding-inline-start: 10px; }
     .item-addons-label { font-size: 11pt; font-weight: bold; margin-bottom: 2px; }
     .item-addon-line { font-size: 12pt; font-weight: 900; line-height: 1.45; margin: 2px 0; }
-    .line-note { font-size: 11pt; font-weight: 900; line-height: 1.35; margin-top: 4px; }
+    .line-note {
+      font-weight: 900;
+      line-height: 1.4;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
+      max-width: 100%;
+    }
+    .line-note--lg { font-size: 11pt; }
+    .line-note--md { font-size: 10pt; }
+    .line-note--sm { font-size: 9pt; }
 `;
 
 function buildKotDocumentHtml(
@@ -112,11 +170,19 @@ function kotOrderNotePanel(sale: PosSale, language: string): string {
   const trimmed = sale.description?.trim();
   if (!trimmed) return "";
   const isAr = language === "ar";
+  const wrapped = wrapThermalKotNoteText(trimmed);
   return `
     <div class="order-note-panel">
       <div class="order-note-label">${isAr ? "ملاحظة مهمة للمطبخ" : "Kitchen note"}</div>
-      <div class="order-note-text">${trimmed}</div>
+      <div class="${kotOrderNoteSizeClass(trimmed)}">${wrapped}</div>
     </div>`;
+}
+
+function buildKotOrderNumberBanner(sale: PosSale, language: string): string {
+  const isAr = language === "ar";
+  const orderNumber = resolveKotDisplayOrderNumber(sale);
+  const label = isAr ? `رقم الطلب: ${orderNumber}` : `Order #${orderNumber}`;
+  return `<div class="order-number-banner">${label}</div>`;
 }
 
 function buildOrderTypeBanner(sale: PosSale, language: string): string {
@@ -235,6 +301,9 @@ function buildLineRowHtml(
   const addonsHtml = buildKitchenAddonsHtml(line.modifiers, language);
   const note =
     line.description && line.description !== (line.itemName ?? "") ? line.description : "";
+  const noteHtml = note
+    ? `<div class="${kotLineNoteSizeClass(note)}">${wrapThermalKotNoteText(note)}</div>`
+    : "";
   return `
     <div class="item">
       <div class="item-row bold">
@@ -242,7 +311,7 @@ function buildLineRowHtml(
         <span class="item-name">${name}</span>
       </div>
       ${addonsHtml}
-      ${note ? `<div class="line-note">${note}</div>` : ""}
+      ${noteHtml}
     </div>`;
 }
 
@@ -273,7 +342,7 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
 
   const bodyHtml = `
     <div class="center bold title">${isAr ? "تذكرة مطبخ" : "Kitchen Ticket"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
+    ${buildKotOrderNumberBanner(sale, language)}
     ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
@@ -298,7 +367,7 @@ export function buildKitchenTicketHtmlForLines(
 
   const bodyHtml = `
     <div class="center bold title">${isAr ? "تذكرة مطبخ" : "Kitchen Ticket"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
+    ${buildKotOrderNumberBanner(sale, language)}
     ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
@@ -312,17 +381,42 @@ export function buildKitchenTicketHtmlForLines(
   );
 }
 
+export function buildKitchenNewOrderTicketHtml(
+  sale: PosSale,
+  lines: KitchenDeltaLine[],
+  language: string,
+): string {
+  const isAr = language === "ar";
+  const lineRows = buildLineRowsFromDeltaLines(lines, language);
+
+  const bodyHtml = `
+    <div class="center bold new-order-title">${isAr ? "*** طلب جديد ***" : "*** NEW ORDER ***"}</div>
+    ${buildKotOrderNumberBanner(sale, language)}
+    ${buildKotHeaderSection(sale, language)}
+    <div class="sep">${SEP}</div>
+    ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
+    <div class="sep">${SEP}</div>
+  `;
+
+  return buildKotDocumentHtml(
+    language,
+    isAr ? "طلب جديد" : "New Order",
+    bodyHtml,
+  );
+}
+
 export function buildKitchenDeltaTicketHtml(
   sale: PosSale,
   deltaLines: KitchenDeltaLine[],
   language: string,
 ): string {
   const isAr = language === "ar";
+  const orderNumber = resolveKotDisplayOrderNumber(sale);
   const lineRows = buildLineRowsFromDeltaLines(deltaLines, language, "+");
 
   const bodyHtml = `
-    <div class="center bold title">${isAr ? "تحديث مطبخ" : "Kitchen Update"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
+    <div class="center bold title">${isAr ? `تحديث — طلب #${orderNumber}` : `Kitchen Update — Order #${orderNumber}`}</div>
+    ${buildKotOrderNumberBanner(sale, language)}
     ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
@@ -342,11 +436,12 @@ export function buildKitchenVoidTicketHtml(
   language: string,
 ): string {
   const isAr = language === "ar";
+  const orderNumber = resolveKotDisplayOrderNumber(sale);
   const lineRows = buildLineRowsFromDeltaLines(voidLines, language, "-");
 
   const bodyHtml = `
-    <div class="center bold void-title">${isAr ? "*** إلغاء ***" : "*** CANCEL ***"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
+    <div class="center bold void-title">${isAr ? `*** إلغاء من الطلب #${orderNumber} ***` : `*** CANCEL order #${orderNumber} ***`}</div>
+    ${buildKotOrderNumberBanner(sale, language)}
     ${buildKotHeaderSection(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}

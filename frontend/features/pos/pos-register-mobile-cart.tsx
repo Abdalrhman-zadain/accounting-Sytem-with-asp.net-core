@@ -9,16 +9,16 @@ import { cn } from "@/lib/utils";
 
 const REGISTER_WIDE_MIN_PX = 960;
 
-export function useRegisterWideLayout() {
+export function useRegisterWideLayout(wideMinPx = REGISTER_WIDE_MIN_PX) {
   const [isWide, setIsWide] = useState(false);
 
   useEffect(() => {
-    const media = window.matchMedia(`(min-width: ${REGISTER_WIDE_MIN_PX}px)`);
+    const media = window.matchMedia(`(min-width: ${wideMinPx}px)`);
     const update = () => setIsWide(media.matches);
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, []);
+  }, [wideMinPx]);
 
   return isWide;
 }
@@ -31,6 +31,7 @@ export type PosRegisterMobileCartBarProps = {
   orderTitle: string;
   isOpen: boolean;
   onToggle: () => void;
+  wideMinPx?: 960 | 1180;
 };
 
 export function PosRegisterStickyCartBar({
@@ -40,11 +41,13 @@ export function PosRegisterStickyCartBar({
   viewOrderLabel,
   isOpen,
   onToggle,
+  wideMinPx = 960,
 }: PosRegisterMobileCartBarProps) {
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-[180] border-t border-[#dce3de] bg-white/95 px-3 py-2.5 shadow-[0_-8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md min-[960px]:hidden",
+        "fixed inset-x-0 bottom-0 z-[180] border-t border-[#dce3de] bg-white/95 px-3 py-2.5 shadow-[0_-8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md",
+        wideMinPx === 1180 ? "min-[1180px]:hidden" : "min-[960px]:hidden",
         "pb-[max(0.625rem,env(safe-area-inset-bottom))]",
       )}
     >
@@ -94,11 +97,13 @@ export function PosRegisterMobileOrderSheet({
   onClose,
   orderTitle,
   children,
+  wideMinPx = 960,
 }: {
   isOpen: boolean;
   onClose: () => void;
   orderTitle: string;
   children: ReactNode;
+  wideMinPx?: 960 | 1180;
 }) {
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -120,7 +125,12 @@ export function PosRegisterMobileOrderSheet({
   if (!isOpen || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[190] min-[960px]:hidden">
+    <div
+      className={cn(
+        "fixed inset-0 z-[190]",
+        wideMinPx === 1180 ? "min-[1180px]:hidden" : "min-[960px]:hidden",
+      )}
+    >
       <button
         type="button"
         className="absolute inset-0 bg-[#1e2c23]/40 backdrop-blur-[2px]"

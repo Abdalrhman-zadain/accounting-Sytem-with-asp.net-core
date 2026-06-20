@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectKitchenOrderItemIds,
   findUnprintedKitchenItems,
+  isKitchenOrderFirstPrint,
   kitchenItemsToDeltaLines,
   kitchenOrderToSaleStub,
   primePrintedKitchenItemIds,
@@ -78,6 +79,13 @@ describe("pos-kitchen-print-hub helpers", () => {
         items: orders[0].items,
       },
     ]);
+  });
+
+  it("detects first kitchen print when no items were printed before", () => {
+    const order = makeOrder("o1", [{ id: "i1" }, { id: "i2" }]);
+
+    expect(isKitchenOrderFirstPrint(new Set(), order)).toBe(true);
+    expect(isKitchenOrderFirstPrint(new Set(["i1"]), order)).toBe(false);
   });
 
   it("builds a sale stub and delta lines for printing", () => {

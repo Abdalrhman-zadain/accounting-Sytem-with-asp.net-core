@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildKitchenOrderTicketHtml,
+  buildKitchenNewOrderTicketHtml,
   buildKitchenDeltaTicketHtml,
   buildKitchenVoidTicketHtml,
 } from "./pos-kot-print";
@@ -8,7 +9,7 @@ import type { PosSale } from "@/types/api";
 
 const mockSaleBase = {
   id: "sale-123",
-  reference: "1001",
+  reference: "POS-20260620-0042",
   invoiceDate: new Date().toISOString(),
   status: "DRAFT",
   invoiceType: "POS",
@@ -105,6 +106,9 @@ describe("buildKitchenOrderTicketHtml", () => {
     const html = buildKitchenOrderTicketHtml(mockSale(), "ar");
 
     expect(html).toContain("تذكرة مطبخ");
+    expect(html).toContain("رقم الطلب: 42");
+    expect(html).toContain("order-number-banner");
+    expect(html).not.toContain("KOT #POS-20260620-0042");
     expect(html).toContain("صالة — طاولة 5");
     expect(html).toContain("order-type-banner");
     expect(html).toContain("أحمد");
@@ -121,15 +125,16 @@ describe("buildKitchenOrderTicketHtml", () => {
     expect(html).toContain("بدون ثوم");
     expect(html).toContain("ملاحظة مهمة للمطبخ");
     expect(html).toContain('class="order-note-panel"');
-    expect(html).toContain("الرجاء تسليم الطلب بسرعة");
+    expect(html).toContain("order-note-text--lg");
+    expect(html).toContain("الرجاء تسليم الطلب");
     expect(html).toContain("font-size: 14pt");
-    expect(html).not.toContain("font-size: 9pt");
   });
 
   it("renders English dine-in KOT", () => {
     const html = buildKitchenOrderTicketHtml(mockSale(), "en");
 
     expect(html).toContain("Kitchen Ticket");
+    expect(html).toContain("Order #42");
     expect(html).toContain("Dine-in — Table 5");
     expect(html).toContain("Waiter");
   });
@@ -193,7 +198,7 @@ describe("buildKitchenOrderTicketHtml", () => {
     expect(html).toContain("اتصل عند الوصول");
   });
 
-  it("includes order-type banner on delta and void tickets", () => {
+  it("includes order-type banner on new, delta and void tickets", () => {
     const sale = mockSale();
     const deltaLine = {
       lineId: "line-1",
@@ -203,15 +208,39 @@ describe("buildKitchenOrderTicketHtml", () => {
       modifiers: null,
     };
 
+    const newOrderHtml = buildKitchenNewOrderTicketHtml(sale, [deltaLine], "ar");
     const updateHtml = buildKitchenDeltaTicketHtml(sale, [deltaLine], "ar");
     const voidHtml = buildKitchenVoidTicketHtml(sale, [deltaLine], "ar");
 
+    expect(newOrderHtml).toContain("*** طلب جديد ***");
+    expect(newOrderHtml).toContain("رقم الطلب: 42");
+    expect(newOrderHtml).toContain("new-order-title");
+    expect(newOrderHtml).toContain("1×");
+    expect(newOrderHtml).not.toContain("+1×");
+    expect(newOrderHtml).not.toContain("KOT #POS-20260620-0042");
+    expect(newOrderHtml).toContain("صالة — طاولة 5");
+    expect(newOrderHtml).toContain("ملاحظة مهمة للمطبخ");
     expect(updateHtml).toContain("صالة — طاولة 5");
     expect(voidHtml).toContain("صالة — طاولة 5");
     expect(updateHtml).toContain("ملاحظة مهمة للمطبخ");
-    expect(updateHtml).toContain("الرجاء تسليم الطلب بسرعة");
+    expect(updateHtml).toContain("الرجاء تسليم الطلب");
     expect(voidHtml).toContain("ملاحظة مهمة للمطبخ");
-    expect(updateHtml).toContain("تحديث مطبخ");
-    expect(voidHtml).toContain("*** إلغاء ***");
+    expect(updateHtml).toContain("تحديث — طلب #42");
+    expect(updateHtml).toContain("+1×");
+    expect(voidHtml).toContain("*** إلغاء من الطلب #42 ***");
+  });
+
+  it("wraps and shrinks long order notes for thermal width", () => {
+    const longNote =
+      "بدون بصل بدون ثوم صلصة حارة جداً بدون مخلل بدون طماطم تقديم سريع للطاولة اثنتا عشرة بدون ليمون بدون خس بدون مخلل إضافي";
+    const html = buildKitchenNewOrderTicketHtml(
+      mockSale({ description: longNote }),
+      [{ lineId: "line-1", itemId: "item-1", name: "بطاطا كبيرة", qty: 1, modifiers: null }],
+      "ar",
+    );
+
+    expect(html).toContain("order-note-text--sm");
+    expect(html).toContain("<br/>");
+    expect(html).toContain("بدون بصل");
   });
 });

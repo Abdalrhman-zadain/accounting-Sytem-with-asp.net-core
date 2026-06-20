@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   LuUtensils, 
   LuUser, 
@@ -16,6 +16,7 @@ import {
   LuSettings,
   LuSparkles,
   LuTimerReset,
+  LuReceipt,
 } from "react-icons/lu";
 
 import { PageShell, Card, PageSkeleton, Modal } from "@/components/ui";
@@ -27,14 +28,17 @@ import {
   getPosTables,
   getPosWaiters,
   openPosReservationPreOrder,
+  printPosBill,
   reservePosTable,
   updatePosTableStatus,
   updatePosTableWaiter,
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import { isWaiterOnlyUser } from "@/lib/auth-access";
+import { hasPermission, isWaiterOnlyUser } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
+import { printCustomerReceipt } from "@/features/pos/pos-print-service";
+import { mapPosReceiptApiResponse } from "@/features/pos/pos-receipt-map";
 import {
   posTableFloorGridClass,
   posTouchButtonClass,
@@ -248,6 +252,33 @@ export default function TablesPage() {
   const [isSavingTableStatus, setIsSavingTableStatus] = React.useState(false);
   const [markingAvailableTableId, setMarkingAvailableTableId] = React.useState<string | null>(null);
   const [tableViewFilter, setTableViewFilter] = React.useState<"all" | "cleaning">("all");
+  const [printingBillTableId, setPrintingBillTableId] = React.useState<string | null>(null);
+
+  const printBillMutation = useMutation({
+    mutationFn: (saleId: string) => printPosBill(saleId, token),
+    onMutate: (saleId) => {
+      const table = tables?.find((row) => row.activeInvoice?.id === saleId);
+      setPrintingBillTableId(table?.id ?? null);
+    },
+    onSuccess: async (response) => {
+      const result = await printCustomerReceipt(mapPosReceiptApiResponse(response.receipt));
+      if (result.fallback) {
+        alert(
+          isAr
+            ? "تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح"
+            : "Receipt printer unavailable; browser print opened",
+        );
+      }
+    },
+    onError: (error) => {
+      alert(getErrorMessage(error, isAr ? "فشل طباعة الفاتورة" : "Failed to print bill"));
+    },
+    onSettled: () => {
+      setPrintingBillTableId(null);
+    },
+  });
+
+  const canPrintBill = hasPermission(user, "POS_PRINT_RECEIPT");
 
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -714,14 +745,14 @@ export default function TablesPage() {
                   : false;
 
               const cardBorder = isWaiting
-                ? "border-[#fde68a] bg-gradient-to-br from-[#fffdf5] to-[#fef9e7]"
+                ? "border-[#f59e0b] bg-gradient-to-br from-[#fffbeb] to-[#fef3c7]"
                 : isCleaning
-                  ? "border-[#e0e7ff] bg-gradient-to-br from-[#f5f7ff] to-[#eef1ff]"
+                  ? "border-[#6366f1] bg-gradient-to-br from-[#eef2ff] to-[#dbe4ff]"
                   : isOccupied
-                    ? "border-[#f7cc9e] bg-gradient-to-br from-[#fffdfa] to-[#fff6ec] hover:from-[#fffcf7] hover:to-[#fff2e0]"
+                    ? "border-[#f97316] bg-gradient-to-br from-[#fff7ed] to-[#ffedd5] hover:from-[#fff4e6] hover:to-[#fed7aa]"
                     : isReserved
-                      ? "border-[#d6d3f0] bg-gradient-to-br from-[#fbfbff] to-[#f3f2ff] hover:from-[#f7f7ff] hover:to-[#ecebff]"
-                      : "border-[#d1dfd6] bg-gradient-to-br from-[#fafdfb] to-[#f1faf4] hover:from-[#f7fcf8] hover:to-[#e8f7ed]";
+                      ? "border-[#818cf8] bg-gradient-to-br from-[#f7f7ff] to-[#e9e7ff] hover:from-[#f3f2ff] hover:to-[#ddd9ff]"
+                      : "border-[#22c55e] bg-gradient-to-br from-[#f0fdf4] to-[#dcfce7] hover:from-[#ecfdf5] hover:to-[#bbf7d0]";
 
               const showOccupiedBadge =
                 isOccupied || (tableStatus === "OCCUPIED" && !isWaiting && !isCleaning);
@@ -729,14 +760,14 @@ export default function TablesPage() {
                 isReserved || (activeReservations.length > 0 && !showOccupiedBadge);
 
               const statusBadge = isWaiting
-                ? { bg: "bg-[#fef9c3] text-[#854d0e]", dot: "bg-[#d97706]", label: isAr ? "انتظار الدفع" : "Awaiting payment" }
+                ? { bg: "bg-[#f59e0b] text-white", dot: "bg-white", label: isAr ? "انتظار الدفع" : "Awaiting payment" }
                 : isCleaning
-                  ? { bg: "bg-[#e0e7ff] text-[#3730a3]", dot: "bg-[#6366f1]", label: isAr ? "تنظيف" : "Cleaning" }
+                  ? { bg: "bg-[#4f46e5] text-white", dot: "bg-white", label: isAr ? "تنظيف" : "Cleaning" }
                   : showOccupiedBadge
-                    ? { bg: "bg-[#ffeccc] text-[#b06000]", dot: "bg-[#e8710a]", label: isAr ? "مشغولة" : "In use" }
+                    ? { bg: "bg-[#ea580c] text-white", dot: "bg-white", label: isAr ? "مشغولة" : "In use" }
                     : showReservedBadge
-                      ? { bg: "bg-[#e9e7ff] text-[#4338ca]", dot: "bg-[#6366f1]", label: isAr ? "محجوزة" : "Reserved" }
-                      : { bg: "bg-[#e2f3e7] text-[#245834]", dot: "bg-[#1e8e3e]", label: isAr ? "متاحة" : "Available" };
+                      ? { bg: "bg-[#6366f1] text-white", dot: "bg-white", label: isAr ? "محجوزة" : "Reserved" }
+                      : { bg: "bg-[#16a34a] text-white", dot: "bg-white", label: isAr ? "متاحة" : "Available" };
 
               return (
                 <div
@@ -748,7 +779,7 @@ export default function TablesPage() {
                     handleOpenTable(table);
                   }}
                   className={cn(
-                    "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 sm:rounded-[24px] sm:p-5",
+                    "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 sm:min-h-[286px] sm:rounded-[24px] sm:p-5",
                     !isOccupied && (isCleaning || isWaiting)
                       ? "cursor-default"
                       : "cursor-pointer hover:-translate-y-1 hover:shadow-md",
@@ -758,8 +789,8 @@ export default function TablesPage() {
                   {/* Status badge row */}
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold", statusBadge.bg)}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full", statusBadge.dot)} />
+                      <span className={cn("inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black shadow-sm", statusBadge.bg)}>
+                        <span className={cn("h-2 w-2 rounded-full", statusBadge.dot)} />
                         <span>{statusBadge.label}</span>
                       </span>
                     </div>
@@ -775,16 +806,16 @@ export default function TablesPage() {
                           setPendingWaiterId(table.assignedWaiterId ?? "");
                         }}
                         className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full border border-[#e1e7e2] bg-white text-[#68776f] transition hover:bg-[#f6faf7] hover:text-[#233329] sm:h-8 sm:w-8",
+                          "flex h-11 w-11 items-center justify-center rounded-full border border-[#d1dcd5] bg-white text-[#506054] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]",
                           posTouchOrHoverRevealClass,
                         )}
                         title={isAr ? "إدارة الطاولة" : "Manage table"}
                       >
-                        <LuSettings className="h-3.5 w-3.5" />
+                        <LuSettings className="h-4 w-4" />
                       </button>
                       <div
                         className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full border bg-white",
+                          "flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-sm",
                           isWaiting
                             ? "border-[#fde68a] text-[#d97706]"
                             : isCleaning
@@ -796,7 +827,7 @@ export default function TablesPage() {
                                   : "border-[#cce5d6] text-[#16a34a]",
                         )}
                       >
-                        {isCleaning ? <LuSparkles className="h-4 w-4" /> : isWaiting ? <LuTimerReset className="h-4 w-4" /> : <LuUtensils className="h-4 w-4" />}
+                        {isCleaning ? <LuSparkles className="h-5 w-5" /> : isWaiting ? <LuTimerReset className="h-5 w-5" /> : <LuUtensils className="h-5 w-5" />}
                       </div>
                     </div>
                   </div>
@@ -805,7 +836,7 @@ export default function TablesPage() {
                   <div className="mt-4 flex-1">
                     <h3
                       className={cn(
-                        "text-2xl font-black tracking-tight",
+                        "text-3xl font-black tracking-tight sm:text-[2.25rem]",
                         isWaiting
                           ? "text-[#854d0e]"
                           : isCleaning
@@ -820,7 +851,7 @@ export default function TablesPage() {
                       {isAr ? `طاولة ${table.tableNumber}` : `Table ${table.tableNumber}`}
                     </h3>
 
-                    <div className="mt-3.5 space-y-2 border-t border-dashed border-black/5 pt-3.5 text-xs font-semibold text-[#506054]">
+                    <div className="mt-3.5 space-y-2 border-t border-dashed border-black/10 pt-3.5 text-sm font-semibold text-[#405248]">
                       <div className="flex items-center gap-2">
                         <LuUsers className="h-3.5 w-3.5 text-[#728578]" />
                         <span>
@@ -891,7 +922,7 @@ export default function TablesPage() {
                               handleOpenTable(table);
                             }}
                             className={cn(
-                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto sm:text-xs",
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto",
                               posTouchButtonClass,
                             )}
                           >
@@ -899,6 +930,26 @@ export default function TablesPage() {
                             <span>{isAr ? "عرض الطلب" : "Open Bill"}</span>
                           </button>
                         </div>
+                        {canPrintBill &&
+                        activeInvoice?.id &&
+                        (activeInvoice.posOperationalStatus === "DRAFT" ||
+                          activeInvoice.posOperationalStatus === "HELD") ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              printBillMutation.mutate(activeInvoice.id);
+                            }}
+                            disabled={printingBillTableId === table.id}
+                            className={cn(
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4e6455] hover:bg-white disabled:opacity-40",
+                              posTouchButtonClass,
+                            )}
+                          >
+                            <LuReceipt className="h-4 w-4 shrink-0" />
+                            <span>{isAr ? "طباعة الفاتورة" : "Print Bill"}</span>
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -906,7 +957,7 @@ export default function TablesPage() {
                             openReserveModal(table, "SPECIAL");
                           }}
                           className={cn(
-                            "w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-2.5 text-xs font-bold text-[#4338ca] hover:bg-[#f6f5ff]",
+                            "w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-3 text-sm font-bold text-[#4338ca] hover:bg-[#f6f5ff]",
                             posTouchButtonClass,
                           )}
                         >
@@ -928,7 +979,7 @@ export default function TablesPage() {
                           }}
                           disabled={markingAvailableTableId === table.id}
                           className={cn(
-                            "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#4f46e5] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#4f46e5] hover:to-[#4338ca] disabled:opacity-60 sm:text-xs",
+                            "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#4f46e5] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#4f46e5] hover:to-[#4338ca] disabled:opacity-60",
                             posTouchButtonClass,
                           )}
                         >
@@ -976,7 +1027,7 @@ export default function TablesPage() {
                               openReserveModal(table, "SPECIAL");
                             }}
                             className={cn(
-                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#c7c3ff] bg-white px-4 py-2.5 text-sm font-bold text-[#4338ca] shadow-sm hover:bg-[#f6f5ff] sm:text-xs",
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#c7c3ff] bg-white px-4 py-3 text-sm font-black text-[#4338ca] shadow-sm hover:bg-[#f6f5ff]",
                               posTouchButtonClass,
                             )}
                           >
@@ -992,7 +1043,7 @@ export default function TablesPage() {
                                 openReserveModal(table);
                               }}
                               className={cn(
-                                "flex items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-bold text-[#233329] shadow-sm hover:bg-[#f6faf7] sm:text-xs",
+                                "flex items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-white px-3 py-3 text-sm font-black text-[#233329] shadow-sm hover:bg-[#f6faf7]",
                                 posTouchButtonClass,
                               )}
                             >
@@ -1006,7 +1057,7 @@ export default function TablesPage() {
                                 handleOpenTable(table);
                               }}
                               className={cn(
-                                "flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d] sm:text-xs",
+                                "flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d]",
                                 posTouchButtonClass,
                               )}
                             >
