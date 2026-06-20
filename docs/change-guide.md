@@ -822,6 +822,8 @@ Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
 - payment receipt print (80mm thermal roll layout, auto-print on complete sale): `frontend/features/pos/pos-receipt-print.ts`
+- receipt contact branding defaults and env overrides (`POS_RECEIPT_PHONE`, `POS_RECEIPT_ADDRESS`, `POS_RECEIPT_TAGLINE`): `backend/src/modules/phase-3-sales-receivables/pos/pos-receipt-branding.ts`
+- held-sales list clarity (headline, identity strip, order number, total, relative time): `frontend/features/pos/pos-held-sale-display.ts`, `frontend/features/pos/pos-held-sale-card.tsx`; wired from `renderHeldWorkspace()` in `frontend/features/pos/pos-page.tsx`
 - session closing roll print (80mm thermal roll, auto-print on cashier shift close; same layout as accountant review): `frontend/features/pos/pos-session-roll-print.ts`, triggered from `closeSessionMutation` in `frontend/features/pos/pos-page.tsx`
 - extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
 - shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos/pos-layout-classes.ts`; reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
@@ -885,6 +887,7 @@ Rules:
 - weight lines do not merge in the cart; each weigh-in stays a separate line
 - enabling `allowFractionalQuantity` requires the item base unit `unitType` to be `WEIGHT`
 - held/draft/resumed sales preserve decimal `quantity`; resume enriches cart lines from the live catalog for `sellByWeight` display controls
+- traditional Arabic quantity labels for sell-by-weight asnaq items (`آبوات`, `فوارغ`, `كرشات`) are display-only in `frontend/features/pos/pos-weight-utils.ts` (`formatPosWeightDisplay`): preset KG picks print as `عدد واحد`, `وقية`, `نص كيلو`, `تلات أواج`, `كيلو` on the register cart, add-on modal, and thermal receipt while stored `quantity` and pricing math stay decimal KG
 
 Checks to run:
 

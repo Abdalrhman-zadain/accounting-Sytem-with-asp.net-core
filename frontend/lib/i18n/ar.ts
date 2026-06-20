@@ -2940,6 +2940,7 @@ Object.assign(arTranslations, {
   "pos.held.linesCount": "{count} أسطر",
   "pos.held.empty": "لا توجد مبيعات POS معلقة بانتظار الاستكمال.",
   "pos.held.resumeDraft": "استئناف المسودة",
+  "pos.held.reference": "مرجع: {reference}",
 
   "pos.review.description": "مراجعة مبيعات POS المكتملة، وتأثير المخزون، والمدفوعات المحصلة، والقيود المحاسبية المسودة قبل الترحيل.",
   "pos.review.approve": "اعتماد",

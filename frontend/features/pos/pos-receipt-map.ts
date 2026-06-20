@@ -12,6 +12,9 @@ export type PosReceiptApiResponse = {
   companyName: string;
   branchName?: string | null;
   taxNumber?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  tagline?: string | null;
   cashierName: string;
   terminalName?: string | null;
   warehouseName: string;
@@ -57,6 +60,9 @@ export function mapPosReceiptApiResponse(receipt: PosReceiptApiResponse): PosRec
     companyName: receipt.companyName,
     branchName: receipt.branchName,
     taxNumber: receipt.taxNumber,
+    phone: receipt.phone,
+    address: receipt.address,
+    tagline: receipt.tagline,
     cashierName: receipt.cashierName,
     terminalName: receipt.terminalName,
     warehouseName: receipt.warehouseName,

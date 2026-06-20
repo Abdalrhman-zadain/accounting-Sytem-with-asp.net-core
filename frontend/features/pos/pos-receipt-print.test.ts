@@ -79,8 +79,28 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain('class="summary-line emphasis"');
     expect(html).toContain("summary-amt");
     expect(html).toContain("شكراً لزيارتكم");
+    expect(html).toContain("هاتف: 079 120 84 88");
+    expect(html).toContain("شارع القدس");
+    expect(html).toContain("كرشات - مقادم");
     expect(html).not.toContain("كاشوكة");
     expect(html).not.toContain("Simple Account");
+  });
+
+  it("renders custom receipt contact fields when provided", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          phone: "0790000000",
+          address: "عنوان مخصص",
+          tagline: "سناكات ومقبلات",
+        }),
+      ),
+    );
+
+    expect(html).toContain("هاتف: 0790000000");
+    expect(html).toContain("عنوان مخصص");
+    expect(html).toContain("سناكات ومقبلات");
+    expect(html).not.toContain("079 120 84 88");
   });
 
   it("shows line discount rows for discounted items without duplicating invoice discount", () => {
@@ -211,6 +231,40 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("غير مدفوع");
     expect(html).not.toContain("نقد");
     expect(html).not.toContain("الباقي");
+  });
+
+  it("renders traditional Arabic quantity labels for sell-by-weight asnaq items", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "فوارغ",
+              quantity: 0.25,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 2.5,
+              unitCode: "KG",
+            },
+            {
+              name: "آبوات",
+              quantity: 0.125,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 1.25,
+              unitCode: "KG",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("وقية");
+    expect(html).toContain("عدد واحد");
+    expect(html).not.toContain("0.25 KG");
+    expect(html).not.toContain("0.125 KG");
   });
 
   it("renders bold addon rows under item lines", () => {

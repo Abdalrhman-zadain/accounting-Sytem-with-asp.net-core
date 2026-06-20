@@ -65,6 +65,7 @@ import {
   UpdateDeliveryCompanyStatusDto,
 } from "./dto/pos.dto";
 import { assertPosKitchenNoteLimits } from "./pos-kitchen-note-limits";
+import { getPosReceiptBranding } from "./pos-receipt-branding";
 
 const POS_WALK_IN_CUSTOMER_CODE = "POS-WALKIN";
 const POS_WALK_IN_CUSTOMER_NAME = "POS Walk-in Customer";
@@ -5785,6 +5786,7 @@ export class PosService {
   }
 
   private mapReceipt(row: any) {
+    const receiptBranding = getPosReceiptBranding();
     const totalPaid = row.posPayments.reduce(
       (sum: number, payment: any) => sum + Number(payment.tenderedAmount ?? payment.amount),
       0,
@@ -5804,9 +5806,12 @@ export class PosService {
       receiptKind: "sale" as const,
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
-      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "",
+      companyName: receiptBranding.companyName,
       branchName: row.posSession?.branchName ?? null,
-      taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
+      taxNumber: receiptBranding.taxNumber,
+      phone: receiptBranding.phone,
+      address: receiptBranding.address,
+      tagline: receiptBranding.tagline,
       cashierName:
         row.posSession?.cashierUser?.name ??
         row.posSession?.cashierUser?.email ??
@@ -5854,6 +5859,7 @@ export class PosService {
   }
 
   private mapProvisionalBill(row: any) {
+    const receiptBranding = getPosReceiptBranding();
     const subtotalAmount = Number(row.subtotalAmount);
     const taxAmount = Number(row.taxAmount);
     const taxRatePercent =
@@ -5865,9 +5871,12 @@ export class PosService {
       receiptKind: "provisional" as const,
       receiptNumber: row.reference,
       soldAt: row.updatedAt.toISOString(),
-      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "",
+      companyName: receiptBranding.companyName,
       branchName: row.posSession?.branchName ?? null,
-      taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
+      taxNumber: receiptBranding.taxNumber,
+      phone: receiptBranding.phone,
+      address: receiptBranding.address,
+      tagline: receiptBranding.tagline,
       cashierName:
         row.posSession?.cashierUser?.name ??
         row.posSession?.cashierUser?.email ??

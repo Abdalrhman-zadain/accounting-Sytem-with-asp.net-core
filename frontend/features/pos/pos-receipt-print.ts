@@ -4,7 +4,7 @@
  */
 
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
-import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
+import { formatPosWeightDisplay } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
   waitForDocumentImages,
@@ -29,6 +29,13 @@ import {
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
 export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
 
+/** Printed when the API does not supply receipt branding (matches backend defaults). */
+export const POS_RECEIPT_DEFAULT_PHONE = "079 120 84 88";
+export const POS_RECEIPT_DEFAULT_ADDRESS =
+  "عمان - شارع القدس - إشارة الرئيسي مقابل قاعات شذى للأفراح";
+export const POS_RECEIPT_DEFAULT_TAGLINE =
+  "كرشات - مقادم - روس - فوارغ - طحالات - سناكات";
+
 export type PosReceiptOrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY" | string;
 
 export type PosReceiptKind = "sale" | "provisional";
@@ -41,6 +48,9 @@ export type PosReceiptData = {
   logoUrl?: string | null;
   branchName?: string | null;
   taxNumber?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  tagline?: string | null;
   cashierName: string;
   terminalName?: string | null;
   warehouseName: string;
@@ -196,7 +206,10 @@ function fmtDateParts(val?: string | Date | null): { date: string; time: string 
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
   if (line.unitCode) {
-    return formatWeightQuantity(line.quantity, line.unitCode, 3);
+    return formatPosWeightDisplay(line.quantity, line.unitCode, {
+      language: "ar",
+      precision: 3,
+    });
   }
   return String(line.quantity);
 }
@@ -262,8 +275,21 @@ function buildPaymentBoxLines(receipt: PosReceiptData): ThermalReceiptPaymentBox
   return lines;
 }
 
+function resolveReceiptContactFields(receipt: PosReceiptData): {
+  phone: string;
+  address: string;
+  tagline: string;
+} {
+  return {
+    phone: receipt.phone?.trim() || POS_RECEIPT_DEFAULT_PHONE,
+    address: receipt.address?.trim() || POS_RECEIPT_DEFAULT_ADDRESS,
+    tagline: receipt.tagline?.trim() || POS_RECEIPT_DEFAULT_TAGLINE,
+  };
+}
+
 function buildBrandHeaderHtml(receipt: PosReceiptData): string {
   const logoUrl = resolveReceiptLogoUrl(receipt);
+  const { tagline } = resolveReceiptContactFields(receipt);
   const identityMeta = [
     receipt.branchName,
     receipt.taxNumber ? `ض.ب: ${receipt.taxNumber}` : null,
@@ -277,17 +303,33 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     return `
       <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
+        ${tagline ? thermalReceiptMetaLineHtml(tagline) : ""}
         <div class="sub">${subtitle}</div>
       </div>
       ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
   return [
+    tagline ? thermalReceiptMetaLineHtml(tagline) : "",
     `<div class="center sub">${subtitle}</div>`,
     identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildReceiptFooterContactHtml(receipt: PosReceiptData): string {
+  const { phone, address } = resolveReceiptContactFields(receipt);
+  const rows: string[] = [];
+
+  if (phone) {
+    rows.push(thermalReceiptMetaLineHtml(`هاتف: ${phone}`));
+  }
+  if (address) {
+    rows.push(thermalReceiptMetaLineHtml(address));
+  }
+
+  return rows.join("\n");
 }
 
 function sumLineDiscounts(lines: PosReceiptData["lines"]): number {
@@ -395,6 +437,7 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(thermalReceiptPaymentBoxHtml(buildPaymentBoxLines(receipt)));
 
   rows.push(`<div class="sep">${SEP}</div>`);
+  rows.push(buildReceiptFooterContactHtml(receipt));
   rows.push(`<div class="center thanks">شكراً لزيارتكم</div>`);
   rows.push(thermalReceiptFooterSpacerHtml());
 

@@ -1661,6 +1661,7 @@ Object.assign(enTranslations, {
   "pos.held.linesCount": "{count} lines",
   "pos.held.empty": "No held POS sales are waiting to be resumed.",
   "pos.held.resumeDraft": "Resume draft",
+  "pos.held.reference": "Ref: {reference}",
 
   "pos.review.description": "Review completed POS sales, inventory relief, captured payments, and draft accounting before posting.",
   "pos.review.approve": "Approve",

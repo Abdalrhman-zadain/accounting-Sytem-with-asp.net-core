@@ -14,7 +14,11 @@ import {
   clampKitchenLineNote,
   POS_ITEM_KITCHEN_NOTE_MAX,
 } from "@/features/pos/pos-kitchen-note-limits";
-import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
+import {
+  formatWeightQuantity,
+  getTraditionalAsnaqWeightLabel,
+  isKiloWeightUnit,
+} from "@/features/pos/pos-weight-utils";
 import { cn } from "@/lib/utils";
 
 type PosLineAddonModalProps = {
@@ -66,25 +70,10 @@ function getWeightPresetLabel(
     return customLabel.labelEn.trim();
   }
 
-  const normalizedUnit = unitCode.trim().toLowerCase();
-  const isKiloUnit =
-    normalizedUnit === "kg" ||
-    normalizedUnit === "kgs" ||
-    normalizedUnit === "كيلو" ||
-    normalizedUnit === "كغم";
-
-  if (isKiloUnit) {
-    if (preset === 0.25) {
-      return language === "ar" ? "ربع كيلو" : "Quarter kilo";
-    }
-    if (preset === 0.5) {
-      return language === "ar" ? "نص كيلو" : "Half kilo";
-    }
-    if (preset === 0.75) {
-      return language === "ar" ? "750غم" : "750 g";
-    }
-    if (preset === 1) {
-      return language === "ar" ? "كيلو" : "1 kilo";
+  if (isKiloWeightUnit(unitCode)) {
+    const traditional = getTraditionalAsnaqWeightLabel(preset, language);
+    if (traditional) {
+      return traditional;
     }
   }
 

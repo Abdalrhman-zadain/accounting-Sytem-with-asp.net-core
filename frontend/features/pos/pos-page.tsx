@@ -152,7 +152,7 @@ import {
 } from "@/features/pos/pos-kitchen-note-limits";
 import {
   getMinSalesQuantity,
-  formatWeightQuantity,
+  formatPosWeightDisplay,
   getQuantityPrecision,
   getWeightQuantityStep,
   isWeightSaleItem,
@@ -178,6 +178,10 @@ import { mapPosReceiptApiResponse } from "@/features/pos/pos-receipt-map";
 import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-panel";
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
+import {
+  HeldSaleKindBadges,
+  PosHeldSaleCard,
+} from "@/features/pos/pos-held-sale-card";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
 import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
@@ -317,8 +321,8 @@ function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
     return [
       {
         value: 0.125,
-        labelAr: "آبوات عدد واحد",
-        labelEn: "Aywat single piece",
+        labelAr: "عدد واحد",
+        labelEn: "Single piece",
       },
     ];
   }
@@ -326,8 +330,8 @@ function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
     return [
       {
         value: 0.125,
-        labelAr: "كرشات عدد واحد",
-        labelEn: "Karshat single piece",
+        labelAr: "عدد واحد",
+        labelEn: "Single piece",
       },
     ];
   }
@@ -419,6 +423,7 @@ type HeldSale = {
   serviceChargeAmount: number;
   deliveryAddress: string;
   deliveryNotes: string;
+  totalAmount: number;
   heldContext?: PosSaleHeldContext | null;
 };
 
@@ -760,6 +765,7 @@ function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
     serviceChargeAmount: parseAmount(sale.serviceChargeAmount),
     deliveryAddress: sale.deliveryAddress ?? "",
     deliveryNotes: sale.deliveryNotes ?? "",
+    totalAmount: parseAmount(sale.totalAmount),
     heldContext: sale.heldContext ?? null,
   };
 }
@@ -814,222 +820,6 @@ function buildPosRegisterTablePath(
     params.set("resume", invoice.id);
   }
   return `${registerPath}?${params.toString()}`;
-}
-
-function formatHeldSaleDateTime(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function HeldSaleKindBadges({
-  sale,
-  t,
-}: {
-  sale: HeldSale;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}) {
-  const ctx = sale.heldContext;
-  const source = ctx?.source ?? (sale.status === "DRAFT" ? "DRAFT" : "HELD");
-  const sourceStyles: Record<string, string> = {
-    DRAFT: "bg-[#eef3ef] text-[#46644b] border-[#d7e5da]",
-    HELD: "bg-[#fff4e8] text-[#9a6b2f] border-[#f0dcc0]",
-    RESERVATION_PREORDER: "bg-[#f3ecff] text-[#6b4f9a] border-[#e2d4f7]",
-    TABLE_ORDER: "bg-[#e8f2ff] text-[#3d628a] border-[#cfe0f5]",
-  };
-  const sourceLabels: Record<string, string> = {
-    DRAFT: t("pos.held.kind.DRAFT"),
-    HELD: t("pos.held.kind.HELD"),
-    RESERVATION_PREORDER: t("pos.held.kind.RESERVATION"),
-    TABLE_ORDER: t("pos.held.kind.TABLE_ORDER"),
-  };
-
-  const badges: Array<{ key: string; label: string; className: string }> = [
-    {
-      key: "source",
-      label: sourceLabels[source] ?? sourceLabels.DRAFT,
-      className: sourceStyles[source] ?? sourceStyles.DRAFT,
-    },
-  ];
-
-  if (ctx?.orderType) {
-    badges.push({
-      key: "orderType",
-      label: t(`pos.orderType.${ctx.orderType}`),
-      className: "bg-[#f6f7f8] text-[#5f6d66] border-[#dfe8e1]",
-    });
-  }
-
-  const tableNumber = ctx?.tableNumber;
-  if (tableNumber) {
-    badges.push({
-      key: "table",
-      label: t("pos.held.tableLabel", { number: tableNumber }),
-      className: "bg-[#f6f7f8] text-[#5f6d66] border-[#dfe8e1]",
-    });
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        {badges.map((badge) => (
-          <span
-            key={badge.key}
-            className={cn(
-              "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold",
-              badge.className,
-            )}
-          >
-            {badge.label}
-          </span>
-        ))}
-      </div>
-      {ctx?.reservedFrom && ctx.reservedTo ? (
-        <div className="text-xs text-[#728579]">
-          {t("pos.held.reservationWindow", {
-            from: formatHeldSaleDateTime(ctx.reservedFrom),
-            to: formatHeldSaleDateTime(ctx.reservedTo),
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function getHeldSaleOrderTypeStyles(orderType: PosOrderType) {
-  if (orderType === "DINE_IN") {
-    return {
-      card: "border-[#f7cc9e] bg-[#fffaf4]",
-      panel: "border-[#fed7aa] bg-[#fff7ed] text-[#7c2d12]",
-      badge: "bg-[#ffedd5] text-[#9a3412] border-[#fdba74]",
-      icon: LuStore,
-    };
-  }
-  if (orderType === "DELIVERY") {
-    return {
-      card: "border-[#bfdbfe] bg-[#f8fbff]",
-      panel: "border-[#bfdbfe] bg-[#eff6ff] text-[#1e3a8a]",
-      badge: "bg-[#dbeafe] text-[#1d4ed8] border-[#93c5fd]",
-      icon: LuTruck,
-    };
-  }
-  return {
-    card: "border-[#bbf7d0] bg-[#f7fdf9]",
-    panel: "border-[#bbf7d0] bg-[#f0fdf4] text-[#14532d]",
-    badge: "bg-[#dcfce7] text-[#166534] border-[#86efac]",
-    icon: LuShoppingBasket,
-  };
-}
-
-function HeldSaleOrderTypeInfo({
-  sale,
-  language,
-}: {
-  sale: HeldSale;
-  language: string;
-}) {
-  const isAr = language === "ar";
-  const styles = getHeldSaleOrderTypeStyles(sale.orderType);
-  const Icon = styles.icon;
-  const rows: Array<{ label: string; value: string | null | undefined }> = [];
-
-  if (sale.orderType === "DINE_IN") {
-    rows.push(
-      {
-        label: isAr ? "الطاولة" : "Table",
-        value: sale.tableNumber ?? sale.tableId ?? null,
-      },
-      {
-        label: isAr ? "النادل" : "Waiter",
-        value: sale.waiterName,
-      },
-      {
-        label: isAr ? "رسوم الخدمة" : "Service",
-        value: sale.serviceChargeAmount > 0 ? formatCurrency(sale.serviceChargeAmount) : null,
-      },
-    );
-  } else if (sale.orderType === "DELIVERY") {
-    rows.push(
-      {
-        label: isAr ? "التحصيل" : "Collection",
-        value:
-          sale.deliveryCollectionMethod === "COMPANY"
-            ? isAr
-              ? "شركة التوصيل"
-              : "Delivery company"
-            : sale.deliveryCollectionMethod
-              ? isAr
-                ? "المطعم"
-                : "Restaurant"
-              : null,
-      },
-      {
-        label: isAr ? "الشركة" : "Company",
-        value: sale.deliveryCompanyName,
-      },
-      {
-        label: isAr ? "السائق" : "Driver",
-        value: sale.driverName,
-      },
-      {
-        label: isAr ? "هاتف السائق" : "Driver phone",
-        value: sale.driverPhone,
-      },
-      {
-        label: isAr ? "العنوان" : "Address",
-        value: sale.deliveryAddress,
-      },
-      {
-        label: isAr ? "رسوم التوصيل" : "Delivery fee",
-        value: sale.deliveryFeeAmount > 0 ? formatCurrency(sale.deliveryFeeAmount) : null,
-      },
-    );
-  } else {
-    rows.push(
-      {
-        label: isAr ? "العميل" : "Customer",
-        value: sale.customerName,
-      },
-      {
-        label: isAr ? "ملاحظات الطلب" : "Order notes",
-        value: sale.orderNotes,
-      },
-      {
-        label: isAr ? "القناة" : "Channel",
-        value: isAr ? "سفري" : "Takeaway",
-      },
-    );
-  }
-
-  const visibleRows = rows.filter((row) => row.value);
-
-  return (
-    <div className={cn("mt-4 rounded-[18px] border px-4 py-3", styles.panel)}>
-      <div className="mb-2 flex items-center gap-2 text-xs font-black">
-        <Icon className="h-4 w-4" />
-        <span>{isAr ? "تفاصيل نوع الطلب" : "Order type details"}</span>
-      </div>
-      {visibleRows.length > 0 ? (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {visibleRows.map((row) => (
-            <div key={row.label} className="min-w-0">
-              <div className="text-[10px] font-black uppercase opacity-70">
-                {row.label}
-              </div>
-              <div className="truncate text-xs font-bold">{row.value}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-xs font-bold opacity-80">
-          {isAr ? "لا توجد تفاصيل إضافية" : "No extra details"}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function mapReceiptResponse(
@@ -6035,77 +5825,24 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     const renderHeldSaleCard = (
       heldSale: HeldSale,
       resumeLabelKey: "pos.held.resumeDraft" | "pos.sales.resumeHeld",
-    ) => {
-      const orderTypeStyles = getHeldSaleOrderTypeStyles(heldSale.orderType);
-      return (
-        <Card
-          key={heldSale.id}
-          className={cn("rounded-[28px] p-6", orderTypeStyles.card)}
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-black text-[#233329]">{heldSale.title}</div>
-              <div className="mt-1 text-sm text-[#66756d]">
-                {new Date(heldSale.createdAt).toLocaleString()}
-              </div>
-              <div className="mt-3">
-                <HeldSaleKindBadges sale={heldSale} t={t} />
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <span
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-black",
-                  orderTypeStyles.badge,
-                )}
-              >
-                {t(`pos.orderType.${heldSale.orderType}`)}
-              </span>
-              <span className="rounded-full bg-[#eef3ef] px-3 py-1 text-xs font-bold text-[#46644b]">
-                {t("pos.held.linesCount", { count: heldSale.cartLines.length })}
-              </span>
-            </div>
-          </div>
-
-          <HeldSaleOrderTypeInfo sale={heldSale} language={language} />
-
-          <div className="mt-4 space-y-2 text-sm text-[#5f6d66]">
-            {heldSale.cartLines.slice(0, 4).map((line) => (
-              <div
-                key={`${heldSale.id}-${line.itemId}`}
-                className="flex items-center justify-between gap-3"
-              >
-                <span>{getLocalizedText(line.name, language)}</span>
-                <span>
-                  {line.quantity} x {formatCurrency(line.unitPrice, currencyCode)}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                stashHeldSaleForResume(heldSale);
-                startRoutingTransition(() => {
-                  router.replace(buildPosRegisterResumePath(heldSale));
-                });
-              }}
-              className="rounded-full bg-[#46644b] px-4 py-2 text-xs font-bold text-white"
-            >
-              {t(resumeLabelKey)}
-            </button>
-            <button
-              type="button"
-              onClick={() => voidSaleMutation.mutate(heldSale.id)}
-              className="rounded-full border border-[#ead7d5] px-4 py-2 text-xs font-bold text-[#8f5a55]"
-            >
-              {t("pos.sales.voidAction")}
-            </button>
-          </div>
-        </Card>
-      );
-    };
+    ) => (
+      <PosHeldSaleCard
+        key={heldSale.id}
+        sale={heldSale}
+        language={language}
+        currencyCode={currencyCode}
+        resumeLabel={t(resumeLabelKey)}
+        t={t}
+        onResume={() => {
+          stashHeldSaleForResume(heldSale);
+          startRoutingTransition(() => {
+            router.replace(buildPosRegisterResumePath(heldSale));
+          });
+        }}
+        onVoid={() => voidSaleMutation.mutate(heldSale.id)}
+        isVoiding={voidSaleMutation.isPending}
+      />
+    );
 
     return (
       <div className="space-y-6">
@@ -7168,7 +6905,10 @@ function CompactCartLine({
   const weightPrecision = line.quantityPrecision ?? 3;
   const weightStep = getWeightQuantityStep(weightPrecision);
   const quantityLabel = line.sellByWeight
-    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+    ? formatPosWeightDisplay(line.quantity, line.unit, {
+        language,
+        precision: weightPrecision,
+      })
     : `${formatCount(line.quantity)} ${unitsLabel}`;
 
   return (
@@ -7301,7 +7041,10 @@ function CompactCartLine({
                 dir="ltr"
                 title={getLocalizedText("Weight is fixed after adding / الوزن ثابت بعد الإضافة", language)}
               >
-                {formatWeightQuantity(line.quantity, line.unit, weightPrecision)}
+                {formatPosWeightDisplay(line.quantity, line.unit, {
+                  language,
+                  precision: weightPrecision,
+                })}
               </span>
             ) : (
               <div className="flex items-center rounded-xl border border-[#cbd5e1] bg-white shadow-sm overflow-hidden select-none">
@@ -7342,7 +7085,10 @@ function CompactCartLine({
             <span className="text-xs font-bold text-[#475569]" dir="ltr">
               ×
               {line.sellByWeight
-                ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+                ? formatPosWeightDisplay(line.quantity, line.unit, {
+                    language,
+                    precision: weightPrecision,
+                  })
                 : formatCount(line.quantity)}
             </span>
           )}
