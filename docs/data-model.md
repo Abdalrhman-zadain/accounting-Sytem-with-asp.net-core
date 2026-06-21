@@ -454,6 +454,7 @@ Main models:
 - `PosPermission`
 - `PosAccessRolePermission`
 - `UserPosAccessRole`
+- `UserPosPermissionOverride`
 
 Key fields & behavior:
 
@@ -461,8 +462,11 @@ Key fields & behavior:
 - `User.role` (ADMIN, MANAGER, USER) remains the legacy system privilege layer used by existing accounting services.
 - `User.companyId` isolates data to a specific tenant.
 - `User.parentUserId` supports hierarchical management of users within a company.
-- POS-specific route/action visibility is modeled separately from the legacy system role through `PosAccessRole` (`CASHIER`, `ACCOUNTANT`) and the many-to-many joins into `PosPermission`.
+- POS-specific route/action visibility is modeled separately from the legacy system role through `PosAccessRole` (`CASHIER`, `ACCOUNTANT`, `WAITER`, `KITCHEN`) and the many-to-many joins into `PosPermission`.
 - `UserPosAccessRole` allows one or more POS access roles per user, and `PosAccessRolePermission` defines the backend-enforced permission list linked to each POS role.
+- `UserPosPermissionOverride` stores per-user `GRANT` / `DENY` overrides on top of role permissions; deny wins when merged at login.
+- Post-confirm cart permissions include `POS_ADD_ITEM_AFTER_WAITER_CONFIRM`, `POS_EDIT_WAITER_CONFIRMED_ORDER`, `POS_MODIFY_KITCHEN_SENT_LINE`, and `RST_UPDATE_KITCHEN_FROM_CART`.
+- `SYS_MANAGE_USERS` is granted to `User.role = ADMIN` for `/settings/users` and `GET/POST/PATCH /users` APIs.
 - JWT/login responses now carry a computed access snapshot derived from those role-to-permission links so the frontend and backend use the same allowed-route and permission picture.
 - `AuditLog.companyId` enables fast filtering of audit history per tenant.
 

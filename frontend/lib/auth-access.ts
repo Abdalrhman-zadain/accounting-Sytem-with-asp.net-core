@@ -59,6 +59,10 @@ export function isCashierPosUser(user: AuthUser | null | undefined) {
   return Boolean(user?.posRoles?.includes("CASHIER"));
 }
 
+export function isAdminUser(user: AuthUser | null | undefined) {
+  return user?.role === "ADMIN";
+}
+
 export function canAccessRoute(user: AuthUser | null | undefined, pathname: string) {
   if (!user) {
     return false;
@@ -66,6 +70,10 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
 
   const normalizedPath = normalizePath(pathname);
   const allowedRoutes = user.allowedRoutes ?? [];
+
+  if (normalizedPath === "/settings/users" || normalizedPath.startsWith("/settings/users/")) {
+    return isAdminUser(user);
+  }
 
   if (normalizedPath === "/pos/returns" || normalizedPath.startsWith("/pos/returns/")) {
     return isCashierPosUser(user) && hasPermission(user, "POS_VIEW_COMPLETED_SALES");

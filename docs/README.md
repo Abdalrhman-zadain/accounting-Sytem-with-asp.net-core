@@ -72,10 +72,14 @@ Implemented:
 - the restaurant dine-in tables screen `/pos/tables` is treated as a cashier-side operational route and is no longer granted to accountant-only access snapshots
 - the POS returns screen `/pos/returns` is treated as a cashier-side operational route and is no longer granted to accountant-only access snapshots
 - seed/setup support now includes dedicated POS logins: `cashier / cashier123`, `kitchen / kitchen123` (legacy role, no screen), and `waiter / waiter123` (waiter lands on `/pos/waiter/tables`, confirms orders via `POST /pos/sales/:id/send-to-kitchen`, tracks service at `/pos/waiter/orders`, cannot pay)
+- granular post-confirm cart permissions (`POS_ADD_ITEM_AFTER_WAITER_CONFIRM`, `POS_EDIT_WAITER_CONFIRMED_ORDER`, `POS_MODIFY_KITCHEN_SENT_LINE`, `RST_UPDATE_KITCHEN_FROM_CART`) are enforced in POS draft/save and register UI
+- per-user POS permission overrides (`UserPosPermissionOverride` with `GRANT` / `DENY`) merge on top of role templates at login
+- ADMIN-only user management at `/settings/users` with `GET/POST/PATCH /users` APIs; public self-registration is disabled
 
 Not fully implemented yet:
 
 - full system-wide backend permission enforcement for every non-POS accounting controller is not yet driven by the new POS permission list; existing accounting modules still primarily rely on legacy auth/module behavior
+- custom editable POS role templates in the admin UI (only built-in roles plus per-user overrides)
 - POS report export is not yet explicitly enforced by `POS_EXPORT_POS_REPORTS`
 - the accountant review UI does not yet expose a dedicated POS-to-journal-entry drill-down workflow even though accountants can reach `/journal-entries`
 - the shared `/pos` workspace still serves both cashier and accountant flows from one feature shell; visibility differs by access, but the UI is not yet split into fully distinct role-specific shells

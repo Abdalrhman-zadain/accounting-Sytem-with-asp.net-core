@@ -1054,6 +1054,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
         "RST_VIEW_TABLE_SCREEN",
         "RST_OPEN_TABLE_ORDER",
         "POS_HOLD_SALE",
+        "POS_ADD_ITEM_AFTER_WAITER_CONFIRM",
         "POS_COMPLETE_SALE",
       ],
     } as any;
@@ -1061,7 +1062,13 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
     const cashierUser = {
       userId: "cashier1",
       posRoles: ["CASHIER"],
-      permissions: ["RST_SEND_KOT", "POS_VIEW_POS_SCREEN", "POS_COMPLETE_SALE"],
+      permissions: [
+        "RST_SEND_KOT",
+        "POS_VIEW_POS_SCREEN",
+        "POS_COMPLETE_SALE",
+        "POS_EDIT_WAITER_CONFIRMED_ORDER",
+        "POS_MODIFY_KITCHEN_SENT_LINE",
+      ],
     } as any;
 
     it("rejects waiter completeSale", async () => {
@@ -1070,7 +1077,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       ).rejects.toThrow("Waiters cannot complete sales or take payment");
     });
 
-    it("rejects waiter second confirm after waiterConfirmedAt", async () => {
+    it("rejects waiter second confirm after waiterConfirmedAt when no unsent lines remain", async () => {
       prismaMock.salesInvoice.findUnique.mockResolvedValue({
         id: "inv1",
         invoiceType: "POS",
@@ -1097,6 +1104,82 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       await expect(service.sendSaleToKitchen("inv1", waiterUser)).rejects.toThrow(
         "already confirmed",
       );
+    });
+
+    it("allows waiter incremental send after confirm when unsent lines exist", async () => {
+      const draftInvoice = {
+        id: "inv1",
+        reference: "POS-1",
+        invoiceType: "POS",
+        posOperationalStatus: "HELD",
+        waiterConfirmedAt: new Date(),
+        orderType: "DINE_IN",
+        tableId: "t1",
+        waiterId: "waiter1",
+        description: null,
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            itemName: "Burger",
+            quantity: { toString: () => "1" },
+            lineNumber: 1,
+            description: null,
+            modifiers: null,
+            kitchenSentAt: new Date(),
+          },
+          {
+            id: "line2",
+            itemId: "item2",
+            itemName: "Fries",
+            quantity: { toString: () => "1" },
+            lineNumber: 2,
+            description: null,
+            modifiers: null,
+            kitchenSentAt: null,
+          },
+        ],
+        kitchenOrder: { id: "kot1", items: [] },
+      };
+      prismaMock.salesInvoice.findUnique.mockResolvedValue(draftInvoice);
+      prismaMock.salesInvoice.findUniqueOrThrow.mockResolvedValue({
+        ...draftInvoice,
+        lines: draftInvoice.lines.map((line) => ({
+          ...line,
+          kitchenSentAt: line.id === "line2" ? new Date() : line.kitchenSentAt,
+          unitPrice: { toString: () => "5" },
+          discountAmount: { toString: () => "0" },
+          taxAmount: { toString: () => "0" },
+          lineSubtotalAmount: { toString: () => "5" },
+          lineAmount: { toString: () => "5" },
+          revenueAccountId: "rev-1",
+          taxId: null,
+          item: null,
+          warehouse: null,
+        })),
+        subtotalAmount: { toString: () => "10" },
+        discountAmount: { toString: () => "0" },
+        taxAmount: { toString: () => "0" },
+        totalAmount: { toString: () => "10" },
+        allocatedAmount: { toString: () => "0" },
+        outstandingAmount: { toString: () => "0" },
+        allocationStatus: "UNALLOCATED",
+        status: "DRAFT",
+        invoiceDate: new Date("2026-06-03T10:00:00.000Z"),
+        currencyCode: "JOD",
+        posPayments: [],
+        posSession: null,
+        customer: null,
+        table: { id: "t1", tableNumber: "T1", status: "OCCUPIED" },
+        waiter: null,
+        deliveryCompany: null,
+        driver: null,
+        journalEntry: null,
+        createdAt: new Date("2026-06-03T10:00:00.000Z"),
+        updatedAt: new Date("2026-06-03T10:00:00.000Z"),
+      });
+
+      await expect(service.sendSaleToKitchen("inv1", waiterUser)).resolves.toBeDefined();
     });
 
     it("promotes sent table drafts to held and keeps the table linked", async () => {
@@ -1285,7 +1368,7 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
       ).rejects.toThrow("ready or served");
     });
 
-    it("rejects waiter cart change after waiter confirmed the dine-in order", async () => {
+    it("rejects waiter quantity change after waiter confirmed the dine-in order", async () => {
       const salesReceivablesMock = {
         resolveSalesInvoiceLines: jest.fn().mockResolvedValue([
           { salesInvoiceLineId: "line1", itemId: "item1", quantity: 3 },
@@ -1357,7 +1440,60 @@ describe("PosService.openReservationPreOrder — guard conditions", () => {
           } as any,
           waiterUser,
         ),
-      ).rejects.toThrow("can no longer be changed by the waiter");
+      ).rejects.toThrow("quantities changed");
+    });
+
+    it("allows waiter to add a new line after waiter confirmed the dine-in order", async () => {
+      const existing = {
+        id: "inv1",
+        posOperationalStatus: PosOperationalStatus.DRAFT,
+        waiterConfirmedAt: new Date(),
+        lines: [
+          {
+            id: "line1",
+            itemId: "item1",
+            quantity: { toString: () => "2" } as any,
+            kitchenSentAt: new Date(),
+          },
+          {
+            id: "line2",
+            itemId: "item2",
+            quantity: { toString: () => "1" } as any,
+            kitchenSentAt: null,
+          },
+        ],
+      };
+      const dtoLines = [
+        { salesInvoiceLineId: "line1", itemId: "item1", quantity: 2 },
+        { salesInvoiceLineId: "line2", itemId: "item2", quantity: 1 },
+        { itemId: "item3", quantity: 1 },
+      ];
+      const resolvedLines = [
+        {
+          salesInvoiceLineId: "line1",
+          itemId: "item1",
+          quantity: 2,
+        },
+        {
+          salesInvoiceLineId: "line2",
+          itemId: "item2",
+          quantity: 1,
+        },
+        {
+          itemId: "item3",
+          quantity: 1,
+        },
+      ] as any;
+
+      expect(() =>
+        (service as any).assertPosSaleDraftModification(
+          waiterUser,
+          existing,
+          dtoLines,
+          resolvedLines,
+          new Map(),
+        ),
+      ).not.toThrow();
     });
 
     it("updates kept lines to tax-free when taxFreeEnabled is true", async () => {

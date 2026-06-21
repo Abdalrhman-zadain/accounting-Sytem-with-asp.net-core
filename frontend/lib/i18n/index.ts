@@ -29,6 +29,7 @@ const enTranslations: Record<string, string> = {
   "nav.item.fiscalPeriods": "Fiscal Periods",
   "nav.item.auditTrail": "Audit Trail",
   "nav.item.settings": "Settings",
+  "nav.item.users": "Users",
 
   "settings.title": "System Settings",
   "settings.globalPreferences": "Global Preferences",

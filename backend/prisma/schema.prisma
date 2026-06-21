@@ -200,6 +200,20 @@ enum PosPermissionCode {
   POS_CORRECT_ORDER_TYPE
   POS_APPROVE_CORRECTION
   POS_REOPEN_SESSION
+
+  // Post-confirm cart permissions
+  POS_ADD_ITEM_AFTER_WAITER_CONFIRM
+  POS_EDIT_WAITER_CONFIRMED_ORDER
+  POS_MODIFY_KITCHEN_SENT_LINE
+  RST_UPDATE_KITCHEN_FROM_CART
+
+  // System permissions
+  SYS_MANAGE_USERS
+}
+
+enum PosPermissionOverrideEffect {
+  GRANT
+  DENY
 }
 
 enum OrderType {
@@ -621,13 +635,14 @@ model PosAccessRole {
 }
 
 model PosPermission {
-  id          String                    @id @default(cuid())
-  code        PosPermissionCode         @unique
+  id          String                      @id @default(cuid())
+  code        PosPermissionCode           @unique
   name        String
   description String?
   roles       PosAccessRolePermission[]
-  createdAt   DateTime                  @default(now())
-  updatedAt   DateTime                  @updatedAt
+  userOverrides UserPosPermissionOverride[]
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
 }
 
 model PosAccessRolePermission {
@@ -652,6 +667,20 @@ model UserPosAccessRole {
 
   @@unique([userId, roleId])
   @@index([roleId])
+}
+
+model UserPosPermissionOverride {
+  id           String                      @id @default(cuid())
+  userId       String
+  permissionId String
+  effect       PosPermissionOverrideEffect
+  user         User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   PosPermission               @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+
+  @@unique([userId, permissionId])
+  @@index([permissionId])
 }
 
 model BankCashTransaction {
@@ -2905,6 +2934,7 @@ model User {
   createdPosReturns                   PosReturn[]                    @relation("PosReturnCreatedByUser")
   reviewedPosReturns                  PosReturn[]                    @relation("PosReturnReviewedByUser")
   posAccessRoles                      UserPosAccessRole[]
+  posPermissionOverrides              UserPosPermissionOverride[]
   posFavoriteItems                    PosUserFavoriteItem[]
   auditLogs                           AuditLog[]
   createdDeliverySettlements          DeliveryCompanySettlement[]    @relation("DeliverySettlementCreatedByUser")

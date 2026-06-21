@@ -188,7 +188,10 @@ export class PosService {
         throw new BadRequestException("Only open POS orders can be sent to the kitchen.");
       }
       if (waiterOnly && invoice.waiterConfirmedAt) {
-        throw new ForbiddenException("This order was already confirmed and cannot be sent again.");
+        const unsentLinesPreview = invoice.lines.filter((line) => !line.kitchenSentAt);
+        if (!unsentLinesPreview.length) {
+          throw new ForbiddenException("This order was already confirmed and cannot be sent again.");
+        }
       }
 
       const unsentLines = invoice.lines.filter((line) => !line.kitchenSentAt);
@@ -894,6 +897,12 @@ export class PosService {
 
   /** Persist cart changes, then replace the kitchen ticket with the full current order. */
   async updateSaleKitchen(dto: SavePosDraftDto, user?: AuthorizedUser) {
+    if (
+      !this.hasPosPermissionCode("RST_UPDATE_KITCHEN_FROM_CART", user) &&
+      !this.hasPosPermissionCode("POS_EDIT_WAITER_CONFIRMED_ORDER", user)
+    ) {
+      throw new BadRequestException("You do not have permission for RST_UPDATE_KITCHEN_FROM_CART.");
+    }
     this.ensureCanSavePosDraft(user);
 
     let invoiceId = dto.invoiceId?.trim() || null;
@@ -6010,12 +6019,24 @@ export class PosService {
     return (
       user.posRoles.includes("WAITER") &&
       !user.posRoles.includes("CASHIER") &&
-      !user.posRoles.includes("ACCOUNTANT")
+      !user.posRoles.includes("ACCOUNTANT") &&
+      !user.posRoles.includes("KITCHEN")
     );
   }
 
-  private canCashierEditPosCart(user?: AuthorizedUser) {
-    return this.hasPosPermissionCode("POS_VIEW_POS_SCREEN", user);
+  private canEditWaiterConfirmedOrder(user?: AuthorizedUser) {
+    return this.hasPosPermissionCode("POS_EDIT_WAITER_CONFIRMED_ORDER", user);
+  }
+
+  private canAddItemsAfterWaiterConfirm(user?: AuthorizedUser) {
+    return this.hasPosPermissionCode("POS_ADD_ITEM_AFTER_WAITER_CONFIRM", user);
+  }
+
+  private canModifyKitchenSentLine(user?: AuthorizedUser) {
+    return (
+      this.hasPosPermissionCode("POS_MODIFY_KITCHEN_SENT_LINE", user) ||
+      this.canEditWaiterConfirmedOrder(user)
+    );
   }
 
   private isPosSaleDone(
@@ -6141,41 +6162,38 @@ export class PosService {
     }
 
     const waiterOnly = this.isWaiterOnlyUser(user);
-    const cashierCanEdit = this.canCashierEditPosCart(user) && !waiterOnly;
+    const canEditConfirmed = this.canEditWaiterConfirmedOrder(user);
+    const canAddAfterConfirm = this.canAddItemsAfterWaiterConfirm(user);
+    const canModifySentLines = this.canModifyKitchenSentLine(user);
 
-    if (waiterOnly && existing.waiterConfirmedAt) {
-      throw new ForbiddenException(
-        "This order was confirmed and can no longer be changed by the waiter.",
-      );
-    }
-
-    if (!cashierCanEdit && existing.waiterConfirmedAt) {
-      if (existing.lines.length !== resolvedLines.length) {
-        throw new BadRequestException(
-          "This order was confirmed by the waiter. No order changes are allowed until payment.",
+    if (existing.waiterConfirmedAt) {
+      if (canEditConfirmed) {
+        // Full edit allowed for users with POS_EDIT_WAITER_CONFIRMED_ORDER.
+      } else if (canAddAfterConfirm) {
+        for (const line of existing.lines) {
+          const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
+          if (!dtoLine) {
+            throw new BadRequestException(
+              "Confirmed orders cannot have existing items removed. You may only add new items.",
+            );
+          }
+          const nextQty = Number(dtoLine.quantity ?? 0);
+          if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
+            throw new BadRequestException(
+              "Confirmed orders cannot have existing items changed. You may only add new items.",
+            );
+          }
+          if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
+            throw new BadRequestException(
+              "Confirmed orders cannot have existing item quantities changed. You may only add new items.",
+            );
+          }
+        }
+      } else if (waiterOnly) {
+        throw new ForbiddenException(
+          "This order was confirmed and can no longer be changed by the waiter.",
         );
-      }
-      for (const line of existing.lines) {
-        const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
-        if (!dtoLine) {
-          throw new BadRequestException(
-            "This order was confirmed by the waiter. No order changes are allowed until payment.",
-          );
-        }
-        const nextQty = Number(dtoLine.quantity ?? 0);
-        if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
-          throw new BadRequestException(
-            "This order was confirmed by the waiter. No order changes are allowed until payment.",
-          );
-        }
-        if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
-          throw new BadRequestException(
-            "This order was confirmed by the waiter. No order changes are allowed until payment.",
-          );
-        }
-      }
-      const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
-      if (newDtoLines.length > 0) {
+      } else {
         throw new BadRequestException(
           "This order was confirmed by the waiter. No order changes are allowed until payment.",
         );
@@ -6200,7 +6218,7 @@ export class PosService {
         continue;
       }
 
-      if (!cashierCanEdit) {
+      if (!canModifySentLines) {
         if (removed) {
           throw new BadRequestException(
             "Items already sent to the kitchen cannot be removed.",
@@ -6221,17 +6239,6 @@ export class PosService {
         throw new BadRequestException(
           "Items already marked ready or served in the kitchen cannot be changed.",
         );
-      }
-    }
-
-    if (!cashierCanEdit && waiterOnly && sentLines.length) {
-      const unsentDtoCount = dtoLines.filter(
-        (line) =>
-          !line.salesInvoiceLineId ||
-          !sentLines.some((sent) => sent.id === line.salesInvoiceLineId),
-      ).length;
-      if (unsentDtoCount > 0 && existing.waiterConfirmedAt) {
-        throw new ForbiddenException("Waiter cannot add items after the order was confirmed.");
       }
     }
   }

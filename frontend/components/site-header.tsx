@@ -46,7 +46,7 @@ import { useTranslation, TranslationKey } from "@/lib/i18n";
 import { useSettings } from "@/providers/settings-provider";
 import { useKdsMode } from "@/providers/kds-mode-provider";
 import { queryKeys } from "@/lib/query-keys";
-import { canAccessRoute, isKitchenOnlyUser, isWaiterOnlyUser } from "@/lib/auth-access";
+import { canAccessRoute, isAdminUser, isKitchenOnlyUser, isWaiterOnlyUser } from "@/lib/auth-access";
 import {
   getAgingReport,
   getAccountOptions,
@@ -82,6 +82,7 @@ type NavGroup = {
       labelKey: TranslationKey;
       icon?: any;
     }>;
+    adminOnly?: boolean;
   }>;
 };
 
@@ -173,7 +174,10 @@ const navGroups: NavGroup[] = [
   },
   {
     labelKey: "nav.group.system",
-    items: [{ href: "/settings", labelKey: "nav.item.settings", icon: Settings2 }],
+    items: [
+      { href: "/settings", labelKey: "nav.item.settings", icon: Settings2 },
+      { href: "/settings/users", labelKey: "nav.item.users", icon: User, adminOnly: true },
+    ],
   },
 ];
 
@@ -526,6 +530,9 @@ export function SiteHeader({
       items: group.items
         .map((item) => {
           if (HIDDEN_NAV_HREFS.has(item.href)) {
+            return null;
+          }
+          if (item.adminOnly && !isAdminUser(user)) {
             return null;
           }
 

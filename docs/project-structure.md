@@ -165,14 +165,21 @@ Purpose:
 Current implemented module:
 
 - `platform/auth`
+- `platform/users` (ADMIN-only user CRUD and permission overrides)
 
 Auth owns:
 
-- registration
 - login
 - JWT strategy
 - auth DTOs
 - auth guards
+- POS permission baseline seeding
+
+Users owns:
+
+- `GET/POST/PATCH /users`
+- `GET /users/permission-catalog`
+- admin user management backing `/settings/users`
 
 ### `backend/src/modules/phase-1-accounting-foundation`
 

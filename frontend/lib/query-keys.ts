@@ -277,4 +277,6 @@ export const queryKeys = {
   auditLog(token: string | null, params: { entity?: string; entityId?: string; limit?: number } = {}) {
     return ["audit-log", token, normalizeObject(params as Record<string, unknown>)] as const;
   },
+  adminUsers: ["admin-users"] as const,
+  permissionCatalog: ["permission-catalog"] as const,
 };

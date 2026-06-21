@@ -19,6 +19,7 @@ const arTranslations: Record<string, string> = {
   "nav.item.fiscalPeriods": "الفترات المالية",
   "nav.item.auditTrail": "مسار التدقيق",
   "nav.item.settings": "الإعدادات",
+  "nav.item.users": "المستخدمون",
 
   "settings.title": "إعدادات النظام",
   "settings.globalPreferences": "التفضيلات العامة",
