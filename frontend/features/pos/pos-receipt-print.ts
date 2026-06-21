@@ -1,38 +1,75 @@
 /**
  * pos-receipt-print.ts
- * Compact thermal 80mm sales receipt for POS payment completion.
- * Generates client-side HTML and triggers window.print() for receipt printers.
+ * Kashouka-style Arabic restaurant receipt for 80mm thermal POS printers.
  */
 
-import { formatWeightQuantity } from "@/features/pos/pos-weight-utils";
+import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
+import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
   waitForDocumentImages,
 } from "@/features/pos/pos-print-bridge";
 import {
   buildThermalReceiptDocumentHtml,
-  fmtThermalReceiptAmt,
+  thermalReceiptColumnHeaderRow,
   thermalReceiptFooterSpacerHtml,
-  thermalReceiptItemLine,
-  thermalReceiptRowLine,
+  thermalReceiptItemRow4Col,
+  thermalReceiptItemAddonRow,
+  thermalReceiptItemDiscountRow,
+  thermalReceiptMetaLineHtml,
+  thermalReceiptPhoneLineHtml,
+  thermalReceiptPaymentBoxHtml,
+  thermalReceiptSepLine,
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
+  thermalReceiptTotalRow,
+  formatReceiptPaymentSummary,
+  type ThermalReceiptPaymentBoxLine,
 } from "@/features/pos-shared/thermal-receipt-layout";
 
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
 export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
 
+/** Printed when the API does not supply receipt branding (matches backend defaults). */
+export const POS_RECEIPT_DEFAULT_PHONE = "079 120 84 88";
+export const POS_RECEIPT_DEFAULT_ADDRESS =
+  "عمان - شارع القدس - إشارة الرئيسي مقابل قاعات شذى للأفراح";
+export const POS_RECEIPT_DEFAULT_TAGLINE =
+  "كرشات - مقادم - روس - فوارغ - طحالات - سناكات";
+
+export type PosReceiptOrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY" | string;
+
+export type PosReceiptKind = "sale" | "provisional";
+
 export type PosReceiptData = {
+  receiptKind?: PosReceiptKind;
   receiptNumber: string;
   soldAt: string;
   companyName: string;
   logoUrl?: string | null;
   branchName?: string | null;
   taxNumber?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  tagline?: string | null;
   cashierName: string;
   terminalName?: string | null;
   warehouseName: string;
+  tableNumber?: string | null;
+  orderType?: PosReceiptOrderType | null;
+  waiterName?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyName?: string | null;
+  driverName?: string | null;
+  serviceChargeAmount?: number;
+  deliveryFeeAmount?: number;
+  taxRatePercent?: number | null;
   paymentSummary: string;
+  payments?: Array<{
+    paymentMethod: string;
+    amount: number;
+  }>;
   total: number;
   paid: number;
   tendered: number;
@@ -48,8 +85,30 @@ export type PosReceiptData = {
     taxAmount: number;
     lineTotal: number;
     unitCode?: string;
+    modifiers?: unknown;
   }>;
 };
+
+/** Daily POS order sequence shown on the receipt (e.g. RECEIPT-20260618-0042 → 42). */
+export function extractDailyOrderNumber(receiptNumber: string): string | null {
+  const trimmed = receiptNumber?.trim();
+  if (!trimmed) return null;
+
+  const datedMatch = trimmed.match(/(?:RECEIPT|POS)-\d{8}-(\d+)$/i);
+  if (datedMatch) {
+    return String(Number.parseInt(datedMatch[1], 10));
+  }
+
+  const lastDash = trimmed.lastIndexOf("-");
+  if (lastDash >= 0) {
+    const tail = trimmed.slice(lastDash + 1);
+    if (/^\d+$/.test(tail)) {
+      return String(Number.parseInt(tail, 10));
+    }
+  }
+
+  return trimmed;
+}
 
 const ARABIC_PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "نقد",
@@ -60,6 +119,15 @@ const ARABIC_PAYMENT_METHOD_LABELS: Record<string, string> = {
   MIXED: "مختلط",
   DELIVERY: "توصيل",
 };
+
+const ARABIC_ORDER_TYPE_LABELS: Record<string, string> = {
+  DINE_IN: "صالة",
+  TAKEAWAY: "سفري",
+  DELIVERY: "توصيل",
+};
+
+const SEP = thermalReceiptSepLine();
+const SEP_STRONG = thermalReceiptSepLine("═");
 
 export function buildArabicPaymentSummary(
   methods: string[],
@@ -79,6 +147,21 @@ export function buildArabicPaymentSummary(
   return "مختلط";
 }
 
+export function resolveReceiptPaymentDisplay(receipt: PosReceiptData): string {
+  if (receipt.payments?.length) {
+    return buildArabicPaymentSummary(
+      receipt.payments.map((payment) => payment.paymentMethod),
+      receipt.payments.map((payment) => payment.amount),
+    );
+  }
+
+  if (receipt.paymentSummary.trim()) {
+    return formatReceiptPaymentSummary(receipt.paymentSummary);
+  }
+
+  return "";
+}
+
 export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosReceiptData {
   return {
     ...receipt,
@@ -86,28 +169,22 @@ export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosRece
       receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
         ? "كاشير"
         : receipt.cashierName,
-    paymentSummary: receipt.paymentSummary.trim() || receipt.paymentSummary,
+    paymentSummary: resolveReceiptPaymentDisplay(receipt),
   };
 }
 
-const SEP = "─".repeat(32);
-
 const RESTAURANT_RECEIPT_EXTRA_CSS = `
-    .brand-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-bottom: 2px;
-    }
-    .brand-text {
-      flex: 1 1 auto;
-      min-width: 0;
-      text-align: right;
+    .brand-stack {
+      text-align: center;
+      margin-bottom: 4px;
     }
     .logo {
-      flex: 0 0 auto;
-      width: 48px;
-      height: 48px;
+      display: block;
+      width: 28mm;
+      max-width: 90%;
+      height: auto;
+      max-height: 28mm;
+      margin: 0 auto 6px;
       object-fit: contain;
     }
     @media print {
@@ -118,18 +195,22 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
 `;
 
-function fmtDateCompact(val?: string | Date | null): string {
-  if (!val) return "—";
+function fmtDateParts(val?: string | Date | null): { date: string; time: string } {
+  if (!val) {
+    return { date: "—", time: "—" };
+  }
   const d = new Date(val);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return {
+    date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
-  if (line.unitCode) {
-    return formatWeightQuantity(line.quantity, line.unitCode, 3);
-  }
-  return String(line.quantity);
+  return formatPosLineQuantityDisplay(line.quantity, "ar", line.unitCode, {
+    precision: 3,
+  });
 }
 
 function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
@@ -144,6 +225,67 @@ function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string | null {
+  if (!orderType) {
+    return null;
+  }
+  return ARABIC_ORDER_TYPE_LABELS[orderType] ?? orderType;
+}
+
+function buildPaymentBoxLines(receipt: PosReceiptData): ThermalReceiptPaymentBoxLine[] {
+  if (receipt.receiptKind === "provisional") {
+    return [{ label: "غير مدفوع", value: receipt.total, emphasis: true, currency: true }];
+  }
+
+  const amountsByMethod = new Map<string, number>();
+
+  for (const payment of receipt.payments ?? []) {
+    const current = amountsByMethod.get(payment.paymentMethod) ?? 0;
+    amountsByMethod.set(payment.paymentMethod, current + payment.amount);
+  }
+
+  const lines: ThermalReceiptPaymentBoxLine[] = [];
+
+  const cash = amountsByMethod.get("CASH") ?? 0;
+  if (cash > 0.009) {
+    lines.push({ label: "نقد", value: cash });
+  }
+
+  const card = amountsByMethod.get("CARD") ?? 0;
+  if (card > 0.009) {
+    lines.push({ label: "بطاقة", value: card });
+  }
+
+  for (const [method, amount] of amountsByMethod.entries()) {
+    if (method === "CASH" || method === "CARD" || amount <= 0.009) {
+      continue;
+    }
+    lines.push({
+      label: ARABIC_PAYMENT_METHOD_LABELS[method] ?? method,
+      value: amount,
+    });
+  }
+
+  lines.push({ label: "مدفوع", value: receipt.paid, emphasis: true, currency: true });
+  if (receipt.change > 0.009) {
+    lines.push({ label: "الباقي", value: receipt.change });
+  }
+
+  return lines;
+}
+
+function resolveReceiptContactFields(receipt: PosReceiptData): {
+  phone: string;
+  address: string;
+  tagline: string;
+} {
+  return {
+    phone: receipt.phone?.trim() || POS_RECEIPT_DEFAULT_PHONE,
+    address: receipt.address?.trim() || POS_RECEIPT_DEFAULT_ADDRESS,
+    tagline: receipt.tagline?.trim() || POS_RECEIPT_DEFAULT_TAGLINE,
+  };
+}
+
 function buildBrandHeaderHtml(receipt: PosReceiptData): string {
   const logoUrl = resolveReceiptLogoUrl(receipt);
   const identityMeta = [
@@ -155,90 +297,135 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
 
   if (logoUrl) {
     return `
-      <div class="brand-row">
+      <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
-        <div class="brand-text">
-          <div class="title">${receipt.companyName}</div>
-          <div class="sub">إيصال بيع</div>
-        </div>
       </div>
-      ${identityMeta ? `<div class="center meta">${identityMeta}</div>` : ""}`;
+      ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
-  return [
-    `<div class="center title">${receipt.companyName}</div>`,
-    `<div class="center sub">إيصال بيع</div>`,
-    identityMeta ? `<div class="center meta">${identityMeta}</div>` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "";
+}
+
+function buildReceiptFooterContactHtml(receipt: PosReceiptData): string {
+  const { phone, address } = resolveReceiptContactFields(receipt);
+  const rows: string[] = [];
+
+  if (phone) {
+    rows.push(thermalReceiptPhoneLineHtml(phone));
+  }
+  if (address) {
+    rows.push(thermalReceiptMetaLineHtml(address));
+  }
+
+  return rows.join("\n");
+}
+
+function sumLineDiscounts(lines: PosReceiptData["lines"]): number {
+  return lines.reduce((sum, line) => sum + (line.discountAmount > 0 ? line.discountAmount : 0), 0);
 }
 
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
+  const { date, time } = fmtDateParts(receipt.soldAt);
+  const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
+  const serviceCharge = receipt.serviceChargeAmount ?? 0;
+  const deliveryFee = receipt.deliveryFeeAmount ?? 0;
+  const lineDiscountTotal = sumLineDiscounts(receipt.lines);
+  const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
+
+  const orderNumber =
+    receipt.receiptKind === "provisional"
+      ? null
+      : extractDailyOrderNumber(receipt.receiptNumber);
 
   rows.push(buildBrandHeaderHtml(receipt));
   rows.push(`<div class="sep">${SEP}</div>`);
-
-  const metaParts = [receipt.receiptNumber, fmtDateCompact(receipt.soldAt)].filter(Boolean);
-  rows.push(`<div class="center meta">${metaParts.join(" · ")}</div>`);
-
-  const partyParts = [
-    receipt.cashierName ? `كاشير: ${receipt.cashierName}` : null,
-    receipt.terminalName ? `جهاز: ${receipt.terminalName}` : null,
-    receipt.warehouseName ? `مستودع: ${receipt.warehouseName}` : null,
-  ].filter(Boolean);
-
-  if (partyParts.length > 0) {
-    rows.push(`<div class="center meta">${partyParts.join(" · ")}</div>`);
+  rows.push(thermalReceiptMetaLineHtml(`التاريخ: ${date}`));
+  rows.push(thermalReceiptMetaLineHtml(`الوقت: ${time}`));
+  if (receipt.receiptKind === "provisional" && receipt.receiptNumber.trim()) {
+    rows.push(thermalReceiptMetaLineHtml(`مرجع: ${receipt.receiptNumber.trim()}`));
+  } else if (orderNumber) {
+    rows.push(thermalReceiptMetaLineHtml(`رقم الطلب: ${orderNumber}`));
   }
-
   rows.push(`<div class="sep">${SEP}</div>`);
 
-  rows.push(thermalReceiptTableOpen());
+  if (receipt.orderType === "DINE_IN" && receipt.tableNumber) {
+    rows.push(thermalReceiptMetaLineHtml(`طاولة: ${receipt.tableNumber}`));
+  }
+
+  if (orderTypeLabel) {
+    rows.push(thermalReceiptMetaLineHtml(`نوع الطلب: ${orderTypeLabel}`));
+  }
+
+  if (receipt.orderType === "DELIVERY") {
+    if (receipt.deliveryAddress?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`عنوان التوصيل: ${receipt.deliveryAddress.trim()}`));
+    }
+    if (receipt.deliveryCompanyName?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`شركة التوصيل: ${receipt.deliveryCompanyName.trim()}`));
+    }
+    if (receipt.driverName?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`السائق: ${receipt.driverName.trim()}`));
+    }
+    if (receipt.deliveryNotes?.trim()) {
+      rows.push(thermalReceiptMetaLineHtml(`ملاحظات التوصيل: ${receipt.deliveryNotes.trim()}`));
+    }
+  }
+
+  rows.push(`<div class="sep sep-strong">${SEP_STRONG}</div>`);
+
+  rows.push(thermalReceiptTableOpen("items-table"));
+  rows.push(
+    thermalReceiptColumnHeaderRow("الصنف", "السعر", "الكمية", "الإجمالي"),
+  );
   for (const line of receipt.lines) {
     const qty = formatReceiptQuantity(line);
-    const discountNote =
-      line.discountAmount > 0.009
-        ? ` <span class="disc">(-${fmtThermalReceiptAmt(line.discountAmount)})</span>`
-        : "";
-    rows.push(thermalReceiptItemLine(qty, line.name, line.lineTotal, discountNote));
+    rows.push(
+      thermalReceiptItemRow4Col(line.name, line.unitPrice, qty, line.lineTotal),
+    );
+    const addons = formatAddonsForDisplay(line.modifiers, "ar");
+    if (addons) {
+      rows.push(thermalReceiptItemAddonRow(addons));
+    }
+    if (line.discountAmount > 0.009) {
+      rows.push(thermalReceiptItemDiscountRow(line.discountAmount));
+    }
   }
   rows.push(thermalReceiptTableClose());
 
-  rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(thermalReceiptTableOpen());
+  rows.push(`<div class="sep sep-strong">${SEP_STRONG}</div>`);
+  rows.push(thermalReceiptTableOpen("totals-table"));
+  rows.push(thermalReceiptTotalRow("المجموع الفرعي", receipt.subtotal));
 
-  if (receipt.discount > 0.009) {
-    rows.push(thermalReceiptRowLine("خصم", `-${fmtThermalReceiptAmt(receipt.discount)}`));
+  if (cartLevelDiscount > 0.009) {
+    rows.push(thermalReceiptTotalRow("خصم", -cartLevelDiscount));
+  }
+
+  if (serviceCharge > 0.009) {
+    rows.push(thermalReceiptTotalRow("رسوم الخدمة", serviceCharge));
+  }
+
+  if (deliveryFee > 0.009) {
+    rows.push(thermalReceiptTotalRow("رسوم التوصيل", deliveryFee));
   }
 
   if (receipt.tax > 0.009) {
-    rows.push(thermalReceiptRowLine("قبل الضريبة", fmtThermalReceiptAmt(receipt.subtotal)));
-    rows.push(thermalReceiptRowLine("الضريبة", fmtThermalReceiptAmt(receipt.tax)));
+    const taxLabel =
+      receipt.taxRatePercent != null
+        ? `الضريبة ${receipt.taxRatePercent}%`
+        : "الضريبة";
+    rows.push(thermalReceiptTotalRow(taxLabel, receipt.tax));
   }
 
-  rows.push(thermalReceiptRowLine("الإجمالي", fmtThermalReceiptAmt(receipt.total)));
-
-  if (receipt.paid > 0.009) {
-    rows.push(thermalReceiptRowLine("مدفوع", fmtThermalReceiptAmt(receipt.paid)));
-  }
-
-  if (receipt.tendered > receipt.paid + 0.009) {
-    rows.push(thermalReceiptRowLine("مقبوض", fmtThermalReceiptAmt(receipt.tendered)));
-  }
-
-  if (receipt.change > 0.009) {
-    rows.push(thermalReceiptRowLine("الباقي", fmtThermalReceiptAmt(receipt.change)));
-  }
-
-  if (receipt.paymentSummary.trim()) {
-    rows.push(thermalReceiptRowLine("الدفع", receipt.paymentSummary));
-  }
-
+  rows.push(
+    thermalReceiptTotalRow("الصافي", receipt.total, { emphasis: true, currency: true }),
+  );
   rows.push(thermalReceiptTableClose());
 
+  rows.push(thermalReceiptPaymentBoxHtml(buildPaymentBoxLines(receipt)));
+
   rows.push(`<div class="sep">${SEP}</div>`);
+  rows.push(buildReceiptFooterContactHtml(receipt));
   rows.push(`<div class="center thanks">شكراً لزيارتكم</div>`);
   rows.push(thermalReceiptFooterSpacerHtml());
 

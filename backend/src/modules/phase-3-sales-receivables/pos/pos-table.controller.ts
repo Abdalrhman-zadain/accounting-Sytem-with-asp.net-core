@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../platform/auth/guards/jwt-auth.guard";
 import { PrismaService } from "../../../common/prisma/prisma.service";
+import { TableStatus } from "../../../generated/prisma";
 import {
   CancelTableReservationDto,
   CreateTableDto,
@@ -69,6 +70,10 @@ export class PosTableController {
       },
       orderBy: { tableNumber: "asc" },
     });
+
+    for (const table of rows) {
+      await this.healStuckTable(table);
+    }
 
     // Collect all preOrderSaleIds for a single batch enrichment query
     const allParsed = rows.flatMap((table) =>
@@ -181,6 +186,7 @@ export class PosTableController {
     if (!table) {
       throw new NotFoundException(`Table with ID ${id} was not found.`);
     }
+    await this.healStuckTable(table);
     return table;
   }
 
@@ -261,7 +267,10 @@ export class PosTableController {
     const table = await this.prisma.posTable.findUnique({
       where: { id },
       include: {
-        activeInvoice: true
+        activeInvoice: true,
+        _count: {
+          select: { invoices: true },
+        },
       }
     });
     if (!table) {
@@ -270,8 +279,55 @@ export class PosTableController {
     if (table.activeInvoice) {
       throw new BadRequestException(`Cannot delete a table with an active order / لا يمكن حذف طاولة عليها طلب نشط`);
     }
+    if (table._count.invoices > 0) {
+      throw new BadRequestException(`Cannot delete a table with invoice history / لا يمكن حذف طاولة لديها سجل فواتير`);
+    }
     return this.prisma.posTable.delete({
       where: { id }
     });
+  }
+
+  private async healStuckTable(table: any) {
+    if (table.status === TableStatus.OCCUPIED && !table.activeInvoice) {
+      const now = new Date();
+      // Only heal if the table was last updated more than 5 minutes ago to allow normal order-taking locks
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      if (new Date(table.updatedAt) < fiveMinutesAgo) {
+        let hasArrivedReservation = false;
+
+        if (table.reservations) {
+          hasArrivedReservation = table.reservations.some((r: any) => {
+            const parsed = this.posService.parseReservationNotes(typeof r.notes === "string" ? r.notes : null);
+            return (
+              now >= new Date(r.reservedFrom) &&
+              now <= new Date(r.reservedTo) &&
+              parsed.attendanceStatus === "ARRIVED"
+            );
+          });
+        } else {
+          const reservations = await this.prisma.posTableReservation.findMany({
+            where: {
+              tableId: table.id,
+              status: "ACTIVE",
+              reservedFrom: { lte: now },
+              reservedTo: { gte: now },
+            },
+          });
+          hasArrivedReservation = reservations.some((r) => {
+            const parsed = this.posService.parseReservationNotes(r.notes);
+            return parsed.attendanceStatus === "ARRIVED";
+          });
+        }
+
+        if (!hasArrivedReservation) {
+          await this.prisma.posTable.update({
+            where: { id: table.id },
+            data: { status: TableStatus.AVAILABLE },
+          });
+          table.status = TableStatus.AVAILABLE;
+        }
+      }
+    }
+    return table;
   }
 }

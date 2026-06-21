@@ -4082,6 +4082,9 @@ export type KitchenOrder = {
   id: string;
   orderNumber: string;
   salesInvoiceId?: string | null;
+  salesInvoice?: {
+    posOperationalStatus?: PosOperationalStatus | null;
+  } | null;
   tableId?: string | null;
   tableName?: string | null;
   waiterId?: string | null;
@@ -4098,6 +4101,7 @@ export type KitchenOrder = {
   items: Array<{
     id: string;
     kitchenOrderId: string;
+    salesInvoiceLineId?: string | null;
     itemId: string;
     itemName: string;
     quantity: string;
@@ -4116,6 +4120,16 @@ export type PosReceipt = {
   taxNumber?: string | null;
   cashierName: string;
   terminalName?: string | null;
+  tableNumber?: string | null;
+  orderType?: string | null;
+  waiterName?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+  deliveryCompanyName?: string | null;
+  driverName?: string | null;
+  serviceChargeAmount?: string;
+  deliveryFeeAmount?: string;
+  taxRatePercent?: number | null;
   total: string;
   tax: string;
   discount: string;
@@ -4124,6 +4138,10 @@ export type PosReceipt = {
   tendered: string;
   change: string;
   paymentSummary: string;
+  payments?: Array<{
+    paymentMethod: string;
+    amount: string;
+  }>;
   warehouseName: string;
   /** Remaining on this delivery when sold on credit. */
   deliveryOutstanding?: string | null;
@@ -4142,6 +4160,8 @@ export type PosReceipt = {
     discountAmount: string;
     taxAmount: string;
     lineTotal: string;
+    unitCode?: string | null;
+    modifiers?: unknown;
   }>;
 };
 

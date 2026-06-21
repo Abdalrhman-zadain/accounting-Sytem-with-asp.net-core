@@ -23,6 +23,15 @@ function routeMatches(allowedRoute: string, normalizedPath: string) {
 }
 
 export function hasPermission(user: AuthUser | null | undefined, permission: PosPermissionCode) {
+  if (permission === "POS_VIEW_POS_SCREEN") {
+    const hasDirect = Boolean(user?.permissions?.includes(permission));
+    if (hasDirect) return true;
+    return Boolean(
+      user?.permissions?.includes("RST_VIEW_TABLE_SCREEN") ||
+      user?.permissions?.includes("RST_OPEN_TABLE_ORDER") ||
+      user?.permissions?.includes("RST_VIEW_WAITER_ORDERS")
+    );
+  }
   return Boolean(user?.permissions?.includes(permission));
 }
 

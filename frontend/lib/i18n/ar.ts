@@ -3435,6 +3435,9 @@ Object.assign(arTranslations, {
     "يمكن في المرحلة القادمة ربط التعليق والمرتجعات والمراجعة المحاسبية وإغلاق الوردية دون الحاجة لتغيير هيكل هذه الشاشة.",
   "pos.sales.lastReceipt": "آخر إيصال",
   "pos.sales.printLastReceipt": "طباعة آخر إيصال",
+  "pos.sales.printBill": "طباعة الفاتورة",
+  "pos.sales.recentReceipts": "إيصالات حديثة",
+  "pos.sales.reprintReceipt": "إعادة طباعة",
   "pos.sales.heldSectionTitle": "المبيعات المعلقة",
   "pos.sales.heldSectionDescription":
     "استكمل أي عملية بيع معلقة مباشرة من شاشة البيع.",
@@ -3510,6 +3513,7 @@ Object.assign(arTranslations, {
   "pos.held.linesCount": "{count} أسطر",
   "pos.held.empty": "لا توجد مبيعات POS معلقة بانتظار الاستكمال.",
   "pos.held.resumeDraft": "استئناف المسودة",
+  "pos.held.reference": "مرجع: {reference}",
 
   "pos.review.description": "مراجعة مبيعات POS المكتملة، وتأثير المخزون، والمدفوعات المحصلة، والقيود المحاسبية المسودة قبل الترحيل.",
   "pos.review.approve": "اعتماد",
@@ -3768,7 +3772,7 @@ Object.assign(arTranslations, {
   "pos.kitchen.column.ready": "جاهز",
   "pos.kitchen.column.done": "منتهي",
   "pos.waiterOrders.title": "متابعة الطلبات",
-  "pos.waiterOrders.subtitle": "طلبات المحلي — انتظار، استلام، مغادرة",
+  "pos.waiterOrders.subtitle": "طلبات الصالة — انتظار، استلام، مغادرة",
   "pos.waiterOrders.searchPlaceholder": "بحث طاولة، طلب، ويتر…",
   "pos.waiterOrders.emptyColumn": "لا توجد طلبات في هذه المرحلة",
   "pos.waiterOrders.column.waiting": "في انتظار",

@@ -106,6 +106,7 @@ export function PosProductCard({
   onToggleFavorite,
   allowNegativeStock,
   disabled,
+  variant = "default",
 }: {
   item: InventoryItem;
   currencyCode: string;
@@ -114,6 +115,7 @@ export function PosProductCard({
   onToggleFavorite?: () => void;
   allowNegativeStock?: boolean;
   disabled?: boolean;
+  variant?: "default" | "tablet";
 }) {
   const { language } = useTranslation();
   const price = parseAmount(item.defaultSalesPrice);
@@ -128,6 +130,7 @@ export function PosProductCard({
   const CategoryIcon = visuals.icon;
   const sellByWeight = isWeightSaleItem(item);
   const unitCode = item.unitOfMeasure?.trim() || "KG";
+  const tablet = variant === "tablet";
 
   return (
     <div
@@ -145,14 +148,20 @@ export function PosProductCard({
         }
       }}
       className={cn(
-        "group flex h-full flex-col overflow-hidden rounded-[16px] bg-white p-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none sm:p-3",
+        "group flex h-full flex-col overflow-hidden rounded-[16px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all duration-300 select-none",
+        tablet ? "min-h-[246px] p-3.5 sm:min-h-[268px] sm:p-4" : "p-2.5 sm:p-3",
         isDisabled
           ? "opacity-60 cursor-not-allowed"
           : "cursor-pointer hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)] active:scale-[0.98]"
       )}
     >
       {/* Product Image Area */}
-      <div className="relative mb-2.5 aspect-[4/3] w-full overflow-hidden rounded-[12px] bg-[#f8faf9] sm:mb-3">
+      <div
+        className={cn(
+          "relative w-full overflow-hidden rounded-[12px] bg-[#f8faf9]",
+          tablet ? "mb-3 aspect-[5/4] sm:mb-3.5" : "mb-2.5 aspect-[4/3] sm:mb-3",
+        )}
+      >
         {item.itemImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -162,22 +171,40 @@ export function PosProductCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <LuPackage className="h-8 w-8 text-slate-200 transition-transform duration-300 group-hover:scale-105" />
+            <LuPackage
+              className={cn(
+                "text-slate-200 transition-transform duration-300 group-hover:scale-105",
+                tablet ? "h-10 w-10" : "h-8 w-8",
+              )}
+            />
           </div>
         )}
       </div>
 
       {/* Product Name */}
-      <p className="line-clamp-2 min-h-[2.5rem] px-1 text-[13px] font-semibold leading-5 text-slate-800 transition-colors duration-200 group-hover:text-slate-900 arabic-heading sm:text-[14px]">
+      <p
+        className={cn(
+          "line-clamp-2 px-1 font-semibold text-slate-800 transition-colors duration-200 group-hover:text-slate-900 arabic-heading",
+          tablet
+            ? "min-h-[3rem] text-[15px] leading-6 sm:text-[16px]"
+            : "min-h-[2.5rem] text-[13px] leading-5 sm:text-[14px]",
+        )}
+      >
         {getLocalizedText(item.name, language)}
       </p>
 
       {/* Footer: Category Pill and Price */}
-      <div className="mt-auto flex items-end justify-between gap-2 px-1 pt-2">
+      <div
+        className={cn(
+          "mt-auto flex gap-2 px-1 pt-2",
+          tablet ? "items-center justify-between" : "items-end justify-between",
+        )}
+      >
         {/* Pastel Category Badge */}
         <span
           className={cn(
-            "max-w-full truncate rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide",
+            "max-w-full truncate rounded-full px-2 font-bold tracking-wide",
+            tablet ? "py-1 text-[10px]" : "py-0.5 text-[9px]",
             // Fallback classes if visuals.bg doesn't contain bg colors
             visuals.bg.replace("border", "border-none").replace("text-", "text-opacity-80 text-")
           )}
@@ -186,7 +213,13 @@ export function PosProductCard({
         </span>
 
         {/* Price */}
-        <span className="shrink-0 text-[13px] font-bold text-slate-900 sm:text-[14px]" dir="ltr">
+        <span
+          className={cn(
+            "shrink-0 rounded-[10px] bg-[#f8faf9] px-2 py-1 font-black text-slate-900",
+            tablet ? "text-[15px] sm:text-[16px]" : "text-[13px] sm:text-[14px]",
+          )}
+          dir="ltr"
+        >
           {sellByWeight
             ? `${formatCurrency(price, currencyCode)} / ${unitCode}`
             : formatCurrency(price, currencyCode)}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>KOT vs Customer Receipt Previews</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; background: #f0f0f0; }
+    h1 { margin-bottom: 8px; }
+    h2 { margin: 32px 0 12px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .card { background: #fff; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
+    .card h3 { margin: 0; padding: 10px 14px; background: #eee; font-size: 14px; }
+    iframe { width: 100%; height: 640px; border: 0; }
+    a { display: block; padding: 8px 14px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Kitchen (KOT) vs Customer Receipt — by order type</h1>
+  <h2>Dine-in (طاولة)</h2>
+  <div class="grid">
+    <div class="card"><h3>Kitchen ticket</h3><iframe src="kot-dine-in.html"></iframe><a href="kot-dine-in.html" target="_blank">Open KOT</a></div>
+    <div class="card"><h3>Customer receipt</h3><iframe src="customer-dine-in.html"></iframe><a href="customer-dine-in.html" target="_blank">Open receipt</a></div>
+  </div>
+  <h2>Takeaway (سفري)</h2>
+  <div class="grid">
+    <div class="card"><h3>Kitchen ticket</h3><iframe src="kot-takeaway.html"></iframe><a href="kot-takeaway.html" target="_blank">Open KOT</a></div>
+    <div class="card"><h3>Customer receipt</h3><iframe src="customer-takeaway.html"></iframe><a href="customer-takeaway.html" target="_blank">Open receipt</a></div>
+  </div>
+  <h2>Delivery (توصيل)</h2>
+  <div class="grid">
+    <div class="card"><h3>Kitchen ticket</h3><iframe src="kot-delivery.html"></iframe><a href="kot-delivery.html" target="_blank">Open KOT</a></div>
+    <div class="card"><h3>Customer receipt</h3><iframe src="customer-delivery.html"></iframe><a href="customer-delivery.html" target="_blank">Open receipt</a></div>
+  </div>
+  <h2>Kitchen delta tickets</h2>
+  <div class="grid">
+    <div class="card"><h3>تحديث مطبخ (ADD)</h3><iframe src="kot-update.html"></iframe></div>
+    <div class="card"><h3>إلغاء (VOID)</h3><iframe src="kot-void.html"></iframe></div>
+  </div>
+</body>
+</html>

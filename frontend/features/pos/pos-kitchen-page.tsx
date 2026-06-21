@@ -80,7 +80,7 @@ function formatClockTime(iso: string, language: string) {
 
 function orderTypeLabel(orderType: PosOrderType, language: string) {
   if (language === "ar") {
-    if (orderType === "DINE_IN") return "محلي";
+    if (orderType === "DINE_IN") return "صالة";
     if (orderType === "TAKEAWAY") return "سفري";
     if (orderType === "DELIVERY") return "توصيل";
     return "استلام";
@@ -482,10 +482,13 @@ function KdsOrderDrawer({
                       <div className="min-w-0 flex-1">
                         <p dir="auto" className="text-base font-bold text-slate-900">
                           {item.itemName}
+                          {mods ? (
+                            <span className="font-semibold text-slate-500">
+                              {language === "ar" ? " · " : ", "}
+                              {mods}
+                            </span>
+                          ) : null}
                         </p>
-                        {mods ? (
-                          <p className="mt-1 text-sm text-slate-500">{mods}</p>
-                        ) : null}
                         {item.notes ? (
                           <p className="mt-1 text-sm italic text-slate-500">{item.notes}</p>
                         ) : null}

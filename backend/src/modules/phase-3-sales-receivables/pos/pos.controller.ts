@@ -266,6 +266,11 @@ export class PosController {
     return this.service.reprintReceipt(id, req.user);
   }
 
+  @Post("sales/:id/print-bill")
+  printBill(@Req() req: Request & { user?: any }, @Param("id") id: string) {
+    return this.service.printBill(id, req.user);
+  }
+
   @Post("sessions/:id/print-roll-report")
   printSessionRollReport(
     @Req() req: Request & { user?: any },

@@ -41,7 +41,7 @@ export default async function RootLayout({
   children: ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const initialLanguage = cookieStore.get("app_language")?.value === "ar" ? "ar" : "en";
+  const initialLanguage = cookieStore.get("app_language")?.value === "en" ? "en" : "ar";
 
   return (
     <html

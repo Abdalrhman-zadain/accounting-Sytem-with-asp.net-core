@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   LuUtensils, 
   LuUser, 
@@ -16,6 +16,7 @@ import {
   LuSettings,
   LuSparkles,
   LuTimerReset,
+  LuReceipt,
 } from "react-icons/lu";
 
 import { PageShell, Card, PageSkeleton, Modal } from "@/components/ui";
@@ -27,14 +28,17 @@ import {
   getPosTables,
   getPosWaiters,
   openPosReservationPreOrder,
+  printPosBill,
   reservePosTable,
   updatePosTableStatus,
   updatePosTableWaiter,
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import { isWaiterOnlyUser } from "@/lib/auth-access";
+import { hasPermission, isWaiterOnlyUser } from "@/lib/auth-access";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
+import { printCustomerReceipt } from "@/features/pos/pos-print-service";
+import { mapPosReceiptApiResponse } from "@/features/pos/pos-receipt-map";
 import {
   posTableFloorGridClass,
   posTouchButtonClass,
@@ -248,6 +252,38 @@ export default function TablesPage() {
   const [isSavingTableStatus, setIsSavingTableStatus] = React.useState(false);
   const [markingAvailableTableId, setMarkingAvailableTableId] = React.useState<string | null>(null);
   const [tableViewFilter, setTableViewFilter] = React.useState<"all" | "cleaning">("all");
+  const [printingBillTableId, setPrintingBillTableId] = React.useState<string | null>(null);
+
+  const printBillMutation = useMutation({
+    mutationFn: (saleId: string) => printPosBill(saleId, token),
+    onMutate: (saleId) => {
+      const table = tables?.find((row) => row.activeInvoice?.id === saleId);
+      setPrintingBillTableId(table?.id ?? null);
+    },
+    onSuccess: async (response) => {
+      const result = await printCustomerReceipt(mapPosReceiptApiResponse(response.receipt));
+      if (result.fallback) {
+        alert(
+          isAr
+            ? "تعذر الاتصال بطابعة الإيصال، تم فتح طباعة المتصفح"
+            : "Receipt printer unavailable; browser print opened",
+        );
+      }
+    },
+    onError: (error) => {
+      alert(getErrorMessage(error, isAr ? "فشل طباعة الفاتورة" : "Failed to print bill"));
+    },
+    onSettled: () => {
+      setPrintingBillTableId(null);
+    },
+  });
+
+  const canPrintBill = hasPermission(user, "POS_PRINT_RECEIPT");
+
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const { data: tables, isLoading, refetch } = useQuery({
     queryKey: queryKeys.posTables(token),
@@ -282,25 +318,31 @@ export default function TablesPage() {
       setNewTableCap(4);
       refetch();
     } catch (err: any) {
-      setTableError(err.message || "Failed to create table / فشل إنشاء الطاولة");
+      setTableError(err.message || (isAr ? "فشل إنشاء الطاولة" : "Failed to create table"));
     } finally {
       setIsSubmittingTable(false);
     }
   };
 
-  const handleDeleteTable = async (id: string) => {
-    if (!window.confirm(isAr ? "هل أنت متأكد من حذف هذه الطاولة؟" : "Are you sure you want to delete this table?")) {
-      return;
-    }
+  const [tableToDeleteId, setTableToDeleteId] = React.useState<string | null>(null);
+
+  const handleDeleteTable = (id: string) => {
+    setTableToDeleteId(id);
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!tableToDeleteId) return;
     try {
-      await deletePosTable(id, token);
+      await deletePosTable(tableToDeleteId, token);
       refetch();
     } catch (err: any) {
-      alert(err.message || "Failed to delete table / فشل حذف الطاولة");
+      alert(err.message || (isAr ? "فشل حذف الطاولة" : "Failed to delete table"));
+    } finally {
+      setTableToDeleteId(null);
     }
   };
 
-  const handleOpenTable = (table: PosTable) => {
+  const handleOpenTable = async (table: PosTable) => {
     const params = new URLSearchParams({ tableId: table.id });
     const invoice = table.activeInvoice;
     if (
@@ -309,6 +351,7 @@ export default function TablesPage() {
     ) {
       return;
     }
+
     if (
       invoice?.id &&
       (invoice.posOperationalStatus === "DRAFT" ||
@@ -370,12 +413,19 @@ export default function TablesPage() {
     setIsReserveOpen(true);
   };
 
-  const handleImmediateReservation = () => {
+  const handleImmediateReservation = async () => {
     if (!reserveTable) return;
     const tableId = reserveTable.id;
     setIsReserveOpen(false);
     setReserveTable(null);
     setReserveMode(null);
+
+    try {
+      await updatePosTableStatus(tableId, "OCCUPIED", token);
+    } catch (e) {
+      console.error("Failed to mark table as occupied", e);
+    }
+
     router.push(`${orderRoute}?tableId=${tableId}`);
   };
 
@@ -453,6 +503,15 @@ export default function TablesPage() {
     setIsOpeningPreOrder((prev) => ({ ...prev, [reservationId]: true }));
     try {
       const tableId = tableIdOverride ?? reserveTable?.id;
+
+      if (tableId) {
+        try {
+          await updatePosTableStatus(tableId, "OCCUPIED", token);
+        } catch (e) {
+          console.error("Failed to mark table as occupied", e);
+        }
+      }
+
       if (preOrderSaleId) {
         setIsReserveOpen(false);
         router.push(
@@ -472,19 +531,21 @@ export default function TablesPage() {
     }
   };
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return <PageSkeleton />;
   }
 
   const activeTablesList = tables || [];
   const totalCount = activeTablesList.length;
-  const occupiedCount = activeTablesList.filter((t) => Boolean(t.activeInvoice)).length;
+  const occupiedCount = activeTablesList.filter((t) => Boolean(t.activeInvoice) || t.status === "OCCUPIED" || t.status === "RESERVED").length;
   const cleaningCount = activeTablesList.filter((t) => t.status === "CLEANING").length;
   const vacantCount = activeTablesList.filter(
     (t) =>
       !t.activeInvoice &&
       t.status !== "CLEANING" &&
-      t.status !== "WAITING_FOR_PAYMENT",
+      t.status !== "WAITING_FOR_PAYMENT" &&
+      t.status !== "OCCUPIED" &&
+      t.status !== "RESERVED",
   ).length;
   const displayedTables =
     tableViewFilter === "cleaning"
@@ -510,7 +571,7 @@ export default function TablesPage() {
                 <span>{isAr ? "مخطط الصالة والخدمة داخل المطعم" : "Dine-In Floor Plan & Service"}</span>
               </div>
               <h1 className="mt-2 text-2xl font-black tracking-tight text-[#1e2c23] arabic-heading sm:text-3xl">
-                {isAr ? "صالة الطعام / Dine-In" : "Restaurant Tables / Dine-In"}
+                {isAr ? "صالة الطعام" : "Restaurant Tables"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-semibold text-[#506055]">
                 {waiterOnly
@@ -666,7 +727,7 @@ export default function TablesPage() {
           <div className={posTableFloorGridClass}>
             {displayedTables.map((table) => {
               const activeInvoice = table.activeInvoice;
-              const isOccupied = Boolean(activeInvoice);
+              const isOccupied = Boolean(activeInvoice) || table.status === "OCCUPIED" || table.status === "RESERVED";
               const invoiceTotal = activeInvoice ? Number(activeInvoice.totalAmount) : 0;
               const tableStatus = table.status;
               const isWaiting = tableStatus === "WAITING_FOR_PAYMENT";
@@ -684,14 +745,14 @@ export default function TablesPage() {
                   : false;
 
               const cardBorder = isWaiting
-                ? "border-[#fde68a] bg-gradient-to-br from-[#fffdf5] to-[#fef9e7]"
+                ? "border-[#f59e0b] bg-gradient-to-br from-[#fffbeb] to-[#fef3c7]"
                 : isCleaning
-                  ? "border-[#e0e7ff] bg-gradient-to-br from-[#f5f7ff] to-[#eef1ff]"
+                  ? "border-[#6366f1] bg-gradient-to-br from-[#eef2ff] to-[#dbe4ff]"
                   : isOccupied
-                    ? "border-[#f7cc9e] bg-gradient-to-br from-[#fffdfa] to-[#fff6ec] hover:from-[#fffcf7] hover:to-[#fff2e0]"
+                    ? "border-[#f97316] bg-gradient-to-br from-[#fff7ed] to-[#ffedd5] hover:from-[#fff4e6] hover:to-[#fed7aa]"
                     : isReserved
-                      ? "border-[#d6d3f0] bg-gradient-to-br from-[#fbfbff] to-[#f3f2ff] hover:from-[#f7f7ff] hover:to-[#ecebff]"
-                      : "border-[#d1dfd6] bg-gradient-to-br from-[#fafdfb] to-[#f1faf4] hover:from-[#f7fcf8] hover:to-[#e8f7ed]";
+                      ? "border-[#818cf8] bg-gradient-to-br from-[#f7f7ff] to-[#e9e7ff] hover:from-[#f3f2ff] hover:to-[#ddd9ff]"
+                      : "border-[#22c55e] bg-gradient-to-br from-[#f0fdf4] to-[#dcfce7] hover:from-[#ecfdf5] hover:to-[#bbf7d0]";
 
               const showOccupiedBadge =
                 isOccupied || (tableStatus === "OCCUPIED" && !isWaiting && !isCleaning);
@@ -699,14 +760,14 @@ export default function TablesPage() {
                 isReserved || (activeReservations.length > 0 && !showOccupiedBadge);
 
               const statusBadge = isWaiting
-                ? { bg: "bg-[#fef9c3] text-[#854d0e]", dot: "bg-[#d97706]", label: isAr ? "انتظار الدفع" : "Awaiting payment" }
+                ? { bg: "bg-[#f59e0b] text-white", dot: "bg-white", label: isAr ? "انتظار الدفع" : "Awaiting payment" }
                 : isCleaning
-                  ? { bg: "bg-[#e0e7ff] text-[#3730a3]", dot: "bg-[#6366f1]", label: isAr ? "تنظيف" : "Cleaning" }
+                  ? { bg: "bg-[#4f46e5] text-white", dot: "bg-white", label: isAr ? "تنظيف" : "Cleaning" }
                   : showOccupiedBadge
-                    ? { bg: "bg-[#ffeccc] text-[#b06000]", dot: "bg-[#e8710a]", label: isAr ? "مشغولة" : "In use" }
+                    ? { bg: "bg-[#ea580c] text-white", dot: "bg-white", label: isAr ? "مشغولة" : "In use" }
                     : showReservedBadge
-                      ? { bg: "bg-[#e9e7ff] text-[#4338ca]", dot: "bg-[#6366f1]", label: isAr ? "محجوزة" : "Reserved" }
-                      : { bg: "bg-[#e2f3e7] text-[#245834]", dot: "bg-[#1e8e3e]", label: isAr ? "متاحة" : "Available" };
+                      ? { bg: "bg-[#6366f1] text-white", dot: "bg-white", label: isAr ? "محجوزة" : "Reserved" }
+                      : { bg: "bg-[#16a34a] text-white", dot: "bg-white", label: isAr ? "متاحة" : "Available" };
 
               return (
                 <div
@@ -718,7 +779,7 @@ export default function TablesPage() {
                     handleOpenTable(table);
                   }}
                   className={cn(
-                    "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 sm:rounded-[24px] sm:p-5",
+                    "group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[20px] border-2 p-4 text-start shadow-sm transition-all duration-200 sm:min-h-[286px] sm:rounded-[24px] sm:p-5",
                     !isOccupied && (isCleaning || isWaiting)
                       ? "cursor-default"
                       : "cursor-pointer hover:-translate-y-1 hover:shadow-md",
@@ -728,8 +789,8 @@ export default function TablesPage() {
                   {/* Status badge row */}
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold", statusBadge.bg)}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full", statusBadge.dot)} />
+                      <span className={cn("inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black shadow-sm", statusBadge.bg)}>
+                        <span className={cn("h-2 w-2 rounded-full", statusBadge.dot)} />
                         <span>{statusBadge.label}</span>
                       </span>
                     </div>
@@ -745,16 +806,16 @@ export default function TablesPage() {
                           setPendingWaiterId(table.assignedWaiterId ?? "");
                         }}
                         className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full border border-[#e1e7e2] bg-white text-[#68776f] transition hover:bg-[#f6faf7] hover:text-[#233329] sm:h-8 sm:w-8",
+                          "flex h-11 w-11 items-center justify-center rounded-full border border-[#d1dcd5] bg-white text-[#506054] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]",
                           posTouchOrHoverRevealClass,
                         )}
                         title={isAr ? "إدارة الطاولة" : "Manage table"}
                       >
-                        <LuSettings className="h-3.5 w-3.5" />
+                        <LuSettings className="h-4 w-4" />
                       </button>
                       <div
                         className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full border bg-white",
+                          "flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-sm",
                           isWaiting
                             ? "border-[#fde68a] text-[#d97706]"
                             : isCleaning
@@ -766,7 +827,7 @@ export default function TablesPage() {
                                   : "border-[#cce5d6] text-[#16a34a]",
                         )}
                       >
-                        {isCleaning ? <LuSparkles className="h-4 w-4" /> : isWaiting ? <LuTimerReset className="h-4 w-4" /> : <LuUtensils className="h-4 w-4" />}
+                        {isCleaning ? <LuSparkles className="h-5 w-5" /> : isWaiting ? <LuTimerReset className="h-5 w-5" /> : <LuUtensils className="h-5 w-5" />}
                       </div>
                     </div>
                   </div>
@@ -775,7 +836,7 @@ export default function TablesPage() {
                   <div className="mt-4 flex-1">
                     <h3
                       className={cn(
-                        "text-2xl font-black tracking-tight",
+                        "text-3xl font-black tracking-tight sm:text-[2.25rem]",
                         isWaiting
                           ? "text-[#854d0e]"
                           : isCleaning
@@ -790,7 +851,7 @@ export default function TablesPage() {
                       {isAr ? `طاولة ${table.tableNumber}` : `Table ${table.tableNumber}`}
                     </h3>
 
-                    <div className="mt-3.5 space-y-2 border-t border-dashed border-black/5 pt-3.5 text-xs font-semibold text-[#506054]">
+                    <div className="mt-3.5 space-y-2 border-t border-dashed border-black/10 pt-3.5 text-sm font-semibold text-[#405248]">
                       <div className="flex items-center gap-2">
                         <LuUsers className="h-3.5 w-3.5 text-[#728578]" />
                         <span>
@@ -861,7 +922,7 @@ export default function TablesPage() {
                               handleOpenTable(table);
                             }}
                             className={cn(
-                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto sm:text-xs",
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto",
                               posTouchButtonClass,
                             )}
                           >
@@ -869,6 +930,26 @@ export default function TablesPage() {
                             <span>{isAr ? "عرض الطلب" : "Open Bill"}</span>
                           </button>
                         </div>
+                        {canPrintBill &&
+                        activeInvoice?.id &&
+                        (activeInvoice.posOperationalStatus === "DRAFT" ||
+                          activeInvoice.posOperationalStatus === "HELD") ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              printBillMutation.mutate(activeInvoice.id);
+                            }}
+                            disabled={printingBillTableId === table.id}
+                            className={cn(
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#d7e2d8] bg-[#f7faf8] px-4 py-3 text-sm font-bold text-[#4e6455] hover:bg-white disabled:opacity-40",
+                              posTouchButtonClass,
+                            )}
+                          >
+                            <LuReceipt className="h-4 w-4 shrink-0" />
+                            <span>{isAr ? "طباعة الفاتورة" : "Print Bill"}</span>
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -876,7 +957,7 @@ export default function TablesPage() {
                             openReserveModal(table, "SPECIAL");
                           }}
                           className={cn(
-                            "w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-2.5 text-xs font-bold text-[#4338ca] hover:bg-[#f6f5ff]",
+                            "w-full rounded-xl border border-[#c7c3ff] bg-white px-3 py-3 text-sm font-bold text-[#4338ca] hover:bg-[#f6f5ff]",
                             posTouchButtonClass,
                           )}
                         >
@@ -898,7 +979,7 @@ export default function TablesPage() {
                           }}
                           disabled={markingAvailableTableId === table.id}
                           className={cn(
-                            "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#4f46e5] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#4f46e5] hover:to-[#4338ca] disabled:opacity-60 sm:text-xs",
+                            "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#4f46e5] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#4f46e5] hover:to-[#4338ca] disabled:opacity-60",
                             posTouchButtonClass,
                           )}
                         >
@@ -946,7 +1027,7 @@ export default function TablesPage() {
                               openReserveModal(table, "SPECIAL");
                             }}
                             className={cn(
-                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#c7c3ff] bg-white px-4 py-2.5 text-sm font-bold text-[#4338ca] shadow-sm hover:bg-[#f6f5ff] sm:text-xs",
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#c7c3ff] bg-white px-4 py-3 text-sm font-black text-[#4338ca] shadow-sm hover:bg-[#f6f5ff]",
                               posTouchButtonClass,
                             )}
                           >
@@ -962,7 +1043,7 @@ export default function TablesPage() {
                                 openReserveModal(table);
                               }}
                               className={cn(
-                                "flex items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-white px-3 py-2.5 text-sm font-bold text-[#233329] shadow-sm hover:bg-[#f6faf7] sm:text-xs",
+                                "flex items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-white px-3 py-3 text-sm font-black text-[#233329] shadow-sm hover:bg-[#f6faf7]",
                                 posTouchButtonClass,
                               )}
                             >
@@ -976,7 +1057,7 @@ export default function TablesPage() {
                                 handleOpenTable(table);
                               }}
                               className={cn(
-                                "flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d] sm:text-xs",
+                                "flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16a34a] to-[#15803d] px-3 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#15803d] hover:to-[#14532d]",
                                 posTouchButtonClass,
                               )}
                             >
@@ -1165,28 +1246,28 @@ export default function TablesPage() {
         </div>
       </Modal>
 
-      {/* Table Management Modal */}
       <Modal
         isOpen={isManageOpen}
         onClose={() => setIsManageOpen(false)}
-        title={isAr ? "إدارة طاولات الصالة / Table Manager" : "Floor Plan & Table Manager"}
+        title={isAr ? "إدارة طاولات الصالة" : "Floor Plan & Table Manager"}
+        size="3xl"
       >
-        <div className="flex flex-col gap-6 p-1" dir={isAr ? "rtl" : "ltr"}>
+        <div className="flex flex-col gap-8 p-1" dir={isAr ? "rtl" : "ltr"}>
           {/* Create Table Form */}
-          <form onSubmit={handleCreateTable} className="flex flex-col gap-4 rounded-2xl border border-[#e1e7e2] bg-[#fbfcfb] p-5">
-            <h4 className="text-sm font-black text-[#233329]">
-              {isAr ? "إضافة طاولة جديدة / Add New Table" : "Add New Table"}
+          <form onSubmit={handleCreateTable} className="flex flex-col gap-6 rounded-2xl border border-[#e1e7e2] bg-[#fbfcfb] p-6 md:p-8">
+            <h4 className="text-base font-black text-[#233329]">
+              {isAr ? "إضافة طاولة جديدة" : "Add New Table"}
             </h4>
 
             {tableError && (
-              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs font-semibold text-red-600">
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm font-semibold text-red-600">
                 {tableError}
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-[#46644b]">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-[#46644b] uppercase tracking-wider">
                   {isAr ? "رقم الطاولة" : "Table Number"}
                 </label>
                 <input
@@ -1194,18 +1275,18 @@ export default function TablesPage() {
                   value={newTableNum}
                   onChange={(e) => setNewTableNum(e.target.value)}
                   placeholder="e.g. T13"
-                  className="w-full rounded-[12px] border border-[#d6e1d9] bg-white px-3 py-2 text-sm font-semibold text-[#233329] outline-none focus:border-[#46644b]"
+                  className="w-full rounded-[14px] border border-[#d6e1d9] bg-white px-4 py-3 text-base font-semibold text-[#233329] outline-none focus:border-[#46644b] focus:ring-2 focus:ring-[#46644b]/10"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-[#46644b]">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-[#46644b] uppercase tracking-wider">
                   {isAr ? "عدد المقاعد" : "Capacity"}
                 </label>
                 <select
                   value={newTableCap}
                   onChange={(e) => setNewTableCap(Number(e.target.value))}
-                  className="w-full rounded-[12px] border border-[#d6e1d9] bg-white px-3 py-2 text-sm font-semibold text-[#233329]"
+                  className="w-full rounded-[14px] border border-[#d6e1d9] bg-white px-4 py-3 text-base font-semibold text-[#233329] outline-none focus:border-[#46644b]"
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16].map((num) => (
                     <option key={num} value={num}>
@@ -1219,40 +1300,40 @@ export default function TablesPage() {
             <button
               type="submit"
               disabled={isSubmittingTable}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#0f8f67] py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-xl bg-[#0f8f67] py-3.5 text-base font-bold text-white transition-colors hover:bg-[#0c7a57] disabled:opacity-50"
             >
-              <LuPlus className="h-4 w-4" />
+              <LuPlus className="h-5 w-5" />
               <span>{isAr ? "إضافة الطاولة" : "Add Table"}</span>
             </button>
           </form>
 
           {/* Table List */}
-          <div className="flex flex-col gap-3">
-            <h4 className="text-sm font-black text-[#233329]">
+          <div className="flex flex-col gap-4">
+            <h4 className="text-base font-black text-[#233329]">
               {isAr ? "قائمة الطاولات الحالية" : "Current Tables"}
             </h4>
 
-            <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
               {activeTablesList.map((table) => {
                 const isOccupied = Boolean(table.activeInvoice);
                 return (
                   <div
                     key={table.id}
-                    className="flex items-center justify-between rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-3 shadow-sm"
+                    className="flex items-center justify-between rounded-xl border border-[#e1e7e2] bg-[#fbfcfb] p-4 shadow-sm"
                   >
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-sm text-[#233329]">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-black text-base text-[#233329]">
                           {isAr ? `طاولة ${table.tableNumber}` : `Table ${table.tableNumber}`}
                         </span>
                         <span
                           className={cn(
-                            "h-2 w-2 rounded-full",
+                            "h-2.5 w-2.5 rounded-full",
                             isOccupied ? "bg-orange-500" : "bg-emerald-500"
                           )}
                         />
                       </div>
-                      <div className="text-[10px] text-[#68776f] mt-0.5">
+                      <div className="text-xs text-[#68776f] mt-1">
                         {table.capacity} {isAr ? "مقاعد" : "seats"} • {isOccupied ? (isAr ? "مشغولة" : "Busy") : (isAr ? "متاحة" : "Available")}
                       </div>
                     </div>
@@ -1262,14 +1343,14 @@ export default function TablesPage() {
                       disabled={isOccupied}
                       onClick={() => handleDeleteTable(table.id)}
                       className={cn(
-                        "rounded-lg p-1.5 transition-colors",
+                        "rounded-xl p-2.5 transition-colors",
                         isOccupied
                           ? "text-[#cbe5d5] cursor-not-allowed"
                           : "text-[#ef4444] hover:bg-red-50"
                       )}
                       title={isOccupied ? "Cannot delete table with active order" : "Delete Table"}
                     >
-                      <LuTrash2 className="h-4 w-4" />
+                      <LuTrash2 className="h-5 w-5" />
                     </button>
                   </div>
                 );
@@ -1388,6 +1469,36 @@ export default function TablesPage() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={tableToDeleteId !== null}
+        onClose={() => setTableToDeleteId(null)}
+        title={isAr ? "تأكيد الحذف" : "Confirm Delete"}
+        size="md"
+      >
+        <div className="space-y-6">
+          <p className="text-sm font-semibold text-gray-700 text-center">
+            {isAr ? "هل أنت متأكد من حذف هذه الطاولة؟" : "Are you sure you want to delete this table?"}
+          </p>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => setTableToDeleteId(null)}
+              className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50"
+            >
+              {isAr ? "إلغاء" : "Cancel"}
+            </button>
+            <button
+              type="button"
+              onClick={confirmDeleteTable}
+              className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700"
+            >
+              {isAr ? "موافق" : "OK"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </PageShell>
   );

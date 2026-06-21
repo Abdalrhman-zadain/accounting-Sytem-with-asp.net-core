@@ -35,6 +35,7 @@ import {
 import { PrismaService } from "../../../common/prisma/prisma.service";
 import type { AuthorizedUser, PosPermissionCode } from "../../platform/auth/auth.types";
 import { AuditService } from "../../phase-1-accounting-foundation/accounting-core/audit/audit.service";
+import { assertPosKitchenNoteLimits } from "./pos-kitchen-note-limits";
 import { JournalEntriesService } from "../../phase-1-accounting-foundation/accounting-core/journal-entries/journal-entries.service";
 import { PostingService } from "../../phase-1-accounting-foundation/accounting-core/posting-logic/posting.service";
 import { ReversalService } from "../../phase-1-accounting-foundation/accounting-core/reversal-control/reversal.service";
@@ -1107,6 +1108,7 @@ export class PosService {
   ) {
     const session = await this.ensureOpenSession(dto.sessionId, options?.posProduct);
     const isMarketSession = session.posProduct === PosProduct.MARKET;
+    assertPosKitchenNoteLimits(dto);
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({
@@ -1329,6 +1331,7 @@ export class PosService {
     }
     const session = await this.ensureOpenSession(dto.sessionId, posProduct);
     const isMarketSession = session.posProduct === PosProduct.MARKET;
+    assertPosKitchenNoteLimits(dto);
     const runtimeConfig = await this.getPosRuntimeConfig();
     if (runtimeConfig.taxFreeEnabled) {
       dto.lines = dto.lines.map((l) => ({

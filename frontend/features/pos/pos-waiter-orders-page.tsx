@@ -100,16 +100,20 @@ function WaiterOrderCard({
       </div>
 
       <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
-        {previewItems.map((item) => (
+        {previewItems.map((item) => {
+          const addonsLabel = formatAddonsForDisplay(item.modifiers, language);
+          return (
           <li key={item.id} className="text-sm text-slate-700">
             <span className="font-bold tabular-nums">{Number(item.quantity)}×</span> {item.itemName}
-            {formatAddonsForDisplay(item.modifiers, language) ? (
-              <span className="block text-xs text-slate-500">
-                {formatAddonsForDisplay(item.modifiers, language)}
+            {addonsLabel ? (
+              <span className="text-xs text-slate-500">
+                {language === "ar" ? " · " : ", "}
+                {addonsLabel}
               </span>
             ) : null}
           </li>
-        ))}
+          );
+        })}
         {hiddenCount > 0 ? (
           <li className="text-xs font-semibold text-slate-400">
             +{hiddenCount} {isAr ? "أصناف" : "more items"}

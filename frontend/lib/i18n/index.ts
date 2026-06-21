@@ -2094,6 +2094,9 @@ Object.assign(enTranslations, {
     "The next POS iteration can connect hold, refund, posting review, and session-closing workflows without changing this page structure.",
   "pos.sales.lastReceipt": "Last receipt",
   "pos.sales.printLastReceipt": "Print Last Receipt",
+  "pos.sales.printBill": "Print Bill",
+  "pos.sales.recentReceipts": "Recent Receipts",
+  "pos.sales.reprintReceipt": "Reprint",
   "pos.sales.heldSectionTitle": "Held Sales",
   "pos.sales.heldSectionDescription":
     "Resume a suspended sale directly from the sales screen.",
@@ -2169,6 +2172,7 @@ Object.assign(enTranslations, {
   "pos.held.linesCount": "{count} lines",
   "pos.held.empty": "No held POS sales are waiting to be resumed.",
   "pos.held.resumeDraft": "Resume draft",
+  "pos.held.reference": "Ref: {reference}",
 
   "pos.review.description": "Review completed POS sales, inventory relief, captured payments, and draft accounting before posting.",
   "pos.review.approve": "Approve",

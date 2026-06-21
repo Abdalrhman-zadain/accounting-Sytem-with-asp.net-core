@@ -52,13 +52,15 @@ function build80mmTestHtml(title, subtitle) {
   <meta charset="UTF-8"/>
   <title>${title}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
+    @page { size: 80mm auto; margin: 0 4mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
       font-size: 10pt;
-      width: 76mm;
-      padding: 4mm 2mm;
+      width: 72mm;
+      max-width: 72mm;
+      margin: 0 auto;
+      padding: 4mm 3mm;
       color: #000;
       text-align: center;
     }

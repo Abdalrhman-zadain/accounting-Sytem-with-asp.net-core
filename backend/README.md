@@ -58,6 +58,22 @@ From the repo root:
 docker compose up -d postgres
 ```
 
+## Market POS PostgreSQL
+
+For the isolated Market POS database, use the dedicated compose file from `backend/`:
+
+```bash
+docker compose -f docker-compose.market.yml up -d postgres
+cp .env.market.example .env
+```
+
+This starts PostgreSQL on host port `15433` with the backend connection string:
+
+```bash
+DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
+INVENTORY_ACCOUNTING_ENABLED=true
+```
+
 ## Troubleshooting Database Startup
 
 If backend startup fails with:

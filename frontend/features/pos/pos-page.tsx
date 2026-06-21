@@ -238,6 +238,17 @@ function getOrderWaiterLockMessage(language: string) {
   );
 }
 
+function getOrderWaiterAddOnlyMessage(language: string) {
+  return getLocalizedText(
+    "This order was confirmed. You can add new items only — existing items cannot be changed. / تم تأكيد الطلب. يمكنك إضافة أصناف جديدة فقط — لا يمكن تعديل الأصناف الحالية.",
+    language,
+  );
+}
+
+function isExistingConfirmedCartLine(line: Pick<CartLine, "salesInvoiceLineId">, isAddOnlyMode: boolean) {
+  return isAddOnlyMode && Boolean(line.salesInvoiceLineId);
+}
+
 function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
   if (item.code === "MENU-001") {
     return [
@@ -2732,10 +2743,21 @@ export function PosPage() {
     );
   }, [editingInvoiceId, draftSales, heldSales]);
 
-  const isCartLockedByWaiter = useMemo(
+  const isWaiterConfirmed = useMemo(
     () => orderType === "DINE_IN" && Boolean(activeEditingSale?.waiterConfirmedAt),
     [orderType, activeEditingSale?.waiterConfirmedAt],
   );
+  const canAddAfterConfirm = hasPermission(user, "POS_ADD_ITEM_AFTER_WAITER_CONFIRM");
+  const canEditConfirmedOrder = hasPermission(user, "POS_EDIT_WAITER_CONFIRMED_ORDER");
+  const isOrderFullyLocked = useMemo(
+    () => isWaiterConfirmed && !canAddAfterConfirm && !canEditConfirmedOrder,
+    [isWaiterConfirmed, canAddAfterConfirm, canEditConfirmedOrder],
+  );
+  const isAddOnlyMode = useMemo(
+    () => isWaiterConfirmed && canAddAfterConfirm && !canEditConfirmedOrder,
+    [isWaiterConfirmed, canAddAfterConfirm, canEditConfirmedOrder],
+  );
+  const isCartLockedByWaiter = isOrderFullyLocked;
 
   const selectedReturnSale =
     completedSales.find((sale) => sale.id === selectedReturnSaleId) ?? null;
@@ -3210,14 +3232,20 @@ export function PosPage() {
     targetLine: CartLine,
     updater: (line: CartLine) => CartLine | null,
   ) => {
-    if (isCartLockedByWaiter) {
+    if (isOrderFullyLocked) {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
     const lineKey = getCartLineKey(targetLine);
     const target = cartLines.find((line) => getCartLineKey(line) === lineKey);
+    if (target && isExistingConfirmedCartLine(target, isAddOnlyMode)) {
+      pushError(getOrderWaiterAddOnlyMessage(language));
+      return;
+    }
     if (target && isKitchenSentLineLocked(target)) {
-      pushError(getOrderWaiterLockMessage(language));
+      pushError(
+        isAddOnlyMode ? getOrderWaiterAddOnlyMessage(language) : getOrderWaiterLockMessage(language),
+      );
       return;
     }
     setCartLines((current) =>
@@ -3228,8 +3256,12 @@ export function PosPage() {
   };
 
   const bumpLineQty = (line: CartLine, delta: number) => {
-    if (isCartLockedByWaiter) {
+    if (isOrderFullyLocked) {
       pushError(getOrderWaiterLockMessage(language));
+      return;
+    }
+    if (isExistingConfirmedCartLine(line, isAddOnlyMode)) {
+      pushError(getOrderWaiterAddOnlyMessage(language));
       return;
     }
     if (isKitchenSentLineLocked(line)) {
@@ -3882,8 +3914,13 @@ export function PosPage() {
       !payCannotCompleteCredit &&
       hasValidPayments;
     const isCartLineLocked = (line: CartLine) =>
-      isCartLockedByWaiter || isKitchenSentLineLocked(line);
-    const orderKitchenLocked = isCartLockedByWaiter;
+      isOrderFullyLocked ||
+      isKitchenSentLineLocked(line) ||
+      (isAddOnlyMode && Boolean(line.salesInvoiceLineId));
+    const orderKitchenLocked = isOrderFullyLocked;
+    const canUpdateKitchenFromCart =
+      hasPermission(user, "RST_UPDATE_KITCHEN_FROM_CART") ||
+      hasPermission(user, "POS_EDIT_WAITER_CONFIRMED_ORDER");
 
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#f6f7f8]">
@@ -4305,6 +4342,10 @@ export function PosPage() {
                     <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-2 text-[10px] font-medium leading-snug text-[#c2410c]">
                       {getOrderWaiterLockMessage(language)}
                     </div>
+                  ) : isAddOnlyMode ? (
+                    <div className="rounded-[10px] border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-2 text-[10px] font-medium leading-snug text-[#1d4ed8]">
+                      {getOrderWaiterAddOnlyMessage(language)}
+                    </div>
                   ) : null}
 
                   {activeReservationId && (
@@ -4499,7 +4540,7 @@ export function PosPage() {
                 />
 
                 <div className="space-y-2 px-3 pb-3 pt-1">
-                  {hasPermission(user, "POS_VIEW_POS_SCREEN") &&
+                  {canUpdateKitchenFromCart &&
                   !orderKitchenLocked &&
                   hadKitchenTicketRef.current &&
                   (cartLines.length > 0 || editingInvoiceId) ? (
@@ -4520,7 +4561,6 @@ export function PosPage() {
                     </button>
                   ) : null}
                   {hasPermission(user, "RST_SEND_KOT") &&
-                  !orderKitchenLocked &&
                   cartLines.some((line) => !line.kitchenSentAt) ? (
                     <button
                       type="button"
