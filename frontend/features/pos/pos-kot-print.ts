@@ -25,6 +25,7 @@ const KOT_STYLES = `
     .bold { font-weight: bold; }
     .title { font-size: 12pt; margin-bottom: 4px; }
     .void-title { font-size: 12pt; margin-bottom: 4px; }
+    .new-order-title { font-size: 12pt; margin-bottom: 4px; }
     .sep { text-align: center; margin: 6px 0; overflow: hidden; }
     .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
     .item { margin: 6px 0; }
@@ -165,22 +166,48 @@ export function buildKitchenTicketHtmlForLines(
   );
 }
 
+export function buildKitchenNewOrderTicketHtml(
+  sale: PosSale,
+  lines: KitchenDeltaLine[],
+  language: string,
+): string {
+  const isAr = language === "ar";
+  const orderNumber = sale.reference?.match(/(\d+)$/)?.[1] ?? sale.reference;
+  const lineRows = buildLineRowsFromDeltaLines(lines, language);
+
+  const bodyHtml = `
+    <div class="center bold new-order-title">${isAr ? "*** طلب جديد ***" : "*** NEW ORDER ***"}</div>
+    <div class="center">${isAr ? `رقم الطلب: ${orderNumber}` : `Order #${orderNumber}`}</div>
+    ${buildSaleMetaRows(sale, language)}
+    <div class="sep">${SEP}</div>
+    ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
+    <div class="sep">${SEP}</div>
+    ${sale.description ? `<div class="note">${sale.description}</div>` : ""}
+  `;
+
+  return buildKotDocumentHtml(
+    language,
+    isAr ? "طلب جديد" : "New Order",
+    bodyHtml,
+  );
+}
+
 export function buildKitchenDeltaTicketHtml(
   sale: PosSale,
   deltaLines: KitchenDeltaLine[],
   language: string,
 ): string {
   const isAr = language === "ar";
+  const orderNumber = sale.reference?.match(/(\d+)$/)?.[1] ?? sale.reference;
   const lineRows = buildLineRowsFromDeltaLines(deltaLines, language, "+");
 
   const bodyHtml = `
-    <div class="center bold title">${isAr ? "تحديث مطبخ" : "Kitchen Update"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
+    <div class="center bold title">${isAr ? `تحديث — طلب #${orderNumber}` : `Kitchen Update — Order #${orderNumber}`}</div>
     ${buildSaleMetaRows(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
+    ${sale.description ? `<div class="note">${sale.description}</div>` : ""}
   `;
 
   return buildKotDocumentHtml(
@@ -196,16 +223,16 @@ export function buildKitchenVoidTicketHtml(
   language: string,
 ): string {
   const isAr = language === "ar";
+  const orderNumber = sale.reference?.match(/(\d+)$/)?.[1] ?? sale.reference;
   const lineRows = buildLineRowsFromDeltaLines(voidLines, language, "-");
 
   const bodyHtml = `
-    <div class="center bold void-title">${isAr ? "*** إلغاء ***" : "*** CANCEL ***"}</div>
-    <div class="center">${isAr ? "KOT" : "KOT"} #${sale.reference}</div>
-    <div class="sep">${SEP}</div>
+    <div class="center bold void-title">${isAr ? `*** إلغاء من الطلب #${orderNumber} ***` : `*** CANCEL from Order #${orderNumber} ***`}</div>
     ${buildSaleMetaRows(sale, language)}
     <div class="sep">${SEP}</div>
     ${lineRows || `<div class="center">${isAr ? "لا أصناف" : "No items"}</div>`}
     <div class="sep">${SEP}</div>
+    ${sale.description ? `<div class="note">${sale.description}</div>` : ""}
   `;
 
   return buildKotDocumentHtml(

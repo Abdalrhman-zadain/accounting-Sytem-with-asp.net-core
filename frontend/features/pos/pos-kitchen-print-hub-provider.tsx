@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 
 import {
   useKitchenPrintHub,
-  type KitchenCartLinePrintRef,
   type KitchenPrintHubController,
 } from "@/features/pos/pos-kitchen-print-hub";
 import { loadPosPrinterConfig } from "@/features/pos/pos-printer-config";
@@ -16,8 +15,6 @@ import { useAuth } from "@/providers/auth-provider";
 const noopKitchenPrintHub: KitchenPrintHubController = {
   markKitchenOrderItemsPrinted: () => {},
   markKitchenOrderItemsPrintedForSale: () => {},
-  markKitchenInvoiceFullyPrinted: () => {},
-  markKitchenLinesFromCart: () => {},
 };
 
 const KitchenPrintHubContext = createContext<KitchenPrintHubController>(noopKitchenPrintHub);
@@ -65,5 +62,3 @@ export function PosKitchenPrintHubProvider({
     <KitchenPrintHubContext.Provider value={hub}>{children}</KitchenPrintHubContext.Provider>
   );
 }
-
-export type { KitchenCartLinePrintRef };
