@@ -133,6 +133,7 @@ export function Modal({
   onClose,
   title,
   children,
+  footer,
   size = "lg",
   className,
 }: {
@@ -140,6 +141,7 @@ export function Modal({
   onClose: () => void;
   title: string;
   children: ReactNode;
+  footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl" | "full";
   className?: string;
 }) {
@@ -201,21 +203,24 @@ export function Modal({
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <Card className={cn("max-h-[calc(100vh-2rem)] overflow-hidden p-0 shadow-2xl ring-1 ring-white/10 sm:max-h-[calc(100vh-4rem)]", className)}>
-          <div className="flex max-h-[inherit] flex-col">
-            <div className="mb-0 flex items-center justify-between border-b border-gray-100 px-6 py-5 sm:px-8">
-              <h2 className="pe-4 text-xl font-bold text-gray-900">{title}</h2>
-              <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-900">
-                <span className="sr-only">Close</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="min-h-0 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
-              {children}
-            </div>
+        <Card className={cn("max-h-[90dvh] flex flex-col overflow-hidden p-0 shadow-2xl ring-1 ring-white/10", className)}>
+          <div className="mb-0 flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-5 sm:px-8">
+            <h2 className="pe-4 text-xl font-bold text-gray-900">{title}</h2>
+            <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-900">
+              <span className="sr-only">Close</span>
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
+          <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+            {children}
+          </div>
+          {footer && (
+            <div className="shrink-0 border-t bg-white px-6 py-4 sm:px-8">
+              {footer}
+            </div>
+          )}
         </Card>
       </div>
     </div>,
