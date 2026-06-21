@@ -1,6 +1,6 @@
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const mode = process.argv[2];
@@ -19,6 +19,32 @@ const nextCli = join(frontendRoot, 'node_modules', 'next', 'dist', 'bin', 'next'
 
 function resetNextArtifacts(targetDir) {
   rmSync(targetDir, { recursive: true, force: true });
+}
+
+function ensureProductionBuild() {
+  const buildIdPath = join(buildNextDir, 'BUILD_ID');
+
+  if (existsSync(buildIdPath)) {
+    return;
+  }
+
+  console.log('Production build is missing; running next build before start.');
+  resetNextArtifacts(buildNextDir);
+
+  const result = spawnSync(process.execPath, [nextCli, 'build'], {
+    cwd: frontendRoot,
+    env,
+    stdio: 'inherit',
+  });
+
+  if (result.signal) {
+    process.kill(process.pid, result.signal);
+    return;
+  }
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }
 
 const env = {
@@ -47,6 +73,10 @@ if (mode === 'dev' && process.env.NEXT_DEV_CLEAN === '1') {
 
 if (mode === 'build') {
   resetNextArtifacts(buildNextDir);
+}
+
+if (mode === 'start') {
+  ensureProductionBuild();
 }
 
 const child = spawn(process.execPath, [nextCli, ...nextArgs], {

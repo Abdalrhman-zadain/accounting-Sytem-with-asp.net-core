@@ -21,7 +21,7 @@ export type PosHeldSaleCardLine = {
   unitPrice: number;
 };
 
-export type PosHeldSaleCardSale = PosHeldSaleDisplay & {
+export type PosHeldSaleCardSale = Omit<PosHeldSaleDisplay, "cartLines"> & {
   id: string;
   status: "DRAFT" | "HELD";
   orderNotes: string;

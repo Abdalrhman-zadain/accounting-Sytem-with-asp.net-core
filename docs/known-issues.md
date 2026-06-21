@@ -13,15 +13,13 @@ Previously identified issue (Resolved/Intermittent):
 
 Current Status:
 
-- The build currently succeeds (`npm run build`) in the engineering environment.
-- `frontend` typecheck is currently blocked by two existing errors in `features/pos/pos-addon-admin-panel.tsx`:
-  - `Property 'items' does not exist on type 'InventoryItemsResponse'.`
-  - `Parameter 'item' implicitly has an 'any' type.`
+- The frontend production build currently succeeds (`npm run build`) in the engineering environment.
+- `frontend` typecheck currently succeeds (`npm run typecheck`) in the engineering environment.
 - the issue is documented here for reference if it reappears during heavy CI loads or environment changes.
 - performance verification must run from `frontend/` against the production Next server (`npm run build && npm run start`), not against dev mode or another package/toolchain in the repo
 - the frontend shell now mirrors the language preference into a cookie so server rendering can keep `lang`/`dir` aligned with the persisted setting and avoid avoidable LTR/RTL layout shift on reloads
 - local fonts should stay compressed (`.woff2`) in `frontend/app/fonts`; shipping raw `.ttf` assets materially increases first-load transfer size
-- the frontend npm scripts route Next through `frontend/scripts/next-run.mjs`, which clears stale `.next` artifacts before `dev` and `build` so OneDrive-backed reparse-point files do not break Next startup while staying runnable on Linux and Windows
+- the frontend npm scripts route Next through `frontend/scripts/next-run.mjs`, which clears stale `.next` artifacts before `dev` and `build`, and now runs `next build` automatically before `start` if the production `BUILD_ID` is missing so PM2 production startup cannot silently serve a missing build
 
 What this means for future edits:
 
