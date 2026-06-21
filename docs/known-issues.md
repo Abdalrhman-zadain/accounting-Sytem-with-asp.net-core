@@ -13,15 +13,13 @@ Previously identified issue (Resolved/Intermittent):
 
 Current Status:
 
-- The build currently succeeds (`npm run build`) in the engineering environment.
-- `frontend` typecheck is currently blocked by two existing errors in `features/pos/pos-addon-admin-panel.tsx`:
-  - `Property 'items' does not exist on type 'InventoryItemsResponse'.`
-  - `Parameter 'item' implicitly has an 'any' type.`
+- The frontend production build currently succeeds (`npm run build`) in the engineering environment.
+- `frontend` typecheck currently succeeds (`npm run typecheck`) in the engineering environment.
 - the issue is documented here for reference if it reappears during heavy CI loads or environment changes.
 - performance verification must run from `frontend/` against the production Next server (`npm run build && npm run start`), not against dev mode or another package/toolchain in the repo
 - the frontend shell now mirrors the language preference into a cookie so server rendering can keep `lang`/`dir` aligned with the persisted setting and avoid avoidable LTR/RTL layout shift on reloads
 - local fonts should stay compressed (`.woff2`) in `frontend/app/fonts`; shipping raw `.ttf` assets materially increases first-load transfer size
-- the frontend npm scripts route Next through `frontend/scripts/next-run.mjs`, which clears stale `.next` artifacts before `dev` and `build` so OneDrive-backed reparse-point files do not break Next startup while staying runnable on Linux and Windows
+- the frontend npm scripts route Next through `frontend/scripts/next-run.mjs`, which clears stale `.next` artifacts before `dev` and `build`, and now runs `next build` automatically before `start` if the production `BUILD_ID` is missing so PM2 production startup cannot silently serve a missing build
 
 What this means for future edits:
 
@@ -50,19 +48,6 @@ If code and docs drift:
 - trust the code first
 - update docs immediately after confirming behavior
 - do not keep outdated architecture descriptions in `docs/`
-
-## Master Data Bilingual Gaps
-
-Current limitation:
-
-- `JournalEntryType` and `PaymentMethodType` currently persist a single `name` field only; they do not yet store a dedicated Arabic name in the schema.
-- the frontend now localizes seeded built-in values such as `General`, `Receipt`, `Payment`, `Transfer`, `Bank`, and `Cash` when the UI language is Arabic.
-- custom user-created journal entry types and payment method types still display exactly as entered because there is no separate persisted Arabic label yet.
-
-What this means for future edits:
-
-- do not assume these two master-data tables have full bilingual storage like accounts, currencies, or payment terms.
-- if full bilingual master-data editing is required later, implement it as a schema/API/UI change together rather than adding more one-off frontend translations.
 
 ## Backend Dev Watchers On Linux
 
@@ -93,19 +78,19 @@ What this means for future edits:
 Current behavior:
 
 - POS kitchen KOT, customer receipt, and session roll prints route through a client-side print service.
-- **Simple Account Print Agent** (production path on Windows) provides silent named-printer routing via `127.0.0.1:9188` without QZ Tray or browser dialogs when selected in POS → Printers.
-- Agent mode fails loudly when the agent is offline, the configured printer is missing, or a print job fails. It does not silently fall back to browser print.
-- Browser print is an explicit manual/emergency bridge mode; it cannot automatically choose between kitchen and receipt printers.
-- QZ Tray remains legacy/optional code for already-configured cashier PCs only. It is not part of the normal production cashier/kitchen flow.
-- Backend QZ signing (`/api/qz/certificate`, `/api/qz/sign`) removes the recurring **Untrusted website** dialog when a self-signed certificate is generated and trusted on each cashier PC; without it, cashiers must click Allow in QZ Tray. QZ is optional when the Print Agent is used.
+- Silent named-printer routing requires QZ Tray to be installed and running on each cashier computer.
 - Kitchen and receipt printer names are saved in browser `localStorage` because the same XPrinter model can have different OS printer names on different machines.
-- Waiter devices do not print kitchen tickets locally. The cashier register polls `GET /pos/kitchen/orders` and prints new `KitchenOrderItem` rows when **Print waiter kitchen tickets on this PC** is enabled.
-- If the Print Agent or a configured printer is unavailable in agent mode, POS shows the error and no browser dialog appears unless Browser print mode is selected.
+- Waiter devices do not print kitchen tickets locally. The cashier register polls kitchen orders and prints new items when **Print waiter kitchen tickets on this PC** is enabled.
+- The kitchen print hub runs from the shared `/pos` layout so it stays active while the cashier visits the floor plan (`/pos/tables`) and other POS screens; it does not restart on every navigation.
+- Paying a dine-in order that was already sent to the kitchen should print only the customer receipt on the cashier printer, not a second kitchen ticket. The print hub dedupes by invoice id and invoice line id, skips completed sales, and marks already-sent orders when the cashier resumes the table.
+- If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
+- Customer receipt amounts use clean grouped LTR formatting with a left safe inset in `frontend/features/pos-shared/thermal-receipt-layout.ts` so values such as `2.50` are not clipped on the physical left edge of 80mm rolls. **الصافي** and **مدفوع** append `د.أ`; zero payment-method rows are hidden. Line-level discounts print under the item row; invoice-level `خصم` prints only for cart-level discounts above summed line discounts.
 
 What this means for future edits:
 
 - do not move local OS printer names into global POS settings unless printing is changed to a network/IP or local-agent model with stable printer identifiers.
-- keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, agent build, or fallback changes.
+- keep `docs/pos/printer-setup.md` aligned with any bridge, certificate, script-hosting, or fallback changes.
+- keep receipt amount columns right-aligned inside the printable safe area; test real printer output after changing `thermal-receipt-layout.ts`.
 
 ## Local Docker Port Reservation On Windows
 
@@ -113,11 +98,11 @@ Current limitation:
 
 - some Windows environments reserve dynamic TCP ranges that can block Docker from binding specific localhost ports even when the compose file is correct.
 - the previous local PostgreSQL host port `55432` can fall inside an excluded Windows TCP range, which causes Docker startup failures such as `bind: An attempt was made to access a socket in a way forbidden by its access permissions.`
-- the current `pos-market` branch setup uses local host port `15433` for PostgreSQL and a dedicated local database named `simple-account-pos-m-ch` so Prisma migrations and seeds stay isolated from the restaurant POS database.
+- the project now uses local host port `15432` for PostgreSQL to avoid the reserved range seen on affected machines.
 
 What this means for future edits:
 
-- keep `docker-compose.yml`, `backend/.env`, and `backend/.env.example` aligned if the local PostgreSQL host port or branch-specific database name changes again.
+- keep `docker-compose.yml`, `backend/.env`, and `backend/.env.example` aligned if the local PostgreSQL host port changes again.
 - if Docker reports a bind-permission error on startup, check `netsh int ipv4 show excludedportrange protocol=tcp` before assuming PostgreSQL or Prisma is misconfigured.
 
 ## Phase 2 Bank & Cash Scope
@@ -156,7 +141,6 @@ Current limitation:
 - supplier and purchase-invoice list print/PDF/Excel output is available through the shared frontend export engine, while formal purchase document templates remain a separate future refinement.
 - purchase orders now support draft/issue/receipt/cancel/close lifecycle management and now store operational purchase-receipt records, but they still do not create inventory or accounting journal entries from receipt posting.
 - purchase invoices, supplier payments, and debit notes now provide explicit reverse-document workflows that create reversal journal entries and mark the source documents as `REVERSED`.
-- purchase-invoice reversal now also writes a real `PURCHASE_RETURN` inventory movement on the same item/warehouse as the original posted receipt and runs inside one database transaction with the accounting reversal; reversal still fails if the original receipt layer has already been consumed or moved because the system only supports exact stock unwind.
 - purchase debit-note posting now supports master-data-driven supplier debit note types for purchase discount, purchase return, price correction, tax correction, and supplier settlement flows; the foundation seed now creates a default active baseline, but custom environments still need equivalent `SupplierDebitNoteType` master data.
 - purchase invoice posting no longer requires a dedicated purchase tax/VAT account; line tax amounts are posted with the line debit accounts instead of a separate tax line. Purchase document entry can now store `taxId`, but posting has not yet been fully refactored to use each tax record's mapped account.
 - purchase transaction audit history now includes reversed purchase invoices, supplier payments, and debit notes, but purchase receipts still do not yet have their own reversal flow.
@@ -173,8 +157,8 @@ What this means for future edits:
 Current limitation:
 
 - item master, warehouses, goods receipts, goods issues, transfers, adjustments, stock-ledger inquiry, warehouse balances, and costing/accounting integration are implemented; posted inventory documents now support reverse status workflows, but reverse currently marks status/audit history only and does not yet create stock-rollback or accounting-reversal entries.
-- sales-invoice posting now participates in inventory by creating `SALES_ISSUE` stock movements and warehouse-level stock relief for inventory-tracked lines. When an invoice is returned to draft through the unpost workflow, the stock-ledger inquiry labels the compensating stock-in row as a sales-invoice reversal for display clarity, but there is still no separate posted `REVERSED` sales-invoice document workflow in Phase 3 beyond the draft-edit-repost path.
-- inventory master data now includes item groups, item categories, and units of measure; item-group and item-category selection on the item card is optional in the current UI/API, so environments that rely on strict classification should treat missing item-group/category values as valid current behavior rather than a data-entry bug.
+- sales-invoice posting now participates in inventory by creating `SALES_ISSUE` stock movements and warehouse-level stock relief for inventory-tracked lines, but reversal/rollback for those sales-linked stock movements is not implemented yet because sales-invoice reversal is not currently part of the Phase 3 workflow.
+- inventory master data now includes item groups, item categories, units of measure, and enforced group/category/material selection in the item card UI/API.
 - item cards now support default prices and unit-conversion setup, but inventory, sales, and purchase transaction lines still operate on their current implemented unit workflow; do not assume document-line unit conversion/storage is live until those modules are updated.
 - `docs/phase-5-inventory-requirements.md` remains the planning/reference document for the full inventory roadmap and translation alignment.
 - inventory accounting entries are conditional and only run when `INVENTORY_ACCOUNTING_ENABLED` is enabled.
@@ -217,18 +201,6 @@ What this means for future edits:
 - preserve Arabic/English translation coverage when adding fixed-asset statuses, depreciation methods, disposal terminology, document labels, and reporting filters.
 - treat future fixed-asset extensions as refinements to this implemented module rather than as unimplemented Phase 7 basics.
 
-## Market POS Rep Car Stock
-
-Current limitation:
-
-- market POS sales deduct `RepCarStockBalance` for the session's `salesRepId` instead of posting warehouse issues at checkout.
-- POS returns for market sales still follow the shared return/stock-in path and do **not** restore rep car balances yet. Returning goods to the rep's car requires a follow-up load or stocktake adjustment until return posting is extended for `PosProduct.MARKET`.
-
-What this means for future edits:
-
-- when implementing market returns, update `RepCarStockService` and return posting in `pos.service.ts` together and remove or narrow this note.
-- keep rep car UI and APIs in `frontend/features/pos-market` and `backend/.../pos-market/rep-car-stock/`; do not route market rep stock through restaurant POS modules.
-
 ## Phase 8 Reporting Status
 
 Current status:
@@ -264,17 +236,18 @@ Current limitation:
 - cashier catalog favorites persist through `GET`/`PUT /pos/favorites/items` (requires the Prisma migration that adds `PosUserFavoriteItem` and related enum values when the database is upgraded).
 - register layout is partially split into `pos-product-card.tsx`, `pos-session-bar.tsx`, and `pos-register-layout.tsx` while state and mutations remain in `pos-page.tsx`.
 - the **Offers** category chip still uses a lightweight text/metadata heuristic (not a dedicated promotion price table); treat it as UX-only until item master exposes promotional fields.
-- POS sell-by-weight now supports quick-pick preset weights (`0.25`, `0.5`, `0.75`, `1` of the base weight unit) in the add-on modal for both cashier and waiter product selection, but integrated scales, weight-embedded barcodes, automatic tare handling, and richer waiter-side decimal quantity editing are still not implemented.
-- the restaurant POS addendum now includes live table and kitchen APIs, delivery company/driver endpoints, restaurant metadata persistence across draft/hold/complete flows, register-side order-type selection (TAKEAWAY / DELIVERY toggle in cart; dine-in is entered via table selection only), dine-in table controls, waiter/driver/company selectors in the cart sidebar, table transfer/merge/split action buttons now visible in the register while an order is open, cashier close-shift cash counting, and accountant review tabs with order-type and payment-method correction.
+- POS sell-by-weight now supports quick-pick preset weights (`0.25`, `0.5`, `0.75`, `1` of the base weight unit) in the add-on modal when first adding the item for both cashier and waiter product selection. After a weighted item is added to the cart, the register keeps the chosen weight fixed on that line but exposes `+` / `−` controls with a `portionCount` multiplier on one row (`×2`, `×3`, …). **Cashiers** may increment/decrement or re-add matching items before payment even after kitchen send (only `READY`/`SERVED` stays locked); kitchen changes require **Update kitchen** (no auto-sync). **Waiters** still cannot remove kitchen-sent portions and clone a new row with `+` after send. Integrated scales, weight-embedded barcodes, automatic tare handling, and in-line decimal re-weighing are still not implemented.
+- the restaurant POS addendum now includes live table and kitchen APIs, delivery company/driver endpoints, restaurant metadata persistence across draft/hold/complete flows, register-side order-type selection (DINE_IN / TAKEAWAY / DELIVERY toggle in cart), dine-in table controls, waiter/driver/company selectors in the cart sidebar, table transfer/merge/split action buttons now visible in the register while an order is open, cashier close-shift cash counting, and accountant review tabs with order-type and payment-method correction.
 - the floor plan now shows all five table states (AVAILABLE, OCCUPIED, RESERVED, WAITING_FOR_PAYMENT, CLEANING) and a per-card status/waiter-assign modal reachable by hovering the card and clicking the gear icon.
 - **Next.js dev `ChunkLoadError` (layout chunk timeout):** usually means the browser still references old `/_next/static/...` hashes after the dev server restarted or `.next-dev` was wiped. Fix: hard-refresh (`Ctrl+Shift+R`), or restart `npm run dev` once. Use `NEXT_DEV_CLEAN=1 npm run dev` only when you need a full cache reset; normal `npm run dev` no longer deletes `.next-dev` on every start.
 - dedicated operational boards: **Waiter order tracking** at `/pos/waiter/orders` (dine-in only: waiting → received → departed) and **Delivery Board** at `/pos/delivery` (kanban by delivery status, driver assign, status advance). Kitchen has no digital screen — KOT prints on send only. `/pos/kitchen` redirects to the waiter board for legacy bookmarks.
 - POS sidebar links are gated by explicit role routes plus permission fallbacks in `frontend/lib/auth-access.ts`. The `/pos` prefix no longer unlocks every sub-route; cashiers need a fresh login after route/permission seed changes to pick up `/pos/returns` and `POS_VIEW_COMPLETED_SALES`.
-- **Waiter role:** assign POS role `WAITER` (seed user `waiter` / `waiter123` via `backend/prisma/setup-pos-waiter.ts`). Waiter-only users use `/pos/waiter/tables`, `/pos/waiter/order`, and `/pos/waiter/orders`. They build dine-in orders, confirm via `POST /pos/sales/:id/send-to-kitchen` (kitchen ticket prints on the cashier PC hub, not on the waiter device), then advance service on the waiter board: **في انتظار → تم الاستلام → مغادرة**. `مغادرة` sets the table to `CLEANING`; cashier pays afterward from held sales/register. After dine-in payment, the table stays on `CLEANING` until the waiter taps **Table ready / الطاولة جاهزة** on the floor plan. The floor plan also exposes a **Needs cleaning** filter when any table is in that state. After waiter confirm (`waiterConfirmedAt`), both waiter and cashier carts are locked until payment.
+- **Waiter role:** assign POS role `WAITER` via admin **Users** at `/settings/users` (ADMIN only) or seed user `waiter` / `waiter123` via `backend/prisma/setup-pos-waiter.ts`. Waiter-only users use `/pos/waiter/tables`, `/pos/waiter/order`, and `/pos/waiter/orders`. Waiters cannot process payments — they build dine-in orders only and confirm via `POST /pos/sales/:id/send-to-kitchen` (kitchen ticket prints on the cashier PC hub, not on the waiter device) to advance service on the waiter board: **في انتظار → تم الاستلام → مغادرة**. `مغادرة` sets the table to `CLEANING`; cashier completes payment afterward. After dine-in payment, the table stays on `CLEANING` until the waiter taps **Table ready / الطاولة جاهزة** on the floor plan. The floor plan also exposes a **Needs cleaning** filter when any table is in that state. After waiter confirm (`waiterConfirmedAt`), waiters with `POS_ADD_ITEM_AFTER_WAITER_CONFIRM` may add new items and send another KOT round; existing sent lines stay locked. Cashiers with `POS_EDIT_WAITER_CONFIRMED_ORDER` may still edit the order and use **Update kitchen** to print VOID/ADD slips.
 - **Kitchen role (`KITCHEN`)** is legacy: no dedicated screen route remains. Use waiter accounts for dine-in service tracking.
 - the delivery board lists completed POS sales with `orderType === "DELIVERY"` (same data source as the old register tab); orders must be completed at the register before they appear on the board.
-- **Waiter-confirmed order lock:** when `waiterConfirmedAt` is set on a dine-in sale, the register cart is frozen — no add/edit/remove or order changes until payment. Cashier can still **Pay** after the waiter marks **مغادرة** (table `CLEANING`). Backend `saveDraft` / hold paths enforce the same rule server-side.
-- the restaurant workflow is still incomplete: waiter master-data administration is still lightweight, delivery-company settlement is now available for accountant confirmation/reversal and reporting but still uses manual statement/attachment URLs rather than a dedicated upload subsystem or external delivery API integration, pre-order completion still does not auto-occupy the table at the database level (cashier must confirm via the new handoff prompt), and broader reopen/correction lifecycle tooling remains narrower than the full restaurant requirements.
+- **Waiter-confirmed order lock:** when `waiterConfirmedAt` is set on a dine-in sale, users without add/edit-confirmed permissions cannot change the cart. Users with `POS_ADD_ITEM_AFTER_WAITER_CONFIRM` may add new lines and re-send unsent items to the kitchen; users with `POS_EDIT_WAITER_CONFIRMED_ORDER` may fully edit until payment. Backend `saveDraft` / hold paths enforce the same permission rules server-side. Per-user grant/deny overrides are managed at `/settings/users` (ADMIN only); users must log in again after permission changes.
+- **User administration:** public `/auth/register` is disabled. ADMIN creates accounts at `/settings/users` with POS role assignment and per-permission inherit/grant/deny overrides (`UserPosPermissionOverride`).
+- the restaurant workflow is still incomplete: delivery-company settlement is now available for accountant confirmation/reversal and reporting but still uses manual statement/attachment URLs rather than a dedicated upload subsystem or external delivery API integration, pre-order completion still does not auto-occupy the table at the database level (cashier must confirm via the new handoff prompt), and broader reopen/correction lifecycle tooling remains narrower than the full restaurant requirements.
 - table reservations support multiple non-overlapping time slots on the same table even while it has a live order; the reserve modal lists each slot with **Pre-order products** and **Cancel reservation** only (no guest-note or arrival fields in the UI). When the current order closes, table status is recalculated so later reservations can show as **Reserved** again. Waiter assignment remains at the table level via the table gear menu.
 - **Third-Party Delivery Order Payment Enforcement:** POS sales with `orderType === "DELIVERY"` and `deliveryMode === "THIRD_PARTY"` (e.g., Talabat, Careem, Ashyaai) are forced to have `deliveryCollectionMethod === "COMPANY"` (Customer Paid via Delivery App). Cashier-selectable payment methods are disabled and bypassed, and completing the order automatically sets `deliverySettlementStatus === "PENDING"`. The resulting transaction journal entry debits the selected delivery company's receivable account instead of the session's cash/bank account. Reversal/correction flows enforce these validation rules backend-side.
 

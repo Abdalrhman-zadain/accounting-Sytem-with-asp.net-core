@@ -3,6 +3,7 @@ import type { TranslationKey } from "@/lib/i18n";
 import { translateKey } from "@/lib/i18n";
 import {
   canAccessRoute,
+  isAdminUser,
   isKitchenOnlyUser,
   isMarketRepUser,
   isWaiterOnlyUser,
@@ -41,6 +42,10 @@ export function getVisibleNavGroups(user: AuthUser | null | undefined): ErpNavGr
       items: group.items
         .map((item) => {
           if (HIDDEN_NAV_HREFS.has(item.href)) {
+            return null;
+          }
+
+          if (item.adminOnly && !isAdminUser(user)) {
             return null;
           }
 

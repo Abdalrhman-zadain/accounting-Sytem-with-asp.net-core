@@ -177,13 +177,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
             </button>
 
             <p className="text-sm text-gray-400 text-center sm:text-left">
-              {isLogin ? "Need access?" : "Have an account?"}{" "}
-              <Link
-                href={isLogin ? "/register" : "/login"}
-                className={`font-semibold hover:underline ${isLogin ? 'text-teal-400' : 'text-violet-400'}`}
-              >
-                {isLogin ? "Create account" : "Log in"}
-              </Link>
+              {isLogin ? "Need an account? Contact your system administrator." : "Have an account?"}{" "}
+              {!isLogin ? (
+                <Link href="/login" className="font-semibold text-violet-400 hover:underline">
+                  Log in
+                </Link>
+              ) : null}
             </p>
           </div>
         </form>

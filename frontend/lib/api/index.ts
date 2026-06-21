@@ -188,6 +188,11 @@ import {
   ReceiptAllocationResult,
   RegisterPayload,
   RegisterResponse,
+  AdminUserSummary,
+  AdminUserDetail,
+  PermissionCatalogEntry,
+  CreateAdminUserPayload,
+  UpdateAdminUserPayload,
   ImportBankStatementLinesPayload,
   SegmentDefinition,
   SegmentValue,
@@ -376,6 +381,38 @@ export async function register(payload: RegisterPayload) {
 export async function login(payload: LoginPayload) {
   return apiRequest<LoginResponse>("/auth/login", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listAdminUsers(token?: string | null) {
+  return apiRequest<AdminUserSummary[]>("/users", { token });
+}
+
+export async function getAdminUser(id: string, token?: string | null) {
+  return apiRequest<AdminUserDetail>(`/users/${id}`, { token });
+}
+
+export async function getPermissionCatalog(token?: string | null) {
+  return apiRequest<PermissionCatalogEntry[]>("/users/permission-catalog", { token });
+}
+
+export async function createAdminUser(payload: CreateAdminUserPayload, token?: string | null) {
+  return apiRequest<AdminUserDetail>("/users", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminUser(
+  id: string,
+  payload: UpdateAdminUserPayload,
+  token?: string | null,
+) {
+  return apiRequest<AdminUserDetail>(`/users/${id}`, {
+    method: "PATCH",
+    token,
     body: JSON.stringify(payload),
   });
 }

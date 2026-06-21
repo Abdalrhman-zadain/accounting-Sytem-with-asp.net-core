@@ -63,6 +63,10 @@ export function isCashierPosUser(user: AuthUser | null | undefined) {
   return Boolean(user?.posRoles?.includes("CASHIER"));
 }
 
+export function isAdminUser(user: AuthUser | null | undefined) {
+  return user?.role === "ADMIN";
+}
+
 export function isMarketCashierUser(user: AuthUser | null | undefined) {
   return Boolean(user?.posRoles?.includes("MARKET_CASHIER"));
 }
@@ -118,6 +122,10 @@ export function canAccessRoute(user: AuthUser | null | undefined, pathname: stri
 
   const normalizedPath = normalizePath(pathname);
   const allowedRoutes = user.allowedRoutes ?? [];
+
+  if (normalizedPath === "/settings/users" || normalizedPath.startsWith("/settings/users/")) {
+    return isAdminUser(user);
+  }
 
   if (isRestaurantPosPath(normalizedPath) && !userHasPosProduct(user, "restaurant")) {
     return false;

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PosAccessRoleCode, PosPermissionCode, Prisma, UserRole } from '../../../generated/prisma';
 import * as bcrypt from 'bcrypt';
@@ -114,6 +114,11 @@ const POS_PERMISSION_METADATA: Record<PosPermissionCode, { name: string; descrip
     name: 'Amend market POS sale',
     description: 'Amend a completed market POS invoice before accounting posting while the session is open.',
   },
+  POS_ADD_ITEM_AFTER_WAITER_CONFIRM: { name: 'Add items after waiter confirm', description: 'Add new cart lines after the waiter has confirmed the dine-in order.' },
+  POS_EDIT_WAITER_CONFIRMED_ORDER: { name: 'Edit waiter-confirmed order', description: 'Fully edit a dine-in order after waiter confirmation.' },
+  POS_MODIFY_KITCHEN_SENT_LINE: { name: 'Modify kitchen-sent line', description: 'Change or remove cart lines already sent to the kitchen before they are ready or served.' },
+  RST_UPDATE_KITCHEN_FROM_CART: { name: 'Update kitchen from cart', description: 'Print kitchen VOID/ADD slips after cart changes on a confirmed order.' },
+  SYS_MANAGE_USERS: { name: 'Manage users', description: 'Create and manage user accounts and permission overrides.' },
 };
 
 @Injectable()
@@ -124,6 +129,12 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    throw new ForbiddenException(
+      'Public registration is disabled. Ask an administrator to create your account.',
+    );
+  }
+
+  async registerUser(dto: RegisterDto) {
     const requestedPosRoles = this.normalizePosRoles(dto.posRoles);
     const salesRepId = await this.resolveRegisterSalesRepId(dto.salesRepId, requestedPosRoles);
 
@@ -342,6 +353,14 @@ export class AuthService {
     return salesRep.id;
   }
 
+  async ensurePosAccessBaselineForAdmin() {
+    return this.ensurePosAccessBaseline();
+  }
+
+  async hashPassword(password: string) {
+    return bcrypt.hash(password, 10);
+  }
+
   private async ensurePosAccessBaseline() {
     await this.ensurePosAccessRoleEnumValues();
 
@@ -466,6 +485,21 @@ export class AuthService {
     await this.prisma.$executeRawUnsafe(
       `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MARKET_AMEND_SALE'`,
     );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_ADD_ITEM_AFTER_WAITER_CONFIRM'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_EDIT_WAITER_CONFIRMED_ORDER'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'POS_MODIFY_KITCHEN_SENT_LINE'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'RST_UPDATE_KITCHEN_FROM_CART'`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `ALTER TYPE "PosPermissionCode" ADD VALUE IF NOT EXISTS 'SYS_MANAGE_USERS'`,
+    );
   }
 
   private buildAuthorizedUser(user: Prisma.UserGetPayload<{ include: ReturnType<AuthService['userAccessInclude']> }>): AuthorizedUser {
@@ -489,12 +523,43 @@ export class AuthService {
       }
     }
 
+    if (user.role === UserRole.ADMIN) {
+      permissionSet.add("SYS_MANAGE_USERS");
+    }
+
+    for (const override of user.posPermissionOverrides ?? []) {
+      const code = override.permission.code as AuthorizedUser["permissions"][number];
+      if (override.effect === "GRANT") {
+        permissionSet.add(code);
+      } else {
+        permissionSet.delete(code);
+      }
+    }
+
     const allowedRoutes = uniqueRoutes(
-      posRoles.flatMap((roleCode: AuthorizedUser["posRoles"][number]) => POS_ROLE_ROUTE_ACCESS[roleCode]).concat(
-        user.role === UserRole.ADMIN || user.role === UserRole.MANAGER || posRoles.includes("ACCOUNTANT")
-          ? ["/accounts", "/bank-cash-accounts", "/bank-reconciliations", "/sales-receivables", "/purchases", "/inventory", "/reporting", "/journal-entries", "/general-ledger", "/master-data", "/fiscal", "/audit", "/settings", "/dashboard"]
-          : [],
-      ),
+      posRoles
+        .flatMap((roleCode: AuthorizedUser["posRoles"][number]) => POS_ROLE_ROUTE_ACCESS[roleCode])
+        .concat(
+          user.role === UserRole.ADMIN || user.role === UserRole.MANAGER || posRoles.includes("ACCOUNTANT")
+            ? [
+                "/accounts",
+                "/bank-cash-accounts",
+                "/bank-reconciliations",
+                "/sales-receivables",
+                "/purchases",
+                "/inventory",
+                "/reporting",
+                "/journal-entries",
+                "/general-ledger",
+                "/master-data",
+                "/fiscal",
+                "/audit",
+                "/settings",
+                "/dashboard",
+              ]
+            : [],
+        )
+        .concat(user.role === UserRole.ADMIN ? ["/settings/users"] : []),
     );
 
     const isKitchenOnly =
@@ -577,6 +642,48 @@ export class AuthService {
           },
         },
       },
+      posPermissionOverrides: {
+        include: {
+          permission: true,
+        },
+      },
     } satisfies Prisma.UserInclude;
+  }
+
+  getPermissionMetadata() {
+    return POS_PERMISSION_METADATA;
+  }
+
+  getPermissionCatalog() {
+    return ALL_POS_PERMISSION_CODES.map((code) => ({
+      code,
+      ...POS_PERMISSION_METADATA[code],
+      category: this.resolvePermissionCategory(code),
+    }));
+  }
+
+  private resolvePermissionCategory(code: PosPermissionCode) {
+    if (code === "SYS_MANAGE_USERS") {
+      return "system";
+    }
+    if (code.startsWith("RST_")) {
+      return "restaurant";
+    }
+    if (
+      code.startsWith("VIEW_") ||
+      code.includes("ACCOUNTING") ||
+      code.includes("POST_BY") ||
+      code.includes("JOURNAL") ||
+      code.includes("LEDGER") ||
+      code.includes("REPORT") ||
+      code.includes("CORRECTION") ||
+      code.includes("REOPEN")
+    ) {
+      return "accounting";
+    }
+    if (code.includes("SESSION")) {
+      return "session";
+    }
+    return "cart";
   }
 }

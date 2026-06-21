@@ -176,7 +176,6 @@ What else to check:
 - customer sales-rep assignment should use optional `salesRepId` to an active Sales & Receivables `SalesRepresentative` for follow-up, reports, commissions, and collections; never substitute the representative's employee-payables account for the customer receivable account
 - new sales representatives should default their generated codes to sequential `REP-<number>` values such as `REP-1`, `REP-2`, and `REP-3`; when calculating the next number, ignore legacy non-sequential `REP-YYYYMMDD-...` codes
 - sales representative account linking may create a new posting liability account under `2130000 Employee Payables / ذمم الموظفين`, link an existing active posting account from that subtree, or leave the representative without an account; this link remains employee-side context only
-- market field-sales logins (`MARKET_REP`) are created from **Sales Receivables → Sales Reps** via `POST /sales-receivables/sales-reps/:id/market-login` (admin/manager only); the endpoint auto-links `User.salesRepId`, allows only one active market login per rep, and should not use the public unauthenticated `POST /auth/register` flow for production admin work
 - customer names should remain unique, and automatic customer-receivable account creation must not create a second detail account with the same customer name under `1121000`
 - customer creation and editing must require an active `TaxTreatment`; the old free-text tax-information field is no longer the authoritative sales tax selector
 - deactivated customers must not be selectable for new quotations, sales orders, invoices, receipts, or credit notes
@@ -191,7 +190,7 @@ What else to check:
 - the quotation editor supports both `save draft` and immediate `approve quotation` from the same form; when approving a brand-new quotation, the UI should save first and then approve the created draft in the same flow
 - sales-order drafts must stay editable until confirmed, and confirmed orders must preserve quotation/invoice traceability
 - the sales-order editor now exposes an explicit confirm button (`تاكيد أمر البيع`) alongside draft save; confirming from the modal must save the draft first and then call the existing sales-order confirmation workflow
-- all sales documents (quotations, orders, invoices, receipts, and credit notes) create/edit forms should open inline inside their respective tab workspaces using the unified inline workspace presentation pattern, rather than as separate modal overlay popups
+- the sales-order create/edit form should open inline inside the `orders` tab workspace with the same placement style used by the inline sales-invoice editor, rather than as a separate full-screen-only workflow
 - new sales invoice references should default to a daily sequential format such as `INV-20260524-1`, `INV-20260524-2`, and `INV-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching invoice references
 - invoice and credit-note drafts must stay editable, but posted documents must be locked
 - credit-note type selection must come from active `CreditNoteType` master data (`GET /credit-note-types/active`) rather than a hardcoded frontend-only option list
@@ -214,14 +213,9 @@ What else to check:
 - customer receipts created from Sales must still use the Phase 2 bank/cash posting behavior and remain allocatable to one or more invoices
 - sales-invoice posting must debit the customer's receivable account for the invoice grand total, credit one or more revenue accounts from the invoice lines for the net subtotal, and credit the mapped tax account for any applied tax amount
 - inventory-tracked sales-invoice lines must default warehouse selection from the item preferred warehouse when available, require a warehouse before save/post, validate warehouse stock at posting time, create one `InventoryStockMovement` issue row per posted line without duplicating by `sourceLineId`, and add matching COGS/inventory-relief journal lines inside the same database transaction
-- sales-invoice posting must validate every linked posting account before journal creation, including the customer receivable account, each line revenue account, and each inventory item's inventory/COGS accounts; legacy header/non-posting mappings should fail with a direct configuration error instead of a generic journal-entry failure
 - sales-invoice posting must reject draft documents that are missing customer/date/currency/lines, any line revenue account, a required tax account, or a balanced posting result
 - the Sales Invoice form may offer a guided `Post & Create Receipt` action that still posts the invoice first, then opens a separate prefilled customer-receipt flow; do not merge the receipt posting into the invoice journal entry
 - the Sales Invoice form should keep `Save as Draft`, `Post Invoice`, and `Post & Create Receipt` as distinct actions: draft save creates no journal entry, normal post creates only the invoice journal entry, and the guided action posts the invoice first before opening the separate receipt flow
-- standard sales invoices may expose `POST /api/sales-receivables/invoices/:id/unpost` when they have no linked credit notes; unallocated posted invoices still return directly to `DRAFT`, while fully paid posted invoices may also be unposted for edit by authorized users, detach their receipt allocations inside the same transaction, and keep those receipts available for automatic reallocation on repost
-- the Sales invoices UI should expose `Unpost and Edit` only when `canUnpost = true`; when a fully paid invoice is unposted for edit, the draft should show a visible warning state until repost, and `Create Return` should still open a linked `CN-SALES-RETURN` credit-note draft only when `canCreateReturn = true`
-- purchase invoices may expose `POST /api/purchases/purchase-invoices/:id/unpost` when `canUnpost = true`; this action should only apply to posted/paid invoices with a posted journal entry and no linked posted debit notes, and it must reverse ledger, supplier-balance, and inventory-receipt effects inside the same transaction before reopening the invoice as `DRAFT`
-- the Purchase Invoice UI should expose `Unpost and Edit` only when `canUnpost = true`; once unposted, the inline editor should show a visible warning banner, relabel the primary post action as `Repost Invoice`, and hide the guided `Post and Create Supplier Payment` shortcut so users reuse the original supplier payments instead of creating duplicates
 - the Sales receipt UI may collect optional invoice-allocation input inside the same customer-receipt form instead of a separate workspace, but it must still create/post the receipt first and then run allocation without changing posting invariants
 - new customer receipt references should default to a daily sequential format such as `RCPT-20260524-1`, `RCPT-20260524-2`, and `RCPT-20260524-3`; when calculating the next number for a given day, ignore legacy non-matching receipt references
 - customer-receipt posting must create a separate journal entry that debits the selected bank/cash posting account and credits the customer's receivable account for the receipt amount; receipts must never create tax lines or merge directly into invoice revenue posting
@@ -242,46 +236,11 @@ Checks to run:
 - backend build
 - frontend typecheck
 
-## Add Or Change Market POS
-
-Where to edit:
-
-- frontend `features/pos-market`
-- backend `phase-3-sales-receivables/pos-market` (thin controller/service)
-- backend `phase-3-sales-receivables/pos-core/pos-terminal.service.ts` for shared retail session/sale/return/report logic
-- `frontend/lib/api/pos-market.ts` for market API fetchers (re-exported from `lib/api/index.ts`)
-- `frontend/app/(erp)/pos-market/` for thin route entrypoints only
-- `docs/pos-market/README.md` when structure, routes, or ownership changes
-- `backend/src/modules/platform/auth/access-control.constants.ts` when market cashier/accountant routes or permissions change
-
-What else to check:
-
-- do not add market POS features to `frontend/features/pos` or `backend/.../pos`
-- do not import across `features/pos` and `features/pos-market`
-- market cashiers use role `MARKET_CASHIER`, routes `/pos-market/*`, and API `/api/pos-market/*`
-- market field reps use role `MARKET_REP` with required `User.salesRepId` for **session/car stock** identity; routes include `/pos-market/receivables`, `/pos-market/receivables/:customerId`, `/pos-market/rep-statement`, `/sales-receivables?tab=market-statement` (embedded market account statement), and `/sales-receivables?tab=rep-statement` (embedded rep sales report); receivables APIs live under `/api/pos-market/receivables*` including `GET /api/pos-market/receivables/:customerId/statement?fromDate=&toDate=` for A4 period statements; rep sales reports use `GET /api/pos-market/rep-statements?salesRepId=&fromDate=&toDate=&customerId=&documentTypes=&paymentTypes=` with utils in `backend/src/modules/phase-3-sales-receivables/pos/market-rep-sales-report.utils.ts` and A4 print in `frontend/features/pos-market/pos-market-rep-statement-a4-print.ts`; `ADMIN`/`MANAGER` may view market receivables and rep reports without `POS_MARKET_VIEW_RECEIVABLES`; customers are **not** restricted to a rep — any rider/cashier may sell to or collect from any active customer
-- Market POS collections set `BankCashTransaction.collectedBySalesRepId` from the collecting user's `User.salesRepId` when present; historical receipts may be backfilled from `AuditLog` (`CustomerReceipt` POST)
-- `MARKET_CASHIER` and `MARKET_REP` include `POS_CREDIT_SALE` for partial/pay-later market sales; collection uses `POS_MARKET_COLLECT_RECEIVABLE` on `/api/pos-market/receivables/collect` (FIFO allocation to oldest open deliveries when allocations are omitted)
-- market POS sales require a destination market (`customerId` on complete/hold/draft); walk-in (`POS-WALKIN`) is rejected in `pos.service.ts` for `PosProduct.MARKET`; register destination picker lists every active ERP customer (sales rep on the customer is optional for selling, still used for rep-scoped receivables views)
-- market POS sessions require `salesRepId` on open; register catalog uses `GET /api/pos-market/catalog?salesRepId=` (rep car on-hand, not warehouse on-hand)
-- rep car loads, transfers, and stocktakes live in `backend/.../pos-market/rep-car-stock/` with routes under `/api/pos-market/rep-car-loads*`, `/api/pos-market/rep-car-transfers*`, and `/api/pos-market/rep-car-stocktakes*`; rep loads use `POS_MARKET_MANAGE_REP_LOADS`; rep-to-rep transfers are **admin/manager only** (not exposed to `MARKET_REP` riders)
-- main-warehouse intake (buying stock in qty + cost) uses ERP `/inventory` goods receipts, not Market POS; rep loads only move warehouse → rep car; rep transfers move rep car → rep car
-- `MARKET_REP` route `/pos-market/my-stock` uses `GET /api/pos-market/rep-car-stock` and is scoped to `User.salesRepId`
-- market `completeSale` deducts `RepCarStockBalance` via `RepCarStockService.applySaleDeduction`; do not add a parallel warehouse issue for market sales
-- restaurant cashiers must remain limited to `/api/pos/*` and must not receive `/api/pos-market/*` through the JWT cashier guard
-
-Checks to run:
-
-- backend build
-- frontend typecheck
-- `npm run check:market-preflight` after market seed or accounting prerequisite changes
-- when adding new market accounting prerequisites, extend [`market-readiness.service.ts`](../backend/src/modules/phase-3-sales-receivables/pos-market/market-readiness.service.ts)
-
 ## Add Or Change POS Payment Account Mapping
 
 Where to edit:
 
-- frontend `features/pos` (restaurant POS only)
+- frontend `features/pos`
 - backend `phase-3-sales-receivables/pos`
 - `frontend/lib/api` and `frontend/types/api.ts` when the settings payload changes
 - `docs/data-model.md` and `docs/README.md` when posting or cashier behavior changes
@@ -307,41 +266,24 @@ Checks to run:
 
 Where to edit:
 
-- `tools/print-agent/` — Windows Simple Account Print Agent (localhost HTTP server, WebView2 silent print)
-- frontend `features/pos-shared/local-print-agent.ts` — HTTP client for the local print agent (`127.0.0.1:9188`)
-- frontend `features/pos/pos-local-agent-bridge.ts` — restaurant POS agent bridge (status + print)
 - frontend `features/pos/pos-print-service.ts` for print routing decisions
-- frontend `features/pos/pos-kitchen-print-delta.ts` for kitchen snapshot diffing and delta/void print orchestration
 - frontend `features/pos/pos-print-bridge.ts` for QZ Tray/browser bridge behavior
-- frontend `features/pos-shared/qz-tray-security.ts` for shared QZ certificate/signature wiring used by restaurant and market POS
-- frontend `lib/api/qz-tray.ts` for `/api/qz/certificate` and `/api/qz/sign` fetchers
-- backend `common/qz-tray/` for server-side QZ signing (`QZ_CERT_PATH`, `QZ_PRIVATE_KEY_PATH`)
-- frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences (`printBridge`: `agent` | `qz` | `browser`)
+- frontend `features/pos/pos-printer-config.ts` for per-machine printer preferences
 - frontend `features/pos/pos-printer-settings-panel.tsx` for cashier-side printer setup
 - frontend `features/pos/pos-kot-print.ts`, `pos-receipt-print.ts`, and `pos-session-roll-print.ts` for the actual 80mm receipt HTML templates
-- `frontend/public/downloads/simple-account-print-agent.zip` — agent installer hosted for POS download (build via `tools/print-agent/build-release.ps1` on Windows)
 - `docs/pos/printer-setup.md` when setup requirements change
 
 What else to check:
 
-- kitchen print routing uses delta ADD tickets on send/update and VOID tickets on cashier cancel; pay-without-send prints kitchen + Arabic receipt together when unsent lines exist
 - kitchen KOT and customer receipt templates are intentionally separate; do not merge kitchen notes/table routing into the customer receipt template unless the business explicitly asks for it
 - OS printer names are machine-local, so kitchen/receipt printer names should stay in browser-local configuration unless a network/IP print service is introduced
-- default print bridge for new installs is **Local agent**; agent mode must fail loudly when the agent/printer is unavailable and must not automatically open browser print
-- browser print is an explicit manual/emergency bridge mode; it cannot automatically route kitchen and receipt jobs to different OS printers
-- QZ Tray is legacy/optional only for already-configured cashier PCs; do not put QZ back into the normal cashier/kitchen flow unless explicitly requested
-- for silent QZ printing without the untrusted-site dialog on legacy QZ machines, configure backend QZ signing (`npm run qz:generate-cert` in `backend/`) and trust the generated certificate on each cashier PC; see `docs/pos/printer-setup.md`
-- rebuild and deploy the print-agent zip when the C# agent changes
+- QZ Tray named-printer routing should fall back to browser `window.print()` when QZ is unavailable so sale completion and kitchen send are not blocked by printer setup
 
 Checks to run:
 
 - frontend typecheck
-- Local Print Agent wrapper tests
-- local contract smoke test with `node tools/print-agent/mock-agent-server.mjs` and `node tools/print-agent/smoke-test-agent-api.mjs`
-- manual Browser print mode check for KOT and customer receipt when emergency mode is selected
-- Print Agent test print on a Windows cashier PC with configured XPrinter devices
-- Windows cashier hardware test with `.\tools\print-agent\verify-windows-hardware.ps1 -KitchenPrinter "XPrinter-Kitchen" -ReceiptPrinter "XPrinter-Cashier"`
-- QZ Tray printer list/test print only when legacy QZ bridge mode is intentionally used
+- manual browser fallback print for KOT and customer receipt
+- QZ Tray printer list/test print on a cashier PC with the configured XPrinter devices
 
 ## POS Tax-Free Sales Mode
 
@@ -399,12 +341,7 @@ What else to check:
 - purchase-order list `عرض` actions may open the dedicated `/purchases/orders/[id]` details page so users can review summary, lines, and receipt history without overloading the workspace list
 - purchase-order workflow actions should stay in the main `/purchases?tab=orders` table `الإجراءات` column, including issue, receive, partial/full receive transitions, cancel, and close; the dedicated `/purchases/orders/[id]` screen should remain a clean details/history view
 - purchase-request references now follow the daily sequence format `PR-YYYYMMDD-N`; new logic must ignore legacy random codes when calculating the next daily number
-- purchase request, purchase order, purchase invoice, and supplier payment create/edit forms should open inline inside their respective `/purchases?tab=...` workspaces using the same in-page workspace flow and visual shell used by the Sales Invoice editor, rather than full-screen overlay modals
-- purchase invoices now persist an explicit `paymentMode` (`CASH` or `CREDIT`) on create/edit while the invoice remains `DRAFT`; posted invoices keep the stored value for reporting
-- supplier movement reporting lives at `/purchases/supplier-movement-report` with backend `GET /api/purchases/supplier-movement-report` returning posted purchase invoices grouped by supplier for A4 print/PDF
-- sample posted purchase invoices for the supplier movement report are seeded by `backend/prisma/seed-supplier-movement-report.ts` (`SEED-SMR-2025-*` references, 2025 dates, mixed `CASH`/`CREDIT`) from the main `npm run seed` flow after opening suppliers are created
-- item sales detail reporting lives at `/sales-receivables/item-sales-detail-report` with backend `GET /api/sales-receivables/item-sales-detail-report?itemId=&fromDate=&toDate=&sourceTypes=&paymentTypes=&branchName=&includeReturns=` returning posted ERP/POS sales lines and negative return lines for one inventory item; `GET /api/sales-receivables/item-sales-detail-report/branches` lists distinct POS session branch names for the branch filter; bonus is always reported as `0.000`; optional `branchName` filters POS rows only while ERP rows remain visible; sample posted ERP invoices are seeded by `backend/prisma/seed-item-sales-detail-report.ts` (`SEED-ISDR-2025-*`) after opening inventory items exist
-- purchase-request and purchase-order inline editors must expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
+- purchase-request and purchase-order editor modals now expose explicit confirm buttons (`تاكيد طلب شراء` and `تاكيد امر الشراء`) alongside draft save, and each confirm action must save the document first before calling the existing submit/issue workflow transition
 - purchase-request request dates and requested-delivery dates must now be realistic business dates (year `2000` or later), and a requested delivery date must not be earlier than the request date
 - purchase-request status-history writes must tolerate stale or missing authenticated user IDs by storing a null audit user reference instead of failing the request transaction on the `PurchaseRequestStatusHistory.userId` foreign key
 - shared audit-log writes must also tolerate stale or reseeded authenticated user IDs by retrying with a null `AuditLog.userId` instead of surfacing a false `Internal server error` after the business transaction already succeeded
@@ -445,7 +382,7 @@ What else to check:
 - item categories must belong to one active item group at creation time
 - material/item cards must select an active item group, an active category under that group, and an active base unit of measure
 - changing an item group in the UI should clear or revalidate the selected category
-- item/service codes are backend-owned on create: omit `code` to allocate `ITM-000001` (prefix `ITM`, six zero-padded digits, one global sequence); optional explicit `code` is allowed when provided and must stay unique (used by Excel import and Market POS `MKT-*` products)
+- item/service codes must be generated only by the backend on create using the `ITM-000001` format, with prefix `ITM`, six zero-padded digits, no date/random suffixes, and one global sequence shared across all item and service types
 - keep Arabic labels distinct: `مجموعة الأصناف`, `فئة الصنف / التصنيف`, `بطاقة المادة`, and `وحدة القياس`
 - item-card pricing fields are suggestion/default values only; they must not be treated as inventory valuation or actual stock cost
 - item-card unit conversion setup must always keep the base-unit row with factor `1`, block duplicate units, and keep conversion factors visible in the owning form/UI
@@ -458,35 +395,6 @@ Checks to run:
 - Prisma generate and migration review
 - backend build
 - frontend typecheck
-
-## Import Inventory Products From Excel
-
-Where to edit:
-
-- backend `phase-5-inventory-management/inventory/item-master/item-import.service.ts`
-- backend `phase-5-inventory-management/inventory/item-master/dto/import-inventory-items.dto.ts`
-- backend `phase-5-inventory-management/inventory/item-master/item-master.controller.ts` (`POST /inventory/items/import/preview`, `POST /inventory/items/import`)
-- frontend `features/phase-5-inventory-management/inventory/item-import-modal.tsx`
-- frontend `features/phase-5-inventory-management/inventory/inventory-page.tsx` (Items workspace **Import Products** action)
-- frontend `lib/api/index.ts` and `types/api.ts`
-
-What else to check:
-
-- v1 parses `.xlsx`/`.xls` on the client with the `xlsx` package and sends JSON rows to the backend (no multipart upload yet)
-- required template columns: `name`, `groupCode`, `categoryCode`, `unitCode`; optional `code`, `barcode`, prices, `description`, `type`
-- masters resolve by **code** (case-insensitive exact match); groups, categories, and units must already exist
-- category must belong to the resolved group
-- duplicate existing item `code` rows use `duplicatePolicy: "skip"` (default) and appear as **Skipped** in preview
-- import copies default posting accounts from the item group when the group stores them; item-level account fields otherwise remain null like manual create
-- Market POS catalog filters products by `MKT-*` item codes (or market group codes); use explicit `code` values such as `MKT-001` when onboarding retail products
-- opening stock is **not** part of v1 import; use goods receipts / rep loads after products exist
-
-Checks to run:
-
-- `item-import.service.spec.ts`
-- backend build
-- frontend typecheck
-- manual flow: download template → preview → import → confirm items list and Market POS catalog
 
 ## Start Or Extend Phase 5 Inventory
 
@@ -503,11 +411,6 @@ What else to check:
 - keep the inventory module split by subdomain ownership such as item master, warehouses, goods receipts, issues, transfers, adjustments, costing, inquiry, posting/accounting, and validation/control
 - inventory list reads (`/inventory/items`, `/inventory/goods-receipts`, `/inventory/goods-issues`, `/inventory/transfers`, `/inventory/adjustments`, `/inventory/stock-ledger`) should use `page`/`limit` and keep frontend pagination state/controls in the owning Phase 5 feature page
 - the inventory items list is full-width and rendered as a compact table (matching the POS Session Review row-styling), where selecting an item from the list displays the item details in a dedicated Accountant Review-style view with separate, properly scaled cards for barcodes and QR codes, and a button to open the full-form editor modal
-- inventory item list filters should stay server-backed through `GET /inventory/items`; availability-style filters must use actual on-hand stock (`InventoryItem.onHandQuantity`, or warehouse balance when the request is warehouse-scoped) rather than client-only row hiding
-- when the item list is filtered by warehouse, `GET /inventory/items?warehouseId=` should drive both the displayed on-hand quantity and stock-based filters so seeded opening stock such as `WH-MAIN` vs `WH-AMER` stays explorable from the item-master screen
-  The warehouse selector must also narrow the item result set itself through `warehouseBalances`, not only change the displayed quantity column for otherwise unfiltered rows.
-- inventory item search text that claims warehouse support should match real warehouse balances (`warehouseBalances -> warehouse.code/name`), not only the item's preferred warehouse metadata
-- the inventory item details view may expose both `Deactivate` and `Delete Item`; permanent deletion must be blocked whenever the item has stock balances, costing/movement history, recipe or POS addon links, or any upstream/downstream document references, so historical traceability remains intact
 - item records that point to a preferred warehouse should reference the Phase 5 warehouse master slice instead of introducing parallel free-text warehouse registries
 - item barcode values must remain unique across all inventory items; use the dedicated item-master workflow for manual entry, scanner entry, or internal barcode generation
 - QR data for item cards should be stored as text/value only, generated dynamically from item fields, and rendered cleanly inside a dedicated max-width container without raw JSON text output
@@ -624,7 +527,7 @@ What else to check:
 - trial balance, balance sheet, profit and loss, and general-ledger inquiry should stay reconcilable to the same posted ledger source for the same filters/period
 - cash movement reporting should continue to derive from the linked bank/cash posting accounts rather than inventing a parallel balance store
 - Arabic and English terminology must stay aligned when adding report names, column labels, filters, export labels, and drill-down actions
-- the `/reporting` workspace uses a flat layout: tools row, primary filter bar (period/account/segment chips plus export), secondary filters row, and report-specific body content; general ledger is the default entry (`/reporting?tab=generalLedger`) and the first item in the sidebar `التقارير` dropdown, with a top account search (code or localized name) above the ledger table; the summary tab (`?tab=summary`) remains implemented for KPI cards and the sticky summary footer but is not linked from navigation
+- the `/reporting` dashboard body uses a flat layout: tools row, primary filter bar (period/account/segment chips plus export), secondary filters row, KPI cards, content tabs (activity / trial balance / general ledger), and a sticky summary footer
 - KPI sparklines on the reporting dashboard are derived client-side from comparison and current metric amounts; they are illustrative, not a historical time series from the API
 
 Must remain compatible:
@@ -727,7 +630,6 @@ Must remain compatible:
 - posted entries stay auditable
 - posting remains transactional
 - ledger history remains consistent with balances
-- manual posted journal entries are edited by unposting the same entry to `DRAFT` through `POST /journal-entries/:id/unpost`; do not reintroduce a reverse-plus-new-draft edit flow in the journal entries UI for those entries
 
 Checks to run:
 
@@ -901,11 +803,11 @@ Must remain compatible:
 
 - base POS sale completion, held sale resume, and accountant-review flows
 - `SalesInvoice.invoiceType = POS` lifecycle invariants
-- waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx` — order panel shows line prices, scrollable cart lines, and a fixed subtotal/tax/total + confirm footer; on mobile the order panel stacks above the product grid
+- waiter floor plan reuses `frontend/app/(erp)/pos/tables/page.tsx` with waiter-only navigation targets (`/pos/waiter/order`); dedicated waiter ordering UI lives in `frontend/features/pos/pos-waiter-order-page.tsx` which directly wraps the cashier's main POS register page (`PosPage`) under `waiterMode=true`, rendering the full unified register layout (style, catalog list, and checkout/payment methods) for waiters with elevated permissions.
 - confirm-to-kitchen: `POST /pos/sales/:id/send-to-kitchen` in `pos.controller.ts` / `PosService.sendSaleToKitchen`; draft saves no longer auto-create kitchen tickets — only explicit send (waiter confirm or cashier incremental send). Sending a draft table order to the kitchen must also promote it to `HELD` and keep the table linked to that invoice so selecting the table later reopens the full submitted order.
-- cart lock rule: once `waiterConfirmedAt` is set on a dine-in sale, register draft/hold edits are blocked until payment; lines with `kitchenSentAt` cannot be removed/changed even before waiter confirm
+- cart lock rule: once `waiterConfirmedAt` is set on a dine-in sale, users without `POS_ADD_ITEM_AFTER_WAITER_CONFIRM` or `POS_EDIT_WAITER_CONFIRMED_ORDER` cannot change the cart; users with `POS_ADD_ITEM_AFTER_WAITER_CONFIRM` may add **new** lines and send incremental KOT rounds but cannot edit/remove existing lines; cashiers (or any user) with `POS_EDIT_WAITER_CONFIRMED_ORDER` may fully edit the cart and push kitchen VOID/ADD slips via **Update kitchen** when they also have `RST_UPDATE_KITCHEN_FROM_CART` or `POS_EDIT_WAITER_CONFIRMED_ORDER`. Lines with `kitchenSentAt` cannot be removed/changed without `POS_MODIFY_KITCHEN_SENT_LINE` unless the linked kitchen item is `READY` or `SERVED`
 - waiter service advance: `PUT /pos/waiter/orders/:id/status` with `RECEIVED` or `DEPARTED`; `DEPARTED` sets the table to `CLEANING` while keeping `activeInvoiceId` for cashier payment; completing a dine-in sale then clears `activeInvoiceId` and keeps/sets the table on `CLEANING` until a waiter marks it `AVAILABLE` from the floor plan (`frontend/app/(erp)/pos/tables/page.tsx`)
-- KOT print: cashier send/update still prints immediately on the cashier PC via `frontend/features/pos/pos-print-service.ts`; waiter confirm is printed by `frontend/features/pos/pos-kitchen-print-hub.ts` on the open cashier register. Audit via `POST /pos/kitchen/orders/:id/reprint` when the kitchen order id is known.
+- KOT print: cashier send still prints immediately on the cashier PC; waiter confirm is printed by `frontend/features/pos/pos-kitchen-print-hub.ts` on the open cashier register. Audit via `POST /pos/kitchen/orders/:id/reprint` when the kitchen order id is known.
 - opening a dine-in table from `/pos/tables` or the register table picker must resume the table's active draft/held sale (`tableId` + `resume` when `activeInvoice` exists); do not reset the cart before held/draft queries finish loading. The standalone tables route and register must use the shared POS table React Query key so table occupancy refreshes after kitchen/hold actions, and the register should preserve the resumed sale's table number as a display fallback while table metadata refetches.
 - current route ownership under `frontend/features/pos`
 
@@ -914,54 +816,28 @@ Checks to run:
 - backend build (`npm run build` in `backend/`)
 - frontend typecheck (`npx tsc --noEmit` in `frontend/`)
 
-## Mobile and tablet responsive layout
-
-Where to edit:
-
-- viewport breakpoints hook: `frontend/lib/hooks/use-viewport-breakpoints.ts` — `useNavDesktopLayout()` (≥1024px fixed sidebar), `usePosWideLayout()` (≥960px register side-by-side)
-- Tailwind named screens: `frontend/tailwind.config.ts` — `pos-wide` (960px), `nav-desktop` (1024px)
-- app shell + main content padding: `frontend/components/app-shell.tsx`
-- sidebar / mobile drawer: `frontend/components/site-header.tsx`
-- mobile top bar / floating menu on POS: `frontend/components/mobile-nav-bar.tsx`
-- PWA viewport + manifest: `frontend/app/layout.tsx`, `frontend/public/manifest.webmanifest`
-
-Behavior:
-
-- below `1024px`: sidebar is an overlay drawer (closed by default); ERP pages show a top nav bar; `/pos/*` and `/pos-market/*` show a floating menu button; main content uses full width (`pl-0`)
-- at `1024px` and above: fixed sidebar with collapse toggle (unchanged desktop behavior)
-- reporting summary footer spans full width on mobile (`frontend/features/phase-8-reporting-control/reporting/components/reporting-summary-footer.tsx`)
-
-Checks to run:
-
-- frontend typecheck
-- DevTools smoke at 390px (phone), 834px (tablet), 1024px (iPad Pro portrait)
-
 ## POS register layout, catalog, favorites, and payments
 
 Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
 - payment receipt print (80mm thermal roll layout, auto-print on complete sale): `frontend/features/pos/pos-receipt-print.ts`
+- receipt contact branding defaults and env overrides (`POS_RECEIPT_PHONE`, `POS_RECEIPT_ADDRESS`, `POS_RECEIPT_TAGLINE`): `backend/src/modules/phase-3-sales-receivables/pos/pos-receipt-branding.ts`
+- held-sales list clarity (headline, identity strip, order number, total, relative time): `frontend/features/pos/pos-held-sale-display.ts`, `frontend/features/pos/pos-held-sale-card.tsx`; wired from `renderHeldWorkspace()` in `frontend/features/pos/pos-page.tsx`
 - session closing roll print (80mm thermal roll, auto-print on cashier shift close; same layout as accountant review): `frontend/features/pos/pos-session-roll-print.ts`, triggered from `closeSessionMutation` in `frontend/features/pos/pos-page.tsx`
-- extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx` (re-exports from `pos-shared`)
-- shared register layout (both POS products): `frontend/features/pos-shared/pos-register-main-grid.tsx`, `pos-register-mobile-cart.tsx`, `pos-layout-classes.ts` — pass `mobileCartBar` and optional `theme` (`POS_REGISTER_DEFAULT_THEME` / `POS_REGISTER_MARKET_THEME`)
-- shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos-shared/pos-layout-classes.ts` (restaurant re-exports via `frontend/features/pos/pos-layout-classes.ts`); reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
-- narrow register UX (iPad portrait, phones): `pos-shared` register shell — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full cart panel. From `960px` (`pos-wide`) up, catalog and order panel stay side by side. Restaurant: pass `mobileCartBar` from `pos-page.tsx`. Market: `frontend/features/pos-market/pos-market-register-layout.tsx`
+- extracted register UI (keep in sync when changing layout): `frontend/features/pos/pos-product-card.tsx`, `frontend/features/pos/pos-session-bar.tsx`, `frontend/features/pos/pos-register-layout.tsx`
+- shared responsive layout classes for POS screens (auto-fill product/table grids, register split breakpoint, touch targets): `frontend/features/pos/pos-layout-classes.ts`; reuse these instead of hard-coded `md:grid-cols-*` when adding new POS grids
+- narrow register UX (iPad portrait, phones): `frontend/features/pos/pos-register-mobile-cart.tsx` + `frontend/features/pos/pos-register-layout.tsx` — full-screen product catalog, sticky bottom cart bar (item count + total), and slide-up order sheet with the full `salePanel`. From `960px` up, catalog and order panel stay side by side. Pass `mobileCartBar` from `pos-page.tsx` when extending the register shell
+- waiter tablet register UX: `PosPage waiterMode` passes a waiter/tablet variant through `frontend/features/pos/pos-register-layout.tsx`, `pos-register-mobile-cart.tsx`, `pos-layout-classes.ts`, and `pos-product-card.tsx`. Waiter mode keeps the catalog-first layout with sticky cart bar and slide-up order sheet until `1180px`; cashier mode keeps the existing `960px` split breakpoint. Product-grid/card sizing for this waiter tablet pass belongs in `frontend/features/pos`, not route files or shared generic UI.
 - dine-in table floor plan UI: `frontend/app/(erp)/pos/tables/page.tsx` — uses the shared table grid classes and touch-friendly card actions
-- mobile navigation drawer (replaces permanent sidebar offset on narrow viewports): `frontend/components/app-shell.tsx` + `frontend/components/mobile-nav-bar.tsx`
+- POS routes auto-collapse the ERP sidebar below `1024px` via `frontend/components/app-shell.tsx` so catalog/table views get more horizontal space on tablets and smaller laptops
 
 - category chips are dynamically loaded from Inventory Item Groups, helper functions defined in: `frontend/features/pos/pos-catalog-chips.ts`
+- the POS register applies a fixed business display order for category chips in `frontend/features/pos/pos-page.tsx`: `الاصناق`, `روس و المقادم`, `الاطباق`, `وجبات 1`, `وجبات 2`, `الفتات`, `المقبلات`, `المشروبات`, `الاضافات`, then `المفضلة` and `الكل`
 - warehouse-scoped on-hand for the product grid: backend `GET /inventory/items?warehouseId=` (item master controller/service) and frontend `getInventoryItems` / `queryKeys.inventoryItems`
 - cashier favorites: backend `GET`/`PUT` `/pos/favorites/items`, frontend `getPosFavoriteItemIds` / `setPosFavoriteItemIds`
-- POS register demo setup (customers, cashier favorites, add-ons; no seeded warehouses/groups/categories or hardcoded inventory products): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
-- POS add-on demo groups (extras, cooking level, drink size) linked to sandwich/chips/drinks: `backend/prisma/seed-pos-addons.ts` (runs with register seed); refresh only add-ons on an existing DB with `npm run seed:pos-addons`
-- Market POS Amer sales rep (`REP-AMER`, login `amer` / `amer123`): `backend/prisma/seed-pos-market.ts`, invoked from full `npm run seed` or standalone `npm run seed:market` on an existing DB (requires foundation/`admin` user)
-- Amer rep car load from `WH-AMER` opening stock (`RCL-AMER-OPENING-01`): `backend/prisma/seed-amer-rep-load.ts`, invoked from full `npm run seed` (after opening inventory) or standalone `npm run seed:amer-rep-load`
-- Admin accountant POS role on `admin`: `backend/prisma/setup-admin-accountant.ts`, invoked from full `npm run seed`
-- Market POS cashier login (`market` / `market123`, `market_cashier` / `market123`) — optional, not in main seed: `backend/prisma/setup-pos-market-cashier.ts`, standalone `npm run seed:market-cashier`
-- Opening inventory workbook import (non-destructive to unrelated tables): `backend/prisma/seed-opening-inventory.ts`, invoked with `npm run seed:opening-inventory`; reads `backend/data/opening-inventory-2026-05-31.json` (snapshot generated from the checked-in workbook), upserts items, creates/reuses the two warehouses, and posts deterministic opening goods receipts dated `2026-05-31`
-  Rerunning the import now refreshes those two deterministic opening receipts by reference instead of silently reusing an older posted result, but only when no later stock movement exists for the affected warehouse items.
-  If later stock movement already exists and you only need to keep the current opening receipts while still upserting item metadata, run `npm run seed:opening-inventory:add-only` instead. That mode skips refreshing existing opening receipts.
+- POS register demo catalog (warehouses, barcoded products, stock, customers, cashier favorites, and the standalone `اضافات اللبن` service item under `الاضافات`): `backend/prisma/seed-pos-register.ts`, invoked from full `npm run seed` or standalone `npm run seed:pos-demo` on an existing DB
+- POS add-on demo groups and menu-item option seeds live in `backend/prisma/seed-pos-addons.ts` (runs with register seed); this now includes per-item options such as `بدون وجبة` pricing overrides for selected meal items, conditional head-yogurt choices (`لبن 0.5` for `نص رأس`, `لبن 1.0` for `رأس كامل`), weight-dependent yogurt pricing for `آبوات` / `فوارغ` / `كرشات` (`0.25/0.5/0.75/1.0` by selected weight), and zero-price menu extras like `إضافة فتة` on selected dishes. Refresh only add-ons on an existing DB with `npm run seed:pos-addons`
 
 ### Volume seed (enterprise demo dataset)
 
@@ -976,7 +852,6 @@ Commands:
 
 - `npm run seed` — fast basic dataset (`prisma/seed.ts`); also used by `npx prisma db seed`
 - `npm run seed:volume` — same foundation plus 3 fiscal years of bulk GL, enterprise masters, reporting audit rows, and quarterly operational samples (truncates DB; ~2–8 min)
-- `npm run seed:opening-inventory` — import the Excel opening stock workbook into existing inventory tables only (does not truncate unrelated tables)
 
 Checks to run after volume seed changes:
 
@@ -1008,10 +883,13 @@ Where to edit:
 Rules:
 
 - cashiers cannot enable sell-by-weight from POS settings or the register; only items flagged in `/inventory` prompt for weight at sale time
-- `defaultSalesPrice` is price per base unit (for example per kg); line total = entered weight × unit price
-- weight lines do not merge in the cart; each weigh-in stays a separate line
+- `defaultSalesPrice` is price per base unit (for example per kg); line total = entered weight × unit price × `portionCount` (plus per-portion add-ons)
+- sell-by-weight lines merge in the cart when item, weight, add-ons, and line note match (`getCartLineMergeKey`); re-adding from the grid or pressing `+` increments `portionCount` on the same row (`×2`, `×3`, …)
+- the register cart shows `+` / `−` on sell-by-weight lines: `+` increments `portionCount`; `−` decrements or removes at `×1`; **cashiers** may edit kitchen-sent weight lines before payment (only `READY`/`SERVED` stays locked); **waiters** still cannot remove kitchen-sent portions and clone a new row with `+` after send
+- kitchen cart changes do **not** auto-sync; cashiers must tap **Update kitchen / تحديث المطبخ** to push VOID/ADD slips and persist line changes; `mergeCartLinesPreservingPortions` keeps `portionCount` after that API round-trip
 - enabling `allowFractionalQuantity` requires the item base unit `unitType` to be `WEIGHT`
 - held/draft/resumed sales preserve decimal `quantity`; resume enriches cart lines from the live catalog for `sellByWeight` display controls
+- traditional Arabic quantity labels for sell-by-weight asnaq items (`آبوات`, `فوارغ`, `كرشات`) are display-only in `frontend/features/pos/pos-weight-utils.ts` (`formatPosWeightDisplay`): preset KG picks print as `عدد واحد`, `وقية`, `نص كيلو`, `تلات أواج`, `كيلو` on the register cart, add-on modal, and thermal receipt while stored `quantity` and pricing math stay decimal KG
 
 Checks to run:
 
@@ -1061,43 +939,3 @@ Key rules:
 - pass `reservationId` in `HoldPosSaleDto` / `SavePosDraftDto` to trigger skip of table activation in `saveDraftLikeSale`
 - `preOrderSaleId` is stored inside the `PosTableReservation.notes` JSON blob alongside `orderNotes`, `attendanceStatus`, etc.
 - one pre-order per reservation at a time; a new pre-order replaces the link if the previous sale is no longer DRAFT/HELD
-
-## Purchase Request UI Modernization
-
-Where to edit:
-
-- Purchase Request form, layout, and tabs: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
-
-Rules:
-
-- The Purchase Request form design, styling, and layout must match the Sales Invoice editor (`SalesDocumentEditorModal`).
-- The modal uses the emerald theme, featuring card-based containers with `rounded-lg` borders and premium shadows.
-- The details and lines tables utilize a tabbed layout (Request Items and Other Info tabs) for high-fidelity UX.
-- The lines table is consistent in cell sizing, spacing (`px-2.5 py-3.5`), select input styling, and action triggers.
-- Provides a summary box in the bottom right of the lines tab (displaying total items and total requested quantity) to visually balance the layout similarly to the Sales Invoice's totals box.
-
-## Purchase Order UI Modernization
-
-Where to edit:
-
-- Purchase Order form, layout, and tabs: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
-
-Rules:
-
-- The Purchase Order form design, styling, and layout must match the Sales Invoice editor (`SalesDocumentEditorModal`) in inline presentation mode.
-- The editor uses the emerald theme, featuring card-based containers with `rounded-2xl` borders, premium shadows, and conditional inline workspace presentation (`isInlineOrderWorkspace`).
-- The details and lines tables utilize a tabbed layout (Order Items, Journal Entries, and Other Info tabs) for high-fidelity UX.
-- The lines table is consistent in cell sizing, spacing (`px-2.5 py-3.5`), select input styling, `CurrencyAmountInput` for unit prices and line totals, and action triggers.
-- Provides a summary box in the bottom right of the lines tab (displaying total amount before tax, tax, and order total) to visually balance the layout similarly to the Sales Invoice's totals box.
-
-## Purchase Invoice And Supplier Payment UI Modernization
-
-Where to edit:
-
-- Purchase Invoice and Supplier Payment inline forms: `frontend/features/phase-4-procure-to-pay/purchases/purchases-page.tsx`
-
-Rules:
-
-- The Purchase Invoice and Supplier Payment editors should stay inline inside the `/purchases` workspace and use the same breadcrumb/header/back-navigation pattern as the Sales Invoice editor.
-- Basic information, tab headers, line/allocation tables, validation alerts, and bottom summary cards should follow the Sales Invoice editor's spacing, card treatment, and emerald-accent visual language.
-- Posting actions remain separate from draft save, and the guided Purchase Invoice -> Supplier Payment handoff must still post the invoice first before opening the prefilled supplier-payment editor.

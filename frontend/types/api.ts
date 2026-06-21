@@ -70,7 +70,12 @@ export type PosPermissionCode =
   | "POS_MARKET_COLLECT_RECEIVABLE"
   | "POS_MARKET_MANAGE_REP_LOADS"
   | "POS_MARKET_REP_STOCKTAKE"
-  | "POS_MARKET_AMEND_SALE";
+  | "POS_MARKET_AMEND_SALE"
+  | "POS_ADD_ITEM_AFTER_WAITER_CONFIRM"
+  | "POS_EDIT_WAITER_CONFIRMED_ORDER"
+  | "POS_MODIFY_KITCHEN_SENT_LINE"
+  | "RST_UPDATE_KITCHEN_FROM_CART"
+  | "SYS_MANAGE_USERS";
 
 export type ApiErrorShape = {
   statusCode?: number;
@@ -125,6 +130,65 @@ export type RegisterResponse = {
   defaultRoute: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PosPermissionOverrideEffect = "GRANT" | "DENY";
+
+export type PermissionOverrideInput = {
+  code: PosPermissionCode;
+  effect: PosPermissionOverrideEffect;
+};
+
+export type AdminUserSummary = {
+  id: string;
+  username: string;
+  email: string;
+  name?: string | null;
+  role: UserRole;
+  isActive: boolean;
+  posRoles: PosAccessRole[];
+  overrideCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PermissionCatalogEntry = {
+  code: PosPermissionCode;
+  name: string;
+  description: string;
+  category: string;
+};
+
+export type PermissionBreakdownEntry = PermissionCatalogEntry & {
+  inherited: boolean;
+  override: PosPermissionOverrideEffect | null;
+  effective: boolean;
+};
+
+export type AdminUserDetail = AdminUserSummary & {
+  permissionOverrides: PermissionOverrideInput[];
+  rolePermissions: PosPermissionCode[];
+  effectivePermissions: PosPermissionCode[];
+  permissionBreakdown: PermissionBreakdownEntry[];
+};
+
+export type CreateAdminUserPayload = {
+  username: string;
+  email: string;
+  password: string;
+  name?: string;
+  isActive?: boolean;
+  posRoles?: PosAccessRole[];
+  permissionOverrides?: PermissionOverrideInput[];
+};
+
+export type UpdateAdminUserPayload = {
+  email?: string;
+  name?: string;
+  isActive?: boolean;
+  password?: string;
+  posRoles?: PosAccessRole[];
+  permissionOverrides?: PermissionOverrideInput[];
 };
 
 // ─── Segments ─────────────────────────────────────────────────────────────────

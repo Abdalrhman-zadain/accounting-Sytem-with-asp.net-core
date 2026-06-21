@@ -30,6 +30,7 @@ const enTranslations: Record<string, string> = {
   "nav.item.fiscalPeriods": "Fiscal Periods",
   "nav.item.auditTrail": "Audit Trail",
   "nav.item.settings": "Settings",
+  "nav.item.users": "Users",
 
   "nav.quickAccess.title": "Jump to page",
   "nav.quickAccess.placeholder": "Search pages… invoices, customers, reports",

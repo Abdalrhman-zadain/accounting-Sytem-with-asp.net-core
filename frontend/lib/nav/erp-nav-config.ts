@@ -27,6 +27,7 @@ import {
   LuUtensils as Utensils,
   LuChefHat as ChefHat,
   LuTruck as Truck,
+  LuUser as User,
 } from "react-icons/lu";
 
 import type { TranslationKey } from "@/lib/i18n";
@@ -41,6 +42,7 @@ export type ErpNavItem = {
   href: string;
   labelKey: TranslationKey;
   icon: IconType;
+  adminOnly?: boolean;
   children?: ErpNavChild[];
 };
 
@@ -160,7 +162,10 @@ export const ERP_NAV_GROUPS: ErpNavGroup[] = [
   },
   {
     labelKey: "nav.group.system",
-    items: [{ href: "/settings", labelKey: "nav.item.settings", icon: Settings2 }],
+    items: [
+      { href: "/settings", labelKey: "nav.item.settings", icon: Settings2 },
+      { href: "/settings/users", labelKey: "nav.item.users", icon: User, adminOnly: true },
+    ],
   },
 ];
 

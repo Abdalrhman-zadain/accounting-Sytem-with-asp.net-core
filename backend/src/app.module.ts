@@ -13,6 +13,7 @@ import { PayrollModule } from './modules/phase-6-payroll-management/payroll/payr
 import { FixedAssetsModule } from './modules/phase-7-fixed-assets-management/fixed-assets/fixed-assets.module';
 import { ReportingModule } from './modules/phase-8-reporting-control/reporting/reporting.module';
 import { AuthModule } from './modules/platform/auth/auth.module';
+import { UsersModule } from './modules/platform/users/users.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AuthModule } from './modules/platform/auth/auth.module';
     FixedAssetsModule,
     ReportingModule,
     AuthModule,
+    UsersModule,
   ],
 })
 export class AppModule { }

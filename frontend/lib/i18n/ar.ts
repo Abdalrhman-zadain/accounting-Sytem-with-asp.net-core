@@ -20,6 +20,7 @@ const arTranslations: Record<string, string> = {
   "nav.item.fiscalPeriods": "الفترات المالية",
   "nav.item.auditTrail": "مسار التدقيق",
   "nav.item.settings": "الإعدادات",
+  "nav.item.users": "المستخدمون",
 
   "nav.quickAccess.title": "الانتقال إلى صفحة",
   "nav.quickAccess.placeholder": "ابحث عن صفحة… فواتير، عملاء، تقارير",
