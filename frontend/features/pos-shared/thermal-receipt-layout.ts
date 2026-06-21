@@ -148,6 +148,15 @@ export function thermalReceiptMetaLineHtml(text: string): string {
   return `<div class="center meta meta-line">${text}</div>`;
 }
 
+/** Inline LTR segment for phone numbers and other digit strings on RTL receipts. */
+export function thermalReceiptLtrInlineHtml(text: string): string {
+  return `<span class="thermal-ltr" dir="ltr">${text}</span>`;
+}
+
+export function thermalReceiptPhoneLineHtml(phone: string): string {
+  return `<div class="center meta meta-line">هاتف: ${thermalReceiptLtrInlineHtml(phone)}</div>`;
+}
+
 export function thermalReceiptMetaRowSplit(
   rightLabel: string,
   rightValue: string,
@@ -299,6 +308,11 @@ const THERMAL_RECEIPT_BASE_CSS = `
       word-break: break-word;
       overflow-wrap: anywhere;
       padding: 0 1mm;
+    }
+    .thermal-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
     }
     .meta-split {
       display: flex;

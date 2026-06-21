@@ -79,9 +79,11 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain('class="summary-line emphasis"');
     expect(html).toContain("summary-amt");
     expect(html).toContain("شكراً لزيارتكم");
-    expect(html).toContain("هاتف: 079 120 84 88");
+    expect(html).toContain('class="thermal-ltr" dir="ltr"');
+    expect(html).toContain("079 120 84 88");
     expect(html).toContain("شارع القدس");
-    expect(html).toContain("كرشات - مقادم");
+    expect(html).not.toContain("كرشات - مقادم");
+    expect(html).not.toContain("إيصال بيع");
     expect(html).not.toContain("كاشوكة");
     expect(html).not.toContain("Simple Account");
   });
@@ -97,9 +99,10 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("هاتف: 0790000000");
+    expect(html).toContain('class="thermal-ltr" dir="ltr"');
+    expect(html).toContain("0790000000");
     expect(html).toContain("عنوان مخصص");
-    expect(html).toContain("سناكات ومقبلات");
+    expect(html).not.toContain("سناكات ومقبلات");
     expect(html).not.toContain("079 120 84 88");
   });
 
@@ -224,7 +227,7 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("فاتورة");
+    expect(html).not.toContain("فاتورة");
     expect(html).not.toContain("إيصال بيع");
     expect(html).toContain("مرجع: POS-20260620-0012");
     expect(html).not.toContain("رقم الطلب:");

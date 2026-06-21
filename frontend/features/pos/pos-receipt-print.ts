@@ -17,6 +17,7 @@ import {
   thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
   thermalReceiptMetaLineHtml,
+  thermalReceiptPhoneLineHtml,
   thermalReceiptPaymentBoxHtml,
   thermalReceiptSepLine,
   thermalReceiptTableClose,
@@ -179,9 +180,11 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
     .logo {
       display: block;
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 4px;
+      width: 28mm;
+      max-width: 90%;
+      height: auto;
+      max-height: 28mm;
+      margin: 0 auto 6px;
       object-fit: contain;
     }
     @media print {
@@ -285,7 +288,6 @@ function resolveReceiptContactFields(receipt: PosReceiptData): {
 
 function buildBrandHeaderHtml(receipt: PosReceiptData): string {
   const logoUrl = resolveReceiptLogoUrl(receipt);
-  const { tagline } = resolveReceiptContactFields(receipt);
   const identityMeta = [
     receipt.branchName,
     receipt.taxNumber ? `ض.ب: ${receipt.taxNumber}` : null,
@@ -293,25 +295,15 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     .filter(Boolean)
     .join(" · ");
 
-  const subtitle = receipt.receiptKind === "provisional" ? "فاتورة" : "إيصال بيع";
-
   if (logoUrl) {
     return `
       <div class="brand-stack">
         <img class="logo" src="${logoUrl}" alt="Logo"/>
-        ${tagline ? thermalReceiptMetaLineHtml(tagline) : ""}
-        <div class="sub">${subtitle}</div>
       </div>
       ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
   }
 
-  return [
-    tagline ? thermalReceiptMetaLineHtml(tagline) : "",
-    `<div class="center sub">${subtitle}</div>`,
-    identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "";
 }
 
 function buildReceiptFooterContactHtml(receipt: PosReceiptData): string {
@@ -319,7 +311,7 @@ function buildReceiptFooterContactHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
 
   if (phone) {
-    rows.push(thermalReceiptMetaLineHtml(`هاتف: ${phone}`));
+    rows.push(thermalReceiptPhoneLineHtml(phone));
   }
   if (address) {
     rows.push(thermalReceiptMetaLineHtml(address));
