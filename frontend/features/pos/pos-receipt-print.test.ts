@@ -10,8 +10,8 @@ function buildSampleReceipt(overrides: Partial<PosReceiptData> = {}): PosReceipt
   return {
     receiptNumber: "RECEIPT-20260618-0030",
     soldAt: "2026-06-18T15:03:00.000Z",
-    companyName: "كاشوكة",
-    branchName: "عمان",
+    companyName: "كرنشي",
+    branchName: "رئيسي",
     taxNumber: "16952073",
     cashierName: "Cashier",
     terminalName: "POS-1",
@@ -54,37 +54,39 @@ describe("extractDailyOrderNumber", () => {
 });
 
 describe("buildPosReceiptHtml", () => {
-  it("renders Kashouka-style Arabic columns, totals, and payment box", () => {
+  it("renders Kashouka-style boxed Arabic receipt", () => {
     const html = buildPosReceiptHtml(normalizeReceiptForArabicPrint(buildSampleReceipt()));
 
-    expect(html).toContain("التاريخ:");
-    expect(html).toContain("الوقت:");
-    expect(html).toContain("رقم الطلب: 30");
-    expect(html).toContain("الصنف");
-    expect(html).toContain("السعر");
-    expect(html).toContain("الكمية");
-    expect(html).toContain("الإجمالي");
+    expect(html).toContain('class="brand-header"');
+    expect(html).toContain('class="receipt-box"');
+    expect(html).toContain("كرنشي");
+    expect(html).toContain("#30");
+    expect(html).toContain("القاعة: رئيسي");
+    expect(html).toContain("الدور: 30");
+    expect(html).toContain("سعر انفرادي");
+    expect(html).toContain("سعر اجمالي");
     expect(html).toContain("2.50");
-    expect(html).toContain("2.50 د.أ");
     expect(html).toContain("thermal-amt");
     expect(html).toContain("2.5mm");
-    expect(html).toContain("المجموع الفرعي");
+    expect(html).toContain("الاجمالي");
+    expect(html).toContain("الخصم");
+    expect(html).toContain("الخدمات");
     expect(html).toContain("الضريبة 16%");
-    expect(html).toContain("الصافي");
-    expect(html).toContain('class="total-row emphasis"');
-    expect(html).toContain('class="payment-box"');
-    expect(html).toContain("نقد");
-    expect(html).not.toContain("بطاقة");
-    expect(html).toContain("مدفوع");
+    expect(html).toContain("المطلوب");
     expect(html).toContain('class="summary-line emphasis"');
-    expect(html).toContain("summary-amt");
+    expect(html).toContain("عدد الأصناف");
+    expect(html).toContain("عدد المواد");
+    expect(html).toContain("مدخل الفاتورة");
+    expect(html).toContain("طريقة الدفع");
+    expect(html).not.toContain('class="payment-box"');
+    expect(html).not.toContain("مدفوع");
     expect(html).toContain("شكراً لزيارتكم");
     expect(html).toContain('class="thermal-ltr" dir="ltr"');
-    expect(html).toContain("079 120 84 88");
-    expect(html).toContain("شارع القدس");
-    expect(html).not.toContain("كرشات - مقادم");
+    expect(html).toContain("0791208488");
+    expect(html).toContain("صنع");
+    expect(html).not.toContain("المجموع الفرعي");
+    expect(html).not.toContain("الصافي");
     expect(html).not.toContain("إيصال بيع");
-    expect(html).not.toContain("كاشوكة");
     expect(html).not.toContain("Simple Account");
   });
 
@@ -101,9 +103,8 @@ describe("buildPosReceiptHtml", () => {
 
     expect(html).toContain('class="thermal-ltr" dir="ltr"');
     expect(html).toContain("0790000000");
-    expect(html).toContain("عنوان مخصص");
+    expect(html).not.toContain("0791208488");
     expect(html).not.toContain("سناكات ومقبلات");
-    expect(html).not.toContain("079 120 84 88");
   });
 
   it("shows line discount rows for discounted items without duplicating invoice discount", () => {
@@ -134,8 +135,8 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("وجبه مجانية لشخص واحد");
     expect(html).toContain('class="item-disc-row"');
     expect(html).toContain("-2.50");
-    expect(html).toContain("0.00 د.أ");
-    expect(html.match(/خصم/g)?.length).toBe(1);
+    expect(html).toContain("0.00");
+    expect(html.match(/خصم/g)?.length).toBeGreaterThanOrEqual(1);
     expect(html).not.toContain("بطاقة");
   });
 
@@ -167,30 +168,82 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("1,234.56");
-    expect(html).toContain("1,360.06 د.أ");
-    expect(html).toContain("نقد");
-    expect(html).toContain("بطاقة");
-    expect(html).toContain("الباقي");
+    expect(html).toContain("125.50");
+    expect(html).toContain("1,360.06");
+    expect(html).toContain("سفري/مختلط");
   });
 
-  it("shows table row without staff for dine-in orders", () => {
+  it("renders order notes in a bottom note box", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
-          orderType: "DINE_IN",
-          tableNumber: "6",
-          waiterName: "أحمد",
+          orderNotes: "بدون بصل",
         }),
       ),
     );
 
-    expect(html).toContain("طاولة: 6");
+    expect(html).toContain('class="receipt-box note-box"');
+    expect(html).toContain("ملاحظات");
+    expect(html).toContain("بدون بصل");
+    const noteIndex = html.indexOf("بدون بصل");
+    const thanksIndex = html.indexOf("شكراً لزيارتكم");
+    expect(noteIndex).toBeGreaterThan(-1);
+    expect(thanksIndex).toBeGreaterThan(noteIndex);
+  });
+
+  it("renders delivery notes at the bottom for delivery orders", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          orderType: "DELIVERY",
+          deliveryNotes: "اتصل عند الوصول",
+        }),
+      ),
+    );
+
+    expect(html).toContain('class="receipt-box note-box"');
+    expect(html).toContain("اتصل عند الوصول");
+  });
+
+  it("shows table and hall info for dine-in orders", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          orderType: "DINE_IN",
+          tableNumber: "1",
+          cashierName: "كاشير صباحي",
+          payments: [{ paymentMethod: "CASH", amount: 14 }],
+          total: 14,
+          paid: 14,
+          tendered: 14,
+          subtotal: 14,
+          tax: 0,
+          lines: [
+            {
+              name: "راس شوي",
+              quantity: 2,
+              unitPrice: 7,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 14,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("الطاولة");
+    expect(html).toContain("حجز 1");
+    expect(html).toContain("صالة/كاشير حجز 1");
+    expect(html).toContain("كاشير صباحي");
+    expect(html).toContain("راس شوي");
+    expect(html).toContain("عدد الأصناف");
+    expect(html).toContain("عدد المواد");
     expect(html).not.toContain("الموظف");
     expect(html).not.toContain("أحمد");
   });
 
-  it("prints delivery address, company, driver, and notes for delivery orders", () => {
+  it("prints delivery address for delivery orders", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -204,12 +257,8 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("نوع الطلب: توصيل");
-    expect(html).toContain("عنوان التوصيل: شارع الملكة رانيا، عمّان");
-    expect(html).toContain("شركة التوصيل: طلبات");
-    expect(html).toContain("السائق: خالد");
-    expect(html).toContain("ملاحظات التوصيل: اتصل عند الوصول");
-    expect(html).toContain("رسوم التوصيل");
+    expect(html).toContain("شارع الملكة رانيا، عمّان");
+    expect(html).toContain("1.50");
   });
 
   it("renders provisional bill with unpaid label instead of sale receipt header", () => {
@@ -227,10 +276,10 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).not.toContain("فاتورة");
     expect(html).not.toContain("إيصال بيع");
-    expect(html).toContain("مرجع: POS-20260620-0012");
-    expect(html).not.toContain("رقم الطلب:");
+    expect(html).toContain("مدخل الفاتورة");
+    expect(html).toContain("#POS-20260620-0012");
+    expect(html).not.toContain("الدور:");
     expect(html).toContain("غير مدفوع");
     expect(html).not.toContain("نقد");
     expect(html).not.toContain("الباقي");

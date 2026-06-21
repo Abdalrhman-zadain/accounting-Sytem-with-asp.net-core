@@ -24,6 +24,7 @@ export type BuildProvisionalReceiptParams = {
   waiterName?: string | null;
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
+  orderNotes?: string | null;
   deliveryCompanyName?: string | null;
   driverName?: string | null;
   serviceChargeAmount: number;
@@ -54,6 +55,7 @@ export function buildProvisionalReceiptData(
     waiterName: params.waiterName ?? null,
     deliveryAddress: params.deliveryAddress ?? null,
     deliveryNotes: params.deliveryNotes ?? null,
+    orderNotes: params.orderNotes ?? null,
     deliveryCompanyName: params.deliveryCompanyName ?? null,
     driverName: params.driverName ?? null,
     serviceChargeAmount: params.serviceChargeAmount,

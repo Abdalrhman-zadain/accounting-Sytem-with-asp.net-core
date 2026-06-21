@@ -29,6 +29,11 @@
       overflow-wrap: anywhere;
       padding: 0 1mm;
     }
+    .thermal-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
+    }
     .meta-split {
       display: flex;
       justify-content: space-between;
@@ -259,19 +264,140 @@
     }
 
 
-    .brand-stack {
-      text-align: center;
-      margin-bottom: 4px;
+    .brand-header {
+      display: flex;
+      align-items: center;
+      gap: 3mm;
+      margin-bottom: 3mm;
+      padding: 0 1mm;
     }
-    .logo {
-      display: block;
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 4px;
+    .logo-inline {
+      flex: 0 0 18mm;
+      width: 18mm;
+      height: 18mm;
       object-fit: contain;
     }
+    .brand-text {
+      flex: 1;
+      min-width: 0;
+      text-align: right;
+    }
+    .brand-name {
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 1px;
+    }
+    .brand-order {
+      font-size: 13px;
+      font-weight: 800;
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: right;
+    }
+    .receipt-box {
+      border: 1.5px solid #000;
+      border-radius: 6px;
+      padding: 2.5mm 2mm;
+      margin-bottom: 2.5mm;
+    }
+    .receipt-box.items-box {
+      padding: 2mm 1.5mm;
+    }
+    .receipt-box.summary-box {
+      padding: 2.5mm 2mm 2mm;
+    }
+    .order-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2mm;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .order-info-right {
+      text-align: right;
+    }
+    .order-info-left {
+      text-align: left;
+    }
+    .order-info-label {
+      font-weight: 800;
+    }
+    .order-info-highlight {
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin: 1px 0;
+    }
+    .summary-box .summary-line {
+      margin: 2px 0;
+    }
+    .summary-box .summary-line.emphasis {
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    .summary-info-block {
+      margin-top: 4px;
+      padding-top: 3px;
+      border-top: 1px solid #000;
+    }
+    .summary-info-line {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      margin: 2px 0;
+      text-align: right;
+    }
+    .summary-info-label {
+      font-weight: 800;
+      display: block;
+    }
+    .summary-info-value {
+      display: block;
+      font-weight: 700;
+    }
+    .footer-thanks {
+      font-size: 16px;
+      font-weight: 900;
+      margin: 4mm 0 2mm;
+      text-align: center;
+    }
+    .footer-credit {
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1.35;
+    }
+    .receipt-box.note-box {
+      padding: 2.5mm 2mm;
+    }
+    .note-label {
+      font-size: 11px;
+      font-weight: 900;
+      text-align: right;
+      margin-bottom: 2px;
+    }
+    .note-text {
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    table.items-table {
+      margin: 0;
+    }
+    table.items-table tr.col-header td {
+      text-decoration: none;
+      font-size: 10px;
+      font-weight: 800;
+      padding-bottom: 2px;
+    }
     @media print {
-      .logo {
+      .logo-inline {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -281,78 +407,91 @@
 </head>
 <body>
 
-      <div class="brand-stack">
-        <img class="logo" src="/pos/mr-karshanji-logo.png" alt="Logo"/>
-        <div class="sub">إيصال بيع</div>
+      <div class="brand-header">
+        <img class="logo-inline" src="/pos/mr-karshanji-logo.png" alt="Logo"/>
+        <div class="brand-text">
+          <div class="brand-name">Simple Account</div>
+          <div class="brand-order">#99</div>
+        </div>
       </div>
-      <div class="center meta meta-line">عمان</div>
-<div class="sep">────────────────────────────────</div>
-<div class="center meta meta-line">التاريخ: 18/06/2026</div>
-<div class="center meta meta-line">الوقت: 20:00</div>
-<div class="center meta meta-line">رقم الطلب: 99</div>
-<div class="sep">────────────────────────────────</div>
-<div class="center meta meta-line">طاولة: 12</div>
-<div class="center meta meta-line">نوع الطلب: صالة</div>
-<div class="sep sep-strong">════════════════════════════════</div>
+<div class="receipt-box">
+<div class="order-info-grid">
+<div class="order-info-right">
+<div class="order-info-label">الطاولة</div>
+<div>18-06-2026</div>
+<div>القاعة: عمان</div>
+</div>
+<div class="order-info-left">
+<div class="order-info-highlight">حجز 12</div>
+<div>20:00:00</div>
+<div>الدور: 99</div>
+</div>
+</div>
+</div>
+<div class="receipt-box items-box">
 <table class="items-table">
 <tr class="col-header">
   <td class="col-name">الصنف</td>
-  <td class="col-price">السعر</td>
+  <td class="col-price">سعر انفرادي</td>
   <td class="col-qty">الكمية</td>
-  <td class="col-total">الإجمالي</td>
+  <td class="col-total">سعر اجمالي</td>
 </tr>
 <tr class="item-row">
   <td class="col-name">وجبة عائلية كبيرة</td>
   <td class="col-price thermal-amt">45.50</td>
-  <td class="col-qty">2 PCS</td>
+  <td class="col-qty">2.00</td>
   <td class="col-total thermal-amt">91.00</td>
 </tr>
 <tr class="item-row">
   <td class="col-name">مشاوي مشكل</td>
   <td class="col-price thermal-amt">125.50</td>
-  <td class="col-qty">1</td>
+  <td class="col-qty">1.00</td>
   <td class="col-total thermal-amt">125.50</td>
 </tr>
 </table>
-<div class="sep sep-strong">════════════════════════════════</div>
-<table class="totals-table">
-<tr class="total-row">
-  <td colspan="4" class="total-line-cell"><div class="summary-line">
-  <span class="summary-label">المجموع الفرعي</span>
+</div>
+<div class="receipt-box summary-box">
+<div class="summary-line">
+  <span class="summary-label">الاجمالي</span>
   <span class="summary-amt thermal-amt">1,200.00</span>
-</div></td>
-</tr>
-<tr class="total-row">
-  <td colspan="4" class="total-line-cell"><div class="summary-line">
+</div>
+<div class="summary-line">
+  <span class="summary-label">الخصم</span>
+  <span class="summary-amt thermal-amt">0.00</span>
+</div>
+<div class="summary-line">
+  <span class="summary-label">الخدمات</span>
+  <span class="summary-amt thermal-amt">0.00</span>
+</div>
+<div class="summary-line">
   <span class="summary-label">الضريبة 16%</span>
   <span class="summary-amt thermal-amt">160.06</span>
-</div></td>
-</tr>
-<tr class="total-row emphasis">
-  <td colspan="4" class="total-line-cell"><div class="summary-line emphasis">
-  <span class="summary-label">الصافي</span>
-  <span class="summary-amt thermal-amt">1,360.06 د.أ</span>
-</div></td>
-</tr>
-</table>
-<div class="payment-box"><div class="summary-line">
-  <span class="summary-label">نقد</span>
-  <span class="summary-amt thermal-amt">125.50</span>
-</div>
-<div class="summary-line">
-  <span class="summary-label">بطاقة</span>
-  <span class="summary-amt thermal-amt">1,234.56</span>
 </div>
 <div class="summary-line emphasis">
-  <span class="summary-label">مدفوع</span>
-  <span class="summary-amt thermal-amt">1,360.06 د.أ</span>
+  <span class="summary-label">المطلوب</span>
+  <span class="summary-amt thermal-amt">1,360.06</span>
 </div>
 <div class="summary-line">
-  <span class="summary-label">الباقي</span>
-  <span class="summary-amt thermal-amt">39.94</span>
-</div></div>
-<div class="sep">────────────────────────────────</div>
-<div class="center thanks">شكراً لزيارتكم</div>
+  <span class="summary-label">عدد الأصناف</span>
+  <span class="summary-text">2</span>
+</div>
+<div class="summary-line">
+  <span class="summary-label">عدد المواد</span>
+  <span class="summary-text">3.00</span>
+</div>
+<div class="summary-info-block">
+<div class="summary-info-line">
+    <span class="summary-info-label">مدخل الفاتورة</span>
+    <span class="summary-info-value">كاشير</span>
+  </div>
+<div class="summary-info-line">
+    <span class="summary-info-label">طريقة الدفع</span>
+    <span class="summary-info-value">صالة/كاشير حجز 12</span>
+  </div>
+</div>
+</div>
+<div class="footer-thanks">شكراً لزيارتكم</div>
+<div class="footer-credit">صنع <span class="thermal-ltr" dir="ltr">0791208488</span></div>
 <div class="print-footer-spacer" aria-hidden="true"></div>
 </body>
 </html>

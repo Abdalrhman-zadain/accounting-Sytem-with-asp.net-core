@@ -23,6 +23,7 @@ export type PosReceiptApiResponse = {
   waiterName?: string | null;
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
+  orderNotes?: string | null;
   deliveryCompanyName?: string | null;
   driverName?: string | null;
   serviceChargeAmount?: string;
@@ -71,6 +72,7 @@ export function mapPosReceiptApiResponse(receipt: PosReceiptApiResponse): PosRec
     waiterName: receipt.waiterName,
     deliveryAddress: receipt.deliveryAddress,
     deliveryNotes: receipt.deliveryNotes,
+    orderNotes: receipt.orderNotes,
     deliveryCompanyName: receipt.deliveryCompanyName,
     driverName: receipt.driverName,
     serviceChargeAmount: receipt.serviceChargeAmount

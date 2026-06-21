@@ -13,6 +13,7 @@ import {
 } from "react-icons/lu";
 
 import { PageSkeleton } from "@/components/ui";
+import { posProductGridClass } from "@/features/pos/pos-layout-classes";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import type { PosItemAddonConfig, PosLineAddonSelection } from "@/features/pos/pos-addon-types";
 import {
@@ -539,8 +540,8 @@ export function PosWaiterOrderPage() {
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <aside className="order-1 flex min-h-0 flex-col border-b border-[#dde5df] bg-white lg:order-2 lg:max-h-none lg:border-b-0 lg:border-s max-h-[min(50vh,420px)]">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-0 waiter-wide:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] waiter-wide:grid-rows-none">
+        <aside className="order-2 flex min-h-0 flex-col border-t border-[#dde5df] bg-white waiter-wide:order-2 waiter-wide:border-t-0 waiter-wide:border-s">
           <div className="shrink-0 border-b border-[#eef2ef] px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-black text-[#233329]">
@@ -721,7 +722,7 @@ export function PosWaiterOrderPage() {
           </div>
         </aside>
 
-        <section className="order-2 flex min-h-0 flex-col lg:order-1 lg:border-e lg:border-[#dde5df]">
+        <section className="order-1 flex min-h-0 flex-col border-[#dde5df] waiter-wide:order-1 waiter-wide:border-e">
           <div className="border-b border-[#eef2ef] bg-white p-3">
             <div className="relative">
               <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8a80] ltr:left-3 rtl:right-3" />
@@ -734,11 +735,12 @@ export function PosWaiterOrderPage() {
               />
             </div>
           </div>
-          <div className="grid flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className={cn(posProductGridClass, "flex-1 overflow-y-auto p-3")}>
             {filteredItems.map((item) => (
               <PosProductCard
                 key={item.id}
                 item={item}
+                variant="tablet"
                 currencyCode={currencyCode}
                 disabled={!canEdit}
                 allowNegativeStock

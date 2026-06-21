@@ -16,15 +16,11 @@ import {
   thermalReceiptItemRow4Col,
   thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
-  thermalReceiptMetaLineHtml,
-  thermalReceiptPhoneLineHtml,
-  thermalReceiptPaymentBoxHtml,
-  thermalReceiptSepLine,
+  thermalReceiptLtrInlineHtml,
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
-  thermalReceiptTotalRow,
   formatReceiptPaymentSummary,
-  type ThermalReceiptPaymentBoxLine,
+  fmtThermalReceiptMoney,
 } from "@/features/pos-shared/thermal-receipt-layout";
 
 /** Default customer-receipt logo served from `frontend/public/pos/`. */
@@ -60,6 +56,7 @@ export type PosReceiptData = {
   waiterName?: string | null;
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
+  orderNotes?: string | null;
   deliveryCompanyName?: string | null;
   driverName?: string | null;
   serviceChargeAmount?: number;
@@ -126,9 +123,6 @@ const ARABIC_ORDER_TYPE_LABELS: Record<string, string> = {
   DELIVERY: "توصيل",
 };
 
-const SEP = thermalReceiptSepLine();
-const SEP_STRONG = thermalReceiptSepLine("═");
-
 export function buildArabicPaymentSummary(
   methods: string[],
   amounts?: number[],
@@ -174,21 +168,140 @@ export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosRece
 }
 
 const RESTAURANT_RECEIPT_EXTRA_CSS = `
-    .brand-stack {
-      text-align: center;
-      margin-bottom: 4px;
+    .brand-header {
+      display: flex;
+      align-items: center;
+      gap: 3mm;
+      margin-bottom: 3mm;
+      padding: 0 1mm;
     }
-    .logo {
-      display: block;
-      width: 28mm;
-      max-width: 90%;
-      height: auto;
-      max-height: 28mm;
-      margin: 0 auto 6px;
+    .logo-inline {
+      flex: 0 0 18mm;
+      width: 18mm;
+      height: 18mm;
       object-fit: contain;
     }
+    .brand-text {
+      flex: 1;
+      min-width: 0;
+      text-align: right;
+    }
+    .brand-name {
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 1px;
+    }
+    .brand-order {
+      font-size: 13px;
+      font-weight: 800;
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: right;
+    }
+    .receipt-box {
+      border: 1.5px solid #000;
+      border-radius: 6px;
+      padding: 2.5mm 2mm;
+      margin-bottom: 2.5mm;
+    }
+    .receipt-box.items-box {
+      padding: 2mm 1.5mm;
+    }
+    .receipt-box.summary-box {
+      padding: 2.5mm 2mm 2mm;
+    }
+    .order-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2mm;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .order-info-right {
+      text-align: right;
+    }
+    .order-info-left {
+      text-align: left;
+    }
+    .order-info-label {
+      font-weight: 800;
+    }
+    .order-info-highlight {
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin: 1px 0;
+    }
+    .summary-box .summary-line {
+      margin: 2px 0;
+    }
+    .summary-box .summary-line.emphasis {
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    .summary-info-block {
+      margin-top: 4px;
+      padding-top: 3px;
+      border-top: 1px solid #000;
+    }
+    .summary-info-line {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      margin: 2px 0;
+      text-align: right;
+    }
+    .summary-info-label {
+      font-weight: 800;
+      display: block;
+    }
+    .summary-info-value {
+      display: block;
+      font-weight: 700;
+    }
+    .footer-thanks {
+      font-size: 16px;
+      font-weight: 900;
+      margin: 4mm 0 2mm;
+      text-align: center;
+    }
+    .footer-credit {
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1.35;
+    }
+    .receipt-box.note-box {
+      padding: 2.5mm 2mm;
+    }
+    .note-label {
+      font-size: 11px;
+      font-weight: 900;
+      text-align: right;
+      margin-bottom: 2px;
+    }
+    .note-text {
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    table.items-table {
+      margin: 0;
+    }
+    table.items-table tr.col-header td {
+      text-decoration: none;
+      font-size: 10px;
+      font-weight: 800;
+      padding-bottom: 2px;
+    }
     @media print {
-      .logo {
+      .logo-inline {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -202,15 +315,19 @@ function fmtDateParts(val?: string | Date | null): { date: string; time: string 
   const d = new Date(val);
   const pad = (n: number) => String(n).padStart(2, "0");
   return {
-    date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    date: `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
   };
 }
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
-  return formatPosLineQuantityDisplay(line.quantity, "ar", line.unitCode, {
+  const display = formatPosLineQuantityDisplay(line.quantity, "ar", line.unitCode, {
     precision: 3,
   });
+  if (/^\d+$/.test(display)) {
+    return line.quantity.toFixed(2);
+  }
+  return display;
 }
 
 function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
@@ -232,46 +349,8 @@ function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string |
   return ARABIC_ORDER_TYPE_LABELS[orderType] ?? orderType;
 }
 
-function buildPaymentBoxLines(receipt: PosReceiptData): ThermalReceiptPaymentBoxLine[] {
-  if (receipt.receiptKind === "provisional") {
-    return [{ label: "غير مدفوع", value: receipt.total, emphasis: true, currency: true }];
-  }
-
-  const amountsByMethod = new Map<string, number>();
-
-  for (const payment of receipt.payments ?? []) {
-    const current = amountsByMethod.get(payment.paymentMethod) ?? 0;
-    amountsByMethod.set(payment.paymentMethod, current + payment.amount);
-  }
-
-  const lines: ThermalReceiptPaymentBoxLine[] = [];
-
-  const cash = amountsByMethod.get("CASH") ?? 0;
-  if (cash > 0.009) {
-    lines.push({ label: "نقد", value: cash });
-  }
-
-  const card = amountsByMethod.get("CARD") ?? 0;
-  if (card > 0.009) {
-    lines.push({ label: "بطاقة", value: card });
-  }
-
-  for (const [method, amount] of amountsByMethod.entries()) {
-    if (method === "CASH" || method === "CARD" || amount <= 0.009) {
-      continue;
-    }
-    lines.push({
-      label: ARABIC_PAYMENT_METHOD_LABELS[method] ?? method,
-      value: amount,
-    });
-  }
-
-  lines.push({ label: "مدفوع", value: receipt.paid, emphasis: true, currency: true });
-  if (receipt.change > 0.009) {
-    lines.push({ label: "الباقي", value: receipt.change });
-  }
-
-  return lines;
+function resolveHallLabel(receipt: PosReceiptData): string {
+  return receipt.branchName?.trim() || receipt.warehouseName?.trim() || "رئيسي";
 }
 
 function resolveReceiptContactFields(receipt: PosReceiptData): {
@@ -288,95 +367,167 @@ function resolveReceiptContactFields(receipt: PosReceiptData): {
 
 function buildBrandHeaderHtml(receipt: PosReceiptData): string {
   const logoUrl = resolveReceiptLogoUrl(receipt);
-  const identityMeta = [
-    receipt.branchName,
-    receipt.taxNumber ? `ض.ب: ${receipt.taxNumber}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const orderNumber =
+    receipt.receiptKind === "provisional"
+      ? receipt.receiptNumber.trim()
+      : extractDailyOrderNumber(receipt.receiptNumber);
+  const orderLabel = orderNumber ? `#${orderNumber}` : "";
+  const brandName = receipt.companyName?.trim() || "كرنشي";
 
   if (logoUrl) {
     return `
-      <div class="brand-stack">
-        <img class="logo" src="${logoUrl}" alt="Logo"/>
+      <div class="brand-header">
+        <img class="logo-inline" src="${logoUrl}" alt="Logo"/>
+        <div class="brand-text">
+          <div class="brand-name">${brandName}</div>
+          ${orderLabel ? `<div class="brand-order">${orderLabel}</div>` : ""}
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="brand-header">
+      <div class="brand-text">
+        <div class="brand-name">${brandName}</div>
+        ${orderLabel ? `<div class="brand-order">${orderLabel}</div>` : ""}
       </div>
-      ${identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : ""}`;
-  }
-
-  return identityMeta ? thermalReceiptMetaLineHtml(identityMeta) : "";
+    </div>`;
 }
 
-function buildReceiptFooterContactHtml(receipt: PosReceiptData): string {
-  const { phone, address } = resolveReceiptContactFields(receipt);
-  const rows: string[] = [];
-
-  if (phone) {
-    rows.push(thermalReceiptPhoneLineHtml(phone));
-  }
-  if (address) {
-    rows.push(thermalReceiptMetaLineHtml(address));
+function buildPaymentMethodDescription(receipt: PosReceiptData): string {
+  if (receipt.receiptKind === "provisional") {
+    return "غير مدفوع";
   }
 
-  return rows.join("\n");
+  const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
+  const paymentLabel = resolveReceiptPaymentDisplay(receipt);
+
+  if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
+    return `${orderTypeLabel ?? "صالة"}/كاشير حجز ${receipt.tableNumber.trim()}`;
+  }
+
+  if (orderTypeLabel && paymentLabel) {
+    return `${orderTypeLabel}/${paymentLabel}`;
+  }
+
+  return paymentLabel || orderTypeLabel || "—";
 }
 
-function sumLineDiscounts(lines: PosReceiptData["lines"]): number {
-  return lines.reduce((sum, line) => sum + (line.discountAmount > 0 ? line.discountAmount : 0), 0);
+function buildSummaryLineHtml(
+  label: string,
+  value: number,
+  options?: { emphasis?: boolean },
+): string {
+  const rowClass = options?.emphasis ? "summary-line emphasis" : "summary-line";
+  return `<div class="${rowClass}">
+  <span class="summary-label">${label}</span>
+  <span class="summary-amt thermal-amt">${fmtThermalReceiptMoney(value)}</span>
+</div>`;
+}
+
+function buildSummaryTextLineHtml(label: string, value: string): string {
+  return `<div class="summary-line">
+  <span class="summary-label">${label}</span>
+  <span class="summary-text">${value}</span>
+</div>`;
+}
+
+function sumLineQuantities(lines: PosReceiptData["lines"]): number {
+  return lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+function escapeReceiptText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildReceiptBottomNotesHtml(receipt: PosReceiptData): string {
+  const orderNote = receipt.orderNotes?.trim() ?? "";
+  const deliveryNote = receipt.deliveryNotes?.trim() ?? "";
+  const lines: string[] = [];
+
+  if (orderNote) {
+    lines.push(escapeReceiptText(orderNote));
+  }
+  if (deliveryNote && deliveryNote !== orderNote) {
+    lines.push(
+      orderNote
+        ? `ملاحظات التوصيل: ${escapeReceiptText(deliveryNote)}`
+        : escapeReceiptText(deliveryNote),
+    );
+  }
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return `<div class="receipt-box note-box">
+  <div class="note-label">ملاحظات</div>
+  <div class="note-text">${lines.join("\n")}</div>
+</div>`;
 }
 
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
   const { date, time } = fmtDateParts(receipt.soldAt);
-  const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
   const serviceCharge = receipt.serviceChargeAmount ?? 0;
   const deliveryFee = receipt.deliveryFeeAmount ?? 0;
-  const lineDiscountTotal = sumLineDiscounts(receipt.lines);
+  const servicesTotal = serviceCharge + deliveryFee;
+  const lineDiscountTotal = receipt.lines.reduce(
+    (sum, line) => sum + (line.discountAmount > 0 ? line.discountAmount : 0),
+    0,
+  );
   const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
-
+  const totalDiscount = cartLevelDiscount + lineDiscountTotal;
   const orderNumber =
     receipt.receiptKind === "provisional"
       ? null
       : extractDailyOrderNumber(receipt.receiptNumber);
+  const tableReservationLabel = (() => {
+    if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
+      return `حجز ${receipt.tableNumber.trim()}`;
+    }
+    const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
+    if (orderTypeLabel) {
+      return orderTypeLabel;
+    }
+    if (orderNumber) {
+      return `#${orderNumber}`;
+    }
+    return "—";
+  })();
 
   rows.push(buildBrandHeaderHtml(receipt));
-  rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(thermalReceiptMetaLineHtml(`التاريخ: ${date}`));
-  rows.push(thermalReceiptMetaLineHtml(`الوقت: ${time}`));
-  if (receipt.receiptKind === "provisional" && receipt.receiptNumber.trim()) {
-    rows.push(thermalReceiptMetaLineHtml(`مرجع: ${receipt.receiptNumber.trim()}`));
-  } else if (orderNumber) {
-    rows.push(thermalReceiptMetaLineHtml(`رقم الطلب: ${orderNumber}`));
+
+  rows.push(`<div class="receipt-box">`);
+  rows.push(`<div class="order-info-grid">`);
+  rows.push(`<div class="order-info-right">`);
+  if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
+    rows.push(`<div class="order-info-label">الطاولة</div>`);
   }
-  rows.push(`<div class="sep">${SEP}</div>`);
-
-  if (receipt.orderType === "DINE_IN" && receipt.tableNumber) {
-    rows.push(thermalReceiptMetaLineHtml(`طاولة: ${receipt.tableNumber}`));
+  rows.push(`<div>${date}</div>`);
+  rows.push(`<div>القاعة: ${resolveHallLabel(receipt)}</div>`);
+  if (receipt.orderType === "DELIVERY" && receipt.deliveryAddress?.trim()) {
+    rows.push(`<div>${receipt.deliveryAddress.trim()}</div>`);
   }
-
-  if (orderTypeLabel) {
-    rows.push(thermalReceiptMetaLineHtml(`نوع الطلب: ${orderTypeLabel}`));
+  rows.push(`</div>`);
+  rows.push(`<div class="order-info-left">`);
+  rows.push(`<div class="order-info-highlight">${tableReservationLabel}</div>`);
+  rows.push(`<div>${time}</div>`);
+  if (orderNumber) {
+    rows.push(`<div>الدور: ${orderNumber}</div>`);
   }
+  rows.push(`</div>`);
+  rows.push(`</div>`);
+  rows.push(`</div>`);
 
-  if (receipt.orderType === "DELIVERY") {
-    if (receipt.deliveryAddress?.trim()) {
-      rows.push(thermalReceiptMetaLineHtml(`عنوان التوصيل: ${receipt.deliveryAddress.trim()}`));
-    }
-    if (receipt.deliveryCompanyName?.trim()) {
-      rows.push(thermalReceiptMetaLineHtml(`شركة التوصيل: ${receipt.deliveryCompanyName.trim()}`));
-    }
-    if (receipt.driverName?.trim()) {
-      rows.push(thermalReceiptMetaLineHtml(`السائق: ${receipt.driverName.trim()}`));
-    }
-    if (receipt.deliveryNotes?.trim()) {
-      rows.push(thermalReceiptMetaLineHtml(`ملاحظات التوصيل: ${receipt.deliveryNotes.trim()}`));
-    }
-  }
-
-  rows.push(`<div class="sep sep-strong">${SEP_STRONG}</div>`);
-
+  rows.push(`<div class="receipt-box items-box">`);
   rows.push(thermalReceiptTableOpen("items-table"));
   rows.push(
-    thermalReceiptColumnHeaderRow("الصنف", "السعر", "الكمية", "الإجمالي"),
+    thermalReceiptColumnHeaderRow("الصنف", "سعر انفرادي", "الكمية", "سعر اجمالي"),
   );
   for (const line of receipt.lines) {
     const qty = formatReceiptQuantity(line);
@@ -392,41 +543,48 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     }
   }
   rows.push(thermalReceiptTableClose());
+  rows.push(`</div>`);
 
-  rows.push(`<div class="sep sep-strong">${SEP_STRONG}</div>`);
-  rows.push(thermalReceiptTableOpen("totals-table"));
-  rows.push(thermalReceiptTotalRow("المجموع الفرعي", receipt.subtotal));
-
-  if (cartLevelDiscount > 0.009) {
-    rows.push(thermalReceiptTotalRow("خصم", -cartLevelDiscount));
-  }
-
-  if (serviceCharge > 0.009) {
-    rows.push(thermalReceiptTotalRow("رسوم الخدمة", serviceCharge));
-  }
-
-  if (deliveryFee > 0.009) {
-    rows.push(thermalReceiptTotalRow("رسوم التوصيل", deliveryFee));
-  }
-
+  rows.push(`<div class="receipt-box summary-box">`);
+  rows.push(buildSummaryLineHtml("الاجمالي", receipt.subtotal));
+  rows.push(buildSummaryLineHtml("الخصم", totalDiscount));
+  rows.push(buildSummaryLineHtml("الخدمات", servicesTotal));
   if (receipt.tax > 0.009) {
     const taxLabel =
       receipt.taxRatePercent != null
         ? `الضريبة ${receipt.taxRatePercent}%`
         : "الضريبة";
-    rows.push(thermalReceiptTotalRow(taxLabel, receipt.tax));
+    rows.push(buildSummaryLineHtml(taxLabel, receipt.tax));
+  }
+  rows.push(buildSummaryLineHtml("المطلوب", receipt.total, { emphasis: true }));
+  rows.push(buildSummaryTextLineHtml("عدد الأصناف", String(receipt.lines.length)));
+  rows.push(
+    buildSummaryTextLineHtml("عدد المواد", fmtThermalReceiptMoney(sumLineQuantities(receipt.lines))),
+  );
+
+  rows.push(`<div class="summary-info-block">`);
+  rows.push(`<div class="summary-info-line">
+    <span class="summary-info-label">مدخل الفاتورة</span>
+    <span class="summary-info-value">${receipt.cashierName}</span>
+  </div>`);
+  rows.push(`<div class="summary-info-line">
+    <span class="summary-info-label">طريقة الدفع</span>
+    <span class="summary-info-value">${buildPaymentMethodDescription(receipt)}</span>
+  </div>`);
+  rows.push(`</div>`);
+  rows.push(`</div>`);
+
+  const notesHtml = buildReceiptBottomNotesHtml(receipt);
+  if (notesHtml) {
+    rows.push(notesHtml);
   }
 
+  const { phone } = resolveReceiptContactFields(receipt);
+  const phoneDigits = phone.replace(/\s+/g, "");
+  rows.push(`<div class="footer-thanks">شكراً لزيارتكم</div>`);
   rows.push(
-    thermalReceiptTotalRow("الصافي", receipt.total, { emphasis: true, currency: true }),
+    `<div class="footer-credit">صنع ${thermalReceiptLtrInlineHtml(phoneDigits)}</div>`,
   );
-  rows.push(thermalReceiptTableClose());
-
-  rows.push(thermalReceiptPaymentBoxHtml(buildPaymentBoxLines(receipt)));
-
-  rows.push(`<div class="sep">${SEP}</div>`);
-  rows.push(buildReceiptFooterContactHtml(receipt));
-  rows.push(`<div class="center thanks">شكراً لزيارتكم</div>`);
   rows.push(thermalReceiptFooterSpacerHtml());
 
   return rows.join("\n");

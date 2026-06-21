@@ -22,10 +22,41 @@ describe("pos receipt preview generator", () => {
   it("writes HTML previews to frontend/.receipt-preview/", () => {
     mkdirSync(PREVIEW_DIR, { recursive: true });
 
+    writePreview("kashouka-dine-in.html", {
+      receiptNumber: "RECEIPT-20260204-0017",
+      soldAt: "2026-02-04T10:58:06",
+      companyName: "كرنشي",
+      branchName: "رئيسي",
+      cashierName: "كاشير صباحي",
+      warehouseName: "Main",
+      orderType: "DINE_IN",
+      tableNumber: "1",
+      orderNotes: "بدون بصل",
+      paymentSummary: "",
+      payments: [{ paymentMethod: "CASH", amount: 14 }],
+      total: 14,
+      paid: 14,
+      tendered: 14,
+      change: 0,
+      subtotal: 14,
+      discount: 0,
+      tax: 0,
+      lines: [
+        {
+          name: "راس شوي",
+          quantity: 2,
+          unitPrice: 7,
+          discountAmount: 0,
+          taxAmount: 0,
+          lineTotal: 14,
+        },
+      ],
+    });
+
     writePreview("standard-sale.html", {
       receiptNumber: "RECEIPT-20260618-0030",
       soldAt: "2026-06-18T15:03:00.000Z",
-      companyName: "Simple Account",
+      companyName: "كرنشي",
       branchName: "عمان",
       taxNumber: "16952073",
       cashierName: "كاشير",

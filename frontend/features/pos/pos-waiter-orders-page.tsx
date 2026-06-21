@@ -243,7 +243,7 @@ export function PosWaiterOrdersPage() {
         </div>
       </header>
 
-      <div className="hidden flex-1 gap-4 overflow-hidden p-4 lg:grid lg:grid-cols-3">
+      <div className="hidden flex-1 gap-4 overflow-hidden p-4 waiter-wide:grid waiter-wide:grid-cols-3">
         {COLUMNS.map((column) => (
           <section
             key={column.status}
@@ -284,7 +284,7 @@ export function PosWaiterOrdersPage() {
         ))}
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 p-4 lg:hidden">
+      <div className="flex flex-1 flex-col gap-3 p-4 waiter-wide:hidden">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {COLUMNS.map((column) => (
             <button

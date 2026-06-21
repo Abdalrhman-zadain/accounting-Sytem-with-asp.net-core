@@ -150,6 +150,10 @@ import {
 } from "@/features/pos/pos-weight-utils";
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
 import { buildArabicPaymentSummary } from "@/features/pos/pos-receipt-print";
+import {
+  mapPosReceiptApiResponse,
+  type PosReceiptApiResponse,
+} from "@/features/pos/pos-receipt-map";
 import { captureKitchenLineSnapshotFromCart } from "@/features/pos/pos-kitchen-print-delta";
 import { useKitchenPrintHub } from "@/features/pos/pos-kitchen-print-hub";
 import {
@@ -964,72 +968,25 @@ function HeldSaleOrderTypeInfo({
 }
 
 function mapReceiptResponse(
-  receipt: {
-  receiptNumber: string;
-  soldAt: string;
-  companyName: string;
-  branchName?: string | null;
-  taxNumber?: string | null;
-  cashierName: string;
-  terminalName?: string | null;
-  warehouseName: string;
-  paymentSummary: string;
-  total: string;
-  paid: string;
-  tendered: string;
-  change: string;
-  subtotal: string;
-  discount: string;
-  tax: string;
-  lines: Array<{
-    name: string;
-    quantity: string;
-    unitPrice: string;
-    discountAmount: string;
-    taxAmount: string;
-    lineTotal: string;
-    unitCode?: string | null;
-  }>;
-},
+  receipt: PosReceiptApiResponse,
   options?: {
     paymentMethods?: string[];
     paymentAmounts?: number[];
   },
 ): CompletedReceipt {
+  const mapped = mapPosReceiptApiResponse(receipt);
   const paymentSummary =
     options?.paymentMethods && options.paymentMethods.length > 0
       ? buildArabicPaymentSummary(options.paymentMethods, options.paymentAmounts)
-      : receipt.paymentSummary;
+      : mapped.paymentSummary;
 
   return {
-    receiptNumber: receipt.receiptNumber,
-    soldAt: receipt.soldAt,
-    companyName: receipt.companyName,
-    branchName: receipt.branchName,
-    taxNumber: receipt.taxNumber,
-    cashierName:
-      receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
-        ? "كاشير"
-        : receipt.cashierName,
-    terminalName: receipt.terminalName,
-    warehouseName: receipt.warehouseName,
+    ...mapped,
     paymentSummary,
-    total: parseAmount(receipt.total),
-    paid: parseAmount(receipt.paid),
-    tendered: parseAmount(receipt.tendered),
-    change: parseAmount(receipt.change),
-    subtotal: parseAmount(receipt.subtotal),
-    discount: parseAmount(receipt.discount),
-    tax: parseAmount(receipt.tax),
-    lines: receipt.lines.map((line) => ({
-      name: line.name,
-      quantity: parseAmount(line.quantity),
-      unitPrice: parseAmount(line.unitPrice),
-      discountAmount: parseAmount(line.discountAmount),
-      taxAmount: parseAmount(line.taxAmount),
-      lineTotal: parseAmount(line.lineTotal),
-      unitCode: line.unitCode ?? undefined,
-    })),
+    cashierName:
+      mapped.cashierName.trim() === "Cashier" || !mapped.cashierName.trim()
+        ? "كاشير"
+        : mapped.cashierName,
   };
 }
 

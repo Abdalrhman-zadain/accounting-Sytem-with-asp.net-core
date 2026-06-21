@@ -15,6 +15,7 @@ const config: Config = {
       xl: "1280px",
       "2xl": "1536px",
       "pos-wide": "960px",
+      "waiter-wide": "800px",
       "nav-desktop": "1024px",
     },
     extend: {

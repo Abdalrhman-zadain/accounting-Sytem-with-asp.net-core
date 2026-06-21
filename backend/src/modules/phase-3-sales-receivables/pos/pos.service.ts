@@ -36,6 +36,7 @@ import { PrismaService } from "../../../common/prisma/prisma.service";
 import type { AuthorizedUser, PosPermissionCode } from "../../platform/auth/auth.types";
 import { AuditService } from "../../phase-1-accounting-foundation/accounting-core/audit/audit.service";
 import { assertPosKitchenNoteLimits } from "./pos-kitchen-note-limits";
+import { getPosReceiptBranding } from "./pos-receipt-branding";
 import { JournalEntriesService } from "../../phase-1-accounting-foundation/accounting-core/journal-entries/journal-entries.service";
 import { PostingService } from "../../phase-1-accounting-foundation/accounting-core/posting-logic/posting.service";
 import { ReversalService } from "../../phase-1-accounting-foundation/accounting-core/reversal-control/reversal.service";
@@ -7838,6 +7839,7 @@ export class PosService {
   }
 
   private mapReceipt(row: any) {
+    const branding = getPosReceiptBranding();
     const totalPaid = row.posPayments.reduce(
       (sum: number, payment: any) => sum + Number(payment.tenderedAmount ?? payment.amount),
       0,
@@ -7849,14 +7851,28 @@ export class PosService {
     return {
       receiptNumber: row.posReceiptNumber,
       soldAt: row.posCompletedAt?.toISOString() ?? row.updatedAt.toISOString(),
-      companyName: process.env.POS_RECEIPT_COMPANY_NAME?.trim() || "Simple Account",
+      companyName: branding.companyName || "كرنشي",
       branchName: row.posSession?.branchName ?? null,
-      taxNumber: process.env.POS_RECEIPT_TAX_NUMBER?.trim() || null,
+      taxNumber: branding.taxNumber,
+      phone: branding.phone,
+      address: branding.address,
+      tagline: branding.tagline,
       cashierName:
         row.posSession?.cashierUser?.name ??
         row.posSession?.cashierUser?.email ??
         "Cashier",
       terminalName: row.posSession?.terminalName ?? null,
+      tableNumber: row.table?.tableNumber ?? null,
+      orderType: row.orderType ?? null,
+      waiterName: row.waiter?.name ?? row.waiter?.email ?? null,
+      deliveryAddress: row.deliveryAddress ?? null,
+      deliveryNotes: row.deliveryNotes ?? null,
+      orderNotes: row.description?.trim() || null,
+      deliveryCompanyName:
+        row.deliveryCompany?.arabicName ?? row.deliveryCompany?.name ?? null,
+      driverName: row.driver?.name ?? null,
+      serviceChargeAmount: row.serviceChargeAmount?.toString() ?? "0.00",
+      deliveryFeeAmount: row.deliveryFeeAmount?.toString() ?? "0.00",
       total: row.totalAmount.toString(),
       tax: row.taxAmount.toString(),
       discount: row.discountAmount.toString(),
@@ -7867,6 +7883,10 @@ export class PosService {
       paymentSummary: row.posPayments
         .map((payment: any) => `${payment.bankCashAccount.name} ${payment.amount.toString()}`)
         .join(" + "),
+      payments: row.posPayments.map((payment: any) => ({
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount.toString(),
+      })),
       warehouseName: row.posSession?.warehouse?.name ?? "—",
       lines: row.lines.map((line: any) => ({
         name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
@@ -7876,6 +7896,7 @@ export class PosService {
         taxAmount: line.taxAmount.toString(),
         lineTotal: line.lineAmount.toString(),
         unitCode: line.item?.unitOfMeasure ?? null,
+        modifiers: line.modifiers ?? null,
       })),
     };
   }
