@@ -238,6 +238,15 @@ npm run test:watch
 
 ## Deployment & Maintenance
 
+### Production Branch
+
+Deploy **`pos-market`** only. It contains Restaurant POS, Market POS, and the current admin/user-management work. The `main` branch is not the production source of truth until it is fast-forwarded to match `pos-market`.
+
+```bash
+git checkout pos-market
+git pull origin pos-market
+```
+
 ### Production Setup (PM2)
 
 The project is deployed using **PM2** and **Nginx**.

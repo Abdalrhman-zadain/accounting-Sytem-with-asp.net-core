@@ -9,6 +9,24 @@ The system is accessible via its primary production domain:
 1.  **Primary Access:** [https://market.trusttechlimited.com](https://market.trusttechlimited.com)
 2.  **Legacy/Secondary Access:** [https://sabina.trusttechlimited.com](https://sabina.trusttechlimited.com)
 
+## Source Branch For Production
+
+**Deploy from `pos-market` only.**
+
+- `pos-market` is the unified production branch: Restaurant POS, Market POS, print agent, rep stock, and admin user management all live here.
+- `main` may lag behind until it is fast-forwarded to match `pos-market` after a stable production deploy.
+- Feature work should branch from `pos-market`, merge back into `pos-market`, and production servers should run `git checkout pos-market && git pull origin pos-market` before build/restart.
+
+Production deploy sequence on the server:
+
+```bash
+git checkout pos-market
+git pull origin pos-market
+cd backend && npm install && npx prisma migrate deploy && npx prisma generate && npm test
+cd ../frontend && npm install && npm run build
+pm2 restart ecosystem.config.js
+```
+
 ## Technical Architecture (Reverse Proxy)
 
 Although there are multiple subdomains, they both serve the same application instance. This is achieved through an **Nginx Reverse Proxy** configuration on the production server.
@@ -30,4 +48,4 @@ The use of multiple subdomains serves several practical purposes:
 3.  **Redundancy & Bookmarking:** Ensuring that both documented entry points remain active prevents confusion and supports legacy bookmarks from different phases of the project rollout.
 
 ---
-*Last Updated: June 13, 2026*
+*Last Updated: June 21, 2026*

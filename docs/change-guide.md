@@ -4,6 +4,13 @@
 
 This guide explains where to edit the system for common Phase 1 changes and what must be checked before finishing the work.
 
+## Git Branch And Deploy Rules
+
+- **Production branch:** `pos-market` — this is the only branch that should be deployed to `market.trusttechlimited.com`.
+- **Do not deploy `main` directly** unless it has been fast-forwarded to the same commit as `pos-market`.
+- **Feature branches:** branch from `pos-market`, open PRs/merges back into `pos-market`.
+- After merging, run backend tests, frontend typecheck/build, and `npx prisma migrate deploy` on the target environment before restart.
+
 ## Add A New Accounting Screen
 
 Where to edit:
