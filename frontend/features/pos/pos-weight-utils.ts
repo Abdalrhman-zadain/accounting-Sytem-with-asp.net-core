@@ -98,6 +98,39 @@ export function formatPosWeightDisplay(
   return formatWeightQuantity(quantity, unitCode, precision);
 }
 
+/** Quantity label for receipts, KOT, and cart (traditional names instead of decimal KG when applicable). */
+export function formatPosLineQuantityDisplay(
+  quantity: number,
+  language: string,
+  unitCode?: string | null,
+  options?: { precision?: number },
+): string {
+  const precision = options?.precision ?? 3;
+  const rounded = Number(quantity.toFixed(3));
+  const isKilo = Boolean(unitCode?.trim() && isKiloWeightUnit(unitCode));
+  const isFractionalPreset = [0.125, 0.25, 0.5, 0.75].includes(rounded);
+
+  if (isKilo || isFractionalPreset) {
+    if (unitCode?.trim()) {
+      return formatPosWeightDisplay(quantity, unitCode, { language, precision });
+    }
+    const traditional = getTraditionalAsnaqWeightLabel(quantity, language);
+    if (traditional) {
+      return traditional;
+    }
+  }
+
+  if (Number.isInteger(quantity) || quantity === Math.trunc(quantity)) {
+    return String(Math.trunc(quantity));
+  }
+
+  if (unitCode?.trim()) {
+    return formatPosWeightDisplay(quantity, unitCode, { language, precision });
+  }
+
+  return String(quantity);
+}
+
 export function parseWeightInput(value: string, precision: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {

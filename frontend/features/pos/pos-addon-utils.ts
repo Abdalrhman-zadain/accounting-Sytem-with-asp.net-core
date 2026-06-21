@@ -81,15 +81,8 @@ export function formatAddonsForDisplay(
   }
   if (!addons.length) return null;
   return addons
-    .map((addon) => {
-      const label =
-        language === "ar" && addon.name ? addon.name : addon.name;
-      const price =
-        addon.priceAdjustment > 0
-          ? ` (+${addon.priceAdjustment.toFixed(2)})`
-          : "";
-      return `${label}${price}`;
-    })
+    .map((addon) => addon.name?.trim() || "—")
+    .filter(Boolean)
     .join(language === "ar" ? " · " : ", ");
 }
 

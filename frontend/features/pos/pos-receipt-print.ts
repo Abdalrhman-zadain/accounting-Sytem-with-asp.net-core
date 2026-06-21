@@ -4,7 +4,7 @@
  */
 
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
-import { formatPosWeightDisplay } from "@/features/pos/pos-weight-utils";
+import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
   waitForDocumentImages,
@@ -205,13 +205,9 @@ function fmtDateParts(val?: string | Date | null): { date: string; time: string 
 }
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
-  if (line.unitCode) {
-    return formatPosWeightDisplay(line.quantity, line.unitCode, {
-      language: "ar",
-      precision: 3,
-    });
-  }
-  return String(line.quantity);
+  return formatPosLineQuantityDisplay(line.quantity, "ar", line.unitCode, {
+    precision: 3,
+  });
 }
 
 function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {

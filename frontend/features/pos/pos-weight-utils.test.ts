@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPosLineQuantityDisplay,
   formatPosWeightDisplay,
   getTraditionalAsnaqWeightLabel,
 } from "@/features/pos/pos-weight-utils";
@@ -30,5 +31,16 @@ describe("formatPosWeightDisplay", () => {
 
   it("falls back to numeric weight for unknown quantities", () => {
     expect(formatPosWeightDisplay(0.3, "KG", { language: "ar" })).toBe("0.3 KG");
+  });
+});
+
+describe("formatPosLineQuantityDisplay", () => {
+  it("uses traditional labels without unit code for preset weights", () => {
+    expect(formatPosLineQuantityDisplay(0.5, "ar")).toBe("نص كيلو");
+    expect(formatPosLineQuantityDisplay(0.5, "ar", "KG")).toBe("نص كيلو");
+  });
+
+  it("keeps integer counts for regular items", () => {
+    expect(formatPosLineQuantityDisplay(2, "ar")).toBe("2");
   });
 });

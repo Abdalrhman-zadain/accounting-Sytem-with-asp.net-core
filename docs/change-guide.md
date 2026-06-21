@@ -883,8 +883,10 @@ Where to edit:
 Rules:
 
 - cashiers cannot enable sell-by-weight from POS settings or the register; only items flagged in `/inventory` prompt for weight at sale time
-- `defaultSalesPrice` is price per base unit (for example per kg); line total = entered weight × unit price
-- weight lines do not merge in the cart; each weigh-in stays a separate line
+- `defaultSalesPrice` is price per base unit (for example per kg); line total = entered weight × unit price × `portionCount` (plus per-portion add-ons)
+- sell-by-weight lines merge in the cart when item, weight, add-ons, and line note match (`getCartLineMergeKey`); re-adding from the grid or pressing `+` increments `portionCount` on the same row (`×2`, `×3`, …)
+- the register cart shows `+` / `−` on sell-by-weight lines: `+` increments `portionCount`; `−` decrements or removes at `×1`; **cashiers** may edit kitchen-sent weight lines before payment (only `READY`/`SERVED` stays locked); **waiters** still cannot remove kitchen-sent portions and clone a new row with `+` after send
+- kitchen cart changes do **not** auto-sync; cashiers must tap **Update kitchen / تحديث المطبخ** to push VOID/ADD slips and persist line changes; `mergeCartLinesPreservingPortions` keeps `portionCount` after that API round-trip
 - enabling `allowFractionalQuantity` requires the item base unit `unitType` to be `WEIGHT`
 - held/draft/resumed sales preserve decimal `quantity`; resume enriches cart lines from the live catalog for `sellByWeight` display controls
 - traditional Arabic quantity labels for sell-by-weight asnaq items (`آبوات`, `فوارغ`, `كرشات`) are display-only in `frontend/features/pos/pos-weight-utils.ts` (`formatPosWeightDisplay`): preset KG picks print as `عدد واحد`, `وقية`, `نص كيلو`, `تلات أواج`, `كيلو` on the register cart, add-on modal, and thermal receipt while stored `quantity` and pricing math stay decimal KG

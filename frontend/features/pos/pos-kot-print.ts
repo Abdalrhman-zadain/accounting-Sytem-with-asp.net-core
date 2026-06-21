@@ -5,6 +5,7 @@ import {
   kotOrderNoteSizeClass,
   wrapThermalKotNoteText,
 } from "@/features/pos/pos-kitchen-note-limits";
+import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
 import { extractDailyOrderNumber } from "@/features/pos/pos-receipt-print";
 import {
   THERMAL_PAGE_SIDE_MARGIN,
@@ -106,10 +107,9 @@ const KOT_STYLES = `
     .item { margin: 6px 0; }
     .item-row { display: flex; gap: 6px; align-items: baseline; }
     .item-qty { font-size: 14pt; font-weight: bold; flex-shrink: 0; }
-    .item-name { font-size: 12pt; flex: 1; }
-    .item-addons-block { margin-top: 4px; padding-inline-start: 10px; }
-    .item-addons-label { font-size: 11pt; font-weight: bold; margin-bottom: 2px; }
-    .item-addon-line { font-size: 12pt; font-weight: 900; line-height: 1.45; margin: 2px 0; }
+    .item-name { font-size: 12pt; flex: 1; line-height: 1.35; }
+    .item-addons-inline { font-size: 11pt; font-weight: 900; }
+    .item-addon-inline { white-space: nowrap; }
     .line-note {
       font-weight: 900;
       line-height: 1.4;
@@ -259,24 +259,34 @@ function buildLineRowsFromSaleLines(
 ): string {
   return sale.lines
     .filter((line) => line.kitchenSentAt && lineIds.has(line.id))
-    .map((line) => buildLineRowHtml(line, Number(line.quantity), language))
+    .map((line) =>
+      buildLineRowHtml(
+        {
+          itemName: line.itemName,
+          description: line.description,
+          modifiers: line.modifiers,
+          unitCode: line.item?.unitOfMeasure ?? null,
+        },
+        Number(line.quantity),
+        language,
+      ),
+    )
     .join("");
 }
 
-function buildKitchenAddonsHtml(
+function buildKitchenAddonsInlineHtml(
   modifiers: PosSale["lines"][number]["modifiers"],
   language: string,
 ): string {
   const addons = getAddonsFromModifiers(modifiers);
   if (addons.length > 0) {
-    const isAr = language === "ar";
-    const lines = addons
+    const sep = language === "ar" ? " · " : ", ";
+    return addons
       .map((addon) => {
         const label = addon.name?.trim() || "—";
-        return `<div class="item-addon-line">+ ${label}</div>`;
+        return `<span class="item-addon-inline">${label}</span>`;
       })
-      .join("");
-    return `<div class="item-addons-block"><div class="item-addons-label">${isAr ? "إضافات" : "Add-ons"}</div>${lines}</div>`;
+      .join(sep);
   }
 
   const legacy = formatAddonsForDisplay(modifiers, language);
@@ -284,7 +294,7 @@ function buildKitchenAddonsHtml(
     return "";
   }
 
-  return `<div class="item-addons-block"><div class="item-addon-line">+ ${legacy}</div></div>`;
+  return `<span class="item-addon-inline">${legacy}</span>`;
 }
 
 function buildLineRowHtml(
@@ -292,13 +302,18 @@ function buildLineRowHtml(
     itemName?: string | null;
     description?: string | null;
     modifiers?: PosSale["lines"][number]["modifiers"];
+    unitCode?: string | null;
   },
   qty: number,
   language: string,
   prefix = "",
 ): string {
   const name = (line.itemName || line.description || "—").slice(0, 28);
-  const addonsHtml = buildKitchenAddonsHtml(line.modifiers, language);
+  const addonsHtml = buildKitchenAddonsInlineHtml(line.modifiers, language);
+  const itemLabel = addonsHtml
+    ? `${name}<span class="item-addons-inline">${language === "ar" ? " · " : ", "}${addonsHtml}</span>`
+    : name;
+  const qtyLabel = formatPosLineQuantityDisplay(qty, language, line.unitCode);
   const note =
     line.description && line.description !== (line.itemName ?? "") ? line.description : "";
   const noteHtml = note
@@ -307,10 +322,9 @@ function buildLineRowHtml(
   return `
     <div class="item">
       <div class="item-row bold">
-        <span class="item-qty">${prefix}${qty}×</span>
-        <span class="item-name">${name}</span>
+        <span class="item-qty">${prefix}${qtyLabel}×</span>
+        <span class="item-name">${itemLabel}</span>
       </div>
-      ${addonsHtml}
       ${noteHtml}
     </div>`;
 }
@@ -324,6 +338,7 @@ function buildLineRowsFromDeltaLines(deltaLines: KitchenDeltaLine[], language: s
           itemName: line.name,
           description: line.lineNote ?? null,
           modifiers: line.modifiers ?? null,
+          unitCode: line.unitCode ?? null,
         },
         line.qty,
         language,
@@ -337,7 +352,18 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
   const isAr = language === "ar";
   const lineRows = sale.lines
     .filter((line) => line.kitchenSentAt)
-    .map((line) => buildLineRowHtml(line, Number(line.quantity), language))
+    .map((line) =>
+      buildLineRowHtml(
+        {
+          itemName: line.itemName,
+          description: line.description,
+          modifiers: line.modifiers,
+          unitCode: line.item?.unitOfMeasure ?? null,
+        },
+        Number(line.quantity),
+        language,
+      ),
+    )
     .join("");
 
   const bodyHtml = `

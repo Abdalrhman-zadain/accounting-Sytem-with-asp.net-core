@@ -240,6 +240,14 @@ describe("buildPosReceiptHtml", () => {
           lines: [
             {
               name: "فوارغ",
+              quantity: 0.5,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 5,
+            },
+            {
+              name: "فوارغ",
               quantity: 0.25,
               unitPrice: 10,
               discountAmount: 0,
@@ -261,8 +269,10 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
+    expect(html).toContain("نص كيلو");
     expect(html).toContain("وقية");
     expect(html).toContain("عدد واحد");
+    expect(html).not.toContain("0.5");
     expect(html).not.toContain("0.25 KG");
     expect(html).not.toContain("0.125 KG");
   });
@@ -298,7 +308,7 @@ describe("buildPosReceiptHtml", () => {
 
     expect(html).toContain('class="item-addon-row"');
     expect(html).toContain("ثومية");
-    expect(html).toContain("(+0.50)");
+    expect(html).not.toContain("(+0.50)");
   });
 });
 

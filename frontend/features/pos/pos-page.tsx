@@ -262,6 +262,62 @@ function getCartLineKey(
   return `${line.itemId}:${addonSignature(getAddonsFromModifiers(line.modifiers))}:${line.lineNote ?? ""}`;
 }
 
+function getCartLineMergeKey(
+  line: Pick<
+    CartLine,
+    "itemId" | "modifiers" | "lineNote" | "quantity" | "sellByWeight"
+  >,
+) {
+  const base = `${line.itemId}:${addonSignature(getAddonsFromModifiers(line.modifiers))}:${line.lineNote ?? ""}`;
+  return line.sellByWeight ? `${base}:${line.quantity}` : base;
+}
+
+function mergeCartLinesPreservingPortions(
+  previous: CartLine[],
+  fromApi: CartLine[],
+): CartLine[] {
+  const prevByInvoiceLineId = new Map(
+    previous
+      .filter((line) => line.salesInvoiceLineId)
+      .map((line) => [line.salesInvoiceLineId!, line]),
+  );
+
+  return fromApi.map((apiLine) => {
+    if (!apiLine.salesInvoiceLineId) {
+      return apiLine;
+    }
+    const prev = prevByInvoiceLineId.get(apiLine.salesInvoiceLineId);
+    if (!prev?.sellByWeight) {
+      return apiLine;
+    }
+
+    const prevPortionQty = prev.quantity;
+    const prevPortionCount = getWeightPortionCount(prev);
+    if (prevPortionQty <= 0) {
+      return apiLine;
+    }
+
+    const precision = prev.quantityPrecision ?? apiLine.quantityPrecision ?? 3;
+    const apiQty = Number(apiLine.quantity.toFixed(precision));
+    const prevTotal = Number((prevPortionQty * prevPortionCount).toFixed(precision));
+
+    if (Math.abs(apiQty - prevTotal) < 0.0001) {
+      return { ...apiLine, quantity: prevPortionQty, portionCount: prevPortionCount };
+    }
+
+    const inferredCount = apiQty / prevPortionQty;
+    const roundedCount = Math.round(inferredCount);
+    if (
+      roundedCount > 0 &&
+      Math.abs(inferredCount - roundedCount) < 0.0001
+    ) {
+      return { ...apiLine, quantity: prevPortionQty, portionCount: roundedCount };
+    }
+
+    return apiLine;
+  });
+}
+
 function isKitchenProductionLocked(
   line: Pick<CartLine, "kitchenItemStatus">,
 ) {
@@ -316,6 +372,47 @@ function getWeightLineLockedMessage(language: string) {
   );
 }
 
+function getWeightSentPortionRemoveMessage(language: string) {
+  return getLocalizedText(
+    "This portion was already sent to the kitchen. Use + to add another portion. / هذه الحصة أُرسلت للمطبخ. استخدم + لإضافة حصة أخرى.",
+    language,
+  );
+}
+
+function getWeightPortionCount(line: Pick<CartLine, "portionCount">) {
+  const count = line.portionCount ?? 1;
+  return count > 0 ? count : 1;
+}
+
+function getCartLineInventoryQuantity(line: CartLine) {
+  if (line.sellByWeight) {
+    return Number(
+      (line.quantity * getWeightPortionCount(line)).toFixed(line.quantityPrecision ?? 3),
+    );
+  }
+  return line.quantity;
+}
+
+function getCartItemWeightTotal(lines: CartLine[], itemId: string) {
+  return lines
+    .filter((entry) => entry.itemId === itemId)
+    .reduce((sum, entry) => sum + getCartLineInventoryQuantity(entry), 0);
+}
+
+function mapCartLinesForKitchenSnapshot(lines: CartLine[]) {
+  return lines.map((line) => ({
+    salesInvoiceLineId: line.salesInvoiceLineId,
+    clientLineId: line.clientLineId,
+    itemId: line.itemId,
+    name: line.name,
+    quantity: getCartLineInventoryQuantity(line),
+    unit: line.unit,
+    kitchenSentAt: line.kitchenSentAt,
+    modifiers: line.modifiers,
+    lineNote: line.lineNote,
+  }));
+}
+
 function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
   if (item.code === "MENU-001") {
     return [
@@ -367,6 +464,8 @@ type CartLine = {
   modifiers?: import("@/features/pos/pos-addon-types").PosLineModifiersPayload | null;
   lineNote?: string;
   sellByWeight?: boolean;
+  /** Same-weight portions on one cart row (sell-by-weight only). */
+  portionCount?: number;
   quantityPrecision?: number;
 };
 
@@ -620,7 +719,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 function getLineBase(line: CartLine) {
   const addonTotal = sumAddonPrices(getAddonsFromModifiers(line.modifiers));
   if (line.sellByWeight) {
-    return line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal;
+    const portionCount = getWeightPortionCount(line);
+    return (
+      portionCount * (line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal)
+    );
   }
   return line.quantity * line.unitPrice;
 }
@@ -671,7 +773,7 @@ function getLineTotal(
 }
 
 function getLineTotalCost(line: CartLine) {
-  return line.quantity * line.unitCost;
+  return getCartLineInventoryQuantity(line) * line.unitCost;
 }
 
 function getInvoiceDiscountAmount(
@@ -1608,17 +1710,21 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       setEditingInvoiceId(sale.id);
       hadKitchenTicketRef.current =
         mapped.cartLines.some((line) => line.kitchenSentAt) || hadKitchenTicketRef.current;
-      setCartLines(mapped.cartLines);
+      setCartLines((previous) => {
+        const merged = mergeCartLinesPreservingPortions(previous, mapped.cartLines);
+        lastKitchenSyncFingerprintRef.current = buildCartKitchenFingerprint(
+          merged.map((line) => ({
+            salesInvoiceLineId: line.salesInvoiceLineId,
+            itemId: line.itemId,
+            quantity: getCartLineInventoryQuantity(line),
+            kitchenSentAt: line.kitchenSentAt,
+          })),
+        );
+        return merged;
+      });
       setSelectedTableId(mapped.tableId ?? null);
       setSelectedTableNumber(mapped.tableNumber ?? null);
       setSelectedWaiterId(mapped.waiterId ?? null);
-      lastKitchenSyncFingerprintRef.current = JSON.stringify(
-        mapped.cartLines.map((line) => ({
-          id: line.salesInvoiceLineId ?? line.itemId,
-          q: line.quantity,
-          sent: line.kitchenSentAt,
-        })),
-      );
       await refreshPosData();
       await queryClient.refetchQueries({ queryKey: queryKeys.posWaiterOrders(token) });
       if (!variables?.silent) {
@@ -1676,7 +1782,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       const wasPreOrder = Boolean(activeReservationId);
       const tableIdForHandoff = wasPreOrder ? selectedTableId : null;
       const hadKitchenTicketBeforeReset = hadKitchenTicketRef.current;
-      const snapshotBefore = captureKitchenLineSnapshotFromCart(cartLines);
+      const snapshotBefore = captureKitchenLineSnapshotFromCart(
+        mapCartLinesForKitchenSnapshot(cartLines),
+      );
       const receipt = mapReceiptResponse(response.receipt);
       setLastReceipt(receipt);
       setPayFlowStep("success");
@@ -2757,7 +2865,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
         warehouseId:
           line.trackInventory && line.warehouseId ? line.warehouseId : undefined,
         itemName: line.name,
-        quantity: line.quantity,
+        quantity: line.sellByWeight
+          ? getCartLineInventoryQuantity(line)
+          : line.quantity,
         unitPrice: line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
         discountAmount: Number(
           (getLineDiscountAmount(line) + (taxPolicy === "AFTER_TAX" ? afterTaxShare : invoiceShare)).toFixed(2),
@@ -2997,10 +3107,33 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
         lineNote,
         sellByWeight,
         quantityPrecision,
+        portionCount: sellByWeight ? 1 : undefined,
         clientLineId: sellByWeight ? createLocalId() : undefined,
       };
 
       if (sellByWeight) {
+        const weightMergeKey = getCartLineMergeKey(draftLine);
+        const existingWeightIndex = current.findIndex(
+          (line) => line.sellByWeight && getCartLineMergeKey(line) === weightMergeKey,
+        );
+        if (existingWeightIndex >= 0) {
+          const nextTotalWeight = getCartItemWeightTotal(current, item.id) + quantity;
+          if (item.trackInventory && !negOk && nextTotalWeight > onHand) {
+            queueMicrotask(() =>
+              pushMessage(
+                t("pos.sales.alert.stockExceeded", {
+                  item: item.name,
+                }),
+              ),
+            );
+            return current;
+          }
+          return current.map((l, index) =>
+            index === existingWeightIndex
+              ? { ...l, portionCount: getWeightPortionCount(l) + 1 }
+              : l,
+          );
+        }
         if (item.trackInventory && !negOk && quantity > onHand) {
           queueMicrotask(() =>
             pushMessage(
@@ -3015,7 +3148,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       }
 
       const existingIndex = current.findIndex(
-        (line) => getCartLineKey(line) === getCartLineKey(draftLine) && !line.kitchenSentAt,
+        (line) => getCartLineMergeKey(line) === getCartLineMergeKey(draftLine),
       );
       if (existingIndex >= 0) {
         const line = current[existingIndex];
@@ -3216,6 +3349,70 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       }
       return { ...current, quantity: nextQty };
     });
+  };
+
+  const duplicateWeightLine = (line: CartLine) => {
+    if (isWaiterOrderLocked) {
+      pushError(getOrderWaiterLockMessage(language));
+      return;
+    }
+    if (!line.sellByWeight) {
+      bumpLineQty(line, 1);
+      return;
+    }
+    const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
+    const nextTotalWeight = getCartItemWeightTotal(cartLines, line.itemId) + line.quantity;
+    if (line.trackInventory && !negOk && nextTotalWeight > line.onHandQuantity) {
+      pushMessage(
+        t("pos.sales.alert.stockExceeded", {
+          item: line.name,
+        }),
+      );
+      return;
+    }
+    if (line.kitchenSentAt && waiterOnlyUser) {
+      const duplicate: CartLine = {
+        ...line,
+        salesInvoiceLineId: undefined,
+        clientLineId: createLocalId(),
+        kitchenSentAt: null,
+        kitchenItemStatus: null,
+        portionCount: 1,
+      };
+      setCartLines((current) => [...current, duplicate]);
+      return;
+    }
+    updateLine(line, (current) => ({
+      ...current,
+      portionCount: getWeightPortionCount(current) + 1,
+    }));
+  };
+
+  const removeWeightLine = (line: CartLine) => {
+    if (isWaiterOrderLocked) {
+      pushError(getOrderWaiterLockMessage(language));
+      return;
+    }
+    if (!line.sellByWeight) {
+      bumpLineQty(line, -1);
+      return;
+    }
+    if (line.kitchenSentAt && waiterOnlyUser) {
+      pushMessage(getWeightSentPortionRemoveMessage(language));
+      return;
+    }
+    if (isKitchenProductionLocked(line)) {
+      pushError(getKitchenProductionLockMessage(language));
+      return;
+    }
+    if (getWeightPortionCount(line) > 1) {
+      updateLine(line, (current) => ({
+        ...current,
+        portionCount: getWeightPortionCount(current) - 1,
+      }));
+      return;
+    }
+    updateLine(line, () => null);
   };
 
   const setLineWeight = (line: CartLine, nextWeight: number) => {
@@ -3450,18 +3647,16 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     setActiveReservationId(target.heldContext?.reservationId ?? null);
     hadKitchenTicketRef.current = target.cartLines.some((line) => line.kitchenSentAt);
     waiterConfirmedAtRef.current = target.waiterConfirmedAt ?? null;
-    lastKitchenSyncFingerprintRef.current = buildCartKitchenFingerprint(target.cartLines);
-    lastSyncedKitchenSnapshotRef.current = captureKitchenLineSnapshotFromCart(
+    lastKitchenSyncFingerprintRef.current = buildCartKitchenFingerprint(
       target.cartLines.map((line) => ({
         salesInvoiceLineId: line.salesInvoiceLineId,
-        clientLineId: line.clientLineId,
         itemId: line.itemId,
-        name: line.name,
-        quantity: line.quantity,
+        quantity: getCartLineInventoryQuantity(line),
         kitchenSentAt: line.kitchenSentAt,
-        modifiers: line.modifiers,
-        lineNote: line.lineNote,
       })),
+    );
+    lastSyncedKitchenSnapshotRef.current = captureKitchenLineSnapshotFromCart(
+      mapCartLinesForKitchenSnapshot(target.cartLines),
     );
     if (hadKitchenTicketRef.current) {
       kitchenHubActionsRef.current.markKitchenInvoiceFullyPrinted(target.id);
@@ -3476,65 +3671,6 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
     }
     pushMessage(t("pos.sales.alert.resumedHeldSale"));
   };
-
-  const cartKitchenFingerprint = useMemo(
-    () => buildCartKitchenFingerprint(cartLines),
-    [cartLines],
-  );
-
-  useEffect(() => {
-    if (!hadKitchenTicketRef.current || !editingInvoiceId || !activeSession?.id) {
-      return;
-    }
-    if (waiterOnlyUser && (isWaiterOrderLocked || waiterConfirmedAtRef.current)) {
-      return;
-    }
-    if (
-      waiterOnlyUser &&
-      cartLines.length > 0 &&
-      cartLines.every((line) => line.kitchenSentAt)
-    ) {
-      return;
-    }
-    if (cartLines.length === 0) {
-      return;
-    }
-    if (!hasPermission(user, "POS_VIEW_POS_SCREEN")) {
-      return;
-    }
-    if (lastKitchenSyncFingerprintRef.current === null) {
-      lastKitchenSyncFingerprintRef.current = cartKitchenFingerprint;
-      return;
-    }
-    if (lastKitchenSyncFingerprintRef.current === cartKitchenFingerprint) {
-      return;
-    }
-    if (updateKitchenMutation.isPending) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      updateKitchenMutation.mutate(
-        { silent: true },
-        {
-          onSuccess: () => {
-            lastKitchenSyncFingerprintRef.current = cartKitchenFingerprint;
-          },
-        },
-      );
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    cartKitchenFingerprint,
-    cartLines.length,
-    editingInvoiceId,
-    activeSession?.id,
-    isWaiterOrderLocked,
-    user,
-    waiterOnlyUser,
-    updateKitchenMutation.isPending,
-  ]);
 
   const loadOpenTableOrder = (tableId: string) => {
     const openSales = mapOpenPosSalesFromApi(
@@ -3763,7 +3899,7 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
       if (!line.trackInventory) return false;
       if (!line.warehouseId) return true;
       if (posSettings?.runtime.negativeStockAllowed) return false;
-      return line.quantity > line.onHandQuantity;
+      return getCartLineInventoryQuantity(line) > line.onHandQuantity;
     });
     if (inventoryViolation) {
       pushMessage(
@@ -4568,6 +4704,9 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                           currencyCode={currencyCode}
                           taxFreeEnabled={Boolean(posSettings?.runtime.taxFreeEnabled)}
                           locked={orderKitchenLocked || isCartLineLocked(line)}
+                          canAdjustWeightPortions={
+                            !orderKitchenLocked && line.sellByWeight
+                          }
                           onEditAddons={
                             !isCartLineLocked(line) ? () => openLineAddonEditor(line) : undefined
                           }
@@ -4580,8 +4719,16 @@ export function PosPage({ waiterMode = false }: { waiterMode?: boolean } = {}) {
                             hasPermission(user, "POS_COMPLETE_SALE") &&
                             hasPermission(user, "POS_UPDATE_ITEM_QUANTITY")
                           }
-                          onIncrease={() => bumpLineQty(line, 1)}
-                          onDecrease={() => bumpLineQty(line, -1)}
+                          onIncrease={() =>
+                            line.sellByWeight
+                              ? duplicateWeightLine(line)
+                              : bumpLineQty(line, 1)
+                          }
+                          onDecrease={() =>
+                            line.sellByWeight
+                              ? removeWeightLine(line)
+                              : bumpLineQty(line, -1)
+                          }
                           onWeightChange={
                             line.sellByWeight
                               ? (nextWeight) => setLineWeight(line, nextWeight)
@@ -6835,24 +6982,6 @@ function PosPaymentSummaryCard({
 
   return (
     <div className="mx-3 mt-2 rounded-[12px] border border-[#eef1ef] bg-[#fafafa] px-3 py-2.5">
-      {!waiterMode && (
-        <>
-          <div className="space-y-1.5">
-            {rows.map((row) => (
-              <div
-                key={row.label}
-                className="flex items-center justify-between gap-3 text-[11px]"
-              >
-                <span className="font-medium text-[#6b7280] arabic-auto">{row.label}</span>
-                <span className="shrink-0 font-semibold tabular-nums text-[#374151]" dir="ltr">
-                  {row.value}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="my-2 border-t border-[#e5e7eb]" />
-        </>
-      )}
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-bold text-[#111827] arabic-auto">{labels.grandTotal}</span>
         <span className="text-[17px] font-bold tabular-nums text-[#111827]" dir="ltr">
@@ -6868,6 +6997,7 @@ function CompactCartLine({
   language,
   currencyCode,
   locked = false,
+  canAdjustWeightPortions = false,
   onIncrease,
   onDecrease,
   onRemove,
@@ -6883,6 +7013,7 @@ function CompactCartLine({
   language: string;
   currencyCode: string;
   locked?: boolean;
+  canAdjustWeightPortions?: boolean;
   onIncrease: () => void;
   onDecrease: () => void;
   onRemove: () => void;
@@ -6904,12 +7035,21 @@ function CompactCartLine({
   const unitsLabel = getLocalizedText("Units / وحدات", language);
   const weightPrecision = line.quantityPrecision ?? 3;
   const weightStep = getWeightQuantityStep(weightPrecision);
+  const weightPortionCount = line.sellByWeight ? getWeightPortionCount(line) : line.quantity;
+  const weightPortionLabel = formatPosWeightDisplay(line.quantity, line.unit, {
+    language,
+    precision: weightPrecision,
+  });
   const quantityLabel = line.sellByWeight
-    ? formatPosWeightDisplay(line.quantity, line.unit, {
-        language,
-        precision: weightPrecision,
-      })
+    ? weightPortionCount > 1
+      ? `${formatCount(weightPortionCount)} × ${weightPortionLabel}`
+      : weightPortionLabel
     : `${formatCount(line.quantity)} ${unitsLabel}`;
+  const weightStepperLabel =
+    line.sellByWeight && weightPortionCount > 1
+      ? `×${formatCount(weightPortionCount)}`
+      : weightPortionLabel;
+  const showQuantityStepper = !locked || canAdjustWeightPortions;
 
   return (
     <div
@@ -6923,6 +7063,12 @@ function CompactCartLine({
           <div className="flex items-center gap-1.5">
             <p className="truncate text-[12px] font-semibold text-[#111827] arabic-heading">
               {getLocalizedText(line.name, language)}
+              {addonsLabel ? (
+                <span className="font-normal text-[#6b7280]">
+                  {language === "ar" ? " · " : ", "}
+                  {addonsLabel}
+                </span>
+              ) : null}
             </p>
             {!locked ? (
               <button
@@ -6935,9 +7081,6 @@ function CompactCartLine({
               </button>
             ) : null}
           </div>
-          {addonsLabel ? (
-            <p className="mt-0.5 truncate text-[10px] text-[#6b7280]">{addonsLabel}</p>
-          ) : null}
           {line.lineNote ? (
             <p className="mt-0.5 text-[10px] italic text-amber-700">{line.lineNote}</p>
           ) : null}
@@ -7034,18 +7177,49 @@ function CompactCartLine({
           <span className="text-[13px] font-bold tabular-nums text-[#111827]" dir="ltr">
             {formatCurrency(lineTotal, currencyCode)}
           </span>
-          {!locked ? (
+          {showQuantityStepper ? (
             line.sellByWeight ? (
-              <span
-                className="inline-flex items-center justify-center rounded-xl border border-emerald-100 bg-[#e8f5e9] px-3.5 py-1.5 text-sm font-extrabold text-emerald-800 shadow-sm"
-                dir="ltr"
-                title={getLocalizedText("Weight is fixed after adding / الوزن ثابت بعد الإضافة", language)}
-              >
-                {formatPosWeightDisplay(line.quantity, line.unit, {
-                  language,
-                  precision: weightPrecision,
-                })}
-              </span>
+              <div className="flex items-center rounded-xl border border-emerald-100 bg-white shadow-sm overflow-hidden select-none">
+                <button
+                  type="button"
+                  onClick={onDecrease}
+                  className={cn(
+                    "flex h-9 w-12 items-center justify-center text-[#475569] transition active:scale-95",
+                    weightPortionCount <= 1
+                      ? "hover:bg-red-50 hover:text-[#e11d48]"
+                      : "hover:bg-gray-50 hover:text-gray-900",
+                  )}
+                  title={
+                    weightPortionCount <= 1
+                      ? getLocalizedText("Remove portion / حذف الحصة", language)
+                      : getLocalizedText("Decrease count / تقليل العدد", language)
+                  }
+                >
+                  {weightPortionCount <= 1 ? (
+                    <LuTrash2 className="h-4 w-4" />
+                  ) : (
+                    <LuMinus className="h-4 w-4 stroke-[2.5]" />
+                  )}
+                </button>
+                <span
+                  className="min-w-[4.5rem] border-x border-emerald-100 bg-[#e8f5e9] px-2 py-1.5 text-center text-sm font-extrabold text-emerald-800"
+                  dir="ltr"
+                  title={getLocalizedText(
+                    "Add another same portion with + / أضف حصة مماثلة بـ +",
+                    language,
+                  )}
+                >
+                  {weightStepperLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={onIncrease}
+                  className="flex h-9 w-12 items-center justify-center text-[#475569] transition hover:bg-emerald-50 hover:text-[#059669] active:scale-95"
+                  title={getLocalizedText("Add same portion / إضافة نفس الحصة", language)}
+                >
+                  <LuPlus className="h-4 w-4 stroke-[2.5]" />
+                </button>
+              </div>
             ) : (
               <div className="flex items-center rounded-xl border border-[#cbd5e1] bg-white shadow-sm overflow-hidden select-none">
                 <button
@@ -7085,10 +7259,12 @@ function CompactCartLine({
             <span className="text-xs font-bold text-[#475569]" dir="ltr">
               ×
               {line.sellByWeight
-                ? formatPosWeightDisplay(line.quantity, line.unit, {
-                    language,
-                    precision: weightPrecision,
-                  })
+                ? weightPortionCount > 1
+                  ? formatCount(weightPortionCount)
+                  : formatPosWeightDisplay(line.quantity, line.unit, {
+                      language,
+                      precision: weightPrecision,
+                    })
                 : formatCount(line.quantity)}
             </span>
           )}

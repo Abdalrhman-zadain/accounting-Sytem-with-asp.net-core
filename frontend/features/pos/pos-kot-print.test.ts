@@ -102,6 +102,48 @@ function mockSale(overrides: Partial<PosSale> = {}): PosSale {
 }
 
 describe("buildKitchenOrderTicketHtml", () => {
+  it("renders traditional quantity labels for sell-by-weight lines", () => {
+    const html = buildKitchenOrderTicketHtml(
+      mockSale({
+        lines: [
+          {
+            ...mockSaleBase.lines[0],
+            id: "line-weight",
+            itemName: "فوارغ",
+            description: null,
+            quantity: "0.5",
+            modifiers: {
+              addons: [
+                {
+                  groupId: "g-1",
+                  groupName: "تحضير",
+                  optionId: "o-1",
+                  name: "سلق",
+                  priceAdjustment: 0,
+                },
+              ],
+            },
+            item: {
+              id: "item-faw",
+              code: "MENU-005",
+              name: "فوارغ",
+              type: "FINISHED_GOOD",
+              trackInventory: true,
+              unitOfMeasure: "KG",
+              allowFractionalQuantity: true,
+            },
+          },
+        ],
+      }),
+      "ar",
+    );
+
+    expect(html).toContain("نص كيلو×");
+    expect(html).toContain("فوارغ");
+    expect(html).toContain("سلق");
+    expect(html).not.toContain("0.5×");
+  });
+
   it("renders Arabic dine-in banner, waiter, and larger item lines", () => {
     const html = buildKitchenOrderTicketHtml(mockSale(), "ar");
 
@@ -118,9 +160,10 @@ describe("buildKitchenOrderTicketHtml", () => {
     expect(html).toContain('class="item-name"');
     expect(html).toContain("مايونيز بالثوم");
     expect(html).toContain("جبنة شيدر مضاعفة");
-    expect(html).toContain('class="item-addons-block"');
-    expect(html).toContain('class="item-addon-line"');
-    expect(html).toContain("إضافات");
+    expect(html).toContain('class="item-addons-inline"');
+    expect(html).toContain('class="item-addon-inline"');
+    expect(html).not.toContain("إضافات");
+    expect(html).not.toContain("item-addons-block");
     expect(html).not.toContain("مايونيز بالثوم (+0.50)");
     expect(html).toContain("بدون ثوم");
     expect(html).toContain("ملاحظة مهمة للمطبخ");

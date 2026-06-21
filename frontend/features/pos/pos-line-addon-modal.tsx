@@ -165,10 +165,6 @@ function isOptionDisabledByDependencies(
   return false;
 }
 
-function shouldHidePriceAdjustment(group: PosAddonGroup) {
-  return group.code === "S_W_K" || group.code === "S_W_K_F";
-}
-
 export function PosLineAddonModal({
   isOpen,
   itemName,
@@ -383,10 +379,6 @@ export function PosLineAddonModal({
                     language,
                     preset,
                   );
-                  const estimatedPrice =
-                    typeof weightSelection.pricePerUnit === "number"
-                      ? Number((weightSelection.pricePerUnit * preset.value).toFixed(2))
-                      : null;
 
                   return (
                     <button
@@ -403,11 +395,6 @@ export function PosLineAddonModal({
                       )}
                     >
                       {label}
-                      {estimatedPrice != null ? (
-                        <span className="ms-1 opacity-80">
-                          {estimatedPrice.toFixed(2)}
-                        </span>
-                      ) : null}
                     </button>
                   );
                 })}
@@ -468,11 +455,6 @@ export function PosLineAddonModal({
                         )}
                       >
                         {localizeAddonLabel(option.name, option.nameAr, language)}
-                        {option.priceAdjustment > 0 && !shouldHidePriceAdjustment(group) ? (
-                          <span className="ms-1 opacity-80">
-                            +{option.priceAdjustment.toFixed(2)}
-                          </span>
-                        ) : null}
                       </button>
                     );
                   })}

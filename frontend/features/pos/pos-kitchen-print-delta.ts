@@ -6,6 +6,7 @@ export type KitchenLineSnapshot = {
   itemId: string;
   name: string;
   qty: number;
+  unitCode?: string | null;
   kitchenSentAt: string | null;
   modifiers?: PosLineModifiersPayload | null;
   lineNote?: string;
@@ -16,6 +17,7 @@ export type KitchenDeltaLine = {
   itemId: string;
   name: string;
   qty: number;
+  unitCode?: string | null;
   modifiers?: PosLineModifiersPayload | null;
   lineNote?: string;
 };
@@ -32,6 +34,7 @@ type SnapshotLineInput = {
   itemId: string;
   name: string;
   quantity: number;
+  unitCode?: string | null;
   kitchenSentAt?: string | null;
   modifiers?: PosLineModifiersPayload | null;
   lineNote?: string | null;
@@ -53,6 +56,7 @@ export function captureKitchenLineSnapshot(lines: SnapshotLineInput[]): KitchenL
     itemId: line.itemId,
     name: line.name || line.itemName || line.description || "—",
     qty: Number(line.quantity) || 0,
+    unitCode: line.unitCode ?? null,
     kitchenSentAt: line.kitchenSentAt ?? null,
     modifiers: line.modifiers ?? null,
     lineNote: line.lineNote ?? undefined,
@@ -66,6 +70,7 @@ export function captureKitchenLineSnapshotFromSale(sale: PosSale): KitchenLineSn
       itemId: line.itemId ?? "",
       name: line.itemName ?? line.description ?? "—",
       quantity: Number(line.quantity),
+      unitCode: line.item?.unitOfMeasure ?? null,
       kitchenSentAt: line.kitchenSentAt ?? null,
       modifiers: line.modifiers ?? null,
       description: line.description ?? null,
@@ -80,6 +85,7 @@ function toDeltaLine(snapshot: KitchenLineSnapshot, qty: number): KitchenDeltaLi
     itemId: snapshot.itemId,
     name: snapshot.name,
     qty,
+    unitCode: snapshot.unitCode ?? null,
     modifiers: snapshot.modifiers ?? null,
     lineNote: snapshot.lineNote,
   };
@@ -153,6 +159,7 @@ export type CartKitchenSnapshotInput = {
   itemId: string;
   name: string;
   quantity: number;
+  unit?: string | null;
   kitchenSentAt?: string | null;
   modifiers?: PosLineModifiersPayload | null;
   lineNote?: string | null;
@@ -168,6 +175,7 @@ export function captureKitchenLineSnapshotFromCart(
       itemId: line.itemId,
       name: line.name,
       quantity: line.quantity,
+      unitCode: line.unit ?? null,
       kitchenSentAt: line.kitchenSentAt,
       modifiers: line.modifiers,
       lineNote: line.lineNote,
