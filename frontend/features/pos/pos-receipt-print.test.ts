@@ -379,7 +379,7 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain("text-overflow: ellipsis");
   });
 
-  it("renders bold addon rows under item lines", () => {
+  it("does not print addon rows on customer receipts", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -408,9 +408,27 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain('class="item-addon-row"');
-    expect(html).toContain("ثومية");
-    expect(html).not.toContain("(+0.50)");
+    expect(html).toContain("شاورما دجاج");
+    expect(html).not.toContain('class="item-addon-row"');
+    expect(html).not.toContain("ثومية");
+  });
+
+  it("wraps long footer address inside the 80mm receipt width", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          address: "عمان - شارع القدس - إشارة الرئيسي مقابل قاعات شذى للأفراح",
+        }),
+      ),
+    );
+
+    expect(html).toContain('class="footer-contact"');
+    expect(html).toContain('class="footer-address"');
+    expect(html).toContain('class="footer-phone"');
+    expect(html).toContain("white-space: normal");
+    expect(html).toContain("overflow-wrap: anywhere");
+    expect(html).toContain("عمان - شارع القدس");
+    expect(html).toContain("0791208488");
   });
 });
 

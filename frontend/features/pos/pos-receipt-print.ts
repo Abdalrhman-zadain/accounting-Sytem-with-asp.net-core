@@ -3,7 +3,6 @@
  * Old boxed Arabic restaurant receipt clone for 80mm thermal POS printers.
  */
 
-import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
 import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
@@ -13,7 +12,6 @@ import {
   buildThermalReceiptDocumentHtml,
   thermalReceiptColumnHeaderRow,
   thermalReceiptFooterSpacerHtml,
-  thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
   thermalReceiptLtrInlineHtml,
   thermalReceiptTableClose,
@@ -339,12 +337,26 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       margin: 6mm 0 4mm;
       text-align: center;
     }
+    .footer-contact {
+      max-width: 100%;
+      padding: 0 1.5mm;
+      text-align: center;
+    }
     .footer-address {
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1.35;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+    .footer-phone {
+      margin-top: 1.5mm;
       font-size: 12px;
       font-weight: 900;
-      text-align: center;
-      line-height: 1.25;
-      white-space: nowrap;
+      line-height: 1.2;
+      direction: ltr;
+      unicode-bidi: isolate;
     }
     .receipt-box.note-box {
       padding: 2.5mm 2mm;
@@ -682,10 +694,6 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     rows.push(
       buildRestaurantReceiptItemRow(line.name, line.unitPrice, qty, line.lineTotal),
     );
-    const addons = formatAddonsForDisplay(line.modifiers, "ar");
-    if (addons) {
-      rows.push(thermalReceiptItemAddonRow(addons));
-    }
     if (line.discountAmount > 0.009) {
       rows.push(thermalReceiptItemDiscountRow(line.discountAmount));
     }
@@ -731,9 +739,10 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const { address } = resolveReceiptContactFields(receipt);
   const phoneDigits = phone.replace(/\s+/g, "");
   rows.push(`<div class="footer-thanks">شكراً لزيارتكم</div>`);
-  rows.push(
-    `<div class="footer-address">${address} ${thermalReceiptLtrInlineHtml(phoneDigits)}</div>`,
-  );
+  rows.push(`<div class="footer-contact">
+  <div class="footer-address">${escapeReceiptText(address)}</div>
+  <div class="footer-phone">${thermalReceiptLtrInlineHtml(phoneDigits)}</div>
+</div>`);
   rows.push(thermalReceiptFooterSpacerHtml());
 
   return rows.join("\n");
