@@ -4,10 +4,14 @@ This document explains the production URL architecture for the Simple Account sy
 
 ## Primary Production URLs
 
-The system is accessible via its primary production domain:
+This repository's `ecosystem.config.js` targets the **Sabina** instance:
 
-1.  **Primary Access:** [https://market.trusttechlimited.com](https://market.trusttechlimited.com)
-2.  **Legacy/Secondary Access:** [https://sabina.trusttechlimited.com](https://sabina.trusttechlimited.com)
+1.  **Primary Access:** [https://sabina.trusttechlimited.com](https://sabina.trusttechlimited.com)
+2.  **PM2 names:** `account-frontend`, `account-backend`
+3.  **Internal ports:** frontend `3000`, backend `3007`
+4.  **Database:** PostgreSQL on host port `15432`, database `simple_account`
+
+A separate isolated **Market** instance (`market-frontend` / `market-backend`, ports `3010` / `3017`) may run on the same server when needed; see `docs/instance-isolation.md`.
 
 ## Source Branch For Production
 
@@ -29,15 +33,12 @@ pm2 restart ecosystem.config.js
 
 ## Technical Architecture (Reverse Proxy)
 
-Although there are multiple subdomains, they both serve the same application instance. This is achieved through an **Nginx Reverse Proxy** configuration on the production server.
+Nginx on the production server terminates HTTPS for `sabina.trusttechlimited.com` and proxies to the Sabina PM2 processes:
 
-### How it Works
+*   `/` → `http://127.0.0.1:3000` (`account-frontend`)
+*   `/api/` → `http://127.0.0.1:3007` (`account-backend`)
 
-*   **Nginx Configuration:** The server is configured to listen for both `market.trusttechlimited.com` and `sabina.trusttechlimited.com`. Regardless of which subdomain is requested, Nginx proxies the traffic to the same internal ports:
-    *   **Frontend:** Port `3010` (Market Next.js)
-    *   **Backend:** Port `3017` (Market NestJS API)
-*   **Unified Application:** Since both URLs point to the same running code, the user experience, database, and features are identical. A user navigating to `/journal-entries` on either subdomain is accessing the same accounting module.
-*   **Dynamic API Resolution:** The frontend code (`frontend/lib/config/api.ts`) detects the current hostname at runtime. It automatically routes API requests to the relative `/api` path, ensuring that database communication works seamlessly across all subdomains without hardcoded URLs.
+**Dynamic API resolution:** `frontend/lib/config/api.ts` detects the current hostname at runtime and routes browser API calls to same-origin `/api`, so the app works on `sabina.trusttechlimited.com` without hardcoding the public API host in client code.
 
 ## Operational Strategy
 
@@ -48,4 +49,4 @@ The use of multiple subdomains serves several practical purposes:
 3.  **Redundancy & Bookmarking:** Ensuring that both documented entry points remain active prevents confusion and supports legacy bookmarks from different phases of the project rollout.
 
 ---
-*Last Updated: June 21, 2026*
+*Last Updated: June 22, 2026*
