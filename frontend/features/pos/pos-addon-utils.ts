@@ -26,6 +26,8 @@ export function getAddonsFromModifiers(modifiers: unknown): PosLineAddonSelectio
       return {
         groupId: item?.groupId || "",
         groupName: item?.groupName || "",
+        groupCode: item?.groupCode || "",
+        isRequired: item?.isRequired === true,
         optionId: item?.optionId || "",
         name: item?.name || "",
         priceAdjustment: Number(item?.priceAdjustment ?? 0),
@@ -41,6 +43,48 @@ export function getAddonsFromModifiers(modifiers: unknown): PosLineAddonSelectio
   }
 
   return [];
+}
+
+/** Single-choice “dish type” groups that should print on customer receipts when selected. */
+export const CUSTOMER_RECEIPT_CHOICE_GROUP_CODES = new Set([
+  "COOKING_TYPE",
+  "COOKING_METHOD",
+  "HALF_HEAD",
+  "RICE_FRIKEH",
+  "S_W_K",
+  "S_W_K_F",
+]);
+
+export function isCustomerReceiptChoiceAddon(addon: PosLineAddonSelection): boolean {
+  if (addon.groupCode && CUSTOMER_RECEIPT_CHOICE_GROUP_CODES.has(addon.groupCode)) {
+    return true;
+  }
+  return addon.isRequired === true;
+}
+
+export function getCustomerReceiptChoiceAddons(modifiers: unknown): PosLineAddonSelection[] {
+  return getAddonsFromModifiers(modifiers).filter(isCustomerReceiptChoiceAddon);
+}
+
+export function formatCustomerReceiptChoiceAddons(
+  modifiers: unknown,
+  language: string,
+): string | null {
+  const addons = getCustomerReceiptChoiceAddons(modifiers);
+  if (!addons.length) return null;
+  const parts = addons.map((addon) => addon.name?.trim() || "—").filter(Boolean);
+  return parts.length ? parts.join(language === "ar" ? " · " : ", ") : null;
+}
+
+export function buildCustomerReceiptItemName(
+  baseName: string,
+  modifiers: unknown,
+  language: string,
+): string {
+  const trimmedName = baseName.trim();
+  const choices = formatCustomerReceiptChoiceAddons(modifiers, language);
+  if (!choices) return trimmedName;
+  return `${trimmedName} (${choices})`;
 }
 
 export function buildModifiersPayload(

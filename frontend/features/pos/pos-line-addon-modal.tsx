@@ -281,6 +281,8 @@ export function PosLineAddonModal({
       const entry: PosLineAddonSelection = {
         groupId: group.id,
         groupName: localizeAddonLabel(group.name, group.nameAr, language),
+        groupCode: group.code,
+        isRequired: group.isRequired,
         optionId: option.id,
         name: localizeAddonLabel(option.name, option.nameAr, language),
         priceAdjustment: option.priceAdjustment,

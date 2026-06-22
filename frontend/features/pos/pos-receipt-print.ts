@@ -3,6 +3,7 @@
  * Old boxed Arabic restaurant receipt clone for 80mm thermal POS printers.
  */
 
+import { buildCustomerReceiptItemName } from "@/features/pos/pos-addon-utils";
 import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
@@ -691,8 +692,9 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   );
   for (const line of receipt.lines) {
     const qty = formatReceiptQuantity(line);
+    const displayName = buildCustomerReceiptItemName(line.name, line.modifiers, "ar");
     rows.push(
-      buildRestaurantReceiptItemRow(line.name, line.unitPrice, qty, line.lineTotal),
+      buildRestaurantReceiptItemRow(displayName, line.unitPrice, qty, line.lineTotal),
     );
     if (line.discountAmount > 0.009) {
       rows.push(thermalReceiptItemDiscountRow(line.discountAmount));

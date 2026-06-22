@@ -3,6 +3,8 @@ export type PosAddonSelectionType = "SINGLE" | "MULTIPLE";
 export type PosLineAddonSelection = {
   groupId: string;
   groupName: string;
+  groupCode?: string;
+  isRequired?: boolean;
   optionId: string;
   name: string;
   priceAdjustment: number;

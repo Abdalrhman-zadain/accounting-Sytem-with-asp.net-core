@@ -379,7 +379,93 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain("text-overflow: ellipsis");
   });
 
-  it("does not print addon rows on customer receipts", () => {
+  it("prints required dish choices inline in the item name", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "أقلاب خروف محشية",
+              quantity: 1,
+              unitPrice: 3.6,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 3.6,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o1",
+                    name: "شوي",
+                    priceAdjustment: 0,
+                  },
+                  {
+                    groupId: "g-head",
+                    groupName: "نص رأس",
+                    groupCode: "HALF_HEAD",
+                    optionId: "o2",
+                    name: "نص رأس",
+                    priceAdjustment: -3.5,
+                  },
+                  {
+                    groupId: "g-yogurt",
+                    groupName: "إضافة لبن",
+                    groupCode: "YOGURT_ADDON",
+                    isRequired: false,
+                    optionId: "o3",
+                    name: "إضافة لبن",
+                    priceAdjustment: 0.5,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("أقلاب خروف محشية (شوي · نص رأس)");
+    expect(html).not.toContain('class="item-addon-row"');
+    expect(html).not.toContain("إضافة لبن");
+  });
+
+  it("supports legacy modifiers without group metadata via type-group codes", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "أقلاب",
+              quantity: 1,
+              unitPrice: 3.6,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 3.6,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-rice",
+                    groupName: "رز و فريكة",
+                    groupCode: "RICE_FRIKEH",
+                    optionId: "o1",
+                    name: "رز",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("أقلاب (رز)");
+  });
+
+  it("does not print optional addon rows on customer receipts", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
