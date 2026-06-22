@@ -344,7 +344,7 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain("0.125 KG");
   });
 
-  it("scales longer item names down instead of wrapping or truncating them", () => {
+  it("scales longer item names down and keeps wrapped name cells", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -375,6 +375,7 @@ describe("buildPosReceiptHtml", () => {
       '<td class="col-name" style="font-size: 11px">توفي سواس انجليزي</td>',
     );
     expect(html).toContain('<td class="col-name" style="font-size: 14px">راس</td>');
+    expect(html).toContain("white-space: normal");
     expect(html).not.toContain("توفي سواس ان...");
     expect(html).not.toContain("text-overflow: ellipsis");
   });
@@ -427,7 +428,8 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("أقلاب خروف محشية (شوي · نص رأس)");
+    expect(html).toContain('class="item-name-base">أقلاب خروف محشية</span>');
+    expect(html).toContain('class="item-name-choices">(شوي · نص رأس)</span>');
     expect(html).not.toContain('class="item-addon-row"');
     expect(html).not.toContain("إضافة لبن");
   });
@@ -462,7 +464,46 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("أقلاب (رز)");
+    expect(html).toContain('class="item-name-base">أقلاب</span>');
+    expect(html).toContain('class="item-name-choices">(رز)</span>');
+  });
+
+  it("wraps long item names with inline choices without overlapping price columns", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "فتة لسانات لشخص واحد",
+              quantity: 1,
+              unitPrice: 5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 5,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-meal",
+                    groupName: "خيار الوجبة",
+                    groupCode: "AQLAB_MEAL_OPTION",
+                    isRequired: true,
+                    optionId: "o1",
+                    name: "وجبة",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain('class="item-name-base">فتة لسانات لشخص واحد</span>');
+    expect(html).toContain('class="item-name-choices">(وجبة)</span>');
+    expect(html).toContain("table-layout: fixed");
+    expect(html).toContain("white-space: normal");
+    expect(html).toContain('<td class="col-price thermal-amt">5.00</td>');
   });
 
   it("does not print optional addon rows on customer receipts", () => {

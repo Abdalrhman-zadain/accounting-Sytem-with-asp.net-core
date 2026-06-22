@@ -379,6 +379,8 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
     table.items-table {
       margin: 0;
+      table-layout: fixed;
+      width: 100%;
     }
     table.items-table td.col-name,
     table.items-table td.col-price,
@@ -389,6 +391,7 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       padding-top: 2px;
       padding-bottom: 2px;
       line-height: 1.15;
+      vertical-align: top;
     }
     table.items-table tr.col-header td {
       text-decoration: none;
@@ -400,17 +403,32 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
     table.items-table td.col-name {
       width: 47%;
+      max-width: 47%;
       text-align: right;
-      white-space: nowrap;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .item-name-base,
+    .item-name-choices {
+      display: block;
+      line-height: 1.2;
+    }
+    .item-name-choices {
+      margin-top: 1px;
+      font-size: 0.92em;
     }
     table.items-table td.col-price {
       width: 16%;
+      max-width: 16%;
       text-align: right;
       direction: ltr;
       unicode-bidi: isolate;
+      white-space: nowrap;
     }
     table.items-table td.col-qty {
       width: 17%;
+      max-width: 17%;
       text-align: center;
       direction: rtl;
       unicode-bidi: isolate;
@@ -420,6 +438,7 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
     table.items-table td.col-total {
       width: 20%;
+      max-width: 20%;
       text-align: left;
       direction: ltr;
       unicode-bidi: isolate;
@@ -474,17 +493,36 @@ function resolveItemNameFontSizePx(name: string): number {
   return 9;
 }
 
+function splitReceiptItemNameParts(displayName: string): {
+  base: string;
+  choices: string | null;
+} {
+  const trimmed = displayName.trim();
+  const openIdx = trimmed.lastIndexOf(" (");
+  if (openIdx > 0 && trimmed.endsWith(")")) {
+    return {
+      base: trimmed.slice(0, openIdx).trim(),
+      choices: trimmed.slice(openIdx + 1).trim(),
+    };
+  }
+  return { base: trimmed, choices: null };
+}
+
 function buildRestaurantReceiptItemRow(
   name: string,
   unitPrice: number,
   qty: string,
   total: number,
 ): string {
-  const escapedName = escapeReceiptText(name.trim());
+  const { base, choices } = splitReceiptItemNameParts(name);
+  const escapedBase = escapeReceiptText(base);
   const nameFontSize = resolveItemNameFontSizePx(name);
+  const nameCell = choices
+    ? `<span class="item-name-base">${escapedBase}</span><span class="item-name-choices">${escapeReceiptText(choices)}</span>`
+    : escapedBase;
 
   return `<tr class="item-row">
-  <td class="col-name" style="font-size: ${nameFontSize}px">${escapedName}</td>
+  <td class="col-name" style="font-size: ${nameFontSize}px">${nameCell}</td>
   <td class="col-price thermal-amt">${fmtThermalReceiptMoney(unitPrice)}</td>
   <td class="col-qty">${qty}</td>
   <td class="col-total thermal-amt">${fmtThermalReceiptMoney(total)}</td>
