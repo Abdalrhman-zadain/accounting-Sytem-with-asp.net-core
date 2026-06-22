@@ -159,6 +159,63 @@ describe("pos receipt preview generator", () => {
       ],
     });
 
+    writePreview("weighted-multi-line.html", {
+      receiptNumber: "RECEIPT-20260618-0105",
+      soldAt: "2026-06-18T18:15:00.000Z",
+      companyName: "كرنشي",
+      branchName: "رئيسي",
+      cashierName: "POS Cashier",
+      warehouseName: "Main",
+      orderType: "TAKEAWAY",
+      paymentSummary: "",
+      payments: [{ paymentMethod: "CASH", amount: 16.75 }],
+      total: 16.75,
+      paid: 16.75,
+      tendered: 16.75,
+      change: 0,
+      subtotal: 16.75,
+      discount: 0,
+      tax: 0,
+      lines: [
+        {
+          name: "فتة مقادم لشخص واحد",
+          quantity: 1,
+          unitPrice: 2.5,
+          discountAmount: 0,
+          taxAmount: 0,
+          lineTotal: 2.5,
+          unitCode: "PCS",
+        },
+        {
+          name: "فوارغ",
+          quantity: 0.25,
+          unitPrice: 10,
+          discountAmount: 0,
+          taxAmount: 0,
+          lineTotal: 2.5,
+          unitCode: "KG",
+        },
+        {
+          name: "آبوات",
+          quantity: 0.125,
+          unitPrice: 10,
+          discountAmount: 0,
+          taxAmount: 0,
+          lineTotal: 1.25,
+          unitCode: "KG",
+        },
+        {
+          name: "راس شوي",
+          quantity: 1,
+          unitPrice: 10.5,
+          discountAmount: 0,
+          taxAmount: 0,
+          lineTotal: 10.5,
+          unitCode: "PCS",
+        },
+      ],
+    });
+
     console.log(`Receipt previews written to: ${PREVIEW_DIR}`);
   });
 });

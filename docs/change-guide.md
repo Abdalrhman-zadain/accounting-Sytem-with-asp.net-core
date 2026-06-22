@@ -828,8 +828,8 @@ Checks to run:
 Where to edit:
 
 - register shell and cart/payment orchestration: `frontend/features/pos/pos-page.tsx`
-- payment receipt print (80mm thermal roll layout, auto-print on complete sale): `frontend/features/pos/pos-receipt-print.ts`
-- customer receipt layout is Kashouka-style boxed Arabic RTL: logo + brand name + `#` order number header, bordered order-info / items / summary boxes, columns `الصنف` / `سعر انفرادي` / `الكمية` / `سعر اجمالي`, totals `الاجمالي` / `الخصم` / `الخدمات` / `المطلوب`, item/unit counts, cashier + payment method footer, optional bottom `ملاحظات` box for order/delivery notes, and `شكراً لزيارتكم` + phone credit line
+- payment receipt print (80mm thermal roll layout, auto-print on complete sale, plus register-side provisional bill print before payment for saved draft/held orders): `frontend/features/pos/pos-receipt-print.ts`
+- customer receipt layout intentionally clones the old same-printer boxed Arabic RTL receipt: centered logo + brand name, standalone left receipt/order number strip, bordered order-info / items / summary boxes, one-line compact columns `الصنف` / `السعر` / `الكمية` / `الإجمالي`, dynamic one-line item-name sizing, totals `الاجمالي` / `الخصم` / `الخدمات` / `المطلوب`, item/unit counts, cashier + payment method block (method text only, without the paid amount), optional bottom `ملاحظات` box for order/delivery notes, and `شكراً لزيارتكم` + address/phone footer
 - receipt contact branding defaults and env overrides (`POS_RECEIPT_PHONE`, `POS_RECEIPT_ADDRESS`, `POS_RECEIPT_TAGLINE`): `backend/src/modules/phase-3-sales-receivables/pos/pos-receipt-branding.ts`
 - held-sales list clarity (headline, identity strip, order number, total, relative time): `frontend/features/pos/pos-held-sale-display.ts`, `frontend/features/pos/pos-held-sale-card.tsx`; wired from `renderHeldWorkspace()` in `frontend/features/pos/pos-page.tsx`
 - session closing roll print (80mm thermal roll, auto-print on cashier shift close; same layout as accountant review): `frontend/features/pos/pos-session-roll-print.ts`, triggered from `closeSessionMutation` in `frontend/features/pos/pos-page.tsx`

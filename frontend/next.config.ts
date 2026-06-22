@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname, ".."),
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  allowedDevOrigins: ["192.168.1.135"],
+  allowedDevOrigins: ["192.168.1.135", "web"],
   async rewrites() {
     return [
       {

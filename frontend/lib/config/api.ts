@@ -35,10 +35,22 @@ function buildBrowserLocalApiBase(hostname: string) {
 function resolveConfiguredBrowserBase(configuredBaseUrl: string, currentHostname: string) {
   try {
     const url = new URL(configuredBaseUrl);
-    if (isLoopbackHost(url.hostname) && isDirectDevHost(currentHostname)) {
-      const pathname = url.pathname.replace(/\/+$/, "");
-      const search = url.search || "";
-      return `${window.location.protocol}//${currentHostname}:${url.port || "3007"}${pathname}${search}`;
+    const pathname = url.pathname.replace(/\/+$/, "");
+    const search = url.search || "";
+    const port = url.port || "3007";
+
+    if (isLoopbackHost(url.hostname)) {
+      if (isLoopbackHost(currentHostname)) {
+        return trimTrailingSlashes(configuredBaseUrl);
+      }
+
+      if (isDirectDevHost(currentHostname)) {
+        return `${window.location.protocol}//${currentHostname}:${port}${pathname}${search}`;
+      }
+
+      // Custom hostnames (e.g. Tailscale `web`) must not call client-side localhost.
+      // Use the Next.js `/api` rewrite so requests stay on the dev machine.
+      return "/api";
     }
   } catch {
     return trimTrailingSlashes(configuredBaseUrl);

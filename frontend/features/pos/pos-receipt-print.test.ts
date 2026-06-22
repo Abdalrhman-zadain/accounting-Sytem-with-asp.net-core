@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildArabicPaymentSummary,
   buildPosReceiptHtml,
   extractDailyOrderNumber,
   normalizeReceiptForArabicPrint,
@@ -54,20 +55,26 @@ describe("extractDailyOrderNumber", () => {
 });
 
 describe("buildPosReceiptHtml", () => {
-  it("renders Kashouka-style boxed Arabic receipt", () => {
+  it("renders old boxed Arabic restaurant receipt clone", () => {
     const html = buildPosReceiptHtml(normalizeReceiptForArabicPrint(buildSampleReceipt()));
 
     expect(html).toContain('class="brand-header"');
+    expect(html).toContain('class="receipt-number-strip"');
     expect(html).toContain('class="receipt-box"');
     expect(html).toContain("كرنشي");
-    expect(html).toContain("#30");
+    expect(html).toContain(">30</div>");
     expect(html).toContain("القاعة: رئيسي");
     expect(html).toContain("الدور: 30");
-    expect(html).toContain("سعر انفرادي");
-    expect(html).toContain("سعر اجمالي");
+    expect(html).toContain(">السعر</td>");
+    expect(html).toContain(">الإجمالي</td>");
+    expect(html).not.toContain("سعر<br/>الانفرادي");
+    expect(html).not.toContain("سعر<br/>الاجمالي");
     expect(html).toContain("2.50");
     expect(html).toContain("thermal-amt");
     expect(html).toContain("2.5mm");
+    expect(html).toContain("white-space: nowrap");
+    expect(html).toContain("font-size: 9px");
+    expect(html).toContain("min-width: 16mm");
     expect(html).toContain("الاجمالي");
     expect(html).toContain("الخصم");
     expect(html).toContain("الخدمات");
@@ -78,12 +85,15 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("عدد المواد");
     expect(html).toContain("مدخل الفاتورة");
     expect(html).toContain("طريقة الدفع");
+    expect(html).toContain("سفري/نقد");
+    expect(html).not.toContain("سفري/نقد 2.50");
     expect(html).not.toContain('class="payment-box"');
     expect(html).not.toContain("مدفوع");
     expect(html).toContain("شكراً لزيارتكم");
     expect(html).toContain('class="thermal-ltr" dir="ltr"');
     expect(html).toContain("0791208488");
-    expect(html).toContain("صنع");
+    expect(html).toContain("المقابلين - شارع القدس");
+    expect(html).not.toContain("صنع");
     expect(html).not.toContain("المجموع الفرعي");
     expect(html).not.toContain("الصافي");
     expect(html).not.toContain("إيصال بيع");
@@ -103,6 +113,7 @@ describe("buildPosReceiptHtml", () => {
 
     expect(html).toContain('class="thermal-ltr" dir="ltr"');
     expect(html).toContain("0790000000");
+    expect(html).toContain("عنوان مخصص");
     expect(html).not.toContain("0791208488");
     expect(html).not.toContain("سناكات ومقبلات");
   });
@@ -278,7 +289,7 @@ describe("buildPosReceiptHtml", () => {
 
     expect(html).not.toContain("إيصال بيع");
     expect(html).toContain("مدخل الفاتورة");
-    expect(html).toContain("#POS-20260620-0012");
+    expect(html).toContain(">POS-20260620-0012</div>");
     expect(html).not.toContain("الدور:");
     expect(html).toContain("غير مدفوع");
     expect(html).not.toContain("نقد");
@@ -324,9 +335,48 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("نص كيلو");
     expect(html).toContain("وقية");
     expect(html).toContain("عدد واحد");
-    expect(html).not.toContain("0.5");
+    expect(html).toContain('<td class="col-qty">وقية</td>');
+    expect(html).toContain('<td class="col-total thermal-amt">2.50</td>');
+    expect(html).toContain('<td class="col-qty">عدد واحد</td>');
+    expect(html).toContain('<td class="col-total thermal-amt">1.25</td>');
+    expect(html).not.toContain('class="col-qty">0.5</td>');
     expect(html).not.toContain("0.25 KG");
     expect(html).not.toContain("0.125 KG");
+  });
+
+  it("scales longer item names down instead of wrapping or truncating them", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "توفي سواس انجليزي",
+              quantity: 0.25,
+              unitPrice: 5.75,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 1.44,
+              unitCode: "KG",
+            },
+            {
+              name: "راس",
+              quantity: 1,
+              unitPrice: 7,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 7,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain(
+      '<td class="col-name" style="font-size: 11px">توفي سواس انجليزي</td>',
+    );
+    expect(html).toContain('<td class="col-name" style="font-size: 14px">راس</td>');
+    expect(html).not.toContain("توفي سواس ان...");
+    expect(html).not.toContain("text-overflow: ellipsis");
   });
 
   it("renders bold addon rows under item lines", () => {
@@ -368,5 +418,25 @@ describe("normalizeReceiptForArabicPrint", () => {
   it("maps default cashier label to Arabic", () => {
     const normalized = normalizeReceiptForArabicPrint(buildSampleReceipt());
     expect(normalized.cashierName).toBe("كاشير");
+  });
+
+  it("maps POS Cashier label to Arabic", () => {
+    const normalized = normalizeReceiptForArabicPrint(
+      buildSampleReceipt({ cashierName: "POS Cashier" }),
+    );
+    expect(normalized.cashierName).toBe("كاشير");
+  });
+
+  it("does not append amounts to single payment method labels", () => {
+    expect(buildArabicPaymentSummary(["CASH"], [1.25])).toBe("نقد");
+    expect(buildArabicPaymentSummary(["CASH", "CARD"], [1, 2])).toBe("مختلط");
+
+    const normalized = normalizeReceiptForArabicPrint(
+      buildSampleReceipt({
+        payments: [],
+        paymentSummary: "CASH 1.25",
+      }),
+    );
+    expect(normalized.paymentSummary).toBe("نقد");
   });
 });

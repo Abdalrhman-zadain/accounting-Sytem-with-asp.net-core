@@ -206,7 +206,7 @@ export class PosService {
       ) {
         throw new BadRequestException("Only open POS orders can be sent to the kitchen.");
       }
-      if (waiterOnly && invoice.waiterConfirmedAt) {
+      if (waiterOnly && invoice.waiterConfirmedAt && !this.canAddAfterWaiterConfirm(user)) {
         throw new ForbiddenException("This order was already confirmed and cannot be sent again.");
       }
 
@@ -1127,6 +1127,20 @@ export class PosService {
         );
       }
     }
+    if (dto.invoiceId?.trim()) {
+      const existingPreview = await this.prisma.salesInvoice.findUnique({
+        where: { id: dto.invoiceId.trim() },
+        include: { lines: { orderBy: { lineNumber: "asc" } } },
+      });
+      if (
+        existingPreview?.waiterConfirmedAt &&
+        this.canAddAfterWaiterConfirm(user) &&
+        !this.canEditWaiterConfirmedOrder(user)
+      ) {
+        dto.lines = this.mergeExistingLinesIntoPayload(dto.lines, existingPreview.lines);
+      }
+    }
+
     const resolvedLines = await this.salesReceivablesService.resolveSalesInvoiceLines(dto.lines);
     const totals = this.salesReceivablesService.computeSalesDocumentTotals(resolvedLines);
     if (!isMarketSession) {
@@ -8001,6 +8015,57 @@ export class PosService {
     return this.hasPosPermissionCode("POS_VIEW_POS_SCREEN", user);
   }
 
+  private canAddAfterWaiterConfirm(user?: AuthorizedUser) {
+    return this.hasPosPermissionCode("POS_ADD_ITEM_AFTER_WAITER_CONFIRM", user);
+  }
+
+  private canEditWaiterConfirmedOrder(user?: AuthorizedUser) {
+    return this.hasPosPermissionCode("POS_EDIT_WAITER_CONFIRMED_ORDER", user);
+  }
+
+  private mergeExistingLinesIntoPayload<
+    T extends { salesInvoiceLineId?: string; itemId?: string; quantity?: number },
+  >(
+    dtoLines: T[],
+    existingLines: Array<{
+      id: string;
+      itemId: string | null;
+      quantity: Prisma.Decimal;
+      unitPrice: Prisma.Decimal;
+      discountAmount: Prisma.Decimal;
+      taxAmount: Prisma.Decimal;
+      lineAmount: Prisma.Decimal;
+      revenueAccountId: string | null;
+      description: string | null;
+      modifiers: Prisma.JsonValue | null;
+    }>,
+  ): T[] {
+    const merged = [...dtoLines];
+    const coveredIds = new Set(
+      dtoLines.map((line) => line.salesInvoiceLineId).filter(Boolean) as string[],
+    );
+
+    for (const existingLine of existingLines) {
+      if (coveredIds.has(existingLine.id)) {
+        continue;
+      }
+      merged.push({
+        salesInvoiceLineId: existingLine.id,
+        itemId: existingLine.itemId ?? undefined,
+        quantity: Number(existingLine.quantity),
+        unitPrice: Number(existingLine.unitPrice),
+        discountAmount: Number(existingLine.discountAmount),
+        taxAmount: Number(existingLine.taxAmount),
+        lineAmount: Number(existingLine.lineAmount),
+        revenueAccountId: existingLine.revenueAccountId ?? undefined,
+        description: existingLine.description ?? undefined,
+        modifiers: existingLine.modifiers ?? undefined,
+      } as unknown as T);
+    }
+
+    return merged;
+  }
+
   private isPosSaleDone(
     status: PosOperationalStatus | null | undefined,
   ) {
@@ -8087,6 +8152,7 @@ export class PosService {
       }
       const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
       if (!dtoLine) {
+        kept.push(sentLine.id);
         continue;
       }
       const nextQty = Number(dtoLine.quantity ?? 0);
@@ -8126,50 +8192,21 @@ export class PosService {
       );
     }
 
-    if (this.isWaiterOnlyUser(user) && existing.waiterConfirmedAt) {
+    if (this.isWaiterOnlyUser(user) && existing.waiterConfirmedAt && !this.canAddAfterWaiterConfirm(user)) {
       throw new ForbiddenException(
         "This order was confirmed and can no longer be changed by the waiter.",
       );
     }
 
     if (existing.waiterConfirmedAt) {
+      const canAddAfter = this.canAddAfterWaiterConfirm(user);
+      const canFullEdit = this.canEditWaiterConfirmedOrder(user);
       const cashierMayCancelKitchen =
         this.canCashierEditPosCart(user) && !this.isWaiterOnlyUser(user);
 
-      if (!cashierMayCancelKitchen) {
-        if (existing.lines.length !== resolvedLines.length) {
-          throw new BadRequestException(
-            "This order was confirmed by the waiter. No order changes are allowed until payment.",
-          );
-        }
-        for (const line of existing.lines) {
-          const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
-          if (!dtoLine) {
-            throw new BadRequestException(
-              "This order was confirmed by the waiter. No order changes are allowed until payment.",
-            );
-          }
-          const nextQty = Number(dtoLine.quantity ?? 0);
-          if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
-            throw new BadRequestException(
-              "This order was confirmed by the waiter. No order changes are allowed until payment.",
-            );
-          }
-          if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
-            throw new BadRequestException(
-              "This order was confirmed by the waiter. No order changes are allowed until payment.",
-            );
-          }
-        }
+      if (canFullEdit || cashierMayCancelKitchen) {
         const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
-        if (newDtoLines.length > 0) {
-          throw new BadRequestException(
-            "This order was confirmed by the waiter. No order changes are allowed until payment.",
-          );
-        }
-      } else {
-        const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
-        if (newDtoLines.length > 0) {
+        if (newDtoLines.length > 0 && !canFullEdit) {
           throw new BadRequestException(
             "Cannot add items after the waiter confirmed this order.",
           );
@@ -8202,21 +8239,75 @@ export class PosService {
               "Items already sent to the kitchen cannot be changed.",
             );
           }
-          if (nextQty > Number(line.quantity) + 0.0001) {
+          if (nextQty > Number(line.quantity) + 0.0001 && !canFullEdit) {
             throw new BadRequestException(
               "Cannot increase quantity after the waiter confirmed this order.",
             );
           }
         }
+      } else if (canAddAfter) {
+        for (const line of existing.lines) {
+          const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
+          if (!dtoLine) {
+            continue;
+          }
+          const nextQty = Number(dtoLine.quantity ?? 0);
+          if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
+            throw new BadRequestException(
+              "Confirmed order lines cannot be changed. Add a new line instead.",
+            );
+          }
+          if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
+            throw new BadRequestException(
+              "Confirmed order lines cannot be changed. Add a new line instead.",
+            );
+          }
+        }
+      } else {
+        if (existing.lines.length !== resolvedLines.length) {
+          throw new BadRequestException(
+            "This order was confirmed by the waiter. No order changes are allowed until payment.",
+          );
+        }
+        for (const line of existing.lines) {
+          const dtoLine = this.findDtoLineForInvoiceLine(line.id, dtoLines, resolvedLines);
+          if (!dtoLine) {
+            throw new BadRequestException(
+              "This order was confirmed by the waiter. No order changes are allowed until payment.",
+            );
+          }
+          const nextQty = Number(dtoLine.quantity ?? 0);
+          if (line.itemId && dtoLine.itemId && line.itemId !== dtoLine.itemId) {
+            throw new BadRequestException(
+              "This order was confirmed by the waiter. No order changes are allowed until payment.",
+            );
+          }
+          if (Math.abs(Number(line.quantity) - nextQty) > 0.0001) {
+            throw new BadRequestException(
+              "This order was confirmed by the waiter. No order changes are allowed until payment.",
+            );
+          }
+        }
+        const newDtoLines = dtoLines.filter((line) => !line.salesInvoiceLineId);
+        if (newDtoLines.length > 0) {
+          throw new BadRequestException(
+            "This order was confirmed by the waiter. No order changes are allowed until payment.",
+          );
+        }
       }
     }
 
     const sentLines = existing.lines.filter((line) => line.kitchenSentAt);
+    const canAddAfter = this.canAddAfterWaiterConfirm(user);
+    const canFullEdit = this.canEditWaiterConfirmedOrder(user);
     const cashierMayCancelKitchen =
       this.canCashierEditPosCart(user) && !this.isWaiterOnlyUser(user);
     for (const sentLine of sentLines) {
       const dtoLine = this.findDtoLineForInvoiceLine(sentLine.id, dtoLines, resolvedLines);
       if (!dtoLine) {
+        if (canAddAfter && !canFullEdit && !cashierMayCancelKitchen) {
+          continue;
+        }
         if (
           cashierMayCancelKitchen &&
           !this.isInvoiceLineKitchenLocked(
@@ -8249,20 +8340,14 @@ export class PosService {
         ) {
           continue;
         }
+        if (canAddAfter && !canFullEdit && !cashierMayCancelKitchen) {
+          throw new BadRequestException(
+            "Confirmed order lines cannot be changed. Add a new line instead.",
+          );
+        }
         throw new BadRequestException(
           "Items already sent to the kitchen cannot be changed.",
         );
-      }
-    }
-
-    if (!this.canCashierEditPosCart(user) && this.isWaiterOnlyUser(user) && sentLines.length) {
-      const unsentDtoCount = dtoLines.filter(
-        (line) =>
-          !line.salesInvoiceLineId ||
-          !sentLines.some((sent) => sent.id === line.salesInvoiceLineId),
-      ).length;
-      if (unsentDtoCount > 0 && existing.waiterConfirmedAt) {
-        throw new ForbiddenException("Waiter cannot add items after the order was confirmed.");
       }
     }
   }

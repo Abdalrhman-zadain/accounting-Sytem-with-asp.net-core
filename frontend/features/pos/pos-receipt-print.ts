@@ -1,6 +1,6 @@
 /**
  * pos-receipt-print.ts
- * Kashouka-style Arabic restaurant receipt for 80mm thermal POS printers.
+ * Old boxed Arabic restaurant receipt clone for 80mm thermal POS printers.
  */
 
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
@@ -13,13 +13,11 @@ import {
   buildThermalReceiptDocumentHtml,
   thermalReceiptColumnHeaderRow,
   thermalReceiptFooterSpacerHtml,
-  thermalReceiptItemRow4Col,
   thermalReceiptItemAddonRow,
   thermalReceiptItemDiscountRow,
   thermalReceiptLtrInlineHtml,
   thermalReceiptTableClose,
   thermalReceiptTableOpen,
-  formatReceiptPaymentSummary,
   fmtThermalReceiptMoney,
 } from "@/features/pos-shared/thermal-receipt-layout";
 
@@ -28,8 +26,7 @@ export const POS_RECEIPT_LOGO_PATH = "/pos/mr-karshanji-logo.png";
 
 /** Printed when the API does not supply receipt branding (matches backend defaults). */
 export const POS_RECEIPT_DEFAULT_PHONE = "079 120 84 88";
-export const POS_RECEIPT_DEFAULT_ADDRESS =
-  "عمان - شارع القدس - إشارة الرئيسي مقابل قاعات شذى للأفراح";
+export const POS_RECEIPT_DEFAULT_ADDRESS = "المقابلين - شارع القدس";
 export const POS_RECEIPT_DEFAULT_TAGLINE =
   "كرشات - مقادم - روس - فوارغ - طحالات - سناكات";
 
@@ -127,18 +124,34 @@ export function buildArabicPaymentSummary(
   methods: string[],
   amounts?: number[],
 ): string {
+  void amounts;
   const uniqueMethods = [...new Set(methods.filter(Boolean))];
   if (uniqueMethods.length === 0) {
     return "";
   }
   if (uniqueMethods.length === 1) {
-    const label = ARABIC_PAYMENT_METHOD_LABELS[uniqueMethods[0]] ?? uniqueMethods[0];
-    if (amounts?.length === 1) {
-      return `${label} ${amounts[0].toFixed(2)}`;
-    }
-    return label;
+    return ARABIC_PAYMENT_METHOD_LABELS[uniqueMethods[0]] ?? uniqueMethods[0];
   }
   return "مختلط";
+}
+
+function stripPaymentSummaryAmounts(summary: string): string {
+  const parts = summary
+    .split(/\s*\+\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => part.replace(/\s+[-+]?\d+(?:[.,]\d+)?\s*$/, "").trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "";
+  }
+  if (parts.length > 1) {
+    return "مختلط";
+  }
+
+  const normalized = parts[0].toUpperCase().replace(/[\s-]+/g, "_");
+  return ARABIC_PAYMENT_METHOD_LABELS[normalized] ?? parts[0];
 }
 
 export function resolveReceiptPaymentDisplay(receipt: PosReceiptData): string {
@@ -150,74 +163,93 @@ export function resolveReceiptPaymentDisplay(receipt: PosReceiptData): string {
   }
 
   if (receipt.paymentSummary.trim()) {
-    return formatReceiptPaymentSummary(receipt.paymentSummary);
+    return stripPaymentSummaryAmounts(receipt.paymentSummary);
   }
 
   return "";
 }
 
+export function normalizeReceiptCashierName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === "Cashier" || trimmed === "POS Cashier") {
+    return "كاشير";
+  }
+  return name;
+}
+
 export function normalizeReceiptForArabicPrint(receipt: PosReceiptData): PosReceiptData {
   return {
     ...receipt,
-    cashierName:
-      receipt.cashierName.trim() === "Cashier" || !receipt.cashierName.trim()
-        ? "كاشير"
-        : receipt.cashierName,
+    cashierName: normalizeReceiptCashierName(receipt.cashierName),
     paymentSummary: resolveReceiptPaymentDisplay(receipt),
   };
 }
 
 const RESTAURANT_RECEIPT_EXTRA_CSS = `
+    body {
+      padding: 4mm 1.5mm 6mm;
+      font-family: Tahoma, 'Arial', sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
     .brand-header {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 3mm;
-      margin-bottom: 3mm;
-      padding: 0 1mm;
+      justify-content: center;
+      gap: 1.5mm;
+      margin-bottom: 1.5mm;
+      padding: 0;
+      text-align: center;
     }
     .logo-inline {
-      flex: 0 0 18mm;
-      width: 18mm;
-      height: 18mm;
+      flex: 0 0 auto;
+      width: 19mm;
+      height: 19mm;
       object-fit: contain;
     }
     .brand-text {
-      flex: 1;
+      flex: none;
       min-width: 0;
-      text-align: right;
+      text-align: center;
     }
     .brand-name {
-      font-size: 20px;
+      font-size: 15px;
       font-weight: 900;
-      line-height: 1.15;
-      margin-bottom: 1px;
+      line-height: 1.1;
+      margin-bottom: 0;
     }
-    .brand-order {
-      font-size: 13px;
-      font-weight: 800;
+    .receipt-number-strip {
+      width: 100%;
       direction: ltr;
       unicode-bidi: isolate;
-      text-align: right;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      padding-left: 1mm;
+      margin-bottom: -0.5mm;
     }
     .receipt-box {
-      border: 1.5px solid #000;
-      border-radius: 6px;
-      padding: 2.5mm 2mm;
-      margin-bottom: 2.5mm;
+      border: 2px solid #000;
+      border-radius: 8px;
+      padding: 2.3mm 2mm;
+      margin-bottom: 2.2mm;
     }
     .receipt-box.items-box {
-      padding: 2mm 1.5mm;
+      padding: 2.2mm 1.7mm;
     }
     .receipt-box.summary-box {
-      padding: 2.5mm 2mm 2mm;
+      padding: 3mm 2.5mm 2.5mm;
     }
     .order-info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2mm;
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 1.35;
+      gap: 1.8mm;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.45;
     }
     .order-info-right {
       text-align: right;
@@ -226,52 +258,93 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       text-align: left;
     }
     .order-info-label {
-      font-weight: 800;
+      font-weight: 900;
+      text-decoration: underline;
     }
     .order-info-highlight {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 900;
       line-height: 1.1;
       margin: 1px 0;
     }
+    .summary-box {
+      min-height: 47mm;
+    }
     .summary-box .summary-line {
-      margin: 2px 0;
+      margin: 1px 0;
+      justify-content: flex-start;
+      gap: 0.8mm;
     }
     .summary-box .summary-line.emphasis {
-      margin-top: 4px;
-      margin-bottom: 4px;
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+    .summary-box .summary-label,
+    .summary-box .summary-text {
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-amt {
+      flex: 0 0 16mm;
+      min-width: 16mm;
+      max-width: 16mm;
+      padding-left: 0.5mm;
+      text-align: left;
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-text {
+      flex: 0 0 auto;
+      min-width: 0;
+      max-width: 28mm;
+      text-align: left;
+    }
+    .summary-box .summary-line.emphasis .summary-label {
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .summary-box .summary-line.emphasis .summary-amt {
+      font-size: 20px;
+      font-weight: 900;
     }
     .summary-info-block {
-      margin-top: 4px;
-      padding-top: 3px;
-      border-top: 1px solid #000;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+      align-items: start;
+      margin-top: 5mm;
+      padding: 0 1mm;
     }
     .summary-info-line {
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 1.4;
-      margin: 2px 0;
-      text-align: right;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.35;
+      margin: 0;
+      text-align: center;
     }
     .summary-info-label {
       font-weight: 800;
       display: block;
+      margin-bottom: 1mm;
     }
     .summary-info-value {
       display: block;
-      font-weight: 700;
+      font-weight: 900;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .footer-thanks {
-      font-size: 16px;
+      font-size: 21px;
       font-weight: 900;
-      margin: 4mm 0 2mm;
+      margin: 6mm 0 4mm;
       text-align: center;
     }
-    .footer-credit {
-      font-size: 11px;
-      font-weight: 700;
+    .footer-address {
+      font-size: 12px;
+      font-weight: 900;
       text-align: center;
-      line-height: 1.35;
+      line-height: 1.25;
+      white-space: nowrap;
     }
     .receipt-box.note-box {
       padding: 2.5mm 2mm;
@@ -294,11 +367,57 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     table.items-table {
       margin: 0;
     }
+    table.items-table td.col-name,
+    table.items-table td.col-price,
+    table.items-table td.col-qty,
+    table.items-table td.col-total {
+      font-size: 14px;
+      font-weight: 900;
+      padding-top: 2px;
+      padding-bottom: 2px;
+      line-height: 1.15;
+    }
     table.items-table tr.col-header td {
       text-decoration: none;
-      font-size: 10px;
-      font-weight: 800;
-      padding-bottom: 2px;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 1.1;
+      padding-bottom: 3px;
+      white-space: nowrap;
+    }
+    table.items-table td.col-name {
+      width: 47%;
+      text-align: right;
+      white-space: nowrap;
+    }
+    table.items-table td.col-price {
+      width: 16%;
+      text-align: right;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    table.items-table td.col-qty {
+      width: 17%;
+      text-align: center;
+      direction: rtl;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 1.5mm;
+      padding-right: 0.8mm;
+    }
+    table.items-table td.col-total {
+      width: 20%;
+      text-align: left;
+      direction: ltr;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 0.5mm;
+      padding-right: 2.2mm;
+    }
+    table.items-table tr.item-addon-row td.item-addon,
+    table.items-table tr.item-disc-row td.item-disc-label {
+      font-size: 11px;
+      font-weight: 900;
     }
     @media print {
       .logo-inline {
@@ -328,6 +447,35 @@ function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
     return line.quantity.toFixed(2);
   }
   return display;
+}
+
+function resolveItemNameFontSizePx(name: string): number {
+  const normalized = name.trim().replace(/\s+/g, " ");
+  const wordCount = normalized ? normalized.split(" ").length : 0;
+  const length = Array.from(normalized).length;
+
+  if (wordCount <= 1 && length <= 10) return 14;
+  if (wordCount <= 2 && length <= 16) return 13;
+  if (wordCount <= 4 && length <= 24) return 11;
+  if (wordCount <= 5 && length <= 32) return 10;
+  return 9;
+}
+
+function buildRestaurantReceiptItemRow(
+  name: string,
+  unitPrice: number,
+  qty: string,
+  total: number,
+): string {
+  const escapedName = escapeReceiptText(name.trim());
+  const nameFontSize = resolveItemNameFontSizePx(name);
+
+  return `<tr class="item-row">
+  <td class="col-name" style="font-size: ${nameFontSize}px">${escapedName}</td>
+  <td class="col-price thermal-amt">${fmtThermalReceiptMoney(unitPrice)}</td>
+  <td class="col-qty">${qty}</td>
+  <td class="col-total thermal-amt">${fmtThermalReceiptMoney(total)}</td>
+</tr>`;
 }
 
 function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
@@ -367,20 +515,14 @@ function resolveReceiptContactFields(receipt: PosReceiptData): {
 
 function buildBrandHeaderHtml(receipt: PosReceiptData): string {
   const logoUrl = resolveReceiptLogoUrl(receipt);
-  const orderNumber =
-    receipt.receiptKind === "provisional"
-      ? receipt.receiptNumber.trim()
-      : extractDailyOrderNumber(receipt.receiptNumber);
-  const orderLabel = orderNumber ? `#${orderNumber}` : "";
   const brandName = receipt.companyName?.trim() || "كرنشي";
 
   if (logoUrl) {
     return `
       <div class="brand-header">
-        <img class="logo-inline" src="${logoUrl}" alt="Logo"/>
+        <img class="logo-inline" src="${logoUrl}" alt=""/>
         <div class="brand-text">
           <div class="brand-name">${brandName}</div>
-          ${orderLabel ? `<div class="brand-order">${orderLabel}</div>` : ""}
         </div>
       </div>`;
   }
@@ -389,7 +531,6 @@ function buildBrandHeaderHtml(receipt: PosReceiptData): string {
     <div class="brand-header">
       <div class="brand-text">
         <div class="brand-name">${brandName}</div>
-        ${orderLabel ? `<div class="brand-order">${orderLabel}</div>` : ""}
       </div>
     </div>`;
 }
@@ -486,6 +627,10 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     receipt.receiptKind === "provisional"
       ? null
       : extractDailyOrderNumber(receipt.receiptNumber);
+  const receiptNumberDisplay =
+    receipt.receiptKind === "provisional"
+      ? receipt.receiptNumber.trim()
+      : orderNumber;
   const tableReservationLabel = (() => {
     if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
       return `حجز ${receipt.tableNumber.trim()}`;
@@ -501,6 +646,9 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   })();
 
   rows.push(buildBrandHeaderHtml(receipt));
+  if (receiptNumberDisplay) {
+    rows.push(`<div class="receipt-number-strip">${receiptNumberDisplay}</div>`);
+  }
 
   rows.push(`<div class="receipt-box">`);
   rows.push(`<div class="order-info-grid">`);
@@ -527,12 +675,12 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   rows.push(`<div class="receipt-box items-box">`);
   rows.push(thermalReceiptTableOpen("items-table"));
   rows.push(
-    thermalReceiptColumnHeaderRow("الصنف", "سعر انفرادي", "الكمية", "سعر اجمالي"),
+    thermalReceiptColumnHeaderRow("الصنف", "السعر", "الكمية", "الإجمالي"),
   );
   for (const line of receipt.lines) {
     const qty = formatReceiptQuantity(line);
     rows.push(
-      thermalReceiptItemRow4Col(line.name, line.unitPrice, qty, line.lineTotal),
+      buildRestaurantReceiptItemRow(line.name, line.unitPrice, qty, line.lineTotal),
     );
     const addons = formatAddonsForDisplay(line.modifiers, "ar");
     if (addons) {
@@ -580,10 +728,11 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   }
 
   const { phone } = resolveReceiptContactFields(receipt);
+  const { address } = resolveReceiptContactFields(receipt);
   const phoneDigits = phone.replace(/\s+/g, "");
   rows.push(`<div class="footer-thanks">شكراً لزيارتكم</div>`);
   rows.push(
-    `<div class="footer-credit">صنع ${thermalReceiptLtrInlineHtml(phoneDigits)}</div>`,
+    `<div class="footer-address">${address} ${thermalReceiptLtrInlineHtml(phoneDigits)}</div>`,
   );
   rows.push(thermalReceiptFooterSpacerHtml());
 

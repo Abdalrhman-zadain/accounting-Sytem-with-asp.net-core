@@ -29,6 +29,11 @@
       overflow-wrap: anywhere;
       padding: 0 1mm;
     }
+    .thermal-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
+    }
     .meta-split {
       display: flex;
       justify-content: space-between;
@@ -259,19 +264,239 @@
     }
 
 
-    .brand-stack {
-      text-align: center;
-      margin-bottom: 4px;
+    body {
+      padding: 4mm 1.5mm 6mm;
+      font-family: Tahoma, 'Arial', sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.3;
     }
-    .logo {
-      display: block;
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 4px;
+    .brand-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5mm;
+      margin-bottom: 1.5mm;
+      padding: 0;
+      text-align: center;
+    }
+    .logo-inline {
+      flex: 0 0 auto;
+      width: 19mm;
+      height: 19mm;
       object-fit: contain;
     }
+    .brand-text {
+      flex: none;
+      min-width: 0;
+      text-align: center;
+    }
+    .brand-name {
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 0;
+    }
+    .receipt-number-strip {
+      width: 100%;
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      padding-left: 1mm;
+      margin-bottom: -0.5mm;
+    }
+    .receipt-box {
+      border: 2px solid #000;
+      border-radius: 8px;
+      padding: 2.3mm 2mm;
+      margin-bottom: 2.2mm;
+    }
+    .receipt-box.items-box {
+      padding: 2.2mm 1.7mm;
+    }
+    .receipt-box.summary-box {
+      padding: 3mm 2.5mm 2.5mm;
+    }
+    .order-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.8mm;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.45;
+    }
+    .order-info-right {
+      text-align: right;
+    }
+    .order-info-left {
+      text-align: left;
+    }
+    .order-info-label {
+      font-weight: 900;
+      text-decoration: underline;
+    }
+    .order-info-highlight {
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin: 1px 0;
+    }
+    .summary-box {
+      min-height: 47mm;
+    }
+    .summary-box .summary-line {
+      margin: 1px 0;
+      justify-content: flex-start;
+      gap: 0.8mm;
+    }
+    .summary-box .summary-line.emphasis {
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+    .summary-box .summary-label,
+    .summary-box .summary-text {
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-amt {
+      flex: 0 0 16mm;
+      min-width: 16mm;
+      max-width: 16mm;
+      padding-left: 0.5mm;
+      text-align: left;
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-text {
+      flex: 0 0 auto;
+      min-width: 0;
+      max-width: 28mm;
+      text-align: left;
+    }
+    .summary-box .summary-line.emphasis .summary-label {
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .summary-box .summary-line.emphasis .summary-amt {
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .summary-info-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+      align-items: start;
+      margin-top: 5mm;
+      padding: 0 1mm;
+    }
+    .summary-info-line {
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.35;
+      margin: 0;
+      text-align: center;
+    }
+    .summary-info-label {
+      font-weight: 800;
+      display: block;
+      margin-bottom: 1mm;
+    }
+    .summary-info-value {
+      display: block;
+      font-weight: 900;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .footer-thanks {
+      font-size: 21px;
+      font-weight: 900;
+      margin: 6mm 0 4mm;
+      text-align: center;
+    }
+    .footer-address {
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .receipt-box.note-box {
+      padding: 2.5mm 2mm;
+    }
+    .note-label {
+      font-size: 11px;
+      font-weight: 900;
+      text-align: right;
+      margin-bottom: 2px;
+    }
+    .note-text {
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    table.items-table {
+      margin: 0;
+    }
+    table.items-table td.col-name,
+    table.items-table td.col-price,
+    table.items-table td.col-qty,
+    table.items-table td.col-total {
+      font-size: 14px;
+      font-weight: 900;
+      padding-top: 2px;
+      padding-bottom: 2px;
+      line-height: 1.15;
+    }
+    table.items-table tr.col-header td {
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1.1;
+      padding-bottom: 3px;
+    }
+    table.items-table td.col-name {
+      width: 40%;
+      text-align: right;
+    }
+    table.items-table td.col-price {
+      width: 18%;
+      text-align: right;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    table.items-table td.col-qty {
+      width: 18%;
+      text-align: center;
+      direction: rtl;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 2.2mm;
+      padding-right: 0.8mm;
+    }
+    table.items-table td.col-total {
+      width: 24%;
+      text-align: left;
+      direction: ltr;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 0.5mm;
+      padding-right: 2.2mm;
+    }
+    table.items-table tr.item-addon-row td.item-addon,
+    table.items-table tr.item-disc-row td.item-disc-label {
+      font-size: 11px;
+      font-weight: 900;
+    }
     @media print {
-      .logo {
+      .logo-inline {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -281,67 +506,88 @@
 </head>
 <body>
 
-      <div class="brand-stack">
-        <img class="logo" src="/pos/mr-karshanji-logo.png" alt="Logo"/>
-        <div class="sub">إيصال بيع</div>
+      <div class="brand-header">
+        <img class="logo-inline" src="/pos/mr-karshanji-logo.png" alt=""/>
+        <div class="brand-text">
+          <div class="brand-name">كرنشي</div>
+        </div>
       </div>
-      <div class="center meta meta-line">عمان</div>
-<div class="sep">────────────────────────────────</div>
-<div class="center meta meta-line">التاريخ: 18/06/2026</div>
-<div class="center meta meta-line">الوقت: 20:05</div>
-<div class="center meta meta-line">رقم الطلب: 1042</div>
-<div class="sep">────────────────────────────────</div>
-<div class="center meta meta-line">طاولة: 12</div>
-<div class="center meta meta-line">نوع الطلب: صالة</div>
-<div class="sep sep-strong">════════════════════════════════</div>
+<div class="receipt-number-strip">1042</div>
+<div class="receipt-box">
+<div class="order-info-grid">
+<div class="order-info-right">
+<div class="order-info-label">الطاولة</div>
+<div>18-06-2026</div>
+<div>القاعة: عمان</div>
+</div>
+<div class="order-info-left">
+<div class="order-info-highlight">حجز 12</div>
+<div>20:05:00</div>
+<div>الدور: 1042</div>
+</div>
+</div>
+</div>
+<div class="receipt-box items-box">
 <table class="items-table">
 <tr class="col-header">
   <td class="col-name">الصنف</td>
-  <td class="col-price">السعر</td>
+  <td class="col-price">سعر<br/>الانفرادي</td>
   <td class="col-qty">الكمية</td>
-  <td class="col-total">الإجمالي</td>
+  <td class="col-total">سعر<br/>الاجمالي</td>
 </tr>
 <tr class="item-row">
   <td class="col-name">شاورما دجاج</td>
   <td class="col-price thermal-amt">5.00</td>
-  <td class="col-qty">2</td>
+  <td class="col-qty">2.00</td>
   <td class="col-total thermal-amt">10.80</td>
 </tr>
 <tr class="item-addon-row">
-  <td class="col-name item-addon" colspan="4">ثومية (+0.50)</td>
+  <td class="col-name item-addon" colspan="4">ثومية</td>
 </tr>
 </table>
-<div class="sep sep-strong">════════════════════════════════</div>
-<table class="totals-table">
-<tr class="total-row">
-  <td colspan="4" class="total-line-cell"><div class="summary-line">
-  <span class="summary-label">المجموع الفرعي</span>
+</div>
+<div class="receipt-box summary-box">
+<div class="summary-line">
+  <span class="summary-label">الاجمالي</span>
   <span class="summary-amt thermal-amt">10.00</span>
-</div></td>
-</tr>
-<tr class="total-row">
-  <td colspan="4" class="total-line-cell"><div class="summary-line">
+</div>
+<div class="summary-line">
+  <span class="summary-label">الخصم</span>
+  <span class="summary-amt thermal-amt">0.00</span>
+</div>
+<div class="summary-line">
+  <span class="summary-label">الخدمات</span>
+  <span class="summary-amt thermal-amt">0.00</span>
+</div>
+<div class="summary-line">
   <span class="summary-label">الضريبة 16%</span>
   <span class="summary-amt thermal-amt">1.60</span>
-</div></td>
-</tr>
-<tr class="total-row emphasis">
-  <td colspan="4" class="total-line-cell"><div class="summary-line emphasis">
-  <span class="summary-label">الصافي</span>
-  <span class="summary-amt thermal-amt">11.60 د.أ</span>
-</div></td>
-</tr>
-</table>
-<div class="payment-box"><div class="summary-line">
-  <span class="summary-label">نقد</span>
-  <span class="summary-amt thermal-amt">11.60</span>
 </div>
 <div class="summary-line emphasis">
-  <span class="summary-label">مدفوع</span>
-  <span class="summary-amt thermal-amt">11.60 د.أ</span>
-</div></div>
-<div class="sep">────────────────────────────────</div>
-<div class="center thanks">شكراً لزيارتكم</div>
+  <span class="summary-label">المطلوب</span>
+  <span class="summary-amt thermal-amt">11.60</span>
+</div>
+<div class="summary-line">
+  <span class="summary-label">عدد الأصناف</span>
+  <span class="summary-text">1</span>
+</div>
+<div class="summary-line">
+  <span class="summary-label">عدد المواد</span>
+  <span class="summary-text">2.00</span>
+</div>
+<div class="summary-info-block">
+<div class="summary-info-line">
+    <span class="summary-info-label">مدخل الفاتورة</span>
+    <span class="summary-info-value">كاشير</span>
+  </div>
+<div class="summary-info-line">
+    <span class="summary-info-label">طريقة الدفع</span>
+    <span class="summary-info-value">صالة/كاشير حجز 12</span>
+  </div>
+</div>
+</div>
+<div class="footer-thanks">شكراً لزيارتكم</div>
+<div class="footer-address">المقابلين - شارع القدس <span class="thermal-ltr" dir="ltr">0791208488</span></div>
 <div class="print-footer-spacer" aria-hidden="true"></div>
 </body>
 </html>

@@ -116,6 +116,7 @@ import {
   getInventoryItemGroups,
   printPosSessionRollReport,
   getPosKitchenOrders,
+  printPosBill,
 } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -149,7 +150,10 @@ import {
   isWeightSaleItem,
 } from "@/features/pos/pos-weight-utils";
 import type { PosReceiptData } from "@/features/pos/pos-receipt-print";
-import { buildArabicPaymentSummary } from "@/features/pos/pos-receipt-print";
+import {
+  buildArabicPaymentSummary,
+  normalizeReceiptCashierName,
+} from "@/features/pos/pos-receipt-print";
 import {
   mapPosReceiptApiResponse,
   type PosReceiptApiResponse,
@@ -983,10 +987,7 @@ function mapReceiptResponse(
   return {
     ...mapped,
     paymentSummary,
-    cashierName:
-      mapped.cashierName.trim() === "Cashier" || !mapped.cashierName.trim()
-        ? "كاشير"
-        : mapped.cashierName,
+    cashierName: normalizeReceiptCashierName(mapped.cashierName),
   };
 }
 
@@ -1998,6 +1999,22 @@ export function PosPage() {
     },
     onError: (error) => {
       pushMessage(getErrorMessage(error, t("pos.sales.loadErrorDescription")));
+    },
+  });
+
+  const printBillMutation = useMutation({
+    mutationFn: (saleId: string) => printPosBill(saleId, token),
+    onSuccess: (response) => {
+      const receipt = mapReceiptResponse(response.receipt);
+      printReceipt(receipt);
+    },
+    onError: (error) => {
+      pushError(
+        getErrorMessage(
+          error,
+          getLocalizedText("Failed to print bill / فشل طباعة الفاتورة", language),
+        ),
+      );
     },
   });
 
@@ -4536,6 +4553,20 @@ export function PosPage() {
                         `Send to kitchen (${cartLines.filter((line) => !line.kitchenSentAt).length}) / إرسال للمطبخ`,
                         language,
                       )}
+                    </button>
+                  ) : null}
+
+                  {editingInvoiceId && hasPermission(user, "POS_PRINT_RECEIPT") ? (
+                    <button
+                      type="button"
+                      onClick={() => printBillMutation.mutate(editingInvoiceId)}
+                      disabled={printBillMutation.isPending || cartLines.length === 0}
+                      className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border-2 border-[#d7e2d8] bg-[#f7faf8] text-xs font-bold text-[#4e6455] transition hover:bg-white disabled:opacity-40"
+                    >
+                      <LuReceipt className="h-3.5 w-3.5" />
+                      {printBillMutation.isPending
+                        ? getLocalizedText("Printing bill... / جاري طباعة الفاتورة...", language)
+                        : getLocalizedText("Print bill before pay / طباعة الفاتورة قبل الدفع", language)}
                     </button>
                   ) : null}
 

@@ -264,56 +264,70 @@
     }
 
 
+    body {
+      padding: 4mm 1.5mm 6mm;
+      font-family: Tahoma, 'Arial', sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
     .brand-header {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 3mm;
-      margin-bottom: 3mm;
-      padding: 0 1mm;
+      justify-content: center;
+      gap: 1.5mm;
+      margin-bottom: 1.5mm;
+      padding: 0;
+      text-align: center;
     }
     .logo-inline {
-      flex: 0 0 18mm;
-      width: 18mm;
-      height: 18mm;
+      flex: 0 0 auto;
+      width: 19mm;
+      height: 19mm;
       object-fit: contain;
     }
     .brand-text {
-      flex: 1;
+      flex: none;
       min-width: 0;
-      text-align: right;
+      text-align: center;
     }
     .brand-name {
-      font-size: 20px;
+      font-size: 15px;
       font-weight: 900;
-      line-height: 1.15;
-      margin-bottom: 1px;
+      line-height: 1.1;
+      margin-bottom: 0;
     }
-    .brand-order {
-      font-size: 13px;
-      font-weight: 800;
+    .receipt-number-strip {
+      width: 100%;
       direction: ltr;
       unicode-bidi: isolate;
-      text-align: right;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      padding-left: 1mm;
+      margin-bottom: -0.5mm;
     }
     .receipt-box {
-      border: 1.5px solid #000;
-      border-radius: 6px;
-      padding: 2.5mm 2mm;
-      margin-bottom: 2.5mm;
+      border: 2px solid #000;
+      border-radius: 8px;
+      padding: 2.3mm 2mm;
+      margin-bottom: 2.2mm;
     }
     .receipt-box.items-box {
-      padding: 2mm 1.5mm;
+      padding: 2.2mm 1.7mm;
     }
     .receipt-box.summary-box {
-      padding: 2.5mm 2mm 2mm;
+      padding: 3mm 2.5mm 2.5mm;
     }
     .order-info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2mm;
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 1.35;
+      gap: 1.8mm;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.45;
     }
     .order-info-right {
       text-align: right;
@@ -322,52 +336,93 @@
       text-align: left;
     }
     .order-info-label {
-      font-weight: 800;
+      font-weight: 900;
+      text-decoration: underline;
     }
     .order-info-highlight {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 900;
       line-height: 1.1;
       margin: 1px 0;
     }
+    .summary-box {
+      min-height: 47mm;
+    }
     .summary-box .summary-line {
-      margin: 2px 0;
+      margin: 1px 0;
+      justify-content: flex-start;
+      gap: 0.8mm;
     }
     .summary-box .summary-line.emphasis {
-      margin-top: 4px;
-      margin-bottom: 4px;
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+    .summary-box .summary-label,
+    .summary-box .summary-text {
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-amt {
+      flex: 0 0 16mm;
+      min-width: 16mm;
+      max-width: 16mm;
+      padding-left: 0.5mm;
+      text-align: left;
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .summary-box .summary-text {
+      flex: 0 0 auto;
+      min-width: 0;
+      max-width: 28mm;
+      text-align: left;
+    }
+    .summary-box .summary-line.emphasis .summary-label {
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .summary-box .summary-line.emphasis .summary-amt {
+      font-size: 20px;
+      font-weight: 900;
     }
     .summary-info-block {
-      margin-top: 4px;
-      padding-top: 3px;
-      border-top: 1px solid #000;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+      align-items: start;
+      margin-top: 5mm;
+      padding: 0 1mm;
     }
     .summary-info-line {
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 1.4;
-      margin: 2px 0;
-      text-align: right;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.35;
+      margin: 0;
+      text-align: center;
     }
     .summary-info-label {
       font-weight: 800;
       display: block;
+      margin-bottom: 1mm;
     }
     .summary-info-value {
       display: block;
-      font-weight: 700;
+      font-weight: 900;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .footer-thanks {
-      font-size: 16px;
+      font-size: 21px;
       font-weight: 900;
-      margin: 4mm 0 2mm;
+      margin: 6mm 0 4mm;
       text-align: center;
     }
-    .footer-credit {
-      font-size: 11px;
-      font-weight: 700;
+    .footer-address {
+      font-size: 12px;
+      font-weight: 900;
       text-align: center;
-      line-height: 1.35;
+      line-height: 1.25;
+      white-space: nowrap;
     }
     .receipt-box.note-box {
       padding: 2.5mm 2mm;
@@ -390,11 +445,57 @@
     table.items-table {
       margin: 0;
     }
+    table.items-table td.col-name,
+    table.items-table td.col-price,
+    table.items-table td.col-qty,
+    table.items-table td.col-total {
+      font-size: 14px;
+      font-weight: 900;
+      padding-top: 2px;
+      padding-bottom: 2px;
+      line-height: 1.15;
+    }
     table.items-table tr.col-header td {
       text-decoration: none;
-      font-size: 10px;
-      font-weight: 800;
-      padding-bottom: 2px;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 1.1;
+      padding-bottom: 3px;
+      white-space: nowrap;
+    }
+    table.items-table td.col-name {
+      width: 47%;
+      text-align: right;
+      white-space: nowrap;
+    }
+    table.items-table td.col-price {
+      width: 16%;
+      text-align: right;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    table.items-table td.col-qty {
+      width: 17%;
+      text-align: center;
+      direction: rtl;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 1.5mm;
+      padding-right: 0.8mm;
+    }
+    table.items-table td.col-total {
+      width: 20%;
+      text-align: left;
+      direction: ltr;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+      padding-left: 0.5mm;
+      padding-right: 2.2mm;
+    }
+    table.items-table tr.item-addon-row td.item-addon,
+    table.items-table tr.item-disc-row td.item-disc-label {
+      font-size: 11px;
+      font-weight: 900;
     }
     @media print {
       .logo-inline {
@@ -408,12 +509,12 @@
 <body>
 
       <div class="brand-header">
-        <img class="logo-inline" src="/pos/mr-karshanji-logo.png" alt="Logo"/>
+        <img class="logo-inline" src="/pos/mr-karshanji-logo.png" alt=""/>
         <div class="brand-text">
           <div class="brand-name">Simple Account</div>
-          <div class="brand-order">#99</div>
         </div>
       </div>
+<div class="receipt-number-strip">99</div>
 <div class="receipt-box">
 <div class="order-info-grid">
 <div class="order-info-right">
@@ -432,18 +533,18 @@
 <table class="items-table">
 <tr class="col-header">
   <td class="col-name">الصنف</td>
-  <td class="col-price">سعر انفرادي</td>
+  <td class="col-price">السعر</td>
   <td class="col-qty">الكمية</td>
-  <td class="col-total">سعر اجمالي</td>
+  <td class="col-total">الإجمالي</td>
 </tr>
 <tr class="item-row">
-  <td class="col-name">وجبة عائلية كبيرة</td>
+  <td class="col-name" style="font-size: 11px">وجبة عائلية كبيرة</td>
   <td class="col-price thermal-amt">45.50</td>
   <td class="col-qty">2.00</td>
   <td class="col-total thermal-amt">91.00</td>
 </tr>
 <tr class="item-row">
-  <td class="col-name">مشاوي مشكل</td>
+  <td class="col-name" style="font-size: 13px">مشاوي مشكل</td>
   <td class="col-price thermal-amt">125.50</td>
   <td class="col-qty">1.00</td>
   <td class="col-total thermal-amt">125.50</td>
@@ -491,7 +592,7 @@
 </div>
 </div>
 <div class="footer-thanks">شكراً لزيارتكم</div>
-<div class="footer-credit">صنع <span class="thermal-ltr" dir="ltr">0791208488</span></div>
+<div class="footer-address">المقابلين - شارع القدس <span class="thermal-ltr" dir="ltr">0791208488</span></div>
 <div class="print-footer-spacer" aria-hidden="true"></div>
 </body>
 </html>

@@ -140,6 +140,13 @@ function computeCartMetrics(lines: WaiterCartLine[]) {
   );
 }
 
+function getWaiterCartLineKey(line: WaiterCartLine, index: number) {
+  return (
+    line.salesInvoiceLineId ??
+    `${line.itemId}:${JSON.stringify(line.modifiers)}:${line.lineNote ?? ""}:${index}`
+  );
+}
+
 function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
   return sale.lines.map((line) => ({
     salesInvoiceLineId: line.id,
@@ -238,7 +245,13 @@ export function PosWaiterOrderPage() {
 
   const table = tablesQuery.data?.find((row) => row.id === tableId) ?? null;
   const isLocked = Boolean(waiterConfirmedAt);
+  const canAddAfterConfirm = hasPermission(user, "POS_ADD_ITEM_AFTER_WAITER_CONFIRM");
   const canEdit = !isLocked;
+  const canAddItems = canEdit || (isLocked && canAddAfterConfirm);
+  const hasUnsentLines = cartLines.some((line) => !line.kitchenSentAt);
+  const canSendToKitchen =
+    (canEdit || (isLocked && canAddAfterConfirm && hasUnsentLines)) &&
+    hasPermission(user, "RST_SEND_KOT");
 
   React.useEffect(() => {
     if (!tableId || !draftsQuery.data) {
@@ -430,7 +443,7 @@ export function PosWaiterOrderPage() {
   };
 
   const addItem = async (item: InventoryItem) => {
-    if (!canEdit) {
+    if (!canAddItems) {
       return;
     }
     if (!sessionQuery.data?.id) {
@@ -455,14 +468,17 @@ export function PosWaiterOrderPage() {
     }
   };
 
-  const updateQty = (itemId: string, delta: number) => {
-    if (!canEdit) {
+  const updateQty = (lineKey: string, delta: number) => {
+    if (!canEdit && !(isLocked && canAddAfterConfirm)) {
       return;
     }
     setCartLines((current) =>
       current
-        .map((line) => {
-          if (line.itemId !== itemId || line.kitchenSentAt) {
+        .map((line, index) => {
+          if (line.kitchenSentAt) {
+            return line;
+          }
+          if (getWaiterCartLineKey(line, index) !== lineKey) {
             return line;
           }
           const next = line.quantity + delta;
@@ -573,6 +589,9 @@ export function PosWaiterOrderPage() {
             ) : (
               cartLines.map((line, index) => {
                 const lineMetrics = computeLineMetrics(line);
+                const lineKey = getWaiterCartLineKey(line, index);
+                const canEditLine =
+                  !line.kitchenSentAt && (canEdit || (isLocked && canAddAfterConfirm));
                 return (
                   <div
                     key={`${line.itemId}-${line.salesInvoiceLineId ?? "new"}-${index}`}
@@ -618,10 +637,10 @@ export function PosWaiterOrderPage() {
                         <div className="text-sm font-black text-[#1a2a20]">
                           {formatMoney(lineMetrics.total, currencyCode)}
                         </div>
-                        {!line.kitchenSentAt && canEdit ? (
+                        {!line.kitchenSentAt && canEditLine ? (
                           <button
                             type="button"
-                            onClick={() => updateQty(line.itemId, -999)}
+                            onClick={() => updateQty(lineKey, -999)}
                             className="mt-1 text-rose-600"
                             aria-label="Remove"
                           >
@@ -630,11 +649,11 @@ export function PosWaiterOrderPage() {
                         ) : null}
                       </div>
                     </div>
-                    {!line.kitchenSentAt && canEdit ? (
+                    {canEditLine ? (
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => updateQty(line.itemId, -1)}
+                          onClick={() => updateQty(lineKey, -1)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
                         >
                           <LuMinus className="h-4 w-4" />
@@ -650,7 +669,7 @@ export function PosWaiterOrderPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => updateQty(line.itemId, 1)}
+                          onClick={() => updateQty(lineKey, 1)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
                         >
                           <LuPlus className="h-4 w-4" />
@@ -696,7 +715,7 @@ export function PosWaiterOrderPage() {
             </div>
           </div>
           <div className="shrink-0 border-t border-[#eef2ef] p-4">
-            {canEdit && hasPermission(user, "RST_SEND_KOT") ? (
+            {canSendToKitchen ? (
               <button
                 type="button"
                 onClick={() => confirmMutation.mutate()}
@@ -708,9 +727,13 @@ export function PosWaiterOrderPage() {
                   ? isAr
                     ? "جاري الإرسال…"
                     : "Sending…"
-                  : isAr
-                    ? "تأكيد وإرسال للمطبخ"
-                    : "Confirm & send to kitchen"}
+                  : isLocked
+                    ? isAr
+                      ? "إرسال الإضافات للمطبخ"
+                      : "Send additions to kitchen"
+                    : isAr
+                      ? "تأكيد وإرسال للمطبخ"
+                      : "Confirm & send to kitchen"}
               </button>
             ) : (
               <p className="text-center text-sm font-semibold text-[#68776f]">
@@ -729,7 +752,7 @@ export function PosWaiterOrderPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                disabled={!canEdit}
+                disabled={!canAddItems}
                 placeholder={t("pos.sales.searchPlaceholder")}
                 className="h-11 w-full rounded-2xl border border-[#d6e1d9] bg-[#f8faf9] text-sm font-semibold ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10"
               />
@@ -742,7 +765,7 @@ export function PosWaiterOrderPage() {
                 item={item}
                 variant="tablet"
                 currencyCode={currencyCode}
-                disabled={!canEdit}
+                disabled={!canAddItems}
                 allowNegativeStock
                 onAdd={() => addItem(item)}
               />

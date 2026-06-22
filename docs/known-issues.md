@@ -41,6 +41,18 @@ What this means for future edits:
 - keep frontend dev-start documentation aligned with the launcher behavior if the watcher strategy changes again.
 - if `npm run dev` is changed to go back to Turbopack or native watching, document the required Linux `fs.inotify.max_user_watches` guidance here so watch-limit startup failures are not mistaken for missing files or broken imports.
 
+## Local Dev Login / API Hostname
+
+Current behavior:
+
+- when the browser opens the frontend on a custom hostname (for example Tailscale `web`, not `localhost` / a private LAN IP), the client now routes API calls through the Next.js `/api` rewrite instead of `http://localhost:3007/api`.
+- this avoids login failures where the browser tries to reach **the user's own machine** as `localhost` instead of the dev server.
+
+What this means for future edits:
+
+- keep `frontend/lib/config/api.ts` aligned with `frontend/next.config.ts` rewrites when changing local API routing.
+- prefer `http://localhost:3000` for same-machine development; custom hostnames should still work after the rewrite fallback.
+
 ## Documentation Warning
 
 If code and docs drift:
@@ -84,7 +96,7 @@ Current behavior:
 - The kitchen print hub runs from the shared `/pos` layout so it stays active while the cashier visits the floor plan (`/pos/tables`) and other POS screens; it does not restart on every navigation.
 - Paying a dine-in order that was already sent to the kitchen should print only the customer receipt on the cashier printer, not a second kitchen ticket. The print hub dedupes by invoice id and invoice line id, skips completed sales, and marks already-sent orders when the cashier resumes the table.
 - If QZ Tray or a configured printer is unavailable, the POS falls back to the browser print window where possible; browser printing cannot automatically choose between kitchen and receipt printers.
-- Customer receipt amounts use clean grouped LTR formatting with a left safe inset in `frontend/features/pos-shared/thermal-receipt-layout.ts` so values such as `2.50` are not clipped on the physical left edge of 80mm rolls. **الصافي** and **مدفوع** append `د.أ`; zero payment-method rows are hidden. Line-level discounts print under the item row; invoice-level `خصم` prints only for cart-level discounts above summed line discounts.
+- Customer receipt amounts use clean grouped LTR formatting with a left safe inset in `frontend/features/pos-shared/thermal-receipt-layout.ts` so values such as `2.50` are not clipped on the physical left edge of 80mm rolls. The customer receipt now intentionally clones the old same-printer boxed layout with `الاجمالي` / `الخصم` / `الخدمات` / `المطلوب`, cashier/payment blocks, and the address/phone footer. Line-level discounts print under the item row; invoice-level `خصم` prints only for cart-level discounts above summed line discounts.
 
 What this means for future edits:
 
