@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e31]:
+    - link "Genius ERP نظام العبقري ERP" [ref=e33] [cursor=pointer]:
+      - /url: /
+      - img "Genius ERP" [ref=e34]
+      - text: نظام العبقري ERP
+  - main [ref=e17]:
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - img [ref=e39]
+        - generic [ref=e43]:
+          - heading "Welcome Back" [level=1] [ref=e44]
+          - paragraph [ref=e45]: Authenticate securely with the NestJS backend and acquire your JWT access token.
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e50]: Username
+          - textbox "Username" [ref=e52]:
+            - /placeholder: cashier.01
+            - text: cashier
+        - generic [ref=e53]:
+          - generic [ref=e55]: Secure Password
+          - textbox "Secure Password" [ref=e57]:
+            - /placeholder: ••••••••
+            - text: cashier123
+        - generic [ref=e58]:
+          - button "Sign In" [ref=e59] [cursor=pointer]
+          - paragraph [ref=e60]: Need an account? Contact your system administrator.
+  - generic [ref=e61]:
+    - img [ref=e63]
+    - button "Open Tanstack query devtools" [ref=e111] [cursor=pointer]:
+      - img [ref=e112]
+  - button "Open Next.js Dev Tools" [ref=e161] [cursor=pointer]:
+    - generic [ref=e164]:
+      - text: Rendering
+      - generic [ref=e165]:
+        - generic [ref=e166]: .
+        - generic [ref=e167]: .
+        - generic [ref=e168]: .
+  - alert [ref=e160]

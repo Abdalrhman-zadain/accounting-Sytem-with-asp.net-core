@@ -1,0 +1,13 @@
+- generic [active] [ref=e1]:
+  - complementary [ref=e2]:
+    - generic [ref=e3]:
+      - img "Genius ERP" [ref=e4]
+      - generic [ref=e5]:
+        - generic [ref=e6]: نظام العبقري ERP
+        - generic [ref=e7]: دفتر الأستاذ العام
+  - button "Open navigation menu" [ref=e10] [cursor=pointer]:
+    - img [ref=e11]
+  - main [ref=e12]:
+    - paragraph [ref=e15]: Restoring session…
+  - button "Open Next.js Dev Tools" [ref=e21] [cursor=pointer]:
+    - img [ref=e22]

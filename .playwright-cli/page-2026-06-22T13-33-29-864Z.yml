@@ -1,0 +1,406 @@
+- generic [active] [ref=e1]:
+  - complementary [ref=e155]:
+    - generic [ref=e157]:
+      - img "Genius ERP" [ref=e158]
+      - generic [ref=e159]:
+        - generic [ref=e160]: نظام العبقري ERP
+        - generic [ref=e161]: دفتر الأستاذ العام
+    - button "الانتقال إلى صفحة… Ctrl+K" [ref=e163] [cursor=pointer]:
+      - img [ref=e164]
+      - generic [ref=e167]: الانتقال إلى صفحة…
+      - generic [ref=e168]: Ctrl+K
+    - generic [ref=e169]:
+      - button "تبديل اللغة" [ref=e170] [cursor=pointer]:
+        - generic [ref=e171]: AR
+        - generic [ref=e172]: RTL
+        - generic [ref=e173]: AR
+      - button "Close sidebar" [ref=e174] [cursor=pointer]:
+        - img [ref=e175]
+        - generic [ref=e178]: Close
+    - navigation [ref=e179]:
+      - generic [ref=e180]:
+        - generic [ref=e181]: الدفاتر المحاسبية
+        - generic [ref=e182]:
+          - generic [ref=e183]:
+            - button "نقاط بيع المطعم" [ref=e184] [cursor=pointer]:
+              - img [ref=e185]
+              - generic [ref=e190]: نقاط بيع المطعم
+              - img [ref=e191]
+            - generic [ref=e193]:
+              - link "شاشة البيع إضافة إلى المفضلة" [ref=e194] [cursor=pointer]:
+                - /url: /pos/register
+                - img [ref=e195]
+                - generic [ref=e197]: شاشة البيع
+                - button "إضافة إلى المفضلة" [ref=e198]:
+                  - img [ref=e199]
+              - link "صالة الطعام / Dine-In إضافة إلى المفضلة" [ref=e201] [cursor=pointer]:
+                - /url: /pos/tables
+                - img [ref=e202]
+                - generic [ref=e205]: صالة الطعام / Dine-In
+                - button "إضافة إلى المفضلة" [ref=e206]:
+                  - img [ref=e207]
+              - link "لوحة التوصيل إضافة إلى المفضلة" [ref=e209] [cursor=pointer]:
+                - /url: /pos/delivery
+                - img [ref=e210]
+                - generic [ref=e215]: لوحة التوصيل
+                - button "إضافة إلى المفضلة" [ref=e216]:
+                  - img [ref=e217]
+              - link "الورديات إضافة إلى المفضلة" [ref=e219] [cursor=pointer]:
+                - /url: /pos/sessions
+                - img [ref=e220]
+                - generic [ref=e223]: الورديات
+                - button "إضافة إلى المفضلة" [ref=e224]:
+                  - img [ref=e225]
+              - link "الفواتير المعلقة إضافة إلى المفضلة" [ref=e227] [cursor=pointer]:
+                - /url: /pos/held-sales
+                - img [ref=e228]
+                - generic [ref=e233]: الفواتير المعلقة
+                - button "إضافة إلى المفضلة" [ref=e234]:
+                  - img [ref=e235]
+              - link "المرتجعات إضافة إلى المفضلة" [ref=e237] [cursor=pointer]:
+                - /url: /pos/returns
+                - img [ref=e238]
+                - generic [ref=e241]: المرتجعات
+                - button "إضافة إلى المفضلة" [ref=e242]:
+                  - img [ref=e243]
+              - link "الطابعات إضافة إلى المفضلة" [ref=e245] [cursor=pointer]:
+                - /url: /pos/printers
+                - img [ref=e246]
+                - generic [ref=e250]: الطابعات
+                - button "إضافة إلى المفضلة" [ref=e251]:
+                  - img [ref=e252]
+          - button "نقاط بيع السوق" [ref=e255] [cursor=pointer]:
+            - img [ref=e256]
+            - generic [ref=e262]: نقاط بيع السوق
+            - img [ref=e263]
+    - generic [ref=e266]:
+      - img [ref=e268]
+      - generic [ref=e271]:
+        - generic [ref=e272]: POS Cashier
+        - generic [ref=e273]: cashier@genius.com
+      - button "Logout" [ref=e274] [cursor=pointer]:
+        - img [ref=e275]
+  - main [ref=e12]:
+    - generic [ref=e279]:
+      - generic [ref=e315]:
+        - button "إغلاق الوردية" [ref=e316] [cursor=pointer]
+        - button [ref=e317] [cursor=pointer]:
+          - img [ref=e318]
+      - generic [ref=e321]:
+        - generic [ref=e323]:
+          - generic [ref=e324]:
+            - generic [ref=e326]:
+              - generic [ref=e328]: باركود / بحث
+              - generic [ref=e329]:
+                - img
+                - textbox "باركود / بحث Scan / كاميرا Calc / حاسبة Refresh / تحديث" [ref=e330]:
+                  - /placeholder: امسح الباركود أو ابحث بالاسم
+                - generic [ref=e331]:
+                  - button "Scan / كاميرا" [ref=e332] [cursor=pointer]:
+                    - img [ref=e333]
+                    - generic [ref=e336]: Scan / كاميرا
+                  - button "Calc / حاسبة" [ref=e337] [cursor=pointer]:
+                    - img [ref=e338]
+                    - generic [ref=e340]: Calc / حاسبة
+                  - button "Refresh / تحديث" [ref=e341] [cursor=pointer]
+            - generic [ref=e342]:
+              - button "سناكات" [ref=e343] [cursor=pointer]
+              - button "المفضلة" [ref=e344] [cursor=pointer]
+              - button "الكل" [ref=e345] [cursor=pointer]
+          - generic [ref=e346]:
+            - button "توفي ايراني صنف JOD 3.00 / KG" [ref=e347] [cursor=pointer]:
+              - img [ref=e350]
+              - paragraph [ref=e354]: توفي ايراني
+              - generic [ref=e355]:
+                - generic [ref=e356]: صنف
+                - generic [ref=e357]: JOD 3.00 / KG
+            - button "توفي سوس انجليزي صنف JOD 5.75 / KG" [ref=e358] [cursor=pointer]:
+              - img [ref=e361]
+              - paragraph [ref=e365]: توفي سوس انجليزي
+              - generic [ref=e366]:
+                - generic [ref=e367]: صنف
+                - generic [ref=e368]: JOD 5.75 / KG
+            - button "جلي صيني صنف JOD 5.00 / KG" [ref=e369] [cursor=pointer]:
+              - img [ref=e372]
+              - paragraph [ref=e376]: جلي صيني
+              - generic [ref=e377]:
+                - generic [ref=e378]: صنف
+                - generic [ref=e379]: JOD 5.00 / KG
+            - button "دهن صويص 1ك صنف JOD 2.00" [ref=e380] [cursor=pointer]:
+              - img [ref=e383]
+              - paragraph [ref=e387]: دهن صويص 1ك
+              - generic [ref=e388]:
+                - generic [ref=e389]: صنف
+                - generic [ref=e390]: JOD 2.00
+            - button "راحه بالبسكوت صنف JOD 3.00 / KG" [ref=e391] [cursor=pointer]:
+              - img [ref=e394]
+              - paragraph [ref=e398]: راحه بالبسكوت
+              - generic [ref=e399]:
+                - generic [ref=e400]: صنف
+                - generic [ref=e401]: JOD 3.00 / KG
+            - button "راحه تركش باللوز صنف JOD 4.00 / KG" [ref=e402] [cursor=pointer]:
+              - img [ref=e405]
+              - paragraph [ref=e409]: راحه تركش باللوز
+              - generic [ref=e410]:
+                - generic [ref=e411]: صنف
+                - generic [ref=e412]: JOD 4.00 / KG
+            - button "سوس صنف JOD 2.25 / KG" [ref=e413] [cursor=pointer]:
+              - img [ref=e416]
+              - paragraph [ref=e420]: سوس
+              - generic [ref=e421]:
+                - generic [ref=e422]: صنف
+                - generic [ref=e423]: JOD 2.25 / KG
+            - button "شوكلاته اوزبكي صنف JOD 3.50 / KG" [ref=e424] [cursor=pointer]:
+              - img [ref=e427]
+              - paragraph [ref=e431]: شوكلاته اوزبكي
+              - generic [ref=e432]:
+                - generic [ref=e433]: صنف
+                - generic [ref=e434]: JOD 3.50 / KG
+            - button "شوكولاتة اذربيجاني صنف JOD 3.75 / KG" [ref=e435] [cursor=pointer]:
+              - img [ref=e438]
+              - paragraph [ref=e442]: شوكولاتة اذربيجاني
+              - generic [ref=e443]:
+                - generic [ref=e444]: صنف
+                - generic [ref=e445]: JOD 3.75 / KG
+            - button "فيصليه سوبر صنف JOD 2.50 / KG" [ref=e446] [cursor=pointer]:
+              - img [ref=e449]
+              - paragraph [ref=e453]: فيصليه سوبر
+              - generic [ref=e454]:
+                - generic [ref=e455]: صنف
+                - generic [ref=e456]: JOD 2.50 / KG
+            - button "قلوب سوريه صنف JOD 3.50 / KG" [ref=e457] [cursor=pointer]:
+              - img [ref=e460]
+              - paragraph [ref=e464]: قلوب سوريه
+              - generic [ref=e465]:
+                - generic [ref=e466]: صنف
+                - generic [ref=e467]: JOD 3.50 / KG
+            - button "قمر دين صنف JOD 3.25 / KG" [ref=e468] [cursor=pointer]:
+              - img [ref=e471]
+              - paragraph [ref=e475]: قمر دين
+              - generic [ref=e476]:
+                - generic [ref=e477]: صنف
+                - generic [ref=e478]: JOD 3.25 / KG
+            - button "كت كات صنف JOD 4.50 / KG" [ref=e479] [cursor=pointer]:
+              - img [ref=e482]
+              - paragraph [ref=e486]: كت كات
+              - generic [ref=e487]:
+                - generic [ref=e488]: صنف
+                - generic [ref=e489]: JOD 4.50 / KG
+            - button "لوزينا سوريه صنف JOD 4.00 / KG" [ref=e490] [cursor=pointer]:
+              - img [ref=e493]
+              - paragraph [ref=e497]: لوزينا سوريه
+              - generic [ref=e498]:
+                - generic [ref=e499]: صنف
+                - generic [ref=e500]: JOD 4.00 / KG
+            - button "مشكل سمسميه صنف JOD 3.50 / KG" [ref=e501] [cursor=pointer]:
+              - img [ref=e504]
+              - paragraph [ref=e508]: مشكل سمسميه
+              - generic [ref=e509]:
+                - generic [ref=e510]: صنف
+                - generic [ref=e511]: JOD 3.50 / KG
+            - button "ملبس 200غ دينار نحله صنف JOD 0.00" [ref=e512] [cursor=pointer]:
+              - img [ref=e515]
+              - paragraph [ref=e519]: ملبس 200غ دينار نحله
+              - generic [ref=e520]:
+                - generic [ref=e521]: صنف
+                - generic [ref=e522]: JOD 0.00
+            - button "ملبس ايس كوفي دينار صنف JOD 0.90" [ref=e523] [cursor=pointer]:
+              - img [ref=e526]
+              - paragraph [ref=e530]: ملبس ايس كوفي دينار
+              - generic [ref=e531]:
+                - generic [ref=e532]: صنف
+                - generic [ref=e533]: JOD 0.90
+            - button "ملبس ايطالي باكيت صنف JOD 0.90" [ref=e534] [cursor=pointer]:
+              - img [ref=e537]
+              - paragraph [ref=e541]: ملبس ايطالي باكيت
+              - generic [ref=e542]:
+                - generic [ref=e543]: صنف
+                - generic [ref=e544]: JOD 0.90
+            - button "ملبس ايطالي وزن صنف JOD 14.00 / KG" [ref=e545] [cursor=pointer]:
+              - img [ref=e548]
+              - paragraph [ref=e552]: ملبس ايطالي وزن
+              - generic [ref=e553]:
+                - generic [ref=e554]: صنف
+                - generic [ref=e555]: JOD 14.00 / KG
+            - button "ملبس بولو شفاف صنف JOD 6.00 / KG" [ref=e556] [cursor=pointer]:
+              - img [ref=e559]
+              - paragraph [ref=e563]: ملبس بولو شفاف
+              - generic [ref=e564]:
+                - generic [ref=e565]: صنف
+                - generic [ref=e566]: JOD 6.00 / KG
+            - button "ملبس روشن صنف JOD 3.00 / KG" [ref=e567] [cursor=pointer]:
+              - img [ref=e570]
+              - paragraph [ref=e574]: ملبس روشن
+              - generic [ref=e575]:
+                - generic [ref=e576]: صنف
+                - generic [ref=e577]: JOD 3.00 / KG
+            - button "ملبس لوز صنف JOD 3.50 / KG" [ref=e578] [cursor=pointer]:
+              - img [ref=e581]
+              - paragraph [ref=e585]: ملبس لوز
+              - generic [ref=e586]:
+                - generic [ref=e587]: صنف
+                - generic [ref=e588]: JOD 3.50 / KG
+            - button "ملبس مصاص صنف JOD 4.00 / KG" [ref=e589] [cursor=pointer]:
+              - img [ref=e592]
+              - paragraph [ref=e596]: ملبس مصاص
+              - generic [ref=e597]:
+                - generic [ref=e598]: صنف
+                - generic [ref=e599]: JOD 4.00 / KG
+            - button "ملبس ميني مينت صنف JOD 5.75 / KG" [ref=e600] [cursor=pointer]:
+              - img [ref=e603]
+              - paragraph [ref=e607]: ملبس ميني مينت
+              - generic [ref=e608]:
+                - generic [ref=e609]: صنف
+                - generic [ref=e610]: JOD 5.75 / KG
+            - button "من وسلوى حبق صنف JOD 5.50 / KG" [ref=e611] [cursor=pointer]:
+              - img [ref=e614]
+              - paragraph [ref=e618]: من وسلوى حبق
+              - generic [ref=e619]:
+                - generic [ref=e620]: صنف
+                - generic [ref=e621]: JOD 5.50 / KG
+            - button "من وسلوى كبير صنف JOD 3.00" [ref=e622] [cursor=pointer]:
+              - img [ref=e625]
+              - paragraph [ref=e629]: من وسلوى كبير
+              - generic [ref=e630]:
+                - generic [ref=e631]: صنف
+                - generic [ref=e632]: JOD 3.00
+            - button "من وسلوى وسط صنف JOD 2.00" [ref=e633] [cursor=pointer]:
+              - img [ref=e636]
+              - paragraph [ref=e640]: من وسلوى وسط
+              - generic [ref=e641]:
+                - generic [ref=e642]: صنف
+                - generic [ref=e643]: JOD 2.00
+            - button "مينتوس حلل صنف JOD 5.00 / KG" [ref=e644] [cursor=pointer]:
+              - img [ref=e647]
+              - paragraph [ref=e651]: مينتوس حلل
+              - generic [ref=e652]:
+                - generic [ref=e653]: صنف
+                - generic [ref=e654]: JOD 5.00 / KG
+            - button "ناشد باكيت صنف JOD 2.50" [ref=e655] [cursor=pointer]:
+              - img [ref=e658]
+              - paragraph [ref=e662]: ناشد باكيت
+              - generic [ref=e663]:
+                - generic [ref=e664]: صنف
+                - generic [ref=e665]: JOD 2.50
+            - button "ناشد حلل صنف JOD 3.80 / KG" [ref=e666] [cursor=pointer]:
+              - img [ref=e669]
+              - paragraph [ref=e673]: ناشد حلل
+              - generic [ref=e674]:
+                - generic [ref=e675]: صنف
+                - generic [ref=e676]: JOD 3.80 / KG
+            - button "ناشد كياس صنف JOD 0.85" [ref=e677] [cursor=pointer]:
+              - img [ref=e680]
+              - paragraph [ref=e684]: ناشد كياس
+              - generic [ref=e685]:
+                - generic [ref=e686]: صنف
+                - generic [ref=e687]: JOD 0.85
+            - button "نوتيلا 400غ صنف JOD 1.25" [ref=e688] [cursor=pointer]:
+              - img [ref=e691]
+              - paragraph [ref=e695]: نوتيلا 400غ
+              - generic [ref=e696]:
+                - generic [ref=e697]: صنف
+                - generic [ref=e698]: JOD 1.25
+            - button "ويكتور صنف JOD 4.00 / KG" [ref=e699] [cursor=pointer]:
+              - img [ref=e702]
+              - paragraph [ref=e706]: ويكتور
+              - generic [ref=e707]:
+                - generic [ref=e708]: صنف
+                - generic [ref=e709]: JOD 4.00 / KG
+        - complementary [ref=e710]:
+          - generic [ref=e712]:
+            - generic [ref=e714]:
+              - generic [ref=e715]:
+                - heading "ملخص الطلب" [level=2] [ref=e717]
+                - paragraph [ref=e718]: —
+              - button "معلقة" [ref=e719] [cursor=pointer]
+            - generic [ref=e720]:
+              - generic [ref=e722]:
+                - img
+                - textbox "ابحث عن عميل..." [ref=e723]
+                - button "إضافة عميل" [ref=e724] [cursor=pointer]:
+                  - img [ref=e725]
+              - generic [ref=e728]:
+                - generic [ref=e730]:
+                  - button "صالة" [ref=e731] [cursor=pointer]
+                  - button "سفري" [ref=e732] [cursor=pointer]
+                  - button "توصيل" [ref=e733] [cursor=pointer]
+                - generic [ref=e734]:
+                  - generic [ref=e735]: ملاحظة الطلب
+                  - textbox "ملاحظات على الطلب..." [ref=e736]
+              - generic [ref=e738]:
+                - paragraph [ref=e878]: السلة فارغة حتى الآن
+                - paragraph [ref=e879]: اختر أصنافًا من الكتالوج على اليمين أو اليسار لبدء عملية البيع.
+              - button "إضافة خصم الفاتورة +" [ref=e742] [cursor=pointer]:
+                - img [ref=e743]
+                - text: إضافة خصم الفاتورة +
+            - generic [ref=e744]:
+              - generic [ref=e745]:
+                - generic [ref=e746]:
+                  - generic [ref=e747]:
+                    - generic [ref=e748]: الإجمالي قبل الضريبة
+                    - generic [ref=e749]: JOD 0.00
+                  - generic [ref=e750]:
+                    - generic [ref=e751]: الخصومات
+                    - generic [ref=e752]: JOD 0.00
+                  - generic [ref=e753]:
+                    - generic [ref=e754]: الضريبة
+                    - generic [ref=e755]: JOD 0.00
+                  - generic [ref=e756]:
+                    - generic [ref=e757]: رسوم الخدمة
+                    - generic [ref=e758]: JOD 0.00
+                  - generic [ref=e759]:
+                    - generic [ref=e760]: رسوم التوصيل
+                    - generic [ref=e761]: JOD 0.00
+                - generic [ref=e763]:
+                  - generic [ref=e764]: الإجمالي النهائي
+                  - generic [ref=e765]: JOD 0.00
+              - generic [ref=e766]:
+                - button "دفع" [disabled] [ref=e767]:
+                  - img [ref=e768]
+                  - text: دفع
+                - generic [ref=e771]:
+                  - button "مسودة" [ref=e772] [cursor=pointer]
+                  - generic [ref=e773]: "|"
+                  - button "تعليق" [disabled] [ref=e774]
+                - button "إلغاء" [ref=e775] [cursor=pointer]
+                - button "طباعة آخر إيصال" [ref=e880] [cursor=pointer]
+  - generic [ref=e55]:
+    - img [ref=e57]
+    - button "Open Tanstack query devtools" [ref=e105] [cursor=pointer]:
+      - img [ref=e106]
+  - generic [ref=e20] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e21]:
+      - img [ref=e22]
+    - generic [ref=e881]:
+      - button "Open issues overlay" [ref=e882]:
+        - generic [ref=e883]:
+          - generic [ref=e884]: "0"
+          - generic [ref=e885]: "1"
+        - generic [ref=e886]: Issue
+      - button "Collapse issues badge" [ref=e887]:
+        - img [ref=e888]
+  - alert [ref=e154]
+  - dialog "تم الدفع" [ref=e890]:
+    - generic [ref=e838]:
+      - generic [ref=e839]:
+        - heading "تم الدفع" [level=2] [ref=e891]
+        - button "Close" [ref=e841] [cursor=pointer]:
+          - generic [ref=e842]: Close
+          - img [ref=e843]
+      - generic [ref=e846]:
+        - generic [ref=e847]:
+          - paragraph [ref=e892]: Sale completed
+          - paragraph [ref=e893]: تم إتمام البيع بنجاح
+          - paragraph [ref=e894]: JOD 2.00
+        - generic [ref=e895]:
+          - button "Print / طباعة" [ref=e896] [cursor=pointer]:
+            - img [ref=e897]
+            - text: Print / طباعة
+          - button "New sale / بيع جديد" [ref=e901] [cursor=pointer]
+  - alert [ref=e902]:
+    - generic [ref=e903]:
+      - img [ref=e905]
+      - generic [ref=e907]:
+        - generic [ref=e908]: Error
+        - generic [ref=e909]: No printer has been configured for this print job.
+      - button "Close" [ref=e910] [cursor=pointer]
