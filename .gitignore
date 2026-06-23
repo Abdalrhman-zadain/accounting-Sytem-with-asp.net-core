@@ -24,8 +24,11 @@ frontend/.env.local
 frontend/.env
 *.tsbuildinfo
 .gemini/
+.playwright-cli/
 new.md
 next-env.d.ts
+*.bak
+tools/print-agent/**/obj/
 
 # QZ Tray certificates - local only
 backend/certs/qz/private-key.pem
