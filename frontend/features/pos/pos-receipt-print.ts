@@ -3,15 +3,18 @@
  * Old boxed Arabic restaurant receipt clone for 80mm thermal POS printers.
  */
 
-import { buildCustomerReceiptItemName } from "@/features/pos/pos-addon-utils";
-import { formatPosLineQuantityDisplay } from "@/features/pos/pos-weight-utils";
+import {
+  buildCustomerReceiptItemName,
+  formatReceiptLineQuantity,
+  getPortionCountFromModifiers,
+  getWeightPerPortionFromModifiers,
+} from "@/features/pos/pos-addon-utils";
 import {
   THERMAL_PRINT_READY_DELAY_MS,
   waitForDocumentImages,
 } from "@/features/pos/pos-print-bridge";
 import {
   buildThermalReceiptDocumentHtml,
-  thermalReceiptColumnHeaderRow,
   thermalReceiptFooterSpacerHtml,
   thermalReceiptItemDiscountRow,
   thermalReceiptLtrInlineHtml,
@@ -241,6 +244,7 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
     }
     .receipt-box.summary-box {
       padding: 3mm 2.5mm 2.5mm;
+      min-height: 47mm;
     }
     .order-info-grid {
       display: grid;
@@ -265,9 +269,6 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       font-weight: 900;
       line-height: 1.1;
       margin: 1px 0;
-    }
-    .summary-box {
-      min-height: 47mm;
     }
     .summary-box .summary-line {
       margin: 1px 0;
@@ -313,6 +314,9 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       align-items: start;
       margin-top: 5mm;
       padding: 0 1mm;
+    }
+    .summary-info-line--full {
+      grid-column: 1 / -1;
     }
     .summary-info-line {
       font-size: 15px;
@@ -409,15 +413,6 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       word-break: break-word;
       overflow-wrap: anywhere;
     }
-    .item-name-base,
-    .item-name-choices {
-      display: block;
-      line-height: 1.2;
-    }
-    .item-name-choices {
-      margin-top: 1px;
-      font-size: 0.92em;
-    }
     table.items-table td.col-price {
       width: 16%;
       max-width: 16%;
@@ -446,7 +441,6 @@ const RESTAURANT_RECEIPT_EXTRA_CSS = `
       padding-left: 0.5mm;
       padding-right: 2.2mm;
     }
-    table.items-table tr.item-addon-row td.item-addon,
     table.items-table tr.item-disc-row td.item-disc-label {
       font-size: 11px;
       font-weight: 900;
@@ -472,13 +466,7 @@ function fmtDateParts(val?: string | Date | null): { date: string; time: string 
 }
 
 function formatReceiptQuantity(line: PosReceiptData["lines"][number]): string {
-  const display = formatPosLineQuantityDisplay(line.quantity, "ar", line.unitCode, {
-    precision: 3,
-  });
-  if (/^\d+$/.test(display)) {
-    return line.quantity.toFixed(2);
-  }
-  return display;
+  return formatReceiptLineQuantity(line, "ar");
 }
 
 function resolveItemNameFontSizePx(name: string): number {
@@ -493,40 +481,27 @@ function resolveItemNameFontSizePx(name: string): number {
   return 9;
 }
 
-function splitReceiptItemNameParts(displayName: string): {
-  base: string;
-  choices: string | null;
-} {
-  const trimmed = displayName.trim();
-  const openIdx = trimmed.lastIndexOf(" (");
-  if (openIdx > 0 && trimmed.endsWith(")")) {
-    return {
-      base: trimmed.slice(0, openIdx).trim(),
-      choices: trimmed.slice(openIdx + 1).trim(),
-    };
-  }
-  return { base: trimmed, choices: null };
-}
-
 function buildRestaurantReceiptItemRow(
   name: string,
   unitPrice: number,
   qty: string,
   total: number,
 ): string {
-  const { base, choices } = splitReceiptItemNameParts(name);
-  const escapedBase = escapeReceiptText(base);
   const nameFontSize = resolveItemNameFontSizePx(name);
-  const nameCell = choices
-    ? `<span class="item-name-base">${escapedBase}</span><span class="item-name-choices">${escapeReceiptText(choices)}</span>`
-    : escapedBase;
 
   return `<tr class="item-row">
-  <td class="col-name" style="font-size: ${nameFontSize}px">${nameCell}</td>
+  <td class="col-name" style="font-size: ${nameFontSize}px">${escapeReceiptText(name)}</td>
   <td class="col-price thermal-amt">${fmtThermalReceiptMoney(unitPrice)}</td>
   <td class="col-qty">${qty}</td>
   <td class="col-total thermal-amt">${fmtThermalReceiptMoney(total)}</td>
 </tr>`;
+}
+
+function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string | null {
+  if (!orderType) {
+    return null;
+  }
+  return ARABIC_ORDER_TYPE_LABELS[orderType] ?? orderType;
 }
 
 function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
@@ -541,15 +516,84 @@ function resolveReceiptLogoUrl(receipt: PosReceiptData): string | null {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-function resolveOrderTypeLabel(orderType?: PosReceiptOrderType | null): string | null {
-  if (!orderType) {
-    return null;
-  }
-  return ARABIC_ORDER_TYPE_LABELS[orderType] ?? orderType;
-}
-
 function resolveHallLabel(receipt: PosReceiptData): string {
   return receipt.branchName?.trim() || receipt.warehouseName?.trim() || "رئيسي";
+}
+
+function buildBrandHeaderHtml(receipt: PosReceiptData): string {
+  const logoUrl = resolveReceiptLogoUrl(receipt);
+  const brandName = receipt.companyName?.trim() || "كرنشي";
+
+  if (logoUrl) {
+    return `<div class="brand-header">
+  <img class="logo-inline" src="${logoUrl}" alt=""/>
+  <div class="brand-text">
+    <div class="brand-name">${escapeReceiptText(brandName)}</div>
+  </div>
+</div>`;
+  }
+
+  return `<div class="brand-header">
+  <div class="brand-text">
+    <div class="brand-name">${escapeReceiptText(brandName)}</div>
+  </div>
+</div>`;
+}
+
+function buildSaleOrderInfoHtml(receipt: PosReceiptData): string {
+  const { date, time } = fmtDateParts(receipt.soldAt);
+  const orderNumber = extractDailyOrderNumber(receipt.receiptNumber);
+  const tableReservationLabel = (() => {
+    if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
+      return `حجز ${receipt.tableNumber.trim()}`;
+    }
+    const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
+    if (orderTypeLabel) {
+      return orderTypeLabel;
+    }
+    if (orderNumber) {
+      return `#${orderNumber}`;
+    }
+    return "—";
+  })();
+
+  const rows: string[] = [];
+  rows.push(`<div class="receipt-box">`);
+  rows.push(`<div class="order-info-grid">`);
+  rows.push(`<div class="order-info-right">`);
+  if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
+    rows.push(`<div class="order-info-label">للطاولة</div>`);
+  } else {
+    const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
+    if (orderTypeLabel) {
+      rows.push(`<div class="order-info-label">${orderTypeLabel}</div>`);
+    }
+  }
+  rows.push(`<div>${date}</div>`);
+  rows.push(`<div>القاعة: ${escapeReceiptText(resolveHallLabel(receipt))}</div>`);
+  if (receipt.orderType === "DELIVERY" && receipt.deliveryAddress?.trim()) {
+    rows.push(`<div>${escapeReceiptText(receipt.deliveryAddress.trim())}</div>`);
+  }
+  rows.push(`</div>`);
+  rows.push(`<div class="order-info-left">`);
+  rows.push(`<div class="order-info-highlight">${escapeReceiptText(tableReservationLabel)}</div>`);
+  rows.push(`<div>${time}</div>`);
+  if (orderNumber) {
+    rows.push(`<div>الدور: ${orderNumber}</div>`);
+  }
+  rows.push(`</div>`);
+  rows.push(`</div>`);
+  rows.push(`</div>`);
+  return rows.join("\n");
+}
+
+function buildRestaurantReceiptColumnHeaderRow(): string {
+  return `<tr class="col-header">
+  <td class="col-name">الصنف</td>
+  <td class="col-price">سعر<br/>الانفرادي</td>
+  <td class="col-qty">الكمية</td>
+  <td class="col-total">سعر<br/>الاجمالي</td>
+</tr>`;
 }
 
 function resolveReceiptContactFields(receipt: PosReceiptData): {
@@ -564,28 +608,6 @@ function resolveReceiptContactFields(receipt: PosReceiptData): {
   };
 }
 
-function buildBrandHeaderHtml(receipt: PosReceiptData): string {
-  const logoUrl = resolveReceiptLogoUrl(receipt);
-  const brandName = receipt.companyName?.trim() || "كرنشي";
-
-  if (logoUrl) {
-    return `
-      <div class="brand-header">
-        <img class="logo-inline" src="${logoUrl}" alt=""/>
-        <div class="brand-text">
-          <div class="brand-name">${brandName}</div>
-        </div>
-      </div>`;
-  }
-
-  return `
-    <div class="brand-header">
-      <div class="brand-text">
-        <div class="brand-name">${brandName}</div>
-      </div>
-    </div>`;
-}
-
 function buildPaymentMethodDescription(receipt: PosReceiptData): string {
   if (receipt.receiptKind === "provisional") {
     return "غير مدفوع";
@@ -595,7 +617,7 @@ function buildPaymentMethodDescription(receipt: PosReceiptData): string {
   const paymentLabel = resolveReceiptPaymentDisplay(receipt);
 
   if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
-    return `${orderTypeLabel ?? "صالة"}/كاشير حجز ${receipt.tableNumber.trim()}`;
+    return `${orderTypeLabel ?? "صالة"}/كاشير/حجز ${receipt.tableNumber.trim()}`;
   }
 
   if (orderTypeLabel && paymentLabel) {
@@ -625,7 +647,12 @@ function buildSummaryTextLineHtml(label: string, value: string): string {
 }
 
 function sumLineQuantities(lines: PosReceiptData["lines"]): number {
-  return lines.reduce((sum, line) => sum + line.quantity, 0);
+  return lines.reduce((sum, line) => {
+    if (getWeightPerPortionFromModifiers(line.modifiers) != null) {
+      return sum + getPortionCountFromModifiers(line.modifiers);
+    }
+    return sum + line.quantity;
+  }, 0);
 }
 
 function escapeReceiptText(text: string): string {
@@ -664,7 +691,6 @@ function buildReceiptBottomNotesHtml(receipt: PosReceiptData): string {
 
 function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   const rows: string[] = [];
-  const { date, time } = fmtDateParts(receipt.soldAt);
   const serviceCharge = receipt.serviceChargeAmount ?? 0;
   const deliveryFee = receipt.deliveryFeeAmount ?? 0;
   const servicesTotal = serviceCharge + deliveryFee;
@@ -674,63 +700,32 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
   );
   const cartLevelDiscount = Math.max(0, receipt.discount - lineDiscountTotal);
   const totalDiscount = cartLevelDiscount + lineDiscountTotal;
-  const orderNumber =
-    receipt.receiptKind === "provisional"
-      ? null
-      : extractDailyOrderNumber(receipt.receiptNumber);
   const receiptNumberDisplay =
     receipt.receiptKind === "provisional"
       ? receipt.receiptNumber.trim()
-      : orderNumber;
-  const tableReservationLabel = (() => {
-    if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
-      return `حجز ${receipt.tableNumber.trim()}`;
-    }
-    const orderTypeLabel = resolveOrderTypeLabel(receipt.orderType);
-    if (orderTypeLabel) {
-      return orderTypeLabel;
-    }
-    if (orderNumber) {
-      return `#${orderNumber}`;
-    }
-    return "—";
-  })();
+      : null;
 
   rows.push(buildBrandHeaderHtml(receipt));
-  if (receiptNumberDisplay) {
-    rows.push(`<div class="receipt-number-strip">${receiptNumberDisplay}</div>`);
-  }
 
-  rows.push(`<div class="receipt-box">`);
-  rows.push(`<div class="order-info-grid">`);
-  rows.push(`<div class="order-info-right">`);
-  if (receipt.orderType === "DINE_IN" && receipt.tableNumber?.trim()) {
-    rows.push(`<div class="order-info-label">الطاولة</div>`);
+  if (receipt.receiptKind === "provisional") {
+    if (receiptNumberDisplay) {
+      rows.push(`<div class="receipt-number-strip">${receiptNumberDisplay}</div>`);
+    }
+  } else {
+    rows.push(buildSaleOrderInfoHtml(receipt));
   }
-  rows.push(`<div>${date}</div>`);
-  rows.push(`<div>القاعة: ${resolveHallLabel(receipt)}</div>`);
-  if (receipt.orderType === "DELIVERY" && receipt.deliveryAddress?.trim()) {
-    rows.push(`<div>${receipt.deliveryAddress.trim()}</div>`);
-  }
-  rows.push(`</div>`);
-  rows.push(`<div class="order-info-left">`);
-  rows.push(`<div class="order-info-highlight">${tableReservationLabel}</div>`);
-  rows.push(`<div>${time}</div>`);
-  if (orderNumber) {
-    rows.push(`<div>الدور: ${orderNumber}</div>`);
-  }
-  rows.push(`</div>`);
-  rows.push(`</div>`);
-  rows.push(`</div>`);
 
   rows.push(`<div class="receipt-box items-box">`);
   rows.push(thermalReceiptTableOpen("items-table"));
-  rows.push(
-    thermalReceiptColumnHeaderRow("الصنف", "السعر", "الكمية", "الإجمالي"),
-  );
+  rows.push(buildRestaurantReceiptColumnHeaderRow());
   for (const line of receipt.lines) {
     const qty = formatReceiptQuantity(line);
-    const displayName = buildCustomerReceiptItemName(line.name, line.modifiers, "ar");
+    const displayName = buildCustomerReceiptItemName(
+      line.name,
+      line.modifiers,
+      "ar",
+      line.unitCode,
+    );
     rows.push(
       buildRestaurantReceiptItemRow(displayName, line.unitPrice, qty, line.lineTotal),
     );
@@ -767,6 +762,12 @@ function buildPosReceiptBodyHtml(receipt: PosReceiptData): string {
     <span class="summary-info-label">طريقة الدفع</span>
     <span class="summary-info-value">${buildPaymentMethodDescription(receipt)}</span>
   </div>`);
+  if (receipt.orderType === "DELIVERY" && receipt.deliveryAddress?.trim()) {
+    rows.push(`<div class="summary-info-line summary-info-line--full">
+    <span class="summary-info-label">العنوان</span>
+    <span class="summary-info-value">${escapeReceiptText(receipt.deliveryAddress.trim())}</span>
+  </div>`);
+  }
   rows.push(`</div>`);
   rows.push(`</div>`);
 

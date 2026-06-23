@@ -62,7 +62,7 @@ export function getTraditionalAsnaqWeightLabel(
     return isAr ? "وقية" : "Waqiya";
   }
   if (rounded === 0.5) {
-    return isAr ? "نص كيلو" : "Half kilo";
+    return isAr ? "نص ك" : "Half kilo";
   }
   if (rounded === 0.75) {
     return isAr ? "تلات أواج" : "Three awaj";

@@ -135,16 +135,20 @@ import { PosRestaurantCartControls } from "@/features/pos/pos-restaurant-cart-co
 import { PosAddonAdminPanel } from "@/features/pos/pos-addon-admin-panel";
 import type { PosItemAddonConfig, PosLineAddonSelection } from "@/features/pos/pos-addon-types";
 import {
-  addonSignature,
   buildModifiersPayload,
+  buildCustomerReceiptItemName,
   formatAddonsForDisplay,
   getAddonsFromModifiers,
+  getCartLineMergeKey,
+  getEffectiveSaleQuantity,
+  getPortionCountFromModifiers,
+  restoreWeightLineQuantities,
   sumAddonPrices,
+  withPortionMetadataInModifiers,
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
 import {
   getMinSalesQuantity,
-  formatWeightQuantity,
   getQuantityPrecision,
   getWeightQuantityStep,
   isWeightSaleItem,
@@ -223,16 +227,24 @@ type DiscountType = "FIXED" | "PERCENT";
 function getCartLineKey(
   line: Pick<
     CartLine,
-    "salesInvoiceLineId" | "clientLineId" | "itemId" | "modifiers" | "lineNote"
+    | "salesInvoiceLineId"
+    | "clientLineId"
+    | "itemId"
+    | "modifiers"
+    | "lineNote"
+    | "sellByWeight"
+    | "quantity"
+    | "quantityPrecision"
+    | "kitchenSentAt"
   >,
 ) {
   if (line.salesInvoiceLineId) {
     return line.salesInvoiceLineId;
   }
-  if (line.clientLineId) {
+  if (line.clientLineId && line.kitchenSentAt) {
     return line.clientLineId;
   }
-  return `${line.itemId}:${addonSignature(getAddonsFromModifiers(line.modifiers))}:${line.lineNote ?? ""}`;
+  return getCartLineMergeKey(line);
 }
 
 function isKitchenSentLineLocked(line: Pick<CartLine, "kitchenSentAt">) {
@@ -281,7 +293,7 @@ function getCustomWeightPresets(item: Pick<InventoryItem, "code">) {
 
 type CartLine = {
   salesInvoiceLineId?: string;
-  /** Stable key for new sell-by-weight lines (each weigh-in stays separate). */
+  /** Stable key for kitchen-sent sell-by-weight lines that were split from a merged row. */
   clientLineId?: string;
   kitchenSentAt?: string | null;
   kitchenItemStatus?: import("@/types/api").KitchenStatus | null;
@@ -292,6 +304,8 @@ type CartLine = {
   unit: string;
   itemType: InventoryItem["type"];
   quantity: number;
+  /** Sell-by-weight: count of identical weight + add-on portions (default 1). */
+  portionCount?: number;
   unitPrice: number;
   discountType: DiscountType;
   discountValue: number;
@@ -554,7 +568,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 function getLineBase(line: CartLine) {
   const addonTotal = sumAddonPrices(getAddonsFromModifiers(line.modifiers));
   if (line.sellByWeight) {
-    return line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal;
+    const portions = line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
+    const perPortion =
+      line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal;
+    return perPortion * portions;
   }
   return line.quantity * line.unitPrice;
 }
@@ -605,7 +622,10 @@ function getLineTotal(
 }
 
 function getLineTotalCost(line: CartLine) {
-  return line.quantity * line.unitCost;
+  const portions = line.sellByWeight
+    ? (line.portionCount ?? getPortionCountFromModifiers(line.modifiers))
+    : 1;
+  return line.quantity * portions * line.unitCost;
 }
 
 function getInvoiceDiscountAmount(
@@ -620,41 +640,54 @@ function getInvoiceDiscountAmount(
 }
 
 function mapPosSaleToHeldSale(sale: PosSale): HeldSale {
-  const cartLines: CartLine[] = sale.lines.map((line) => ({
-    salesInvoiceLineId: line.id,
-    kitchenSentAt: line.kitchenSentAt ?? null,
-    kitchenItemStatus: line.kitchenItemStatus ?? null,
-    itemId: line.itemId ?? line.id,
-    name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
-    code: line.item?.code ?? line.itemId ?? line.id,
-    unit: line.item?.unitOfMeasure ?? "",
-    itemType: line.item?.type ?? "SERVICE",
-    sellByWeight: Boolean(line.item?.allowFractionalQuantity),
-    quantityPrecision: line.item?.unitOfMeasureRef?.decimalPrecision ?? 3,
-    quantity: parseAmount(line.quantity),
-    unitPrice: parseAmount(line.unitPrice),
-    discountType: "FIXED",
-    discountValue: parseAmount(line.discountAmount),
-    taxRate:
-      parseAmount(line.lineSubtotalAmount) > 0
-        ? (parseAmount(line.taxAmount) / parseAmount(line.lineSubtotalAmount)) * 100
-        : 0,
-    trackInventory: Boolean(line.item?.trackInventory),
-    unitCost: 0,
-    averageCost: 0,
-    salesAccountId: line.revenueAccountId,
-    warehouseId: line.warehouse?.id ?? undefined,
-    onHandQuantity: 0,
-    baseUnitPrice:
-      Boolean(line.item?.allowFractionalQuantity)
+  const cartLines: CartLine[] = sale.lines.map((line) => {
+    const sellByWeight = Boolean(line.item?.allowFractionalQuantity);
+    const quantityPrecision = line.item?.unitOfMeasureRef?.decimalPrecision ?? 3;
+    const restored = sellByWeight
+      ? restoreWeightLineQuantities(
+          parseAmount(line.quantity),
+          line.modifiers,
+          quantityPrecision,
+        )
+      : { quantity: parseAmount(line.quantity), portionCount: 1 };
+
+    return {
+      salesInvoiceLineId: line.id,
+      kitchenSentAt: line.kitchenSentAt ?? null,
+      kitchenItemStatus: line.kitchenItemStatus ?? null,
+      itemId: line.itemId ?? line.id,
+      name: line.itemName ?? line.description ?? `Line ${line.lineNumber}`,
+      code: line.item?.code ?? line.itemId ?? line.id,
+      unit: line.item?.unitOfMeasure ?? "",
+      itemType: line.item?.type ?? "SERVICE",
+      sellByWeight,
+      quantityPrecision,
+      quantity: restored.quantity,
+      portionCount: restored.portionCount,
+      unitPrice: parseAmount(line.unitPrice),
+      discountType: "FIXED",
+      discountValue: parseAmount(line.discountAmount),
+      taxRate:
+        parseAmount(line.lineSubtotalAmount) > 0
+          ? (parseAmount(line.taxAmount) / parseAmount(line.lineSubtotalAmount)) * 100
+          : 0,
+      trackInventory: Boolean(line.item?.trackInventory),
+      unitCost: 0,
+      averageCost: 0,
+      salesAccountId: line.revenueAccountId,
+      warehouseId: line.warehouse?.id ?? undefined,
+      onHandQuantity: 0,
+      baseUnitPrice: sellByWeight
         ? parseAmount(line.unitPrice)
-        : parseAmount(line.unitPrice) - sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
-    modifiers: (line.modifiers as CartLine["modifiers"]) ?? null,
-    lineNote:
-      line.description && line.description !== (line.itemName ?? "")
-        ? line.description
-        : "",
-  }));
+        : parseAmount(line.unitPrice) -
+          sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
+      modifiers: (line.modifiers as CartLine["modifiers"]) ?? null,
+      lineNote:
+        line.description && line.description !== (line.itemName ?? "")
+          ? line.description
+          : "",
+    };
+  });
 
   return {
     id: sale.id,
@@ -1619,6 +1652,8 @@ export function PosPage() {
         itemId: line.itemId,
         name: line.name,
         quantity: line.quantity,
+        sellByWeight: line.sellByWeight,
+        portionCount: line.portionCount,
         kitchenSentAt: line.kitchenSentAt,
         modifiers: line.modifiers,
         lineNote: line.lineNote,
@@ -2801,7 +2836,7 @@ export function PosPage() {
         warehouseId:
           line.trackInventory && line.warehouseId ? line.warehouseId : undefined,
         itemName: line.name,
-        quantity: line.quantity,
+        quantity: getEffectiveSaleQuantity(line),
         unitPrice: line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
         discountAmount: Number(
           (getLineDiscountAmount(line) + (taxPolicy === "AFTER_TAX" ? afterTaxShare : invoiceShare)).toFixed(2),
@@ -2809,7 +2844,13 @@ export function PosPage() {
         taxAmount: Number(taxAmount.toFixed(2)),
         lineAmount: Number(lineAmount.toFixed(2)),
         description: line.lineNote?.trim() || undefined,
-        modifiers: line.modifiers ?? undefined,
+        modifiers: line.sellByWeight
+          ? withPortionMetadataInModifiers(
+              line.modifiers ?? null,
+              line.portionCount ?? getPortionCountFromModifiers(line.modifiers),
+              line.quantity,
+            ) ?? undefined
+          : line.modifiers ?? undefined,
         revenueAccountId: line.salesAccountId ?? undefined,
       };
     });
@@ -3007,14 +3048,24 @@ export function PosPage() {
     setCartLines((current) => {
       if (replaceLine) {
         const replaceKey = getCartLineKey(replaceLine);
+        const nextPortionCount = sellByWeight
+          ? (replaceLine.portionCount ?? getPortionCountFromModifiers(replaceLine.modifiers))
+          : undefined;
         return current.map((line) =>
           getCartLineKey(line) === replaceKey
             ? {
                 ...line,
                 unitPrice,
                 baseUnitPrice,
-                modifiers,
+                modifiers: sellByWeight
+                  ? withPortionMetadataInModifiers(
+                      modifiers,
+                      nextPortionCount ?? 1,
+                      quantity,
+                    )
+                  : modifiers,
                 lineNote,
+                ...(sellByWeight ? { quantity, portionCount: nextPortionCount ?? 1 } : {}),
               }
             : line,
         );
@@ -3032,6 +3083,7 @@ export function PosPage() {
         unit: item.unitOfMeasure,
         itemType: item.type,
         quantity,
+        portionCount: sellByWeight ? 1 : undefined,
         unitPrice,
         baseUnitPrice,
         discountType: "FIXED",
@@ -3045,14 +3097,48 @@ export function PosPage() {
         cogsAccountId: item.cogsAccount?.id,
         warehouseId: lineWarehouseId,
         onHandQuantity: onHand,
-        modifiers,
+        modifiers: sellByWeight
+          ? withPortionMetadataInModifiers(modifiers, 1, quantity)
+          : modifiers,
         lineNote,
         sellByWeight,
         quantityPrecision,
-        clientLineId: sellByWeight ? createLocalId() : undefined,
       };
 
       if (sellByWeight) {
+        const existingIndex = current.findIndex(
+          (line) =>
+            getCartLineMergeKey(line) === getCartLineMergeKey(draftLine) &&
+            !line.kitchenSentAt,
+        );
+        if (existingIndex >= 0) {
+          const line = current[existingIndex];
+          const nextPortions = (line.portionCount ?? 1) + 1;
+          const totalWeight = line.quantity * nextPortions;
+          if (item.trackInventory && !negOk && totalWeight > line.onHandQuantity) {
+            queueMicrotask(() =>
+              pushMessage(
+                t("pos.sales.alert.stockExceeded", {
+                  item: item.name,
+                }),
+              ),
+            );
+            return current;
+          }
+          return current.map((l, index) =>
+            index === existingIndex
+              ? {
+                  ...l,
+                  portionCount: nextPortions,
+                  modifiers: withPortionMetadataInModifiers(
+                    l.modifiers ?? null,
+                    nextPortions,
+                    l.quantity,
+                  ),
+                }
+              : l,
+          );
+        }
         if (item.trackInventory && !negOk && quantity > onHand) {
           queueMicrotask(() =>
             pushMessage(
@@ -3242,12 +3328,41 @@ export function PosPage() {
       pushError(getOrderWaiterLockMessage(language));
       return;
     }
-    const qtyDelta = line.sellByWeight
-      ? delta * getWeightQuantityStep(line.quantityPrecision ?? 3)
-      : delta;
+
+    if (line.sellByWeight) {
+      const nextPortions = (line.portionCount ?? 1) + delta;
+      if (nextPortions <= 0) {
+        updateLine(line, () => null);
+        return;
+      }
+      if (delta > 0) {
+        const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
+        const totalWeight = line.quantity * nextPortions;
+        if (line.trackInventory && !negOk && totalWeight > line.onHandQuantity) {
+          pushMessage(
+            t("pos.sales.alert.stockExceeded", {
+              item: line.name,
+            }),
+          );
+          return;
+        }
+      }
+      updateLine(line, (current) => ({
+        ...current,
+        portionCount: nextPortions,
+        modifiers: withPortionMetadataInModifiers(
+          current.modifiers ?? null,
+          nextPortions,
+          current.quantity,
+        ),
+      }));
+      return;
+    }
+
+    const qtyDelta = delta;
     if (qtyDelta > 0) {
       const negOk = Boolean(posSettings?.runtime.negativeStockAllowed);
-      const nextQty = Number((line.quantity + qtyDelta).toFixed(line.quantityPrecision ?? 3));
+      const nextQty = line.quantity + qtyDelta;
       if (line.trackInventory && !negOk && nextQty > line.onHandQuantity) {
         pushMessage(
           t("pos.sales.alert.stockExceeded", {
@@ -3258,11 +3373,9 @@ export function PosPage() {
       }
     }
     updateLine(line, (current) => {
-      const nextQty = Number(
-        (current.quantity + qtyDelta).toFixed(current.quantityPrecision ?? 3),
-      );
+      const nextQty = current.quantity + qtyDelta;
       if (nextQty <= 0) {
-        return current;
+        return null;
       }
       return { ...current, quantity: nextQty };
     });
@@ -3283,7 +3396,15 @@ export function PosPage() {
       );
       return;
     }
-    updateLine(line, (current) => ({ ...current, quantity: normalized }));
+    updateLine(line, (current) => ({
+      ...current,
+      quantity: normalized,
+      modifiers: withPortionMetadataInModifiers(
+        current.modifiers ?? null,
+        current.portionCount ?? getPortionCountFromModifiers(current.modifiers),
+        normalized,
+      ),
+    }));
   };
 
   const updatePaymentEntry = (
@@ -3475,9 +3596,8 @@ export function PosPage() {
         quantityPrecision: catalogItem
           ? getQuantityPrecision(catalogItem)
           : line.quantityPrecision,
-        clientLineId:
-          line.clientLineId ??
-          (sellByWeight && !line.salesInvoiceLineId ? createLocalId() : undefined),
+        portionCount:
+          line.portionCount ?? getPortionCountFromModifiers(line.modifiers),
       };
       return enriched;
     };
@@ -6659,9 +6779,16 @@ function CompactCartLine({
   const addonsLabel = formatAddonsForDisplay(line.modifiers, language);
   const unitsLabel = getLocalizedText("Units / وحدات", language);
   const weightPrecision = line.quantityPrecision ?? 3;
-  const weightStep = getWeightQuantityStep(weightPrecision);
+  const portionCount = line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
+  const displayName = buildCustomerReceiptItemName(
+    line.name,
+    line.modifiers,
+    language,
+    line.unit,
+    line.sellByWeight ? line.quantity : null,
+  );
   const quantityLabel = line.sellByWeight
-    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
+    ? formatCount(portionCount)
     : `${formatCount(line.quantity)} ${unitsLabel}`;
 
   return (
@@ -6674,7 +6801,7 @@ function CompactCartLine({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-semibold text-[#111827] arabic-heading">
-            {getLocalizedText(line.name, language)}
+            {getLocalizedText(displayName, language)}
           </p>
           {addonsLabel ? (
             <p className="mt-0.5 truncate text-[10px] text-[#6b7280]">{addonsLabel}</p>
@@ -6787,8 +6914,8 @@ function CompactCartLine({
               {line.sellByWeight && onWeightChange && isEditingWeight ? (
                 <input
                   type="number"
-                  min={weightStep}
-                  step={weightStep}
+                  min={getWeightQuantityStep(weightPrecision)}
+                  step={getWeightQuantityStep(weightPrecision)}
                   autoFocus
                   value={weightDraft}
                   onBlur={() => {
@@ -6826,9 +6953,7 @@ function CompactCartLine({
                   )}
                   dir="ltr"
                 >
-                  {line.sellByWeight
-                    ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
-                    : formatCount(line.quantity)}
+                  {line.sellByWeight ? formatCount(portionCount) : formatCount(line.quantity)}
                 </button>
               )}
               <button
@@ -6841,10 +6966,7 @@ function CompactCartLine({
             </div>
           ) : (
             <span className="text-[11px] font-semibold text-[#6b7280]" dir="ltr">
-              ×
-              {line.sellByWeight
-                ? formatWeightQuantity(line.quantity, line.unit, weightPrecision)
-                : formatCount(line.quantity)}
+              ×{line.sellByWeight ? formatCount(portionCount) : formatCount(line.quantity)}
             </span>
           )}
           {!locked ? (

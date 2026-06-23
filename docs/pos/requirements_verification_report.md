@@ -76,7 +76,7 @@ This report verifies that all requirements for the Restaurant POS Add-ons manage
 | **REQ-POS-293** | Restrict group/option deletion if used in transactions | تقييد حذف مجموعات أو خيارات الإضافات المستخدمة سابقًا | **Implemented** | Deletion is disabled (system uses active/inactive state instead) |
 | **REQ-POS-294** | Use soft delete or inactive status for transaction data | استخدام الحذف الناعم أو التعطيل للأصناف المستخدمة بالحركات | **Implemented** | Managed via `isActive: false` updates |
 | **REQ-POS-295** | Include add-on details in order history | عرض تفاصيل الإضافات في سجل الطلبات | **Implemented** | Loaded from invoice lines snapshots |
-| **REQ-POS-296** | Include add-on details in printed customer receipt | عرض تفاصيل الإضافات في إيصالات العملاء المطبوعة | **Implemented** | Printed receipt lines display addon names |
+| **REQ-POS-296** | Include add-on details in printed customer receipt | عرض تفاصيل الإضافات في إيصالات العملاء المطبوعة | **Partial** | Customer receipt merges cooking-type add-ons into the item name; other add-ons print on kitchen tickets only |
 | **REQ-POS-297** | Include add-on details in kitchen printouts | عرض تفاصيل الإضافات في مطبوعات المطبخ | **Implemented** | Kitchen ticket layout lists options |
 | **REQ-POS-298** | Store add-on prices in system currency precision | تخزين أسعار الإضافات حسب دقة العملة المعتمدة | **Implemented** | Decimal fields in DB match core currency decimals |
 | **REQ-POS-299** | Support add-on prices in decimal format | دعم أسعار الإضافات بصيغة عشرية | **Implemented** | Decimal format used in database schema & DTO validations |

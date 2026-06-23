@@ -55,20 +55,21 @@ describe("extractDailyOrderNumber", () => {
 });
 
 describe("buildPosReceiptHtml", () => {
-  it("renders old boxed Arabic restaurant receipt clone", () => {
+  it("renders boxed Arabic restaurant receipt with logo and order info header", () => {
     const html = buildPosReceiptHtml(normalizeReceiptForArabicPrint(buildSampleReceipt()));
 
     expect(html).toContain('class="brand-header"');
-    expect(html).toContain('class="receipt-number-strip"');
-    expect(html).toContain('class="receipt-box"');
+    expect(html).toContain('class="logo-inline"');
     expect(html).toContain("كرنشي");
-    expect(html).toContain(">30</div>");
-    expect(html).toContain("القاعة: رئيسي");
+    expect(html).toContain('class="order-info-grid"');
+    expect(html).not.toContain('class="receipt-number-strip"');
     expect(html).toContain("الدور: 30");
-    expect(html).toContain(">السعر</td>");
-    expect(html).toContain(">الإجمالي</td>");
-    expect(html).not.toContain("سعر<br/>الانفرادي");
-    expect(html).not.toContain("سعر<br/>الاجمالي");
+    expect(html).toContain("القاعة: رئيسي");
+    expect(html).toContain('class="receipt-box items-box"');
+    expect(html).toContain("سعر<br/>الانفرادي");
+    expect(html).toContain("سعر<br/>الاجمالي");
+    expect(html).not.toContain(">السعر</td>");
+    expect(html).not.toContain(">الإجمالي</td>");
     expect(html).toContain("2.50");
     expect(html).toContain("thermal-amt");
     expect(html).toContain("2.5mm");
@@ -216,7 +217,7 @@ describe("buildPosReceiptHtml", () => {
     expect(html).toContain("اتصل عند الوصول");
   });
 
-  it("shows table and hall info for dine-in orders", () => {
+  it("shows table info via payment method for dine-in orders", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -243,9 +244,12 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("الطاولة");
+    expect(html).not.toContain("الطاولة");
+    expect(html).toContain('class="order-info-grid"');
+    expect(html).toContain("للطاولة");
     expect(html).toContain("حجز 1");
-    expect(html).toContain("صالة/كاشير حجز 1");
+    expect(html).toContain("الدور:");
+    expect(html).toContain("صالة/كاشير/حجز 1");
     expect(html).toContain("كاشير صباحي");
     expect(html).toContain("راس شوي");
     expect(html).toContain("عدد الأصناف");
@@ -332,7 +336,7 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain("نص كيلو");
+    expect(html).toContain("نص ك");
     expect(html).toContain("وقية");
     expect(html).toContain("عدد واحد");
     expect(html).toContain('<td class="col-qty">وقية</td>');
@@ -342,6 +346,48 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain('class="col-qty">0.5</td>');
     expect(html).not.toContain("0.25 KG");
     expect(html).not.toContain("0.125 KG");
+  });
+
+  it("prints piece quantities as whole numbers without decimal padding", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "وقية فوارغ سلق",
+              quantity: 1,
+              unitPrice: 2.5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 2.5,
+            },
+            {
+              name: "طحالات",
+              quantity: 2,
+              unitPrice: 2,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 4,
+            },
+            {
+              name: "مقدم خروف",
+              quantity: 3,
+              unitPrice: 1,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 3,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain('<td class="col-qty">1</td>');
+    expect(html).toContain('<td class="col-qty">2</td>');
+    expect(html).toContain('<td class="col-qty">3</td>');
+    expect(html).not.toContain('<td class="col-qty">1.00</td>');
+    expect(html).not.toContain('<td class="col-qty">2.00</td>');
+    expect(html).not.toContain('<td class="col-qty">3.00</td>');
   });
 
   it("scales longer item names down and keeps wrapped name cells", () => {
@@ -380,7 +426,7 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain("text-overflow: ellipsis");
   });
 
-  it("prints required dish choices inline in the item name", () => {
+  it("merges cooking type into the item name without parentheses", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -428,13 +474,357 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain('class="item-name-base">أقلاب خروف محشية</span>');
-    expect(html).toContain('class="item-name-choices">(شوي · نص رأس)</span>');
+    expect(html).toContain("نص رأس أقلاب خروف محشية شوي");
+    expect(html).not.toContain('class="item-name-choices"');
     expect(html).not.toContain('class="item-addon-row"');
     expect(html).not.toContain("إضافة لبن");
   });
 
-  it("supports legacy modifiers without group metadata via type-group codes", () => {
+  it("merges half-head portion into sheep-head item name", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "رأس خروف",
+              quantity: 1,
+              unitPrice: 4,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 4,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                  {
+                    groupId: "g-head",
+                    groupName: "نص رأس",
+                    groupCode: "HALF_HEAD",
+                    optionId: "o-half",
+                    name: "نص رأس",
+                    priceAdjustment: -3.5,
+                  },
+                  {
+                    groupId: "g-yogurt",
+                    groupName: "إضافة لبن للرأس",
+                    groupCode: "HEAD_YOGURT_ADDON",
+                    optionId: "o-yogurt",
+                    name: "لبن 0.5",
+                    priceAdjustment: 0.5,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("نص رأس سلق");
+    expect(html).not.toContain("خروف");
+    expect(html).not.toContain("لبن 0.5");
+    expect(html).not.toContain("رأس كامل");
+    expect(html).not.toContain("رأس خروف سلق نص رأس");
+  });
+
+  it("prefixes half-head before grilled sheep-head item name", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "رأس خروف",
+              quantity: 1,
+              unitPrice: 4,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 4,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o-grill",
+                    name: "شوي",
+                    priceAdjustment: 0,
+                  },
+                  {
+                    groupId: "g-head",
+                    groupName: "نص رأس",
+                    groupCode: "HALF_HEAD",
+                    optionId: "o-half",
+                    name: "نص رأس",
+                    priceAdjustment: -3.5,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("نص رأس شوي");
+    expect(html).not.toContain("خروف");
+    expect(html).not.toContain("رأس خروف شوي نص رأس");
+  });
+
+  it("does not merge full-head portion into item name", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "رأس خروف",
+              quantity: 1,
+              unitPrice: 7.5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 7.5,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                  {
+                    groupId: "g-head",
+                    groupName: "نص رأس",
+                    groupCode: "HALF_HEAD",
+                    optionId: "o-full",
+                    name: "رأس كامل",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("رأس سلق");
+    expect(html).not.toContain("رأس خروف سلق");
+    expect(html).not.toContain("رأس كامل");
+  });
+
+  it("prints full grilled head as رأس شوي", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "رأس خروف",
+              quantity: 1,
+              unitPrice: 8,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 8,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o-grill",
+                    name: "شوي",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("رأس شوي");
+    expect(html).not.toContain("رأس خروف شوي");
+    expect(html).not.toContain("خروف");
+  });
+
+  it("puts weight preset in the item name and portion count in the qty column", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "أبوات",
+              quantity: 0.75,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 8.25,
+              unitCode: "KG",
+              modifiers: {
+                portionCount: 1,
+                weightPerPortion: 0.75,
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "طريقة الطبخ",
+                    groupCode: "COOKING_METHOD",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+            {
+              name: "أبوات",
+              quantity: 1.5,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 16.5,
+              unitCode: "KG",
+              modifiers: {
+                portionCount: 2,
+                weightPerPortion: 0.75,
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "طريقة الطبخ",
+                    groupCode: "COOKING_METHOD",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("تلات أواج أبوات سلق");
+    expect(html).toContain('<td class="col-qty">1</td>');
+    expect(html).toContain('<td class="col-qty">2</td>');
+    expect(html).not.toContain('<td class="col-qty">تلات أواج</td>');
+  });
+
+  it("prefixes traditional weight before asnaq item and cooking method", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "آبوات",
+              quantity: 0.25,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 2.5,
+              unitCode: "KG",
+              modifiers: {
+                portionCount: 1,
+                weightPerPortion: 0.25,
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "طريقة الطبخ",
+                    groupCode: "COOKING_METHOD",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+            {
+              name: "آبوات",
+              quantity: 0.25,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 2.5,
+              unitCode: "KG",
+              modifiers: {
+                portionCount: 1,
+                weightPerPortion: 0.25,
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "طريقة الطبخ",
+                    groupCode: "COOKING_METHOD",
+                    isRequired: true,
+                    optionId: "o-grill",
+                    name: "شوي",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("وقية آبوات سلق");
+    expect(html).toContain("وقية آبوات شوي");
+    expect(html).not.toContain("آبوات سلق وقية");
+    expect(html).not.toContain("آبوات شوي وقية");
+  });
+
+  it("prefixes half-kilo label as نص ك before item and cooking", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "فوارغ",
+              quantity: 0.5,
+              unitPrice: 10,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 5,
+              unitCode: "KG",
+              modifiers: {
+                portionCount: 1,
+                weightPerPortion: 0.5,
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "طريقة الطبخ",
+                    groupCode: "COOKING_METHOD",
+                    isRequired: true,
+                    optionId: "o-boil",
+                    name: "سلق",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("نص ك فوارغ سلق");
+    expect(html).not.toContain("نص كيلو فوارغ سلق");
+  });
+
+  it("prints base item name when only non-cooking choices are selected", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -464,11 +854,11 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain('class="item-name-base">أقلاب</span>');
-    expect(html).toContain('class="item-name-choices">(رز)</span>');
+    expect(html).toContain(">أقلاب</td>");
+    expect(html).not.toContain("(رز)");
   });
 
-  it("wraps long item names with inline choices without overlapping price columns", () => {
+  it("wraps long merged item names without overlapping price columns", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
         buildSampleReceipt({
@@ -499,11 +889,87 @@ describe("buildPosReceiptHtml", () => {
       ),
     );
 
-    expect(html).toContain('class="item-name-base">فتة لسانات لشخص واحد</span>');
-    expect(html).toContain('class="item-name-choices">(وجبة)</span>');
+    expect(html).toContain("فتة لسانات لشخص واحد");
+    expect(html).not.toContain("(وجبة)");
     expect(html).toContain("table-layout: fixed");
     expect(html).toContain("white-space: normal");
     expect(html).toContain('<td class="col-price thermal-amt">5.00</td>');
+  });
+
+  it("appends fattah size choice to the item name", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "فتة لحمة راس لشخص واحد",
+              quantity: 1,
+              unitPrice: 2.5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 2.5,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-size",
+                    groupName: "صغير، وسط، كبير",
+                    groupCode: "S_W_K_F",
+                    optionId: "o-small",
+                    name: "صغير",
+                    priceAdjustment: 0,
+                  },
+                ],
+              },
+            },
+            {
+              name: "فتة لحمة راس لشخص واحد",
+              quantity: 1,
+              unitPrice: 3.5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 3.5,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-size",
+                    groupName: "صغير، وسط، كبير",
+                    groupCode: "S_W_K_F",
+                    optionId: "o-medium",
+                    name: "وسط",
+                    priceAdjustment: 1,
+                  },
+                ],
+              },
+            },
+            {
+              name: "فتة لحمة راس لشخص واحد",
+              quantity: 1,
+              unitPrice: 4.5,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 4.5,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-size",
+                    groupName: "صغير، وسط، كبير",
+                    groupCode: "S_W_K_F",
+                    optionId: "o-large",
+                    name: "كبير",
+                    priceAdjustment: 2,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("فتة لحمة راس لشخص واحد صغير");
+    expect(html).toContain("فتة لحمة راس لشخص واحد وسط");
+    expect(html).toContain("فتة لحمة راس لشخص واحد كبير");
+    expect(html).not.toContain('class="item-addon-row"');
   });
 
   it("does not print optional addon rows on customer receipts", () => {

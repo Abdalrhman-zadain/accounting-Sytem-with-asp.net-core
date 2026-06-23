@@ -9,7 +9,7 @@ describe("getTraditionalAsnaqWeightLabel", () => {
   it("maps preset KG quantities to traditional Arabic labels", () => {
     expect(getTraditionalAsnaqWeightLabel(0.125, "ar")).toBe("عدد واحد");
     expect(getTraditionalAsnaqWeightLabel(0.25, "ar")).toBe("وقية");
-    expect(getTraditionalAsnaqWeightLabel(0.5, "ar")).toBe("نص كيلو");
+    expect(getTraditionalAsnaqWeightLabel(0.5, "ar")).toBe("نص ك");
     expect(getTraditionalAsnaqWeightLabel(0.75, "ar")).toBe("تلات أواج");
     expect(getTraditionalAsnaqWeightLabel(1, "ar")).toBe("كيلو");
   });
@@ -36,8 +36,8 @@ describe("formatPosWeightDisplay", () => {
 
 describe("formatPosLineQuantityDisplay", () => {
   it("uses traditional labels without unit code for preset weights", () => {
-    expect(formatPosLineQuantityDisplay(0.5, "ar")).toBe("نص كيلو");
-    expect(formatPosLineQuantityDisplay(0.5, "ar", "KG")).toBe("نص كيلو");
+    expect(formatPosLineQuantityDisplay(0.5, "ar")).toBe("نص ك");
+    expect(formatPosLineQuantityDisplay(0.5, "ar", "KG")).toBe("نص ك");
   });
 
   it("keeps integer counts for regular items", () => {

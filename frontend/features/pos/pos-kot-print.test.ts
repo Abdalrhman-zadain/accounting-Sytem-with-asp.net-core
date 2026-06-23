@@ -138,7 +138,7 @@ describe("buildKitchenOrderTicketHtml", () => {
       "ar",
     );
 
-    expect(html).toContain("نص كيلو×");
+    expect(html).toContain("نص ك×");
     expect(html).toContain("فوارغ");
     expect(html).toContain("سلق");
     expect(html).not.toContain("0.5×");

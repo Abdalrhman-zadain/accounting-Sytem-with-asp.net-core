@@ -1,6 +1,43 @@
-import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
+import {
+  buildCustomerReceiptItemName,
+  formatAddonsForDisplay,
+  getPortionCountFromModifiers,
+  getWeightPerPortionFromModifiers,
+} from "@/features/pos/pos-addon-utils";
 import type { KitchenDeltaLine } from "@/features/pos/pos-kitchen-print-delta";
 import type { PosSale } from "@/types/api";
+
+function resolveKitchenLineQty(
+  line: {
+    quantity: unknown;
+    modifiers?: PosSale["lines"][number]["modifiers"];
+    item?: { allowFractionalQuantity?: boolean | null; unitOfMeasure?: string | null } | null;
+  },
+): number {
+  const weightPerPortion = getWeightPerPortionFromModifiers(line.modifiers);
+  if (weightPerPortion != null) {
+    return getPortionCountFromModifiers(line.modifiers);
+  }
+  return Number(line.quantity) || 0;
+}
+
+function resolveKitchenLineName(
+  line: {
+    itemName?: string | null;
+    description?: string | null;
+    modifiers?: PosSale["lines"][number]["modifiers"];
+    item?: { unitOfMeasure?: string | null } | null;
+  },
+  language: string,
+): string {
+  const baseName = line.itemName || line.description || "—";
+  return buildCustomerReceiptItemName(
+    baseName,
+    line.modifiers,
+    language,
+    line.item?.unitOfMeasure,
+  ).slice(0, 40);
+}
 
 function fmtDate(val?: string | Date | null): string {
   if (!val) return "—";
@@ -71,7 +108,7 @@ function buildLineRowsFromSaleLines(
 ): string {
   return sale.lines
     .filter((line) => line.kitchenSentAt && lineIds.has(line.id))
-    .map((line) => buildLineRowHtml(line, Number(line.quantity), language))
+    .map((line) => buildLineRowHtml(line, resolveKitchenLineQty(line), language))
     .join("");
 }
 
@@ -85,7 +122,7 @@ function buildLineRowHtml(
   language: string,
   prefix = "",
 ): string {
-  const name = (line.itemName || line.description || "—").slice(0, 22);
+  const name = resolveKitchenLineName(line, language);
   const addons = formatAddonsForDisplay(line.modifiers, language);
   const note =
     line.description && line.description !== (line.itemName ?? "") ? line.description : "";
@@ -119,7 +156,7 @@ export function buildKitchenOrderTicketHtml(sale: PosSale, language: string): st
   const isAr = language === "ar";
   const lineRows = sale.lines
     .filter((line) => line.kitchenSentAt)
-    .map((line) => buildLineRowHtml(line, Number(line.quantity), language))
+    .map((line) => buildLineRowHtml(line, resolveKitchenLineQty(line), language))
     .join("");
 
   const bodyHtml = `

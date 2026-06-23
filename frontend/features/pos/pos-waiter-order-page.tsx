@@ -18,13 +18,19 @@ import { PosProductCard } from "@/features/pos/pos-product-card";
 import type { PosItemAddonConfig, PosLineAddonSelection } from "@/features/pos/pos-addon-types";
 import {
   buildModifiersPayload,
+  buildCustomerReceiptItemName,
   formatAddonsForDisplay,
   getAddonsFromModifiers,
+  getCartLineMergeKey,
+  getEffectiveSaleQuantity,
+  getPortionCountFromModifiers,
+  restoreWeightLineQuantities,
   sumAddonPrices,
+  withPortionMetadataInModifiers,
 } from "@/features/pos/pos-addon-utils";
 import { PosLineAddonModal } from "@/features/pos/pos-line-addon-modal";
 import {
-  formatWeightQuantity,
+  formatPosLineQuantityDisplay,
   getMinSalesQuantity,
   getQuantityPrecision,
   isWeightSaleItem,
@@ -56,6 +62,7 @@ type WaiterCartLine = {
   sellByWeight?: boolean;
   quantityPrecision?: number;
   quantity: number;
+  portionCount?: number;
   unitPrice: number;
   baseUnitPrice?: number;
   taxRate: number;
@@ -115,8 +122,11 @@ function formatMoney(value: number, currency = "JOD") {
 
 function computeLineMetrics(line: WaiterCartLine) {
   const addonTotal = sumAddonPrices(getAddonsFromModifiers(line.modifiers));
+  const portions = line.sellByWeight
+    ? (line.portionCount ?? getPortionCountFromModifiers(line.modifiers))
+    : 1;
   const subtotal = line.sellByWeight
-    ? line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal
+    ? (line.quantity * (line.baseUnitPrice ?? line.unitPrice) + addonTotal) * portions
     : line.quantity * line.unitPrice;
   const taxAmount = subtotal * (line.taxRate / 100);
   return {
@@ -133,7 +143,10 @@ function computeCartMetrics(lines: WaiterCartLine[]) {
       acc.subtotal += metrics.subtotal;
       acc.tax += metrics.taxAmount;
       acc.total += metrics.total;
-      acc.itemCount += line.quantity;
+      const portions = line.sellByWeight
+        ? (line.portionCount ?? getPortionCountFromModifiers(line.modifiers))
+        : line.quantity;
+      acc.itemCount += portions;
       return acc;
     },
     { subtotal: 0, tax: 0, total: 0, itemCount: 0 },
@@ -141,40 +154,54 @@ function computeCartMetrics(lines: WaiterCartLine[]) {
 }
 
 function getWaiterCartLineKey(line: WaiterCartLine, index: number) {
-  return (
-    line.salesInvoiceLineId ??
-    `${line.itemId}:${JSON.stringify(line.modifiers)}:${line.lineNote ?? ""}:${index}`
-  );
+  if (line.salesInvoiceLineId) {
+    return line.salesInvoiceLineId;
+  }
+  return getCartLineMergeKey(line) || `${line.itemId}:${index}`;
 }
 
 function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
-  return sale.lines.map((line) => ({
-    salesInvoiceLineId: line.id,
-    kitchenSentAt: line.kitchenSentAt ?? null,
-    itemId: line.itemId ?? line.id,
-    name: line.itemName ?? line.description ?? "Item",
-    unit: line.item?.unitOfMeasure ?? "",
-    sellByWeight: Boolean(line.item?.allowFractionalQuantity),
-    quantityPrecision: line.item?.unitOfMeasureRef?.decimalPrecision ?? 3,
-    quantity: parseAmount(line.quantity),
-    unitPrice: parseAmount(line.unitPrice),
-    baseUnitPrice: Boolean(line.item?.allowFractionalQuantity)
-      ? parseAmount(line.unitPrice)
-      : parseAmount(line.unitPrice) - sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
-    taxRate:
-      parseAmount(line.lineSubtotalAmount) > 0
-        ? (parseAmount(line.taxAmount) / parseAmount(line.lineSubtotalAmount)) * 100
-        : 0,
-    trackInventory: Boolean(line.item?.trackInventory),
-    warehouseId: line.warehouse?.id ?? null,
-    salesAccountId: line.revenueAccountId,
-    onHandQuantity: 0,
-    modifiers: (line.modifiers as WaiterCartLine["modifiers"]) ?? null,
-    lineNote:
-      line.description && line.description !== (line.itemName ?? "")
-        ? line.description
-        : "",
-  }));
+  return sale.lines.map((line) => {
+    const sellByWeight = Boolean(line.item?.allowFractionalQuantity);
+    const quantityPrecision = line.item?.unitOfMeasureRef?.decimalPrecision ?? 3;
+    const restored = sellByWeight
+      ? restoreWeightLineQuantities(
+          parseAmount(line.quantity),
+          line.modifiers,
+          quantityPrecision,
+        )
+      : { quantity: parseAmount(line.quantity), portionCount: 1 };
+
+    return {
+      salesInvoiceLineId: line.id,
+      kitchenSentAt: line.kitchenSentAt ?? null,
+      itemId: line.itemId ?? line.id,
+      name: line.itemName ?? line.description ?? "Item",
+      unit: line.item?.unitOfMeasure ?? "",
+      sellByWeight,
+      quantityPrecision,
+      quantity: restored.quantity,
+      portionCount: restored.portionCount,
+      unitPrice: parseAmount(line.unitPrice),
+      baseUnitPrice: sellByWeight
+        ? parseAmount(line.unitPrice)
+        : parseAmount(line.unitPrice) -
+          sumAddonPrices(getAddonsFromModifiers(line.modifiers)),
+      taxRate:
+        parseAmount(line.lineSubtotalAmount) > 0
+          ? (parseAmount(line.taxAmount) / parseAmount(line.lineSubtotalAmount)) * 100
+          : 0,
+      trackInventory: Boolean(line.item?.trackInventory),
+      warehouseId: line.warehouse?.id ?? null,
+      salesAccountId: line.revenueAccountId,
+      onHandQuantity: 0,
+      modifiers: (line.modifiers as WaiterCartLine["modifiers"]) ?? null,
+      lineNote:
+        line.description && line.description !== (line.itemName ?? "")
+          ? line.description
+          : "",
+    };
+  });
 }
 
 export function PosWaiterOrderPage() {
@@ -309,13 +336,19 @@ export function PosWaiterOrderPage() {
         itemId: line.itemId,
         warehouseId: line.trackInventory && line.warehouseId ? line.warehouseId : undefined,
         itemName: line.name,
-        quantity: line.quantity,
+        quantity: getEffectiveSaleQuantity(line),
         unitPrice: line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
         discountAmount: 0,
         taxAmount: metrics.taxAmount,
         lineAmount: metrics.total,
         description: line.lineNote?.trim() || undefined,
-        modifiers: line.modifiers ?? undefined,
+        modifiers: line.sellByWeight
+          ? withPortionMetadataInModifiers(
+              line.modifiers ?? null,
+              line.portionCount ?? getPortionCountFromModifiers(line.modifiers),
+              line.quantity,
+            ) ?? undefined
+          : line.modifiers ?? undefined,
         revenueAccountId: line.salesAccountId ?? undefined,
       };
     });
@@ -382,63 +415,65 @@ export function PosWaiterOrderPage() {
     }
     const baseUnitPrice = parseAmount(item.defaultSalesPrice);
     const unitPrice = sellByWeight ? baseUnitPrice : baseUnitPrice + sumAddonPrices(addons);
-    const modifiers = buildModifiersPayload(addons);
+    const modifiers = sellByWeight
+      ? withPortionMetadataInModifiers(buildModifiersPayload(addons), 1, quantity)
+      : buildModifiersPayload(addons);
     setCartLines((current) => {
+      const draftLine: WaiterCartLine = {
+        itemId: item.id,
+        name: item.name,
+        unit: item.unitOfMeasure,
+        sellByWeight,
+        quantityPrecision: getQuantityPrecision(item),
+        quantity,
+        portionCount: sellByWeight ? 1 : undefined,
+        unitPrice,
+        baseUnitPrice,
+        taxRate: parseAmount(item.defaultTax?.rate),
+        trackInventory: Boolean(item.trackInventory),
+        warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
+        salesAccountId: item.salesAccount?.id ?? null,
+        onHandQuantity: parseAmount(item.onHandQuantity),
+        modifiers,
+        lineNote,
+      };
+
       if (sellByWeight) {
-        return [
-          ...current,
-          {
-            itemId: item.id,
-            name: item.name,
-            unit: item.unitOfMeasure,
-            sellByWeight,
-            quantityPrecision: getQuantityPrecision(item),
-            quantity,
-            unitPrice,
-            baseUnitPrice,
-            taxRate: parseAmount(item.defaultTax?.rate),
-            trackInventory: Boolean(item.trackInventory),
-            warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
-            salesAccountId: item.salesAccount?.id ?? null,
-            onHandQuantity: parseAmount(item.onHandQuantity),
-            modifiers,
-            lineNote,
-          },
-        ];
+        const existingIndex = current.findIndex(
+          (line) =>
+            getCartLineMergeKey(line) === getCartLineMergeKey(draftLine) &&
+            !line.kitchenSentAt,
+        );
+        if (existingIndex >= 0) {
+          const line = current[existingIndex];
+          const nextPortions = (line.portionCount ?? 1) + 1;
+          return current.map((entry, index) =>
+            index === existingIndex
+              ? {
+                  ...entry,
+                  portionCount: nextPortions,
+                  modifiers: withPortionMetadataInModifiers(
+                    entry.modifiers ?? null,
+                    nextPortions,
+                    entry.quantity,
+                  ),
+                }
+              : entry,
+          );
+        }
+        return [...current, draftLine];
       }
 
       const idx = current.findIndex(
         (line) =>
-          line.itemId === item.id &&
-          !line.kitchenSentAt &&
-          JSON.stringify(line.modifiers) === JSON.stringify(modifiers) &&
-          (line.lineNote ?? "") === lineNote,
+          getCartLineMergeKey(line) === getCartLineMergeKey(draftLine) && !line.kitchenSentAt,
       );
       if (idx >= 0) {
         return current.map((line, i) =>
           i === idx ? { ...line, quantity: line.quantity + 1 } : line,
         );
       }
-      return [
-        ...current,
-        {
-          itemId: item.id,
-          name: item.name,
-          unit: item.unitOfMeasure,
-          sellByWeight,
-          quantityPrecision: getQuantityPrecision(item),
-          quantity,
-          unitPrice,
-          baseUnitPrice,
-          taxRate: parseAmount(item.defaultTax?.rate),
-          trackInventory: Boolean(item.trackInventory),
-          warehouseId: item.preferredWarehouseId ?? sessionQuery.data?.warehouse.id ?? null,
-          salesAccountId: item.salesAccount?.id ?? null,
-          onHandQuantity: parseAmount(item.onHandQuantity),
-          modifiers,
-          lineNote,
-        },
-      ];
+      return [...current, draftLine];
     });
   };
 
@@ -480,6 +515,21 @@ export function PosWaiterOrderPage() {
           }
           if (getWaiterCartLineKey(line, index) !== lineKey) {
             return line;
+          }
+          if (line.sellByWeight) {
+            const nextPortions = (line.portionCount ?? 1) + delta;
+            if (nextPortions <= 0) {
+              return null;
+            }
+            return {
+              ...line,
+              portionCount: nextPortions,
+              modifiers: withPortionMetadataInModifiers(
+                line.modifiers ?? null,
+                nextPortions,
+                line.quantity,
+              ),
+            };
           }
           const next = line.quantity + delta;
           if (next <= 0) {
@@ -590,6 +640,8 @@ export function PosWaiterOrderPage() {
               cartLines.map((line, index) => {
                 const lineMetrics = computeLineMetrics(line);
                 const lineKey = getWaiterCartLineKey(line, index);
+                const portionCount =
+                  line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
                 const canEditLine =
                   !line.kitchenSentAt && (canEdit || (isLocked && canAddAfterConfirm));
                 return (
@@ -604,7 +656,15 @@ export function PosWaiterOrderPage() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-[#233329]">{line.name}</div>
+                        <div className="text-sm font-bold text-[#233329]">
+                          {buildCustomerReceiptItemName(
+                            line.name,
+                            line.modifiers,
+                            language,
+                            line.unit ?? "",
+                            line.sellByWeight ? line.quantity : null,
+                          )}
+                        </div>
                         {formatAddonsForDisplay(line.modifiers, language) ? (
                           <p className="text-[10px] text-[#46644b]">
                             {formatAddonsForDisplay(line.modifiers, language)}
@@ -614,14 +674,7 @@ export function PosWaiterOrderPage() {
                           <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
                         ) : null}
                         <p className="mt-1 text-xs font-semibold text-[#506054]">
-                          {line.sellByWeight
-                            ? formatWeightQuantity(
-                                line.quantity,
-                                line.unit ?? "",
-                                line.quantityPrecision ?? 3,
-                              )
-                            : line.quantity}{" "}
-                          ×{" "}
+                          {portionCount} ×{" "}
                           {formatMoney(
                             line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
                             currencyCode,
@@ -659,13 +712,7 @@ export function PosWaiterOrderPage() {
                           <LuMinus className="h-4 w-4" />
                         </button>
                         <span className="min-w-[2rem] text-center text-sm font-black">
-                          {line.sellByWeight
-                            ? formatWeightQuantity(
-                                line.quantity,
-                                line.unit ?? "",
-                                line.quantityPrecision ?? 3,
-                              )
-                            : line.quantity}
+                          {line.sellByWeight ? portionCount : line.quantity}
                         </span>
                         <button
                           type="button"
@@ -677,14 +724,7 @@ export function PosWaiterOrderPage() {
                       </div>
                     ) : (
                       <div className="mt-1 text-sm font-black text-[#506054]">
-                        ×{" "}
-                        {line.sellByWeight
-                          ? formatWeightQuantity(
-                              line.quantity,
-                              line.unit ?? "",
-                              line.quantityPrecision ?? 3,
-                            )
-                          : line.quantity}
+                        × {line.sellByWeight ? portionCount : line.quantity}
                       </div>
                     )}
                   </div>

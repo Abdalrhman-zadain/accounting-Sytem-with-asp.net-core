@@ -1,4 +1,9 @@
 import type { PosLineModifiersPayload } from "@/features/pos/pos-addon-types";
+import {
+  getEffectiveKitchenQuantity,
+  getPortionCountFromModifiers,
+  getWeightPerPortionFromModifiers,
+} from "@/features/pos/pos-addon-utils";
 import type { PosSale } from "@/types/api";
 
 export type KitchenLineSnapshot = {
@@ -61,16 +66,33 @@ export function captureKitchenLineSnapshot(lines: SnapshotLineInput[]): KitchenL
 
 export function captureKitchenLineSnapshotFromSale(sale: PosSale): KitchenLineSnapshot[] {
   return captureKitchenLineSnapshot(
-    sale.lines.map((line) => ({
-      salesInvoiceLineId: line.id,
-      itemId: line.itemId ?? "",
-      name: line.itemName ?? line.description ?? "—",
-      quantity: Number(line.quantity),
-      kitchenSentAt: line.kitchenSentAt ?? null,
-      modifiers: line.modifiers ?? null,
-      description: line.description ?? null,
-      itemName: line.itemName ?? null,
-    })),
+    sale.lines.map((line) => {
+      const sellByWeight = Boolean(line.item?.allowFractionalQuantity);
+      const weightPerPortion = getWeightPerPortionFromModifiers(line.modifiers);
+      const portionCount = getPortionCountFromModifiers(line.modifiers);
+      const quantityPerPortion =
+        sellByWeight && weightPerPortion != null
+          ? weightPerPortion
+          : sellByWeight && portionCount > 1
+            ? Number(line.quantity) / portionCount
+            : Number(line.quantity);
+
+      return {
+        salesInvoiceLineId: line.id,
+        itemId: line.itemId ?? "",
+        name: line.itemName ?? line.description ?? "—",
+        quantity: getEffectiveKitchenQuantity({
+          quantity: quantityPerPortion,
+          sellByWeight,
+          portionCount,
+          modifiers: line.modifiers,
+        }),
+        kitchenSentAt: line.kitchenSentAt ?? null,
+        modifiers: line.modifiers ?? null,
+        description: line.description ?? null,
+        itemName: line.itemName ?? null,
+      };
+    }),
   );
 }
 
@@ -152,6 +174,8 @@ export type CartKitchenSnapshotInput = {
   itemId: string;
   name: string;
   quantity: number;
+  sellByWeight?: boolean;
+  portionCount?: number;
   kitchenSentAt?: string | null;
   modifiers?: PosLineModifiersPayload | null;
   lineNote?: string | null;
@@ -166,7 +190,7 @@ export function captureKitchenLineSnapshotFromCart(
       clientLineId: line.clientLineId,
       itemId: line.itemId,
       name: line.name,
-      quantity: line.quantity,
+      quantity: getEffectiveKitchenQuantity(line),
       kitchenSentAt: line.kitchenSentAt,
       modifiers: line.modifiers,
       lineNote: line.lineNote,

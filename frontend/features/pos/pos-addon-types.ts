@@ -12,6 +12,10 @@ export type PosLineAddonSelection = {
 
 export type PosLineModifiersPayload = {
   addons?: PosLineAddonSelection[];
+  /** Sell-by-weight: identical portions of the same weight + add-on config (default 1). */
+  portionCount?: number;
+  /** Sell-by-weight: weight per portion in base unit (e.g. kg); persisted for cart round-trip. */
+  weightPerPortion?: number;
 };
 
 export type PosAddonOption = {
