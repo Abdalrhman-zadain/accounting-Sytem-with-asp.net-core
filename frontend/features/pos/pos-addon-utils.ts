@@ -159,14 +159,17 @@ function compactHeadDishBaseName(baseName: string): string {
   return trimmed;
 }
 
-/** Head dishes like "رأس خروف" print as "نص رأس سلق" — the animal suffix is omitted. */
+/** Head dishes like "رأس خروف" or category items "روس" print as "نص رأس شوي" — base is omitted. */
 function shouldOmitBaseNameForHalfHead(baseName: string, halfHeadLabel: string): boolean {
   const trimmed = baseName.trim();
   if (!trimmed) return false;
   const isHalfHead =
     halfHeadLabel.includes("نص") || halfHeadLabel.toLowerCase().includes("half");
   if (!isHalfHead) return false;
-  return /^رأس\s+\S+$/u.test(trimmed);
+  if (/^رأس\s+\S+$/u.test(trimmed)) return true;
+  // Single-word head-category items (روس، مقادم، …): "نص رأس" already describes the portion.
+  if (!/\s/u.test(trimmed) && !trimmed.includes("رأس")) return true;
+  return false;
 }
 
 /** Photo-style receipt/cart name: weight/half-head prefix + base + cooking, no parentheses. */

@@ -578,6 +578,49 @@ describe("buildPosReceiptHtml", () => {
     expect(html).not.toContain("رأس خروف شوي نص رأس");
   });
 
+  it("prints half-head grilled roos category item as نص رأس شوي", () => {
+    const html = buildPosReceiptHtml(
+      normalizeReceiptForArabicPrint(
+        buildSampleReceipt({
+          lines: [
+            {
+              name: "روس",
+              quantity: 1,
+              unitPrice: 4,
+              discountAmount: 0,
+              taxAmount: 0,
+              lineTotal: 4,
+              modifiers: {
+                addons: [
+                  {
+                    groupId: "g-cook",
+                    groupName: "نوع الطبخ",
+                    groupCode: "COOKING_TYPE",
+                    isRequired: true,
+                    optionId: "o-grill",
+                    name: "شوي",
+                    priceAdjustment: 0,
+                  },
+                  {
+                    groupId: "g-head",
+                    groupName: "نص رأس",
+                    groupCode: "HALF_HEAD",
+                    optionId: "o-half",
+                    name: "نص رأس",
+                    priceAdjustment: -3.5,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(html).toContain("نص رأس شوي");
+    expect(html).not.toContain("نص رأس روس");
+  });
+
   it("does not merge full-head portion into item name", () => {
     const html = buildPosReceiptHtml(
       normalizeReceiptForArabicPrint(
