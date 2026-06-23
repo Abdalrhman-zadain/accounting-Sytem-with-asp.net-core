@@ -2,13 +2,19 @@ export { usePosCatalog } from "./use-pos-catalog";
 export { useRegisterWideLayout } from "./use-register-wide-layout";
 export {
   posProductGridClass,
+  waiterProductGridClass,
+  waiterOrderGridClass,
+  waiterOrderCatalogClass,
+  waiterOrderCartPanelClass,
   posRegisterCartPanelClass,
   posRegisterCatalogClass,
   posRegisterGridClass,
   posTouchButtonClass,
   posTouchOrHoverRevealClass,
+  posFinePointerHoverRevealClass,
   POS_REGISTER_DEFAULT_THEME,
   POS_REGISTER_MARKET_THEME,
+  WAITER_REGISTER_THEME,
   type PosRegisterMobileTheme,
 } from "./pos-layout-classes";
 export {

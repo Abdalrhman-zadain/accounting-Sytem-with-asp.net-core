@@ -30,10 +30,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function getInitialSession() {
-  return readStoredSession();
-}
-
 function shouldRedirectToLogin() {
   if (typeof window === "undefined") {
     return false;
@@ -44,9 +40,8 @@ function shouldRedirectToLogin() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [initialSession] = useState(getInitialSession);
-  const [token, setToken] = useState<string | null>(initialSession.token);
-  const [user, setUser] = useState<AuthUser | null>(initialSession.user);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   const applySession = useCallback((session: { token: string | null; user: AuthUser | null }) => {
@@ -64,13 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncStoredSession();
     setIsHydrated(true);
   }, [syncStoredSession]);
-
-  useEffect(() => {
-    if (!isHydrated) {
-      syncStoredSession();
-      setIsHydrated(true);
-    }
-  }, [isHydrated, syncStoredSession]);
 
   useEffect(() => {
     function handleSessionCleared() {

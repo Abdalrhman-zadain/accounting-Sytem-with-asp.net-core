@@ -13,7 +13,15 @@ import {
 } from "react-icons/lu";
 
 import { PageSkeleton } from "@/components/ui";
-import { posProductGridClass } from "@/features/pos/pos-layout-classes";
+import { PosRegisterMainGrid } from "@/features/pos-shared";
+import {
+  waiterProductGridClass,
+  waiterOrderGridClass,
+  waiterOrderCatalogClass,
+  waiterOrderCartPanelClass,
+  WAITER_REGISTER_THEME,
+  posTouchButtonClass,
+} from "@/features/pos-shared/pos-layout-classes";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import type { PosItemAddonConfig, PosLineAddonSelection } from "@/features/pos/pos-addon-types";
 import {
@@ -38,6 +46,8 @@ import {
 import {
   getActivePosSession,
   getDraftPosSales,
+  getHeldPosSales,
+  getInventoryItemGroups,
   getInventoryItems,
   getPosAddonCatalog,
   getPosItemAddonConfig,
@@ -48,7 +58,9 @@ import {
   sendPosSaleToKitchen,
 } from "@/lib/api";
 import { hasPermission } from "@/lib/auth-access";
+import { useWaiterWideLayout } from "@/lib/hooks/use-viewport-breakpoints";
 import { useTranslation } from "@/lib/i18n";
+import { queryKeys } from "@/lib/query-keys";
 import { cn, getLocalizedText } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { InventoryItem, PosSale } from "@/types/api";
@@ -160,6 +172,30 @@ function getWaiterCartLineKey(line: WaiterCartLine, index: number) {
   return getCartLineMergeKey(line) || `${line.itemId}:${index}`;
 }
 
+function findOpenWaiterSale(
+  drafts: PosSale[] | undefined,
+  held: PosSale[] | undefined,
+  tableId: string,
+  resumeSaleId: string | null,
+  activeInvoiceId?: string | null,
+) {
+  const openSales = [...(drafts ?? []), ...(held ?? [])];
+  if (resumeSaleId) {
+    const byResume = openSales.find((sale) => sale.id === resumeSaleId);
+    if (byResume) {
+      return byResume;
+    }
+  }
+  const byTable = openSales.find((sale) => sale.tableId === tableId);
+  if (byTable) {
+    return byTable;
+  }
+  if (activeInvoiceId) {
+    return openSales.find((sale) => sale.id === activeInvoiceId);
+  }
+  return undefined;
+}
+
 function mapSaleToCart(sale: PosSale): WaiterCartLine[] {
   return sale.lines.map((line) => {
     const sellByWeight = Boolean(line.item?.allowFractionalQuantity);
@@ -208,12 +244,14 @@ export function PosWaiterOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tableId = searchParams.get("tableId");
+  const resumeSaleId = searchParams.get("resume");
   const { token, user } = useAuth();
   const { language, t } = useTranslation();
   const isAr = language === "ar";
   const queryClient = useQueryClient();
 
   const [search, setSearch] = React.useState("");
+  const [activeCategory, setActiveCategory] = React.useState("all");
   const [cartLines, setCartLines] = React.useState<WaiterCartLine[]>([]);
   const [editingInvoiceId, setEditingInvoiceId] = React.useState<string | null>(null);
   const [waiterConfirmedAt, setWaiterConfirmedAt] = React.useState<string | null>(null);
@@ -221,6 +259,7 @@ export function PosWaiterOrderPage() {
   const [orderNotes, setOrderNotes] = React.useState("");
   const [addonModalItem, setAddonModalItem] = React.useState<InventoryItem | null>(null);
   const [addonModalConfig, setAddonModalConfig] = React.useState<PosItemAddonConfig | null>(null);
+  const resumedOrderRef = React.useRef<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["pos-active-session", token],
@@ -247,6 +286,12 @@ export function PosWaiterOrderPage() {
     enabled: Boolean(token && sessionQuery.data?.warehouse.id),
   });
 
+  const itemGroupsQuery = useQuery({
+    queryKey: queryKeys.inventoryItemGroups(token, { isActive: "true" }),
+    queryFn: () => getInventoryItemGroups({ isActive: "true" }, token),
+    enabled: Boolean(token && sessionQuery.data?.warehouse.id),
+  });
+
   const visibleItemIds = React.useMemo(
     () => (itemsQuery.data?.data ?? []).map((item) => item.id).filter(Boolean),
     [itemsQuery.data],
@@ -264,10 +309,18 @@ export function PosWaiterOrderPage() {
     staleTime: 30_000,
   });
 
+  const sessionId = sessionQuery.data?.id ?? null;
+
   const draftsQuery = useQuery({
-    queryKey: ["pos-drafts", token, sessionQuery.data?.id, tableId],
-    queryFn: () => getDraftPosSales(sessionQuery.data!.id, token),
-    enabled: Boolean(token && sessionQuery.data?.id && tableId),
+    queryKey: queryKeys.posDraftSales(token, sessionId),
+    queryFn: () => getDraftPosSales(sessionId!, token),
+    enabled: Boolean(token && sessionId && tableId),
+  });
+
+  const heldQuery = useQuery({
+    queryKey: queryKeys.posHeldSales(token, sessionId),
+    queryFn: () => getHeldPosSales(sessionId!, token),
+    enabled: Boolean(token && sessionId && tableId),
   });
 
   const table = tablesQuery.data?.find((row) => row.id === tableId) ?? null;
@@ -281,34 +334,69 @@ export function PosWaiterOrderPage() {
     hasPermission(user, "RST_SEND_KOT");
 
   React.useEffect(() => {
-    if (!tableId || !draftsQuery.data) {
+    if (!tableId || !draftsQuery.isSuccess || !heldQuery.isSuccess) {
       return;
     }
-    const existing =
-      draftsQuery.data.find((sale) => sale.tableId === tableId) ??
-      draftsQuery.data.find((sale) => sale.heldContext?.isActiveTableOrder && sale.tableId === tableId);
+    const existing = findOpenWaiterSale(
+      draftsQuery.data,
+      heldQuery.data,
+      tableId,
+      resumeSaleId,
+      table?.activeInvoice?.id,
+    );
+    const resumeKey = existing?.id ?? `new:${tableId}`;
+    if (resumedOrderRef.current === resumeKey) {
+      return;
+    }
+    resumedOrderRef.current = resumeKey;
+
     if (!existing) {
+      setEditingInvoiceId(null);
+      setWaiterConfirmedAt(null);
+      setOrderNotes("");
+      setCartLines([]);
       return;
     }
+
     setEditingInvoiceId(existing.id);
     setWaiterConfirmedAt(existing.waiterConfirmedAt ?? null);
     setOrderNotes(existing.description ?? "");
     setCartLines(mapSaleToCart(existing));
-  }, [draftsQuery.data, tableId]);
+  }, [
+    tableId,
+    resumeSaleId,
+    table?.activeInvoice?.id,
+    draftsQuery.data,
+    draftsQuery.isSuccess,
+    heldQuery.data,
+    heldQuery.isSuccess,
+  ]);
 
   const filteredItems = React.useMemo(() => {
     const items = itemsQuery.data?.data ?? [];
     const q = search.trim().toLowerCase();
-    if (!q) {
-      return items;
-    }
-    return items.filter(
-      (item) =>
+    return items.filter((item) => {
+      if (activeCategory !== "all" && item.itemGroupId !== activeCategory) {
+        return false;
+      }
+      if (!q) {
+        return true;
+      }
+      return (
         item.name.toLowerCase().includes(q) ||
         item.code.toLowerCase().includes(q) ||
-        (item.barcode?.toLowerCase().includes(q) ?? false),
-    );
-  }, [itemsQuery.data, search]);
+        (item.barcode?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [itemsQuery.data, search, activeCategory]);
+
+  const catalogChips = React.useMemo(() => {
+    const groups = itemGroupsQuery.data ?? [];
+    return [
+      { id: "all", name: isAr ? "الكل" : "All" },
+      ...groups.map((group) => ({ id: group.id, name: group.name })),
+    ];
+  }, [itemGroupsQuery.data, isAr]);
 
   const addonCatalogByItemId = React.useMemo(
     () =>
@@ -327,6 +415,14 @@ export function PosWaiterOrderPage() {
     "JOD";
 
   const cartMetrics = React.useMemo(() => computeCartMetrics(cartLines), [cartLines]);
+  const unsentCartLines = React.useMemo(
+    () => cartLines.filter((line) => !line.kitchenSentAt),
+    [cartLines],
+  );
+  const sentCartLines = React.useMemo(
+    () => cartLines.filter((line) => line.kitchenSentAt),
+    [cartLines],
+  );
 
   const buildLinesPayload = () =>
     cartLines.map((line) => {
@@ -362,8 +458,8 @@ export function PosWaiterOrderPage() {
       if (!tableId) {
         throw new Error(isAr ? "لم يتم اختيار طاولة" : "No table selected.");
       }
-      if (cartLines.length === 0) {
-        throw new Error(isAr ? "السلة فارغة" : "Cart is empty.");
+      if (!hasUnsentLines) {
+        throw new Error(isAr ? "لا توجد أصناف جديدة للإرسال" : "No new items to send.");
       }
       const saved = await savePosDraft(
         {
@@ -393,7 +489,8 @@ export function PosWaiterOrderPage() {
       } catch {
         // Audit reprint is best-effort; physical print is handled on the cashier PC hub
       }
-      await queryClient.invalidateQueries({ queryKey: ["pos-drafts"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.posDraftSales(token, sessionId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.posHeldSales(token, sessionId) });
       await queryClient.invalidateQueries({ queryKey: ["pos-tables"] });
       await queryClient.invalidateQueries({ queryKey: ["pos-waiter-orders"] });
     },
@@ -569,13 +666,19 @@ export function PosWaiterOrderPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-3rem)] flex-col bg-[#f4f7f5]" dir={isAr ? "rtl" : "ltr"}>
-      <header className="border-b border-[#dde5df] bg-white px-4 py-3 shadow-sm">
+    <div
+      className="flex min-h-[calc(100dvh-env(safe-area-inset-bottom,0px))] flex-col bg-[#f4f7f5]"
+      dir={isAr ? "rtl" : "ltr"}
+    >
+      <header className="border-b border-[#dde5df] bg-white px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-sm ltr:ps-14 rtl:pe-14">
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => router.push("/pos/waiter/tables")}
-            className="flex items-center gap-2 rounded-xl border border-[#d6e1d9] px-3 py-2 text-sm font-bold text-[#233329]"
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-[#d6e1d9] px-3 py-2 text-sm font-bold text-[#233329]",
+              posTouchButtonClass,
+            )}
           >
             <LuArrowLeft className="h-4 w-4" />
             {isAr ? "الطاولات" : "Tables"}
@@ -606,212 +709,337 @@ export function PosWaiterOrderPage() {
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-0 waiter-wide:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] waiter-wide:grid-rows-none">
-        <aside className="order-2 flex min-h-0 flex-col border-t border-[#dde5df] bg-white waiter-wide:order-2 waiter-wide:border-t-0 waiter-wide:border-s">
-          <div className="shrink-0 border-b border-[#eef2ef] px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-black text-[#233329]">
-                {getLocalizedText("Order / الطلب", language)}
-              </h2>
-              <span className="rounded-full bg-[#eef3ef] px-2.5 py-0.5 text-xs font-black text-[#46644b]">
-                {cartMetrics.itemCount}{" "}
-                {isAr ? "صنف" : cartMetrics.itemCount === 1 ? "item" : "items"}
-              </span>
-            </div>
-          </div>
-          <div className="shrink-0 border-b border-[#eef2ef] px-3 py-2">
-            <label className="text-[10px] font-black uppercase text-[#7a8780]">
-              {isAr ? "ملاحظة للمطبخ" : "Kitchen note"}
-            </label>
-            <textarea
-              value={orderNotes}
-              onChange={(e) => setOrderNotes(e.target.value)}
-              disabled={!canEdit}
-              rows={2}
-              className="mt-1 w-full rounded-lg border border-[#d6e1d9] px-2 py-1.5 text-sm disabled:opacity-60"
-            />
-          </div>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-            {cartLines.length === 0 ? (
-              <p className="py-8 text-center text-sm text-[#68776f]">
-                {isAr ? "أضف أصنافاً من القائمة" : "Add items from the menu"}
-              </p>
-            ) : (
-              cartLines.map((line, index) => {
-                const lineMetrics = computeLineMetrics(line);
-                const lineKey = getWaiterCartLineKey(line, index);
-                const portionCount =
-                  line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
-                const canEditLine =
-                  !line.kitchenSentAt && (canEdit || (isLocked && canAddAfterConfirm));
-                return (
-                  <div
-                    key={`${line.itemId}-${line.salesInvoiceLineId ?? "new"}-${index}`}
-                    className={cn(
-                      "rounded-xl border px-3 py-2",
-                      line.kitchenSentAt
-                        ? "border-emerald-200 bg-emerald-50/50"
-                        : "border-[#eef2ef] bg-[#fafcfb]",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-[#233329]">
-                          {buildCustomerReceiptItemName(
-                            line.name,
-                            line.modifiers,
-                            language,
-                            line.unit ?? "",
-                            line.sellByWeight ? line.quantity : null,
-                          )}
-                        </div>
-                        {formatAddonsForDisplay(line.modifiers, language) ? (
-                          <p className="text-[10px] text-[#46644b]">
-                            {formatAddonsForDisplay(line.modifiers, language)}
-                          </p>
-                        ) : null}
-                        {line.lineNote ? (
-                          <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
-                        ) : null}
-                        <p className="mt-1 text-xs font-semibold text-[#506054]">
-                          {portionCount} ×{" "}
-                          {formatMoney(
-                            line.sellByWeight ? (line.baseUnitPrice ?? line.unitPrice) : line.unitPrice,
-                            currencyCode,
-                          )}
-                        </p>
-                        {line.kitchenSentAt ? (
-                          <div className="mt-0.5 text-[10px] font-bold text-emerald-700">
-                            {isAr ? "مرسل للمطبخ" : "Sent to kitchen"}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0 text-end">
-                        <div className="text-sm font-black text-[#1a2a20]">
-                          {formatMoney(lineMetrics.total, currencyCode)}
-                        </div>
-                        {!line.kitchenSentAt && canEditLine ? (
-                          <button
-                            type="button"
-                            onClick={() => updateQty(lineKey, -999)}
-                            className="mt-1 text-rose-600"
-                            aria-label="Remove"
-                          >
-                            <LuTrash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    {canEditLine ? (
-                      <div className="mt-2 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateQty(lineKey, -1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
-                        >
-                          <LuMinus className="h-4 w-4" />
-                        </button>
-                        <span className="min-w-[2rem] text-center text-sm font-black">
-                          {line.sellByWeight ? portionCount : line.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQty(lineKey, 1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d6e1d9]"
-                        >
-                          <LuPlus className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="mt-1 text-sm font-black text-[#506054]">
-                        × {line.sellByWeight ? portionCount : line.quantity}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div className="shrink-0 border-t border-[#dde5df] bg-[#f8faf9] px-4 py-3">
-            <div className="space-y-1.5 text-sm">
-              <div className="flex items-center justify-between text-[#596760]">
-                <span>{isAr ? "المجموع الفرعي" : "Subtotal"}</span>
-                <span className="font-semibold">
-                  {formatMoney(cartMetrics.subtotal, currencyCode)}
-                </span>
+      <div className="flex min-h-0 flex-1 flex-col">
+      <PosRegisterMainGrid
+        gridClassName={waiterOrderGridClass}
+        catalogClassName={waiterOrderCatalogClass}
+        cartPanelClassName={cn(waiterOrderCartPanelClass, "border-t border-[#dde5df] bg-white waiter-wide:border-t-0")}
+        useWideLayout={useWaiterWideLayout}
+        narrowOnlyClassName="waiter-wide:hidden"
+        salePanelShell={(children) => <>{children}</>}
+        mobileCartBar={{
+          itemCount: cartLines.length,
+          totalLabel: formatMoney(cartMetrics.total, currencyCode),
+          itemsLabel:
+            cartLines.length === 0
+              ? getLocalizedText("No items / لا أصناف", language)
+              : cartLines.length === 1
+                ? getLocalizedText("1 item / صنف واحد", language)
+                : getLocalizedText(
+                    `${cartLines.length} items / ${cartLines.length} أصناف`,
+                    language,
+                  ),
+          viewOrderLabel: getLocalizedText("View order / عرض الطلب", language),
+          orderTitle: getLocalizedText("Order / الطلب", language),
+          theme: WAITER_REGISTER_THEME,
+        }}
+        catalog={
+          <>
+            <div className="shrink-0 border-b border-[#eef2ef] bg-white p-3">
+              <div className="relative">
+                <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8a80] ltr:left-3 rtl:right-3" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  disabled={!canAddItems}
+                  placeholder={t("pos.sales.searchPlaceholder")}
+                  className="h-11 w-full rounded-2xl border border-[#d6e1d9] bg-[#f8faf9] text-sm font-semibold ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10"
+                />
               </div>
-              {cartMetrics.tax > 0 ? (
-                <div className="flex items-center justify-between text-[#596760]">
-                  <span>{isAr ? "الضريبة" : "Tax"}</span>
-                  <span className="font-semibold">
-                    {formatMoney(cartMetrics.tax, currencyCode)}
-                  </span>
+              {catalogChips.length > 1 ? (
+                <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {catalogChips.map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setActiveCategory(chip.id)}
+                      className={cn(
+                        "min-h-[32px] shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-bold transition",
+                        activeCategory === chip.id
+                          ? "border-[#46644b] bg-[#46644b] text-white"
+                          : "border-[#d6e1d9] bg-[#f9fcfa] text-[#5b6e61] hover:border-[#bdd0c0] hover:bg-white",
+                      )}
+                    >
+                      {chip.name}
+                    </button>
+                  ))}
                 </div>
               ) : null}
-              <div className="flex items-center justify-between border-t border-[#dde5df] pt-2 text-base font-black text-[#1a2a20]">
-                <span>{isAr ? "الإجمالي" : "Total"}</span>
-                <span>{formatMoney(cartMetrics.total, currencyCode)}</span>
+            </div>
+            <div className={cn(waiterProductGridClass, "min-h-0 flex-1 overflow-y-auto bg-[#f4f7f5] p-3")}>
+              {filteredItems.map((item) => (
+                <PosProductCard
+                  key={item.id}
+                  item={item}
+                  variant="tablet"
+                  currencyCode={currencyCode}
+                  disabled={!canAddItems}
+                  allowNegativeStock
+                  onAdd={() => addItem(item)}
+                />
+              ))}
+            </div>
+          </>
+        }
+        salePanel={
+          <>
+            <div className="shrink-0 border-b border-[#eef2ef] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-black text-[#233329]">
+                  {getLocalizedText("Order / الطلب", language)}
+                </h2>
+                <span className="rounded-full bg-[#eef3ef] px-2.5 py-0.5 text-xs font-black text-[#46644b]">
+                  {cartMetrics.itemCount}{" "}
+                  {isAr ? "صنف" : cartMetrics.itemCount === 1 ? "item" : "items"}
+                </span>
               </div>
             </div>
-          </div>
-          <div className="shrink-0 border-t border-[#eef2ef] p-4">
-            {canSendToKitchen ? (
-              <button
-                type="button"
-                onClick={() => confirmMutation.mutate()}
-                disabled={confirmMutation.isPending || cartLines.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#46644b] py-4 text-base font-black text-white shadow-md disabled:opacity-50"
-              >
-                <LuChefHat className="h-5 w-5" />
-                {confirmMutation.isPending
-                  ? isAr
-                    ? "جاري الإرسال…"
-                    : "Sending…"
-                  : isLocked
-                    ? isAr
-                      ? "إرسال الإضافات للمطبخ"
-                      : "Send additions to kitchen"
-                    : isAr
-                      ? "تأكيد وإرسال للمطبخ"
-                      : "Confirm & send to kitchen"}
-              </button>
-            ) : (
-              <p className="text-center text-sm font-semibold text-[#68776f]">
-                {isAr
-                  ? "الطلب في المطبخ — التعديل والدفع من عند الكاشير فقط"
-                  : "Order is in the kitchen — only the cashier can edit or take payment"}
-              </p>
-            )}
-          </div>
-        </aside>
-
-        <section className="order-1 flex min-h-0 flex-col border-[#dde5df] waiter-wide:order-1 waiter-wide:border-e">
-          <div className="border-b border-[#eef2ef] bg-white p-3">
-            <div className="relative">
-              <LuSearch className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8a80] ltr:left-3 rtl:right-3" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                disabled={!canAddItems}
-                placeholder={t("pos.sales.searchPlaceholder")}
-                className="h-11 w-full rounded-2xl border border-[#d6e1d9] bg-[#f8faf9] text-sm font-semibold ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10"
+            <div className="shrink-0 border-b border-[#eef2ef] px-3 py-2">
+              <label className="text-[10px] font-black uppercase text-[#7a8780]">
+                {isAr ? "ملاحظة للمطبخ" : "Kitchen note"}
+              </label>
+              <textarea
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                disabled={!canEdit}
+                rows={2}
+                className="mt-1 w-full rounded-lg border border-[#d6e1d9] px-2 py-1.5 text-sm disabled:opacity-60"
               />
             </div>
-          </div>
-          <div className={cn(posProductGridClass, "flex-1 overflow-y-auto p-3")}>
-            {filteredItems.map((item) => (
-              <PosProductCard
-                key={item.id}
-                item={item}
-                variant="tablet"
-                currencyCode={currencyCode}
-                disabled={!canAddItems}
-                allowNegativeStock
-                onAdd={() => addItem(item)}
-              />
-            ))}
-          </div>
-        </section>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {cartLines.length === 0 ? (
+                <p className="py-8 text-center text-sm text-[#68776f]">
+                  {isAr ? "أضف أصنافاً من القائمة" : "Add items from the menu"}
+                </p>
+              ) : (
+                <>
+                  {unsentCartLines.length > 0 ? (
+                    <div className="space-y-2">
+                      {isLocked ? (
+                        <p className="text-[10px] font-black uppercase tracking-wide text-[#46644b]">
+                          {isAr ? "إضافات جديدة" : "New additions"}
+                        </p>
+                      ) : null}
+                      {unsentCartLines.map((line) => {
+                        const lineIndex = cartLines.indexOf(line);
+                        const lineMetrics = computeLineMetrics(line);
+                        const lineKey = getWaiterCartLineKey(line, lineIndex);
+                        const portionCount =
+                          line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
+                        const canEditLine =
+                          canEdit || (isLocked && canAddAfterConfirm);
+                        return (
+                          <div
+                            key={`new-${line.itemId}-${line.salesInvoiceLineId ?? "new"}-${lineIndex}`}
+                            className="rounded-xl border border-[#eef2ef] bg-[#fafcfb] px-3 py-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold text-[#233329]">
+                                  {buildCustomerReceiptItemName(
+                                    line.name,
+                                    line.modifiers,
+                                    language,
+                                    line.unit ?? "",
+                                    line.sellByWeight ? line.quantity : null,
+                                  )}
+                                </div>
+                                {formatAddonsForDisplay(line.modifiers, language) ? (
+                                  <p className="text-[10px] text-[#46644b]">
+                                    {formatAddonsForDisplay(line.modifiers, language)}
+                                  </p>
+                                ) : null}
+                                {line.lineNote ? (
+                                  <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
+                                ) : null}
+                                <p className="mt-1 text-xs font-semibold text-[#506054]">
+                                  {portionCount} ×{" "}
+                                  {formatMoney(
+                                    line.sellByWeight
+                                      ? (line.baseUnitPrice ?? line.unitPrice)
+                                      : line.unitPrice,
+                                    currencyCode,
+                                  )}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-end">
+                                <div className="text-sm font-black text-[#1a2a20]">
+                                  {formatMoney(lineMetrics.total, currencyCode)}
+                                </div>
+                                {canEditLine ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQty(lineKey, -999)}
+                                    className={cn(
+                                      "mt-1 flex min-h-[44px] min-w-[44px] items-center justify-center text-rose-600",
+                                      posTouchButtonClass,
+                                    )}
+                                    aria-label="Remove"
+                                  >
+                                    <LuTrash2 className="h-4 w-4" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                            {canEditLine ? (
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateQty(lineKey, -1)}
+                                  className={cn(
+                                    "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[#d6e1d9]",
+                                    posTouchButtonClass,
+                                  )}
+                                >
+                                  <LuMinus className="h-4 w-4" />
+                                </button>
+                                <span className="min-w-[2rem] text-center text-sm font-black">
+                                  {line.sellByWeight ? portionCount : line.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateQty(lineKey, 1)}
+                                  className={cn(
+                                    "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[#d6e1d9]",
+                                    posTouchButtonClass,
+                                  )}
+                                >
+                                  <LuPlus className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : isLocked && sentCartLines.length > 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#d6e1d9] bg-[#fafcfb] px-3 py-4 text-center text-sm text-[#68776f]">
+                      {isAr
+                        ? "أضف أصنافاً جديدة من القائمة أعلاه"
+                        : "Add new items from the menu above"}
+                    </p>
+                  ) : null}
+                  {sentCartLines.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-emerald-800">
+                        {isAr ? "مرسل للمطبخ — للعرض فقط" : "Sent to kitchen — view only"}
+                      </p>
+                      {sentCartLines.map((line) => {
+                        const lineIndex = cartLines.indexOf(line);
+                        const lineMetrics = computeLineMetrics(line);
+                        const portionCount =
+                          line.portionCount ?? getPortionCountFromModifiers(line.modifiers);
+                        return (
+                          <div
+                            key={`sent-${line.itemId}-${line.salesInvoiceLineId ?? "sent"}-${lineIndex}`}
+                            className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold text-[#233329]">
+                                  {buildCustomerReceiptItemName(
+                                    line.name,
+                                    line.modifiers,
+                                    language,
+                                    line.unit ?? "",
+                                    line.sellByWeight ? line.quantity : null,
+                                  )}
+                                </div>
+                                {formatAddonsForDisplay(line.modifiers, language) ? (
+                                  <p className="text-[10px] text-[#46644b]">
+                                    {formatAddonsForDisplay(line.modifiers, language)}
+                                  </p>
+                                ) : null}
+                                {line.lineNote ? (
+                                  <p className="text-[10px] italic text-amber-800">{line.lineNote}</p>
+                                ) : null}
+                                <p className="mt-1 text-xs font-semibold text-[#506054]">
+                                  {portionCount} ×{" "}
+                                  {formatMoney(
+                                    line.sellByWeight
+                                      ? (line.baseUnitPrice ?? line.unitPrice)
+                                      : line.unitPrice,
+                                    currencyCode,
+                                  )}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-end">
+                                <div className="text-sm font-black text-[#1a2a20]">
+                                  {formatMoney(lineMetrics.total, currencyCode)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-sm font-black text-[#506054]">
+                              × {line.sellByWeight ? portionCount : line.quantity}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+            <div className="shrink-0 border-t border-[#dde5df] bg-[#f8faf9] px-4 py-3">
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between text-[#596760]">
+                  <span>{isAr ? "المجموع الفرعي" : "Subtotal"}</span>
+                  <span className="font-semibold">
+                    {formatMoney(cartMetrics.subtotal, currencyCode)}
+                  </span>
+                </div>
+                {cartMetrics.tax > 0 ? (
+                  <div className="flex items-center justify-between text-[#596760]">
+                    <span>{isAr ? "الضريبة" : "Tax"}</span>
+                    <span className="font-semibold">
+                      {formatMoney(cartMetrics.tax, currencyCode)}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between border-t border-[#dde5df] pt-2 text-base font-black text-[#1a2a20]">
+                  <span>{isAr ? "الإجمالي" : "Total"}</span>
+                  <span>{formatMoney(cartMetrics.total, currencyCode)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="shrink-0 border-t border-[#eef2ef] p-4 pb-[env(safe-area-inset-bottom,0px)]">
+              {canSendToKitchen ? (
+                <button
+                  type="button"
+                  onClick={() => confirmMutation.mutate()}
+                  disabled={confirmMutation.isPending || !hasUnsentLines}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#46644b] py-4 text-base font-black text-white shadow-md disabled:opacity-50"
+                >
+                  <LuChefHat className="h-5 w-5" />
+                  {confirmMutation.isPending
+                    ? isAr
+                      ? "جاري الإرسال…"
+                      : "Sending…"
+                    : isLocked
+                      ? isAr
+                        ? "إرسال الإضافات للمطبخ"
+                        : "Send additions to kitchen"
+                      : isAr
+                        ? "تأكيد وإرسال للمطبخ"
+                        : "Confirm & send to kitchen"}
+                </button>
+              ) : canAddItems && isLocked && !hasUnsentLines ? (
+                <p className="text-center text-sm font-semibold text-[#68776f]">
+                  {isAr
+                    ? "أضف أصنافاً جديدة من القائمة ثم أرسل للمطبخ"
+                    : "Add new items from the menu, then send to kitchen"}
+                </p>
+              ) : (
+                <p className="text-center text-sm font-semibold text-[#68776f]">
+                  {isAr
+                    ? "الطلب في المطبخ — التعديل والدفع من عند الكاشير فقط"
+                    : "Order is in the kitchen — only the cashier can edit or take payment"}
+                </p>
+              )}
+            </div>
+          </>
+        }
+      />
       </div>
 
       <PosLineAddonModal

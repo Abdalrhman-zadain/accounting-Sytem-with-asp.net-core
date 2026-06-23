@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 import { MobileNavBar } from "@/components/mobile-nav-bar";
 import { NavQuickAccessProvider } from "@/components/nav-quick-access-provider";
 import { SiteHeader } from "@/components/site-header";
-import { useNavDesktopLayout } from "@/lib/hooks/use-viewport-breakpoints";
+import { useNavDesktopLayout, usePosNavDesktopLayout } from "@/lib/hooks/use-viewport-breakpoints";
 import { useKdsMode } from "@/providers/kds-mode-provider";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,8 @@ const DevRoutePerf =
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { kitchenMode } = useKdsMode();
-  const isNavDesktop = useNavDesktopLayout();
+  const isNavDesktopGlobal = useNavDesktopLayout();
+  const isPosNavDesktop = usePosNavDesktopLayout();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -30,6 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isPosPage = pathname?.startsWith("/pos") || pathname?.startsWith("/pos-market");
   const isKitchenRoute = pathname?.startsWith("/pos/kitchen");
   const hideSidebar = kitchenMode && isKitchenRoute;
+  const isNavDesktop = isPosPage ? isPosNavDesktop : isNavDesktopGlobal;
   const isMobileNav = !isNavDesktop;
 
   useEffect(() => {

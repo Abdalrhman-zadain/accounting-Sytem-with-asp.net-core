@@ -1,10 +1,12 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LuCheck, LuClock, LuRefreshCcw, LuSearch, LuUtensils } from "react-icons/lu";
+import { LuCheck, LuClock, LuExternalLink, LuRefreshCcw, LuSearch, LuUtensils } from "react-icons/lu";
 
 import { PageSkeleton } from "@/components/ui";
+import { posTouchButtonClass } from "@/features/pos/pos-layout-classes";
 import { formatAddonsForDisplay } from "@/features/pos/pos-addon-utils";
 import { getPosWaiterOrders, updateWaiterOrderStatus } from "@/lib/api";
 import { hasPermission } from "@/lib/auth-access";
@@ -59,12 +61,14 @@ function WaiterOrderCard({
   canUpdate,
   isUpdating,
   onAdvance,
+  onOpenOrder,
 }: {
   order: KitchenOrder;
   language: string;
   canUpdate: boolean;
   isUpdating: boolean;
   onAdvance: (orderId: string, status: WaiterFoodStatus) => void;
+  onOpenOrder?: (tableId: string) => void;
 }) {
   const isAr = language === "ar";
   const mins = elapsedMinutes(order.createdAt);
@@ -121,6 +125,20 @@ function WaiterOrderCard({
         ) : null}
       </ul>
 
+      {order.tableId && onOpenOrder ? (
+        <button
+          type="button"
+          onClick={() => onOpenOrder(order.tableId!)}
+          className={cn(
+            "mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[#d6e1d9] bg-white py-3 text-sm font-bold text-[#46644b] hover:bg-[#f4f7f5]",
+            posTouchButtonClass,
+          )}
+        >
+          <LuExternalLink className="h-4 w-4" />
+          {isAr ? "فتح الطلب" : "Open order"}
+        </button>
+      ) : null}
+
       {canUpdate && next ? (
         <button
           type="button"
@@ -143,6 +161,7 @@ function WaiterOrderCard({
 }
 
 export function PosWaiterOrdersPage() {
+  const router = useRouter();
   const { token, user } = useAuth();
   const { language, t } = useTranslation();
   const isAr = language === "ar";
@@ -198,6 +217,13 @@ export function PosWaiterOrdersPage() {
     return map;
   }, [filteredOrders]);
 
+  const openTableOrder = React.useCallback(
+    (tableId: string) => {
+      router.push(`/pos/waiter/order?tableId=${tableId}`);
+    },
+    [router],
+  );
+
   if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center bg-slate-100">
@@ -207,8 +233,8 @@ export function PosWaiterOrdersPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-3rem)] flex-col bg-slate-100">
-      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+    <div className="flex min-h-[calc(100dvh-env(safe-area-inset-bottom,0px))] flex-col bg-slate-100">
+      <header className="border-b border-slate-200 bg-white px-4 py-4 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 ltr:ps-14 rtl:pe-14">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#46644b]/10 text-[#46644b]">
@@ -234,7 +260,10 @@ export function PosWaiterOrdersPage() {
             <button
               type="button"
               onClick={() => refetch()}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700",
+                posTouchButtonClass,
+              )}
             >
               <LuRefreshCcw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               {isAr ? "تحديث" : "Refresh"}
@@ -276,6 +305,7 @@ export function PosWaiterOrdersPage() {
                     onAdvance={(orderId, status) =>
                       updateStatusMutation.mutate({ orderId, status })
                     }
+                    onOpenOrder={openTableOrder}
                   />
                 ))
               )}
@@ -293,6 +323,7 @@ export function PosWaiterOrdersPage() {
               onClick={() => setMobileTab(column.status)}
               className={cn(
                 "shrink-0 rounded-full px-4 py-2 text-sm font-bold",
+                posTouchButtonClass,
                 mobileTab === column.status
                   ? "bg-[#46644b] text-white"
                   : "bg-white text-slate-600 ring-1 ring-slate-200",
@@ -313,6 +344,7 @@ export function PosWaiterOrdersPage() {
               onAdvance={(orderId, status) =>
                 updateStatusMutation.mutate({ orderId, status })
               }
+              onOpenOrder={openTableOrder}
             />
           ))}
         </div>

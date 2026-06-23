@@ -15,8 +15,9 @@ const config: Config = {
       xl: "1280px",
       "2xl": "1536px",
       "pos-wide": "960px",
-      "waiter-wide": "800px",
+      "waiter-wide": "768px",
       "nav-desktop": "1024px",
+      "pos-nav-desktop": "1280px",
     },
     extend: {
       colors: {

@@ -20,6 +20,8 @@ export type PosRegisterMobileCartBarProps = {
   isOpen: boolean;
   onToggle: () => void;
   theme?: PosRegisterMobileTheme;
+  /** Tailwind class to hide on wide layouts (default: pos-wide:hidden). */
+  narrowOnlyClassName?: string;
 };
 
 export function PosRegisterStickyCartBar({
@@ -30,13 +32,15 @@ export function PosRegisterStickyCartBar({
   isOpen,
   onToggle,
   theme = POS_REGISTER_DEFAULT_THEME,
+  narrowOnlyClassName = "pos-wide:hidden",
 }: PosRegisterMobileCartBarProps) {
   const resolvedTheme = { ...POS_REGISTER_DEFAULT_THEME, ...theme };
 
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-[180] border-t px-3 py-2.5 shadow-[0_-8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md pos-wide:hidden",
+        "fixed inset-x-0 bottom-0 z-[180] border-t px-3 py-2.5 shadow-[0_-8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md",
+        narrowOnlyClassName,
         resolvedTheme.stickyBarBorder,
         resolvedTheme.stickyBarBg,
         "pb-[max(0.625rem,env(safe-area-inset-bottom))]",
@@ -98,11 +102,13 @@ export function PosRegisterMobileOrderSheet({
   onClose,
   orderTitle,
   children,
+  narrowOnlyClassName = "pos-wide:hidden",
 }: {
   isOpen: boolean;
   onClose: () => void;
   orderTitle: string;
   children: ReactNode;
+  narrowOnlyClassName?: string;
 }) {
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -124,7 +130,7 @@ export function PosRegisterMobileOrderSheet({
   if (!isOpen || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[190] pos-wide:hidden">
+    <div className={cn("fixed inset-0 z-[190]", narrowOnlyClassName)}>
       <button
         type="button"
         className="absolute inset-0 bg-[#1e2c23]/40 backdrop-blur-[2px]"

@@ -37,7 +37,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (!isHydrated) {
     return (
       <Card>
-        <p className="text-sm text-slate-600">Restoring session…</p>
+        <p className="text-sm text-slate-600" suppressHydrationWarning>
+          Restoring session…
+        </p>
       </Card>
     );
   }

@@ -23,6 +23,7 @@ const cashierPermissionCodes: PosPermissionCode[] = [
   "POS_EDIT_WAITER_CONFIRMED_ORDER",
   "POS_MODIFY_KITCHEN_SENT_LINE",
   "RST_UPDATE_KITCHEN_FROM_CART",
+  "RST_PRINT_PRE_BILL",
 ];
 
 async function main() {

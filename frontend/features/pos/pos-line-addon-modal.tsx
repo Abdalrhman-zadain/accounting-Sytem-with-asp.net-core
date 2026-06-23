@@ -237,7 +237,8 @@ export function PosLineAddonModal({
       next[addon.groupId] = bucket;
     }
     setSelectedByGroup(next);
-  }, [isOpen, initialAddons, initialLineNote, weightSelection]);
+    // Only re-run when the modal opens. Callers often pass fresh weightSelection objects each render.
+  }, [isOpen]);
 
   React.useEffect(() => {
     if (!isOpen) return;

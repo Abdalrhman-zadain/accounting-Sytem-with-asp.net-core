@@ -7034,7 +7034,7 @@ export class PosService {
   ) {
     const session = await this.prisma.posSession.findUnique({
       where: { id },
-      select: { id: true, cashierUserId: true, posProduct: true },
+      select: { id: true, cashierUserId: true, posProduct: true, status: true },
     });
     if (!session) {
       throw new BadRequestException(`POS session ${id} was not found.`);
@@ -7043,7 +7043,16 @@ export class PosService {
       throw new BadRequestException(`POS session does not belong to the ${expectedPosProduct} terminal.`);
     }
     const canSeeAll = this.canReviewAllSessions(user);
-    if (!canSeeAll && session.cashierUserId && session.cashierUserId !== user?.userId) {
+    const waiterSharedOpenSession =
+      this.isWaiterOnlyUser(user) &&
+      session.posProduct === PosProduct.RESTAURANT &&
+      session.status === PosSessionStatus.OPEN;
+    if (
+      !canSeeAll &&
+      !waiterSharedOpenSession &&
+      session.cashierUserId &&
+      session.cashierUserId !== user?.userId
+    ) {
       throw new BadRequestException("You do not have permission to access this POS session.");
     }
     return session;

@@ -127,7 +127,8 @@ import {
 } from "@/features/pos/pos-catalog-chips";
 import { PosProductCard } from "@/features/pos/pos-product-card";
 import { DetailTile, DetailedTableCard } from "@/features/pos/pos-detail-cards";
-import { posProductGridClass } from "@/features/pos/pos-layout-classes";
+import { posProductGridClass, posTouchButtonClass } from "@/features/pos/pos-layout-classes";
+import { useRegisterWideLayout } from "@/features/pos-shared/use-register-wide-layout";
 import { PosRegisterMainGrid } from "@/features/pos/pos-register-layout";
 import { PosRestaurantCartControls } from "@/features/pos/pos-restaurant-cart-controls";
 import { PosAddonAdminPanel } from "@/features/pos/pos-addon-admin-panel";
@@ -1068,6 +1069,7 @@ export function PosPage() {
   const { token, user } = useAuth();
   const { t, language } = useTranslation();
   const isArabic = language === "ar";
+  const isRegisterWide = useRegisterWideLayout();
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<PosWorkspace>(() =>
     resolvePosWorkspace(pathname, searchParams.get("tab")) ?? "sales",
@@ -1089,7 +1091,6 @@ export function PosPage() {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const hadKitchenTicketRef = useRef(false);
-  const lastKitchenSyncFingerprintRef = useRef<string | null>(null);
   const pendingKitchenSnapshotRef = useRef<KitchenLineSnapshot[]>([]);
   const kitchenHubActionsRef = useRef({
     markKitchenOrderItemsPrinted: (_itemIds: string[]) => {},
@@ -1814,13 +1815,6 @@ export function PosPage() {
       setSelectedTableId(mapped.tableId ?? null);
       setSelectedTableNumber(mapped.tableNumber ?? null);
       setSelectedWaiterId(mapped.waiterId ?? null);
-      lastKitchenSyncFingerprintRef.current = JSON.stringify(
-        mapped.cartLines.map((line) => ({
-          id: line.salesInvoiceLineId ?? line.itemId,
-          q: line.quantity,
-          sent: line.kitchenSentAt,
-        })),
-      );
       await refreshPosData();
       await queryClient.refetchQueries({ queryKey: queryKeys.posWaiterOrders(token) });
       if (!variables?.silent) {
@@ -3004,7 +2998,6 @@ export function PosPage() {
   const resetSale = () => {
     setEditingInvoiceId(null);
     hadKitchenTicketRef.current = false;
-    lastKitchenSyncFingerprintRef.current = null;
     prevOrderTypeRef.current = "TAKEAWAY";
     setCartLines([]);
     setInvoiceDiscountType("FIXED");
@@ -3645,66 +3638,8 @@ export function PosPage() {
     setDeliveryMode(target.deliveryCompanyId ? "THIRD_PARTY" : "DIRECT");
     setActiveReservationId(target.heldContext?.reservationId ?? null);
     hadKitchenTicketRef.current = target.cartLines.some((line) => line.kitchenSentAt);
-    lastKitchenSyncFingerprintRef.current = null;
     pushMessage(t("pos.sales.alert.resumedHeldSale"));
   };
-
-  const cartKitchenFingerprint = useMemo(
-    () =>
-      JSON.stringify(
-        cartLines.map((line) => ({
-          id: line.salesInvoiceLineId ?? line.itemId,
-          q: line.quantity,
-          sent: line.kitchenSentAt,
-        })),
-      ),
-    [cartLines],
-  );
-
-  useEffect(() => {
-    if (!hadKitchenTicketRef.current || !editingInvoiceId || !activeSession?.id) {
-      return;
-    }
-    if (isCartLockedByWaiter) {
-      return;
-    }
-    if (cartLines.length === 0) {
-      return;
-    }
-    if (!hasPermission(user, "POS_VIEW_POS_SCREEN")) {
-      return;
-    }
-    if (lastKitchenSyncFingerprintRef.current === null) {
-      lastKitchenSyncFingerprintRef.current = cartKitchenFingerprint;
-      return;
-    }
-    if (lastKitchenSyncFingerprintRef.current === cartKitchenFingerprint) {
-      return;
-    }
-    if (updateKitchenMutation.isPending) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      updateKitchenMutation.mutate(
-        { silent: true },
-        {
-          onSuccess: () => {
-            lastKitchenSyncFingerprintRef.current = cartKitchenFingerprint;
-          },
-        },
-      );
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    cartKitchenFingerprint,
-    cartLines.length,
-    editingInvoiceId,
-    activeSession?.id,
-    user,
-    updateKitchenMutation.isPending,
-  ]);
 
   const loadOpenTableOrder = (tableId: string) => {
     const openSales = mapOpenPosSalesFromApi(
@@ -4059,7 +3994,7 @@ export function PosPage() {
           catalog={
             <section className="flex flex-col gap-3 pb-3">
               <Card className="rounded-[12px] border-[#e4e9e6] bg-white p-3 shadow-none">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                <div className="flex flex-col gap-3 pos-wide:flex-row pos-wide:items-end">
                   <Field
                     label={t("pos.sales.barcodeSearch")}
                     className="mb-0 min-w-0 flex-1"
@@ -4155,6 +4090,7 @@ export function PosPage() {
                     <PosProductCard
                       key={item.id}
                       item={item}
+                      variant={isRegisterWide ? "default" : "tablet"}
                       currencyCode={currencyCode}
                       isFavorite={favoriteIdSet.has(item.id)}
                       onToggleFavorite={() => toggleItemFavorite(item.id)}
@@ -4665,7 +4601,7 @@ export function PosPage() {
                     </button>
                   ) : null}
 
-                  {editingInvoiceId && hasPermission(user, "POS_PRINT_RECEIPT") ? (
+                  {editingInvoiceId && hasPermission(user, "RST_PRINT_PRE_BILL") ? (
                     <button
                       type="button"
                       onClick={() => printBillMutation.mutate(editingInvoiceId)}
@@ -6878,7 +6814,10 @@ function CompactCartLine({
               <button
                 type="button"
                 onClick={onDecrease}
-                className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]"
+                className={cn(
+                  "flex min-h-[44px] min-w-[44px] items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]",
+                  posTouchButtonClass,
+                )}
               >
                 <LuMinus className="h-3 w-3" />
               </button>
@@ -6930,7 +6869,10 @@ function CompactCartLine({
               <button
                 type="button"
                 onClick={onIncrease}
-                className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]"
+                className={cn(
+                  "flex min-h-[44px] min-w-[44px] items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6]",
+                  posTouchButtonClass,
+                )}
               >
                 <LuPlus className="h-3 w-3" />
               </button>
@@ -6944,7 +6886,10 @@ function CompactCartLine({
             <button
               type="button"
               onClick={onRemove}
-              className="text-[10px] text-[#d1d5db] transition hover:text-[#dc2626]"
+              className={cn(
+                "flex min-h-[44px] min-w-[44px] items-center justify-center text-[#d1d5db] transition hover:text-[#dc2626]",
+                posTouchButtonClass,
+              )}
               title="Remove"
             >
               <LuTrash2 className="h-3.5 w-3.5" />

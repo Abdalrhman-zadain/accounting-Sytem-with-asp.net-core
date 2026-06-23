@@ -25,11 +25,18 @@ function SalePanelShell({ children }: { children: ReactNode }) {
 export type PosRegisterMainGridProps = {
   catalog: ReactNode;
   salePanel: ReactNode;
-  mobileCartBar: Omit<PosRegisterMobileCartBarProps, "isOpen" | "onToggle">;
+  mobileCartBar: Omit<
+    PosRegisterMobileCartBarProps,
+    "isOpen" | "onToggle" | "narrowOnlyClassName"
+  >;
   gridClassName?: string;
   catalogClassName?: string;
   cartPanelClassName?: string;
   salePanelShell?: (children: ReactNode) => ReactNode;
+  /** Hook that returns true when side-by-side layout is active (default: register ≥960px). */
+  useWideLayout?: () => boolean;
+  /** Tailwind class to scope sticky bar + sheet to narrow viewports only. */
+  narrowOnlyClassName?: string;
 };
 
 /**
@@ -45,8 +52,10 @@ export function PosRegisterMainGrid({
   catalogClassName = posRegisterCatalogClass,
   cartPanelClassName = posRegisterCartPanelClass,
   salePanelShell = (children) => <SalePanelShell>{children}</SalePanelShell>,
+  useWideLayout = useRegisterWideLayout,
+  narrowOnlyClassName = "pos-wide:hidden",
 }: PosRegisterMainGridProps) {
-  const isWide = useRegisterWideLayout();
+  const isWide = useWideLayout();
   const [isMobileOrderOpen, setIsMobileOrderOpen] = useState(false);
 
   useEffect(() => {
@@ -69,11 +78,13 @@ export function PosRegisterMainGrid({
             {...mobileCartBar}
             isOpen={isMobileOrderOpen}
             onToggle={() => setIsMobileOrderOpen((open) => !open)}
+            narrowOnlyClassName={narrowOnlyClassName}
           />
           <PosRegisterMobileOrderSheet
             isOpen={isMobileOrderOpen}
             onClose={() => setIsMobileOrderOpen(false)}
             orderTitle={mobileCartBar.orderTitle}
+            narrowOnlyClassName={narrowOnlyClassName}
           >
             {salePanelShell(salePanel)}
           </PosRegisterMobileOrderSheet>

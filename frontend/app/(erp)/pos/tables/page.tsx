@@ -42,7 +42,7 @@ import { mapPosReceiptApiResponse } from "@/features/pos/pos-receipt-map";
 import {
   posTableFloorGridClass,
   posTouchButtonClass,
-  posTouchOrHoverRevealClass,
+  posFinePointerHoverRevealClass,
 } from "@/features/pos/pos-layout-classes";
 import { PosTable } from "@/types/api";
 import { cn } from "@/lib/utils";
@@ -137,7 +137,10 @@ function ReservationCard({
             <button
               type="button"
               onClick={onManage}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-[#fbfcfb] px-3 py-2 text-xs font-bold text-[#233329] hover:bg-[#f6faf7]"
+              className={cn(
+                "flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#d6e1d9] bg-[#fbfcfb] px-3 py-2 text-xs font-bold text-[#233329] hover:bg-[#f6faf7]",
+                posTouchButtonClass,
+              )}
             >
               <LuClock className="h-3.5 w-3.5 shrink-0" />
               <span>{isAr ? "إدارة الحجز" : "Manage"}</span>
@@ -149,6 +152,7 @@ function ReservationCard({
             onClick={onOpenPreOrder}
             className={cn(
               "flex w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-50",
+              posTouchButtonClass,
               preOrder
                 ? "border-[#7c3aed] bg-[#f3e8ff] text-[#6d28d9] hover:bg-[#ede9fe]"
                 : "border-[#4338ca] bg-[#efefff] text-[#4338ca] hover:bg-[#e5e3ff]",
@@ -209,7 +213,10 @@ function ReservationCard({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-50"
+          className={cn(
+            "rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-50",
+            posTouchButtonClass,
+          )}
         >
           {isAr ? "إلغاء الحجز" : "Cancel reservation"}
         </button>
@@ -558,9 +565,39 @@ export default function TablesPage() {
   );
 
   return (
-    <PageShell className="px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
-      <div className="flex flex-col gap-4 sm:gap-6" dir={isAr ? "rtl" : "ltr"}>
+    <PageShell
+      className={cn(
+        waiterOnly ? "px-3 py-2 sm:px-4 sm:py-3" : "px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8",
+      )}
+    >
+      <div
+        className={cn("flex flex-col", waiterOnly ? "gap-2 sm:gap-3" : "gap-4 sm:gap-6")}
+        dir={isAr ? "rtl" : "ltr"}
+      >
         {/* Header Dashboard section */}
+        {waiterOnly ? (
+          <div className="flex flex-col gap-2 rounded-2xl border border-[#d6e5da] bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <h1 className="text-lg font-black tracking-tight text-[#1e2c23] arabic-heading sm:text-xl">
+              {isAr ? "صالة الطعام" : "Tables"}
+            </h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cce5d6] bg-[#f0faf4] px-2.5 py-1 text-xs font-bold text-[#166534]">
+                <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
+                {isAr ? "متاحة" : "Vacant"} {vacantCount}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#fadcb9] bg-[#fffbf6] px-2.5 py-1 text-xs font-bold text-[#9a3412]">
+                <span className="h-2 w-2 rounded-full bg-[#ea580c]" />
+                {isAr ? "مشغولة" : "Busy"} {occupiedCount}
+              </span>
+              {cleaningCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c7d2fe] bg-[#eef2ff] px-2.5 py-1 text-xs font-bold text-[#3730a3]">
+                  <LuSparkles className="h-3 w-3" />
+                  {isAr ? "تنظيف" : "Cleaning"} {cleaningCount}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : (
         <div className="relative overflow-hidden rounded-[20px] border border-[#d6e5da] bg-gradient-to-br from-[#f3faf5] via-[#ffffff] to-[#ecf7f0] p-4 shadow-sm sm:rounded-[24px] sm:p-6">
           <div className="absolute right-0 top-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-[#e3f4e8]/40 blur-2xl" />
           
@@ -574,13 +611,9 @@ export default function TablesPage() {
                 {isAr ? "صالة الطعام" : "Restaurant Tables"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-semibold text-[#506055]">
-                {waiterOnly
-                  ? isAr
-                    ? "اختر طاولة متاحة لطلب جديد. الطاولات قيد التنظيف تحتاج تأكيد «جاهزة» قبل فتح طلب جديد."
-                    : "Pick an available table for a new order. Cleaning tables must be marked ready before reuse."
-                  : isAr
-                    ? "اختر طاولة فارغة لبدء طلب جديد، أو اختر طاولة مشغولة لاستكمال الحساب وإضافة الطلبات."
-                    : "Select a vacant table to open a new receipt, or select an occupied table to resume the current bill."}
+                {isAr
+                  ? "اختر طاولة فارغة لبدء طلب جديد، أو اختر طاولة مشغولة لاستكمال الحساب وإضافة الطلبات."
+                  : "Select a vacant table to open a new receipt, or select an occupied table to resume the current bill."}
               </p>
             </div>
 
@@ -656,8 +689,10 @@ export default function TablesPage() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="min-w-0 flex flex-col gap-4">
+        <div className={cn("min-w-0 flex flex-col", waiterOnly ? "gap-2" : "gap-4")}>
+            {!waiterOnly ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#46644b]">
                 {isAr ? "مخطط الطاولات" : "Floor plan"}
@@ -669,6 +704,7 @@ export default function TablesPage() {
                     onClick={() => setTableViewFilter("all")}
                     className={cn(
                       "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                      posTouchButtonClass,
                       tableViewFilter === "all"
                         ? "bg-[#46644b] text-white"
                         : "border border-[#d6e1d9] bg-white text-[#506054] hover:bg-[#f6faf7]",
@@ -681,6 +717,7 @@ export default function TablesPage() {
                     onClick={() => setTableViewFilter("cleaning")}
                     className={cn(
                       "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                      posTouchButtonClass,
                       tableViewFilter === "cleaning"
                         ? "bg-[#6366f1] text-white"
                         : "border border-[#e0e7ff] bg-[#f5f7ff] text-[#3730a3] hover:bg-[#eef1ff]",
@@ -693,6 +730,38 @@ export default function TablesPage() {
                 </div>
               ) : null}
             </div>
+            ) : cleaningCount > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTableViewFilter("all")}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                    posTouchButtonClass,
+                    tableViewFilter === "all"
+                      ? "bg-[#46644b] text-white"
+                      : "border border-[#d6e1d9] bg-white text-[#506054] hover:bg-[#f6faf7]",
+                  )}
+                >
+                  {isAr ? `الكل (${totalCount})` : `All (${totalCount})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTableViewFilter("cleaning")}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                    posTouchButtonClass,
+                    tableViewFilter === "cleaning"
+                      ? "bg-[#6366f1] text-white"
+                      : "border border-[#e0e7ff] bg-[#f5f7ff] text-[#3730a3] hover:bg-[#eef1ff]",
+                  )}
+                >
+                  {isAr
+                    ? `تحتاج تنظيف (${cleaningCount})`
+                    : `Needs cleaning (${cleaningCount})`}
+                </button>
+              </div>
+            ) : null}
 
         {/* Floor Plan Tables Grid */}
         {displayedTables.length === 0 ? (
@@ -796,7 +865,7 @@ export default function TablesPage() {
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {/* Quick status/waiter action */}
+                      {!waiterOnly ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -807,12 +876,13 @@ export default function TablesPage() {
                         }}
                         className={cn(
                           "flex h-11 w-11 items-center justify-center rounded-full border border-[#d1dcd5] bg-white text-[#506054] shadow-sm transition hover:bg-[#f6faf7] hover:text-[#233329]",
-                          posTouchOrHoverRevealClass,
+                          posFinePointerHoverRevealClass,
                         )}
                         title={isAr ? "إدارة الطاولة" : "Manage table"}
                       >
                         <LuSettings className="h-4 w-4" />
                       </button>
+                      ) : null}
                       <div
                         className={cn(
                           "flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-sm",
@@ -863,7 +933,7 @@ export default function TablesPage() {
 
                       {isOccupied && activeInvoice && (
                         <>
-                          {table.assignedWaiter && (
+                          {table.assignedWaiter && !waiterOnly ? (
                             <div className="flex items-center gap-2">
                               <LuUser className="h-3.5 w-3.5 text-[#d97706]" />
                               <span className="truncate">
@@ -871,7 +941,8 @@ export default function TablesPage() {
                                 {table.assignedWaiter.name || table.assignedWaiter.email}
                               </span>
                             </div>
-                          )}
+                          ) : null}
+                          {!waiterOnly ? (
                           <div className="flex items-center gap-2">
                             <LuClock className="h-3.5 w-3.5 text-[#d97706]" />
                             <span className="truncate">
@@ -879,6 +950,7 @@ export default function TablesPage() {
                               {activeInvoice.reference}
                             </span>
                           </div>
+                          ) : null}
                         </>
                       )}
 
@@ -906,7 +978,10 @@ export default function TablesPage() {
                   <div className="mt-4 border-t border-black/5 pt-3 sm:mt-5 sm:pt-4">
                     {isOccupied ? (
                       <div className="flex flex-col gap-2">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className={cn(
+                          "flex flex-col gap-2",
+                          waiterOnly ? "" : "sm:flex-row sm:items-center sm:justify-between",
+                        )}>
                           <div>
                             <div className="text-[10px] font-bold uppercase text-[#8c6d4f]">
                               {isAr ? "قيمة الفاتورة" : "Amount Due"}
@@ -922,15 +997,16 @@ export default function TablesPage() {
                               handleOpenTable(table);
                             }}
                             className={cn(
-                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f] sm:w-auto",
+                              "flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d97706] to-[#b45309] px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:from-[#b45309] hover:to-[#78350f]",
+                              !waiterOnly && "sm:w-auto",
                               posTouchButtonClass,
                             )}
                           >
                             <LuCheck className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                            <span>{isAr ? "عرض الطلب" : "Open Bill"}</span>
+                            <span>{isAr ? (waiterOnly ? "فتح الطلب" : "عرض الطلب") : (waiterOnly ? "Open order" : "Open Bill")}</span>
                           </button>
                         </div>
-                        {canPrintBill &&
+                        {!waiterOnly && canPrintBill &&
                         activeInvoice?.id &&
                         (activeInvoice.posOperationalStatus === "DRAFT" ||
                           activeInvoice.posOperationalStatus === "HELD") ? (
@@ -950,6 +1026,7 @@ export default function TablesPage() {
                             <span>{isAr ? "طباعة الفاتورة" : "Print Bill"}</span>
                           </button>
                         ) : null}
+                        {!waiterOnly ? (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -963,6 +1040,7 @@ export default function TablesPage() {
                         >
                           {isAr ? "+ حجز وقت آخر" : "+ Book another time slot"}
                         </button>
+                        ) : null}
                       </div>
                     ) : isCleaning ? (
                       <div className="flex flex-col gap-2">
@@ -1035,7 +1113,7 @@ export default function TablesPage() {
                             <span>{isAr ? "تعديل الحجز" : "Edit"}</span>
                           </button>
                         ) : (
-                          <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1091,6 +1169,7 @@ export default function TablesPage() {
           setReserveSuccess(null);
         }}
         title={isAr ? "حجز طاولة" : "Reserve Table"}
+        size="xl"
       >
         <div className="flex flex-col gap-4 p-1" dir={isAr ? "rtl" : "ltr"}>
           {reserveError ? (
@@ -1117,6 +1196,7 @@ export default function TablesPage() {
               }}
               className={cn(
                 "rounded-xl border px-4 py-3 text-sm font-black transition-colors",
+                posTouchButtonClass,
                 reserveMode === "IMMEDIATE"
                   ? "border-[#16a34a] bg-[#eaf7ef] text-[#14532d]"
                   : "border-[#d6e1d9] bg-white text-[#233329] hover:bg-[#f6faf7]",
@@ -1138,6 +1218,7 @@ export default function TablesPage() {
               }}
               className={cn(
                 "rounded-xl border px-4 py-3 text-sm font-black transition-colors",
+                posTouchButtonClass,
                 reserveMode === "SPECIAL"
                   ? "border-[#4338ca] bg-[#efefff] text-[#2f2ab5]"
                   : "border-[#d6e1d9] bg-white text-[#233329] hover:bg-[#f7f7ff]",
@@ -1157,7 +1238,10 @@ export default function TablesPage() {
               <button
                 type="button"
                 onClick={handleImmediateReservation}
-                className="rounded-xl bg-[#16a34a] py-2.5 text-sm font-black text-white hover:bg-[#15803d]"
+                className={cn(
+                  "rounded-xl bg-[#16a34a] py-2.5 text-sm font-black text-white hover:bg-[#15803d]",
+                  posTouchButtonClass,
+                )}
               >
                 {isAr ? "فتح نقاط البيع الآن" : "Open POS now"}
               </button>
@@ -1233,7 +1317,10 @@ export default function TablesPage() {
               <button
                 type="submit"
                 disabled={isSubmittingReserve}
-                className="rounded-xl bg-[#4338ca] py-2.5 text-sm font-bold text-white hover:bg-[#372fb4] disabled:opacity-50"
+                className={cn(
+                  "rounded-xl bg-[#4338ca] py-2.5 text-sm font-bold text-white hover:bg-[#372fb4] disabled:opacity-50",
+                  posTouchButtonClass,
+                )}
               >
                 {isAr ? "إضافة حجز جديد" : "Add new reservation"}
               </button>
@@ -1343,7 +1430,8 @@ export default function TablesPage() {
                       disabled={isOccupied}
                       onClick={() => handleDeleteTable(table.id)}
                       className={cn(
-                        "rounded-xl p-2.5 transition-colors",
+                        "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl transition-colors",
+                        posTouchButtonClass,
                         isOccupied
                           ? "text-[#cbe5d5] cursor-not-allowed"
                           : "text-[#ef4444] hover:bg-red-50"
@@ -1371,6 +1459,7 @@ export default function TablesPage() {
               : `Manage Table ${statusTable.tableNumber}`
             : ""
         }
+        size="xl"
       >
         {statusTable ? (
           <div className="flex flex-col gap-4 p-1" dir={isAr ? "rtl" : "ltr"}>
@@ -1379,7 +1468,7 @@ export default function TablesPage() {
               <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#46644b]">
                 {isAr ? "حالة الطاولة" : "Table status"}
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {(
                   [
                     { value: "AVAILABLE", en: "Available", ar: "متاحة", active: "border-[#16a34a] bg-[#e9f7ed] text-[#14532d]" },
@@ -1395,6 +1484,7 @@ export default function TablesPage() {
                     onClick={() => setPendingStatus(s.value)}
                     className={cn(
                       "rounded-xl border px-3 py-2 text-xs font-bold transition-colors",
+                      posTouchButtonClass,
                       pendingStatus === s.value
                         ? s.active
                         : "border-[#d6e1d9] bg-white text-[#506054] hover:bg-[#f6faf7]",
@@ -1455,14 +1545,20 @@ export default function TablesPage() {
                     setIsSavingTableStatus(false);
                   }
                 }}
-                className="flex-1 rounded-xl bg-[#0f8f67] py-2.5 text-sm font-bold text-white hover:bg-[#0c7a57] disabled:opacity-50"
+                className={cn(
+                  "flex-1 rounded-xl bg-[#0f8f67] py-2.5 text-sm font-bold text-white hover:bg-[#0c7a57] disabled:opacity-50",
+                  posTouchButtonClass,
+                )}
               >
                 {isSavingTableStatus ? (isAr ? "جاري الحفظ…" : "Saving…") : isAr ? "حفظ" : "Save"}
               </button>
               <button
                 type="button"
                 onClick={() => setStatusTable(null)}
-                className="rounded-xl border border-[#d6e1d9] px-4 py-2.5 text-sm font-bold text-[#506054] hover:bg-[#f6faf7]"
+                className={cn(
+                  "rounded-xl border border-[#d6e1d9] px-4 py-2.5 text-sm font-bold text-[#506054] hover:bg-[#f6faf7]",
+                  posTouchButtonClass,
+                )}
               >
                 {isAr ? "إلغاء" : "Cancel"}
               </button>
@@ -1486,14 +1582,20 @@ export default function TablesPage() {
             <button
               type="button"
               onClick={() => setTableToDeleteId(null)}
-              className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              className={cn(
+                "flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50",
+                posTouchButtonClass,
+              )}
             >
               {isAr ? "إلغاء" : "Cancel"}
             </button>
             <button
               type="button"
               onClick={confirmDeleteTable}
-              className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700"
+              className={cn(
+                "flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700",
+                posTouchButtonClass,
+              )}
             >
               {isAr ? "موافق" : "OK"}
             </button>
