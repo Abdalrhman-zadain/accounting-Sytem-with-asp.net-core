@@ -25,8 +25,11 @@ project-root/
 │   │   └── utils/
 │   └── providers/
 └── backend/
+    ├── ops/
     ├── prisma/
+    ├── scripts/
     └── src/
+        ├── config/
         ├── common/
         └── modules/
             ├── platform/
@@ -158,6 +161,52 @@ Current important example:
 - Prisma wiring
 
 Put code here only when it is truly shared across modules.
+
+### `backend/src/config`
+
+Purpose:
+
+- runtime environment parsing
+- config validation
+- NestJS config factories
+- grouped app/database/auth/POS configuration code
+
+Put code here when configuration is application-owned and used by backend modules at runtime.
+
+Do not put tool config files here:
+
+- `tsconfig.json`
+- `tsconfig.build.json`
+- `jest.config.ts`
+- `nest-cli.json`
+- `.env` templates
+
+### `backend/ops`
+
+Purpose:
+
+- backend-specific runbooks
+- architecture notes
+- operational recovery documentation
+
+Current examples:
+
+- backend architecture notes
+- Market recovery runbooks
+
+### `backend/scripts`
+
+Purpose:
+
+- backend operational helper scripts
+- database maintenance helpers
+- verification and support utilities that are not application runtime modules
+
+Current examples:
+
+- market verification scripts
+- QZ certificate helper scripts
+- database backup helpers
 
 ### `backend/src/modules/platform`
 

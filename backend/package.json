@@ -10,6 +10,7 @@
     "test:watch": "jest --watch",
     "db:up": "docker compose -f ../docker-compose.yml up -d postgres",
     "db:down": "docker compose -f ../docker-compose.yml down",
+    "backup:db": "bash ./scripts/db/backup-db.sh",
     "prisma:generate": "prisma generate --generator client",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:format": "prisma format",

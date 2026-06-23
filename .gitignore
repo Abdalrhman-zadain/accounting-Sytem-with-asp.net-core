@@ -25,6 +25,7 @@ frontend/.env
 *.tsbuildinfo
 .gemini/
 .playwright-cli/
+.obsidian/
 new.md
 next-env.d.ts
 *.bak

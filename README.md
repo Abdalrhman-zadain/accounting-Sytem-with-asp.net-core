@@ -125,16 +125,16 @@ npm run db:up
 
 ### Database Backup
 
-Create a PostgreSQL backup file from the project root:
+Create a PostgreSQL backup file using the backend helper script:
 
 ```bash
-./backup-db.sh
+npm run backup:db --prefix backend
 ```
 
-Optionally pass a custom output path:
+Optionally pass a custom output path relative to the repository root:
 
 ```bash
-./backup-db.sh backups/my-manual-backup.dump
+npm run backup:db --prefix backend -- backups/my-manual-backup.dump
 ```
 
 ### Backend Setup Commands

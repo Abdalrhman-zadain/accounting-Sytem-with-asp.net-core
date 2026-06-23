@@ -6,6 +6,7 @@ NestJS backend for the accounting foundation.
 
 ```text
 src/
+├── config/         # Runtime config parsing/validation/factories
 ├── common/         # Shared infrastructure
 ├── generated/      # Prisma generated client
 ├── modules/
@@ -13,6 +14,12 @@ src/
 │   └── auth/
 ├── app.module.ts
 └── main.ts
+```
+
+```text
+ops/
+├── BACKEND_ARCHITECTURE.md
+└── MARKET_502_DATABASE_RECOVERY.md
 ```
 
 ## Commands
@@ -58,6 +65,22 @@ From the repo root:
 docker compose up -d postgres
 ```
 
+## Database Backup
+
+Create a PostgreSQL custom-format dump using the current `backend/.env` database connection:
+
+```bash
+npm run backup:db
+```
+
+Optionally pass a custom output path relative to the repository root:
+
+```bash
+npm run backup:db -- backups/my-manual-backup.dump
+```
+
+The backup script lives at `backend/scripts/db/backup-db.sh` and writes to `backups/` by default.
+
 ## Troubleshooting Database Startup
 
 If backend startup fails with:
@@ -90,3 +113,7 @@ Warning:
 
 - removing `simple-account-sabina_sabina_postgres_data` deletes all local PostgreSQL data in that Docker volume
 - only use the volume-reset flow when you are okay recreating the local database
+
+## Operational Notes
+
+Backend operational runbooks and architecture notes now live under `backend/ops/`.
