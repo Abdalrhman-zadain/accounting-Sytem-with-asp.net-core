@@ -22,6 +22,7 @@ import {
   LuPlus,
   LuPrinter,
   LuReceipt,
+  LuRefreshCcw,
   LuSave,
   LuSearch,
   LuFolder,
