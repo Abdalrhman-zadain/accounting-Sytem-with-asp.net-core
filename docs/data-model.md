@@ -10,7 +10,7 @@ This document describes the current schema and its accounting meaning. It does n
 
 Local demo data is synthetic only — not production imports.
 
-- **Basic seed** (`npm run seed` / `npx prisma db seed`): full chart of accounts and masters, empty accounting history so journal entry workflows start from scratch, and POS demo catalog.
+- **Basic seed** (`npm run seed` / `npx prisma db seed`): truncates public tables, seeds the foundation dataset (chart of accounts, masters, fiscal setup, admin/cashier users), loads the restaurant POS demo catalog/register baseline, and provisions the extra POS users `kitchen` / `kitchen123` and `waiter` / `waiter123`.
 - **Volume seed** (`npm run seed:volume`, opt-in): same foundation, then three fiscal years (2024–2026) of batched posted journals, per-customer receivable sub-accounts, suppliers, inventory items, reporting `AuditLog` samples, and quarterly operational documents for module UI walkthroughs.
 - **Opening inventory import seed** (`npm run seed:opening-inventory`, opt-in): reads `backend/data/opening-inventory-2026-05-31.json` (generated from the checked-in workbook), upserts inventory items, creates/reuses the target warehouses, and creates deterministic opening-stock goods receipts dated `2026-05-31` without truncating unrelated tables. Reruns now refresh those same opening receipts by reference when no later stock activity exists for the affected warehouse items, so a corrected workbook split can be reapplied safely. When later stock activity already exists and you must preserve the posted opening receipts, use `npm run seed:opening-inventory:add-only` to skip receipt refresh while keeping item/warehouse upserts.
 

@@ -184,7 +184,7 @@ From the `backend` folder, choose a seed command. The two demo reset commands tr
 | `npm run seed:volume` | Reporting screenshots, module walkthroughs, “big company” demos | Same foundation **plus** fiscal years 2024–2026, ~15k+ posted journals, enterprise masters, reporting audit activity, quarterly operational samples, POS demo | ~2–8 min |
 | `npm run seed:opening-inventory` | Import the attached opening stock workbook into an existing DB | Upserts item masters, creates/reuses the two warehouses, and posts deterministic opening inventory receipts dated `2026-05-31` without truncating unrelated tables. Reruns refresh those same opening receipts by reference when no later stock activity exists for the affected warehouse items. | ~10–30s |
 
-Login after either seed: **admin** / **admin123** (cashier: **cashier** / **cashier123**).
+Login after the basic seed: **admin** / **admin123**, **cashier** / **cashier123**, **kitchen** / **kitchen123**, and **waiter** / **waiter123**.
 
 Prerequisites:
 
