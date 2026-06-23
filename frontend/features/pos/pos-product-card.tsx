@@ -215,8 +215,9 @@ export function PosProductCard({
         {/* Price */}
         <span
           className={cn(
-            "shrink-0 rounded-[10px] bg-[#f8faf9] px-2 py-1 font-black text-slate-900",
-            tablet ? "text-[15px] sm:text-[16px]" : "text-[13px] sm:text-[14px]",
+            tablet
+              ? "shrink-0 rounded-[10px] bg-[#f8faf9] px-2 py-1 text-[15px] font-black text-slate-900 sm:text-[16px]"
+              : "shrink-0 text-[13px] font-bold text-slate-900 sm:text-[14px]",
           )}
           dir="ltr"
         >

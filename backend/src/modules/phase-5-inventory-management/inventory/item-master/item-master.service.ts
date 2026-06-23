@@ -263,11 +263,21 @@ export class ItemMasterService {
     }
 
     return {
-      warehouseBalances: {
-        some: {
-          warehouseId,
+      OR: [
+        {
+          trackInventory: false,
         },
-      },
+        {
+          type: "SERVICE",
+        },
+        {
+          warehouseBalances: {
+            some: {
+              warehouseId,
+            },
+          },
+        },
+      ],
     };
   }
 

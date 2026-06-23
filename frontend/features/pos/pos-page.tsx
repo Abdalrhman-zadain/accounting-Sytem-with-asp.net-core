@@ -22,7 +22,6 @@ import {
   LuPlus,
   LuPrinter,
   LuReceipt,
-  LuRefreshCcw,
   LuSave,
   LuSearch,
   LuFolder,
@@ -41,7 +40,6 @@ import {
   LuChevronDown,
   LuChevronRight,
   LuLock,
-  LuCamera,
   LuArchive,
   LuTag,
   LuCalculator,
@@ -176,7 +174,6 @@ import { PosPrinterSettingsPanel } from "@/features/pos/pos-printer-settings-pan
 import { PosReviewWorkspace } from "@/features/pos/pos-review-workspace";
 import { PosDeliveryWorkspace } from "@/features/pos/pos-delivery-page";
 import { PosSessionBar } from "@/features/pos/pos-session-bar";
-import { PosCameraScanner } from "@/features/pos/pos-camera-scanner";
 import type {
   AccountOption,
   BankCashAccount,
@@ -223,6 +220,22 @@ type WorkspaceTab = {
 };
 
 type DiscountType = "FIXED" | "PERCENT";
+
+const POS_CATEGORY_DISPLAY_ORDER = [
+  "الاصناق",
+  "روس و المقادم",
+  "الاطباق",
+  "وجبات 1",
+  "وجبات 2",
+  "الفتات",
+  "المقبلات",
+  "المشروبات",
+  "الاضافات",
+] as const;
+
+const POS_CATEGORY_DISPLAY_ORDER_MAP = new Map<string, number>(
+  POS_CATEGORY_DISPLAY_ORDER.map((name, index) => [name, index]),
+);
 
 function getCartLineKey(
   line: Pick<
@@ -1135,7 +1148,6 @@ export function PosPage() {
   const [payFlowStep, setPayFlowStep] = useState<"tender" | "success">("tender");
   const [isHeldOrdersOpen, setIsHeldOrdersOpen] = useState(false);
   const [isCancelSaleOpen, setIsCancelSaleOpen] = useState(false);
-  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   // Restaurant Cart details
   const [orderType, setOrderType] = useState<PosOrderType>("TAKEAWAY");
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -1275,12 +1287,33 @@ export function PosPage() {
     enabled: Boolean(token && activeSessionQuery.data?.id && workspace === "sales"),
   });
 
-  const itemGroups = itemGroupsQuery.data ?? [];
+  const itemGroups = useMemo(() => {
+    const groups = itemGroupsQuery.data ?? [];
+    return [...groups].sort((left, right) => {
+      const leftOrder = POS_CATEGORY_DISPLAY_ORDER_MAP.get(left.name) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = POS_CATEGORY_DISPLAY_ORDER_MAP.get(right.name) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.name.localeCompare(right.name, "ar");
+    });
+  }, [itemGroupsQuery.data]);
+  const hasInitializedCategoryRef = useRef(false);
+  useEffect(() => {
+    if (!hasInitializedCategoryRef.current && itemGroups.length > 0) {
+      const firstGroupId = itemGroups[0]?.id;
+      if (firstGroupId) {
+        setActiveCategory(firstGroupId);
+        hasInitializedCategoryRef.current = true;
+      }
+    }
+  }, [itemGroups]);
+
   const catalogChips = useMemo(() => {
     return [
       ...itemGroups.map((g) => ({ id: g.id, name: g.name })),
-      { id: "favorites", name: language === "ar" ? "المفضلة" : "Favorites / المفضلة" },
-      { id: "all", name: language === "ar" ? "الكل" : "All / الكل" },
+      { id: "favorites", name: getLocalizedText("Favorites / المفضلة", language) },
+      { id: "all", name: getLocalizedText("All / الكل", language) },
     ];
   }, [itemGroups, language]);
 
@@ -3273,21 +3306,6 @@ export function PosPage() {
     setSearch("");
   };
 
-  const handleCameraScan = (decodedText: string) => {
-    const normalized = decodedText.trim().toLowerCase();
-    if (!normalized) return;
-    const match =
-      items.find((item) => item.barcode?.trim().toLowerCase() === normalized) ||
-      items.find((item) => item.code.trim().toLowerCase() === normalized);
-    if (!match) {
-      pushMessage(t("pos.sales.alert.noBarcodeMatch"));
-      return;
-    }
-    addItemToCart(match);
-    setIsCameraScannerOpen(false);
-    setSearch("");
-  };
-
   const updateLine = (
     targetLine: CartLine,
     updater: (line: CartLine) => CartLine | null,
@@ -4061,16 +4079,7 @@ export function PosPage() {
                         placeholder={t("pos.sales.barcodePlaceholder")}
                         className="h-9 rounded-[6px] border-[#d7dfda] bg-white py-2 pl-9 pr-3 text-xs focus:border-[#5f8a67] focus:ring-[#5f8a67]/10 rtl:pl-3 rtl:pr-9"
                       />
-                      <div className="grid grid-cols-3 gap-2 sm:flex sm:w-auto sm:gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsCameraScannerOpen(true)}
-                          className="flex h-9 items-center justify-center rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                          title="Scan Barcode with Camera"
-                        >
-                          <LuCamera className="mr-1.5 h-3.5 w-3.5" />
-                          <span className="truncate">Scan / كاميرا</span>
-                        </button>
+                      <div className="grid grid-cols-1 gap-2 sm:flex sm:w-auto sm:gap-2">
                         <button
                           type="button"
                           onClick={() => setIsCalculatorOpen(true)}
@@ -4079,17 +4088,6 @@ export function PosPage() {
                         >
                           <LuCalculator className="mr-1.5 h-3.5 w-3.5" />
                           <span className="truncate">Calc / حاسبة</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void queryClient.invalidateQueries({
-                              queryKey: ["inventory-items", token],
-                            });
-                          }}
-                          className="h-9 rounded-[6px] border border-[#d7dfda] bg-[#f7f9f8] px-3 text-[11px] font-bold text-[#4e6455] hover:bg-white"
-                        >
-                          Refresh / تحديث
                         </button>
                       </div>
                     </div>
@@ -4150,15 +4148,6 @@ export function PosPage() {
                   <p className="mt-1 text-xs leading-6 text-[#6a776f] arabic-auto">
                     {t("pos.sales.emptyDescription")}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void queryClient.invalidateQueries({ queryKey: ["inventory-items", token] });
-                    }}
-                    className="mt-3 rounded-[6px] border border-[#d6e1d9] bg-[#f7faf8] px-4 py-2 text-xs font-bold text-[#4f6556] hover:bg-white"
-                  >
-                    Refresh products / تحديث المنتجات
-                  </button>
                 </Card>
               ) : (
                 <div className={posProductGridClass}>
@@ -5151,11 +5140,6 @@ export function PosPage() {
           </div>
         </Modal>
 
-        <PosCameraScanner
-          isOpen={isCameraScannerOpen}
-          onClose={() => setIsCameraScannerOpen(false)}
-          onScan={handleCameraScan}
-        />
         <PosCalculatorModal
           isOpen={isCalculatorOpen}
           onClose={() => setIsCalculatorOpen(false)}
