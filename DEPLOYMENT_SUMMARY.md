@@ -8,7 +8,7 @@ The project has been reconfigured as an **isolated instance** (Market POS) to ru
 * **Assigned Ports:**
     *   **Frontend:** `3010`
     *   **Backend:** `3017`
-* **Database Port:** `15433` (Dockerized PostgreSQL)
+* **Database Port:** `15432` (root `docker-compose.yml` PostgreSQL)
 
 ## 2. Code Synchronization (Git)
 * **Command:** `git stash` followed by `git pull`
@@ -41,7 +41,7 @@ The project has been reconfigured as an **isolated instance** (Market POS) to ru
 We pull the latest code from the `pos-market` branch. This branch contains the `ecosystem.config.js` file specifically tuned for this instance's ports and process names.
 
 ### 2. Environment Alignment (Prisma & Dependencies)
-*   **Database Migrations:** We use `prisma migrate deploy` to update the database container (running on port `15433`). This ensures this instance's data remains separate from other projects.
+*   **Database Migrations:** We use `prisma migrate deploy` against the PostgreSQL container started from the repository root `docker-compose.yml` (port `15432`).
 
 ### 3. Production Optimization (Build Phase)
 *   **Build:** Next.js compiles the frontend. It embeds the `NEXT_PUBLIC_API_BASE_URL` (set to `https://market.trusttechlimited.com/api`) into the static assets.

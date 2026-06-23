@@ -2,7 +2,7 @@ import {
   PosAccessRoleCode,
   PosPermissionCode,
   PrismaClient,
-} from '../src/generated/prisma';
+} from '../../src/generated/prisma';
 import * as bcrypt from 'bcrypt';
 
 export const MARKET_SNACKS_GROUP_CODE = 'MARKET-SNACKS';

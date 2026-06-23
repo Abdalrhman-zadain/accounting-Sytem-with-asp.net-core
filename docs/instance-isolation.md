@@ -20,10 +20,10 @@ These ports are dedicated to the Market instance. Ensure no other service on the
 | **Backend (NestJS)** | `3017` | `https://market.trusttechlimited.com/api` |
 
 ### 3. Database Configuration
-The instance is connected to its own dedicated PostgreSQL container.
-*   **Docker Port:** `15433` (mapped to `5432` internally)
-*   **Database Name:** `simple-account-pos-m-ch`
-*   **Connection String:** `postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public`
+The instance now uses the repository root PostgreSQL container instead of a separate Market-only compose file.
+*   **Docker Port:** `15432` (mapped to `5432` internally)
+*   **Database Name:** `simple_account`
+*   **Connection String:** `postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public`
 
 ## Nginx Routing Requirements
 
@@ -57,4 +57,4 @@ pm2 logs market-backend
 ```
 
 ---
-*Last Updated: June 13, 2026*
+*Last Updated: June 23, 2026*

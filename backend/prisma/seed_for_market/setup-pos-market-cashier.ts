@@ -2,7 +2,7 @@ import {
   PosAccessRoleCode,
   PosPermissionCode,
   type PrismaClient,
-} from "../src/generated/prisma";
+} from "../../src/generated/prisma";
 import * as bcrypt from "bcrypt";
 
 const marketCashierPermissionCodes: PosPermissionCode[] = [
@@ -145,7 +145,7 @@ export async function setupPosMarketCashierUser(prisma: PrismaClient) {
 }
 
 async function main() {
-  const { PrismaClient } = await import("../src/generated/prisma");
+  const { PrismaClient } = await import("../../src/generated/prisma");
   const prisma = new PrismaClient();
   try {
     await setupPosMarketCashierUser(prisma);

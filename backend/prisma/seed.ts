@@ -1,38 +1,33 @@
 import { PrismaClient } from '../src/generated/prisma';
-import { truncateDatabase } from './seed-database';
-import { runFoundationSeed } from './seed-foundation';
-import { seedPosMarketDemo } from './seed-pos-market';
-import { seedAmerRepCarLoad } from './seed-amer-rep-load';
-import { seedMarketPosRuntimeSettings } from './seed-market-pos-settings';
-import { setupAdminAccountantRole } from './setup-admin-accountant';
+import { truncateDatabase } from '../prisma/seed-database';
 
-import { seedOpeningJournalEntry } from './seed-opening-entry';
-import { seedOpeningInventoryFromWorkbook } from './seed-opening-inventory';
+import { runFoundationSeed } from '../prisma/seed-foundation';
+import { seedPosRegisterDemo } from '../prisma/seed-pos-register';
+import { setupPosKitchenUser } from '../prisma/setup-pos-kitchen';
+import { setupPosWaiterUser } from '../prisma/setup-pos-waiter';
 
-const prisma = new PrismaClient();
-
-async function main() {
+export async function runSabinaSeed(prisma: PrismaClient) {
   console.log('Cleaning existing database data...');
   await truncateDatabase(prisma);
 
   const ctx = await runFoundationSeed(prisma);
 
-  await seedOpeningJournalEntry(prisma, ctx);
-
-  await seedOpeningInventoryFromWorkbook(prisma);
-
-  await seedPosMarketDemo(prisma, {
+  await seedPosRegisterDemo(prisma, {
     adminUserId: ctx.admin.id,
+    cashierUserId: ctx.cashier.id,
   });
 
-  await seedAmerRepCarLoad(prisma);
-
-  await seedMarketPosRuntimeSettings(prisma);
-
-  await setupAdminAccountantRole(prisma);
+  await setupPosKitchenUser(prisma);
+  await setupPosWaiterUser(prisma);
 
   console.log('Basic seed complete.');
-  console.log('Logins: admin / admin123 (ERP + accountant), amer / amer123 (market rep).');
+  console.log('POS logins: cashier/cashier123, kitchen/kitchen123, waiter/waiter123, admin from foundation seed.');
+}
+
+const prisma = new PrismaClient();
+
+async function main() {
+  await runSabinaSeed(prisma);
 }
 
 main()

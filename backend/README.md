@@ -34,7 +34,7 @@ npm run start:dev
 Create `backend/.env` by copying `backend/.env.example`, or use:
 
 ```bash
-DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
+DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public"
 PORT=3007
 JWT_SECRET="your_highly_secret_key_change_in_production"
 JWT_EXPIRATION="24h"
@@ -58,28 +58,12 @@ From the repo root:
 docker compose up -d postgres
 ```
 
-## Market POS PostgreSQL
-
-For the isolated Market POS database, use the dedicated compose file from `backend/`:
-
-```bash
-docker compose -f docker-compose.market.yml up -d postgres
-cp .env.market.example .env
-```
-
-This starts PostgreSQL on host port `15433` with the backend connection string:
-
-```bash
-DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
-INVENTORY_ACCOUNTING_ENABLED=true
-```
-
 ## Troubleshooting Database Startup
 
 If backend startup fails with:
 
 ```text
-PrismaClientInitializationError: Database `simple-account-pos-m-ch` does not exist
+PrismaClientInitializationError: Database `simple_account` does not exist
 ```
 
 use this recovery flow from `backend/`:
@@ -97,12 +81,12 @@ If Docker starts but the database still does not exist, your local Postgres volu
 
 ```bash
 npm run db:down
-docker volume rm simple-account_postgres_pos_market_data
+docker volume rm simple-account-sabina_sabina_postgres_data
 npm run db:up
 npm run prisma:deploy
 ```
 
 Warning:
 
-- removing `simple-account_postgres_pos_market_data` deletes all local PostgreSQL data in that Docker volume
+- removing `simple-account-sabina_sabina_postgres_data` deletes all local PostgreSQL data in that Docker volume
 - only use the volume-reset flow when you are okay recreating the local database

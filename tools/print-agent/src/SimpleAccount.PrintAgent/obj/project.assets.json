@@ -132,13 +132,13 @@
     "/home/abdalrhman-zadain/.nuget/packages/": {}
   },
   "project": {
-    "version": "1.0.0",
+    "version": "1.0.3",
     "restore": {
-      "projectUniqueName": "/home/abdalrhman-zadain/porject/simple-account/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
+      "projectUniqueName": "/home/abdalrhman-zadain/porject/Accounting-SysMuliCient/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
       "projectName": "SimpleAccount.PrintAgent",
-      "projectPath": "/home/abdalrhman-zadain/porject/simple-account/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
+      "projectPath": "/home/abdalrhman-zadain/porject/Accounting-SysMuliCient/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
       "packagesPath": "/home/abdalrhman-zadain/.nuget/packages/",
-      "outputPath": "/home/abdalrhman-zadain/porject/simple-account/tools/print-agent/src/SimpleAccount.PrintAgent/obj/",
+      "outputPath": "/home/abdalrhman-zadain/porject/Accounting-SysMuliCient/tools/print-agent/src/SimpleAccount.PrintAgent/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/abdalrhman-zadain/.nuget/NuGet/NuGet.Config"

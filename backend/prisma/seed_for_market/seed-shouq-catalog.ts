@@ -2,15 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import * as XLSX from 'xlsx';
-import { InventoryItemType, Prisma, PrismaClient } from '../src/generated/prisma';
+import { InventoryItemType, Prisma, PrismaClient } from '../../src/generated/prisma';
 
-import { postJournalEntry } from './seed-posting';
+import { postJournalEntry } from '../seed-posting';
 
 export const SHOUQ_OPENING_INVENTORY_JE_REF = 'JE-SHOUQ-OPENING-INV';
 
 export const SHOUQ_GROUP_CODE = 'MARKET-SNACKS';
 export const SHOUQ_CODE_PREFIX = 'MKT-SHQ-';
-export const DEFAULT_SHOUQ_XLSX_PATH = path.join(__dirname, '..', 'data', 'shouq.xlsx');
+export const DEFAULT_SHOUQ_XLSX_PATH = path.join(__dirname, '..', '..', 'data', 'shouq.xlsx');
 
 const AR_HEADERS = {
   itemCode: 'رمز المادة',
@@ -101,10 +101,6 @@ export function readShouqCatalogRows(xlsxPath = DEFAULT_SHOUQ_XLSX_PATH): ShouqC
     .filter((row): row is ShouqCatalogRow => row !== null);
 }
 
-import { clearLegacyMarketDemoProducts } from './clear-legacy-market-demo';
-
-export { clearLegacyMarketDemoProducts as deactivateLegacyMarketDemoProducts };
-
 export async function deactivateRemovedShouqProducts(
   prisma: PrismaClient,
   activeCodes: Set<string>,
@@ -143,8 +139,6 @@ export async function seedShouqCatalog(
   console.log(`Seeding Shouq market catalog (${rows.length} products from Excel)...`);
 
   const activeCodes = new Set(rows.map((row) => row.code));
-
-  await clearLegacyMarketDemoProducts(prisma);
   await deactivateRemovedShouqProducts(prisma, activeCodes);
 
   const [

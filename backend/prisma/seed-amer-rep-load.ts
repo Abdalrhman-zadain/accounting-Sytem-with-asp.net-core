@@ -6,7 +6,7 @@ import {
   RepCarStockMovementType,
 } from '../src/generated/prisma';
 
-import { REP_AMER_CODE } from './seed-pos-market';
+import { REP_AMER_CODE } from './seed_for_market/seed-pos-market';
 
 export const AMER_REP_LOAD_REF = 'RCL-AMER-OPENING-01';
 export const WH_AMER_CODE = 'WH-AMER';

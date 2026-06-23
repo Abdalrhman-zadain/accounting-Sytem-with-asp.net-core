@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "0qIWbSx0iMjpkkexvMmEmhk9isuZeOOcOoJVsrbfLJIDL/jzsglc/tLNqDNLVdA+bCwP1ttdAKKdEnWtjINcLQ==",
+  "dgSpecHash": "sagqkOQq6VetrB3pKwpolrBcPWvyZ8yZyH2orKpjbSBejIHr8aQQWY9+s91J5pf+Ha0OPgWUdz8n2T2g0scGXA==",
   "success": true,
-  "projectFilePath": "/home/abdalrhman-zadain/porject/simple-account/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
+  "projectFilePath": "/home/abdalrhman-zadain/porject/Accounting-SysMuliCient/tools/print-agent/src/SimpleAccount.PrintAgent/SimpleAccount.PrintAgent.csproj",
   "expectedPackageFiles": [
     "/home/abdalrhman-zadain/.nuget/packages/microsoft.web.webview2/1.0.2903.40/microsoft.web.webview2.1.0.2903.40.nupkg.sha512"
   ],

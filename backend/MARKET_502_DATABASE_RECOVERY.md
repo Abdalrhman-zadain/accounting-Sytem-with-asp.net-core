@@ -2,14 +2,15 @@
 
 This runbook fixes the `https://market.trusttechlimited.com/` Cloudflare/Nginx
 502 caused by missing Market upstream services and pushes the backend schema and
-seed data into the Market PostgreSQL database.
+seed data into the PostgreSQL database started from the repository root
+`docker-compose.yml`.
 
 ## Expected Market Configuration
 
-The Market instance must use its own PostgreSQL database:
+The Market instance must point to the root compose PostgreSQL database:
 
 ```bash
-DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
+DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public"
 PORT=3008
 INVENTORY_ACCOUNTING_ENABLED=true
 ```
@@ -19,28 +20,28 @@ The reverse proxy currently expects:
 ```text
 market frontend: http://127.0.0.1:3009
 market backend:  http://127.0.0.1:3008/api
-market database: localhost:15433/simple-account-pos-m-ch
+market database: localhost:15432/simple_account
 ```
 
-## 1. Start Market PostgreSQL
+## 1. Start PostgreSQL
 
-From the backend directory:
+From the repository root:
 
 ```bash
-cd /home/server/Desktop/production/simple-account/backend
-sudo docker compose -f docker-compose.market.yml up -d postgres
+cd /home/server/Desktop/production/simple-account
+sudo docker compose up -d postgres
 ```
 
 Verify the database port is reachable:
 
 ```bash
-pg_isready -h 127.0.0.1 -p 15433
+pg_isready -h 127.0.0.1 -p 15432
 ```
 
 Expected result:
 
 ```text
-127.0.0.1:15433 - accepting connections
+127.0.0.1:15432 - accepting connections
 ```
 
 If Docker fails with permission errors, run the command as a user with Docker
@@ -54,7 +55,7 @@ target the Sabina or local development database.
 
 ```bash
 cd /home/server/Desktop/production/simple-account/backend
-export DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
+export DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public"
 npm run prisma:generate
 npx prisma migrate deploy
 ```
@@ -74,7 +75,7 @@ production backend.
 
 ```bash
 cd /home/server/Desktop/production/simple-account/backend
-export DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public"
+export DATABASE_URL="postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public"
 npm run seed
 npm run seed:market
 npm run seed:opening-inventory
@@ -142,13 +143,12 @@ Expected healthy result:
 ## Current Known Blocker
 
 The frontend root 502 can be fixed by starting `market-frontend` on port `3009`.
-The API 502 remains until PostgreSQL is running on `15433` and `market-backend`
+The API 502 remains until PostgreSQL is running on `15432` and `market-backend`
 can connect to:
 
 ```text
-postgresql://simple_account_user:simple_account_pass@localhost:15433/simple-account-pos-m-ch?schema=public
+postgresql://simple_account_user:simple_account_pass@localhost:15432/simple_account?schema=public
 ```
 
-Do not point Market to `15432/simple_account` as a workaround unless you
-intentionally want to share the Sabina/local database. That breaks the intended
-Market instance isolation.
+This repository now expects Market to use that root compose database instead of
+the removed dedicated Market compose/database pair.
