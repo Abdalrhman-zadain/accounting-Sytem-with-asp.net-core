@@ -6715,19 +6715,6 @@ function PosPaymentSummaryCard({
 
   return (
     <div className="mx-3 mt-2 rounded-[12px] border border-[#eef1ef] bg-[#fafafa] px-3 py-2.5">
-      <div className="space-y-1.5">
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center justify-between gap-3 text-[11px]"
-          >
-            <span className="font-medium text-[#6b7280] arabic-auto">{row.label}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-[#374151]" dir="ltr">
-              {row.value}
-            </span>
-          </div>
-        ))}
-      </div>
       <div className="my-2 border-t border-[#e5e7eb]" />
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs font-bold text-[#111827] arabic-auto">{labels.grandTotal}</span>
